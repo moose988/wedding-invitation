@@ -1,0 +1,167 @@
+
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta
+      name="description"
+      content="A premium Arabic and English digital wedding invitation."
+    />
+    <title>Layan & Mohammed | Wedding Invitation</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Amiri:wght@400;700&family=Cinzel:wght@400;500;600&family=Cormorant+Garamond:wght@400;500;600;700&family=Noto+Naskh+Arabic:wght@400;500;600;700&display=swap"
+      rel="stylesheet"
+    />
+    <link rel="stylesheet" href="./styles.css" />
+  </head>
+  <body>
+    <div class="page-shell">
+      <div class="ambient ambient-top"></div>
+      <div class="ambient ambient-bottom"></div>
+
+      <div class="petals" aria-hidden="true">
+        <span class="petal petal-1"></span>
+        <span class="petal petal-2"></span>
+        <span class="petal petal-3"></span>
+        <span class="petal petal-4"></span>
+        <span class="petal petal-5"></span>
+        <span class="petal petal-6"></span>
+      </div>
+
+      <div class="floral-frame" aria-hidden="true">
+        <span class="floral-frame__corner floral-frame__corner--top-left"></span>
+        <span class="floral-frame__corner floral-frame__corner--top-right"></span>
+        <span class="floral-frame__corner floral-frame__corner--bottom-left"></span>
+        <span class="floral-frame__corner floral-frame__corner--bottom-right"></span>
+      </div>
+
+      <div class="intro-screen" id="introScreen">
+        <div class="intro-halo"></div>
+        <button
+          class="intro-card intro-card--envelope"
+          id="openInvitation"
+          type="button"
+          aria-label="Open wedding invitation"
+        >
+          <span class="envelope-stage" aria-hidden="true">
+            <span class="envelope-glow"></span>
+            <img class="envelope-layer envelope-layer--back" src="./images/envelope-back.png" alt="" onerror="this.hidden=true" />
+            <img class="envelope-layer envelope-layer--card" src="./images/invitation-card.png" alt="" onerror="this.hidden=true" />
+            <img class="envelope-layer envelope-layer--flap" src="./images/envelope-flap.png" alt="" onerror="this.hidden=true" />
+            <img class="envelope-layer envelope-layer--front" src="./images/envelope-front.png" alt="" onerror="this.hidden=true" />
+            <img class="envelope-layer envelope-layer--flowers" src="./images/envelope-flowers.png" alt="" onerror="this.hidden=true" />
+            <img class="envelope-layer envelope-layer--seal" src="./images/wax-seal.png" alt="" onerror="this.hidden=true" />
+            <span class="envelope-shimmer"></span>
+            <span class="envelope-sparkles"></span>
+          </span>
+          <span class="intro-card__cta-wrap">
+            <span class="intro-card__cta intro-card__cta--overlay" id="openInvitationLabel">
+              <span class="intro-card__cta-text is-active" id="openInvitationLabelPrimary">Open Invitation</span>
+              <span class="intro-card__cta-text" id="openInvitationLabelSecondary" aria-hidden="true"></span>
+            </span>
+          </span>
+        </button>
+      </div>
+
+      <button
+        class="music-toggle"
+        id="musicToggle"
+        type="button"
+        aria-label="Play wedding music"
+        hidden
+      >
+        <span class="music-toggle__record-wrap">
+          <img class="music-toggle__record" src="./images/music-record.png" alt="" />
+          <span class="music-toggle__label">Play Music</span>
+        </span>
+      </button>
+
+      <audio id="weddingAudio" preload="none" loop>
+        <source src="./music/wedding.mp3" type="audio/mpeg" />
+      </audio>
+
+      <main class="site-content" id="siteContent">
+        <section class="hero section reveal">
+          <div class="section-frame hero-frame">
+            <div class="hero-backdrop" id="heroBackdrop" aria-hidden="true"></div>
+            <img
+              class="hero-blossom hero-blossom--top-right"
+              src="./images/landing-blossom-branch.png"
+              alt=""
+              aria-hidden="true"
+              onerror="this.hidden=true"
+            />
+            <div class="hero-flourish hero-flourish--left" aria-hidden="true"></div>
+            <div class="hero-flourish hero-flourish--right" aria-hidden="true"></div>
+            <div class="hero-content-panel">
+              <p class="section-kicker">Luxury Celebration</p>
+              <div class="hero-names">
+                <h1 class="hero-names__arabic rtl-copy" id="heroArabicNames" lang="ar" dir="rtl"></h1>
+                <p class="hero-names__english" id="heroEnglishNames"></p>
+              </div>
+              <div class="hero-copy">
+                <p class="hero-copy__arabic rtl-copy" id="heroSubtitleArabic" lang="ar" dir="rtl"></p>
+                <p class="hero-copy__english" id="heroSubtitleEnglish"></p>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <section class="section reveal">
+          <div class="section-frame invitation-note countdown-note">
+            <div class="section-heading section-heading--center">
+              <p class="section-kicker">Countdown</p>
+              <h2>Until the Celebration Begins</h2>
+            </div>
+            <div class="hero-countdown" id="countdownGrid"></div>
+          </div>
+        </section>
+
+        <section class="section reveal">
+          <div class="section-frame invitation-note">
+            <div class="section-heading section-heading--center">
+              <p class="section-kicker">Invitation</p>
+              <h2>An Evening of Love and Grace</h2>
+            </div>
+            <p class="invitation-note__arabic rtl-copy" id="invitationMessageArabic" lang="ar" dir="rtl"></p>
+            <p class="invitation-note__english" id="invitationMessageEnglish"></p>
+          </div>
+        </section>
+
+        <section class="section reveal">
+          <div class="section-frame">
+            <div class="section-heading">
+              <p class="section-kicker">Details</p>
+              <h2>The Evening at a Glance</h2>
+            </div>
+            <div class="details-grid" id="detailsGrid"></div>
+          </div>
+        </section>
+
+        <section class="section reveal" id="rsvpSection" aria-labelledby="rsvpTitle">
+          <div class="section-frame rsvp-card">
+            <div class="section-heading">
+              <p class="section-kicker">RSVP</p>
+              <h2 id="rsvpTitle">Kindly Reply</h2>
+            </div>
+            <div id="rsvpMount"></div>
+          </div>
+        </section>
+
+        <section class="section reveal">
+          <div class="section-frame closing-card">
+            <p class="closing-card__arabic rtl-copy" id="closingArabic" lang="ar" dir="rtl"></p>
+            <p class="closing-card__english" id="closingEnglish"></p>
+          </div>
+        </section>
+      </main>
+
+      <nav class="sticky-actions" id="stickyActions" aria-label="Quick wedding actions" hidden></nav>
+    </div>
+
+    <script src="./script.js"></script>
+  </body>
+</html>

@@ -1,4 +1,3 @@
-
 <!DOCTYPE html>
 <html lang="en">
   <head>
@@ -6,9 +5,9 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <meta
       name="description"
-      content="A premium Arabic and English digital wedding invitation."
+      content="A premium bilingual Arabic and English digital wedding invitation platform."
     />
-    <title>Layan & Mohammed | Wedding Invitation</title>
+    <title>Wedding Invitation Platform</title>
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link
@@ -97,7 +96,7 @@
             <div class="hero-flourish hero-flourish--left" aria-hidden="true"></div>
             <div class="hero-flourish hero-flourish--right" aria-hidden="true"></div>
             <div class="hero-content-panel">
-              <p class="section-kicker">Luxury Celebration</p>
+              <p class="section-kicker" id="heroKicker">Luxury Celebration</p>
               <div class="hero-names">
                 <h1 class="hero-names__arabic rtl-copy" id="heroArabicNames" lang="ar" dir="rtl"></h1>
                 <p class="hero-names__english" id="heroEnglishNames"></p>
@@ -107,6 +106,17 @@
                 <p class="hero-copy__english" id="heroSubtitleEnglish"></p>
               </div>
             </div>
+          </div>
+        </section>
+
+        <section class="section reveal" id="guestSpotlightSection" hidden>
+          <div class="section-frame guest-honoree-card">
+            <div class="section-heading section-heading--center">
+              <p class="section-kicker">Guest of Honor</p>
+              <h2 id="guestGreetingTitle">Dear Guest</h2>
+            </div>
+            <p class="guest-honoree-card__arabic rtl-copy" id="guestGreetingArabic" lang="ar" dir="rtl"></p>
+            <p class="guest-honoree-card__english" id="guestGreetingEnglish"></p>
           </div>
         </section>
 
@@ -141,6 +151,19 @@
           </div>
         </section>
 
+        <section class="section reveal" id="seatingSection" hidden>
+          <div class="section-frame seating-card">
+            <div class="section-heading">
+              <p class="section-kicker">Your Seat</p>
+              <h2>Your Seating Details</h2>
+            </div>
+            <div id="seatDetailsMount"></div>
+            <div class="seating-map-shell">
+              <div class="seating-map" id="seatingMap"></div>
+            </div>
+          </div>
+        </section>
+
         <section class="section reveal" id="rsvpSection" aria-labelledby="rsvpTitle">
           <div class="section-frame rsvp-card">
             <div class="section-heading">
@@ -148,6 +171,16 @@
               <h2 id="rsvpTitle">Kindly Reply</h2>
             </div>
             <div id="rsvpMount"></div>
+          </div>
+        </section>
+
+        <section class="section reveal" id="qrPassSection" hidden>
+          <div class="section-frame qr-pass-card">
+            <div class="section-heading">
+              <p class="section-kicker">Entrance Pass</p>
+              <h2>Your QR Access</h2>
+            </div>
+            <div class="qr-pass" id="qrPassMount"></div>
           </div>
         </section>
 
@@ -160,8 +193,9 @@
       </main>
 
       <nav class="sticky-actions" id="stickyActions" aria-label="Quick wedding actions" hidden></nav>
+      <div class="toast-rail" id="toastRail" aria-live="polite" aria-atomic="true"></div>
     </div>
 
-    <script src="./script.js"></script>
+    <script type="module" src="./script.js"></script>
   </body>
 </html>

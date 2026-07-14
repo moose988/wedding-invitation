@@ -1,0 +1,43 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>DA3WA Planner Login</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,500;9..144,600&family=Manrope:wght@400;500;600;700;800&family=Noto+Naskh+Arabic:wght@400;500;600;700&display=swap"
+      rel="stylesheet"
+    />
+    <link rel="stylesheet" href="./styles.css" />
+    <link rel="stylesheet" href="./dashboard.css" />
+  </head>
+  <body class="dashboard-body">
+    <main class="da3wa-shell">
+      <section class="da3wa-auth">
+        <div class="da3wa-auth__panel">
+          <p class="da3wa-eyebrow">Planner Access</p>
+          <h1>DA3WA Operations Console</h1>
+          <p>
+            Sign in on this separate access page, then continue directly into the planner dashboard for your event.
+          </p>
+          <form class="da3wa-auth__form" id="loginForm">
+            <label>
+              <span>Email</span>
+              <input class="da3wa-input" name="email" type="email" autocomplete="email" required />
+            </label>
+            <label>
+              <span>Password</span>
+              <input class="da3wa-input" name="password" type="password" autocomplete="current-password" required />
+            </label>
+            <button class="da3wa-button da3wa-button--primary" type="submit">Sign in to dashboard</button>
+          </form>
+          <p class="da3wa-auth__status" id="authStatus" aria-live="polite"></p>
+        </div>
+      </section>
+    </main>
+
+    <script type="module" src="./dashboard-login.js"></script>
+  </body>
+</html>

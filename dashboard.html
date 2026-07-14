@@ -1,0 +1,224 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>DA3WA Planner Dashboard</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,500;9..144,600&family=Manrope:wght@400;500;600;700;800&family=Noto+Naskh+Arabic:wght@400;500;600;700&display=swap"
+      rel="stylesheet"
+    />
+    <link rel="stylesheet" href="./styles.css" />
+    <link rel="stylesheet" href="./dashboard.css" />
+  </head>
+  <body class="dashboard-body">
+    <main class="da3wa-shell">
+      <section class="da3wa-app" id="dashboardApp" hidden>
+        <aside class="da3wa-sidebar" id="dashboardSidebar">
+          <div class="da3wa-sidebar__brand">
+            <div class="da3wa-sidebar__mark" aria-hidden="true">D</div>
+            <div>
+              <p>DA3WA</p>
+              <strong>Planner Suite</strong>
+            </div>
+          </div>
+
+          <nav class="da3wa-sidebar__nav" aria-label="Dashboard navigation">
+            <div class="da3wa-nav-group">
+              <p class="da3wa-nav-group__label">Workspace</p>
+              <button class="da3wa-nav-link" type="button" data-nav-view="overview">Overview</button>
+              <button class="da3wa-nav-link" type="button" data-nav-view="guests">Guests</button>
+              <button class="da3wa-nav-link" type="button" data-nav-view="seating">Seating</button>
+              <button class="da3wa-nav-link" type="button" data-nav-view="checkin">Check-In</button>
+              <button class="da3wa-nav-link" type="button" data-nav-view="share">Invitations</button>
+              <button class="da3wa-nav-link" type="button" data-nav-view="exports">Exports</button>
+            </div>
+          </nav>
+
+          <div class="da3wa-sidebar__footer">
+            <button class="da3wa-button da3wa-button--ghost" type="button" id="signOutButton">Sign out</button>
+          </div>
+        </aside>
+
+        <div class="da3wa-main">
+          <header class="da3wa-topbar">
+            <div class="da3wa-topbar__intro">
+              <button class="da3wa-icon-button da3wa-topbar__menu" type="button" id="navToggleButton" aria-label="Open navigation">
+                <span></span>
+                <span></span>
+                <span></span>
+              </button>
+              <div>
+                <p class="da3wa-eyebrow" id="pageEyebrow">Dashboard</p>
+                <h1 id="pageTitle">Overview</h1>
+                <p id="pageDescription"></p>
+              </div>
+            </div>
+            <div class="da3wa-topbar__actions">
+              <div class="da3wa-live-indicator" id="liveIndicator"></div>
+              <div class="da3wa-topbar__action-row" id="globalActions"></div>
+            </div>
+          </header>
+
+          <section class="da3wa-page" id="pageContent" aria-live="polite"></section>
+        </div>
+      </section>
+    </main>
+
+    <dialog class="da3wa-dialog da3wa-dialog--modal" id="guestModal">
+      <form class="da3wa-sheet da3wa-sheet--guest" id="guestForm" method="dialog">
+        <div class="da3wa-sheet__header">
+          <div>
+            <p class="da3wa-eyebrow">Guest Profile</p>
+            <h2 id="guestModalTitle">Add Guest</h2>
+          </div>
+          <button class="da3wa-icon-button" type="button" data-close-modal="guestModal" aria-label="Close guest form">×</button>
+        </div>
+
+        <div class="da3wa-sheet__body">
+          <section class="da3wa-form-section">
+            <h3>Personal information</h3>
+            <div class="da3wa-form-grid">
+              <label>
+                <span>Full name</span>
+                <input class="da3wa-input" name="fullName" required />
+              </label>
+              <label>
+                <span>Phone</span>
+                <input class="da3wa-input" name="phone" type="tel" inputmode="tel" autocomplete="tel" />
+              </label>
+              <label>
+                <span>Side</span>
+                <select class="da3wa-input" name="side">
+                  <option value="bride">Bride</option>
+                  <option value="groom">Groom</option>
+                  <option value="both">Both</option>
+                  <option value="family">Family</option>
+                  <option value="other">Other</option>
+                </select>
+              </label>
+              <label>
+                <span>Additional guests</span>
+                <input class="da3wa-input" name="additionalGuests" type="number" inputmode="numeric" min="0" step="1" value="0" required />
+              </label>
+            </div>
+          </section>
+        </div>
+
+        <div class="da3wa-sheet__footer">
+          <button class="da3wa-button da3wa-button--danger" type="button" id="guestDeleteButton">Delete guest</button>
+          <div class="da3wa-sheet__footer-actions">
+            <button class="da3wa-button da3wa-button--secondary" type="button" data-close-modal="guestModal">Cancel</button>
+            <button class="da3wa-button da3wa-button--primary" type="submit">Save guest</button>
+          </div>
+        </div>
+      </form>
+    </dialog>
+
+    <dialog class="da3wa-dialog da3wa-dialog--sheet" id="tableModal">
+      <form class="da3wa-sheet" id="tableForm" method="dialog">
+        <div class="da3wa-sheet__header">
+          <div>
+            <p class="da3wa-eyebrow">Planner Table</p>
+            <h2 id="tableModalTitle">Create Table</h2>
+          </div>
+          <button class="da3wa-icon-button" type="button" data-close-modal="tableModal" aria-label="Close table form">×</button>
+        </div>
+
+        <div class="da3wa-sheet__body">
+          <section class="da3wa-form-section">
+            <h3>Identity</h3>
+            <div class="da3wa-form-grid">
+              <label>
+                <span>Table name</span>
+                <input class="da3wa-input" name="name" required />
+              </label>
+              <label>
+                <span>Label</span>
+                <input class="da3wa-input" name="label" required />
+              </label>
+              <label>
+                <span>Shape</span>
+                <select class="da3wa-input" name="shape">
+                  <option value="round">Round</option>
+                  <option value="rectangle">Rectangle</option>
+                  <option value="square">Square</option>
+                  <option value="u-shape">U-shape</option>
+                  <option value="open-u">Open U</option>
+                  <option value="horseshoe">Horseshoe</option>
+                  <option value="long-banquet">Long banquet</option>
+                  <option value="conference">Conference</option>
+                </select>
+              </label>
+              <label>
+                <span>Floor zone</span>
+                <input class="da3wa-input" name="floorZone" />
+              </label>
+            </div>
+          </section>
+
+          <section class="da3wa-form-section">
+            <h3>Capacity and geometry</h3>
+            <div class="da3wa-form-grid">
+              <label>
+                <span>Capacity</span>
+                <input class="da3wa-input" name="capacity" type="number" min="1" required />
+              </label>
+              <label>
+                <span>Seat count</span>
+                <input class="da3wa-input" name="seatCount" type="number" min="2" max="30" value="8" required />
+              </label>
+              <label>
+                <span>Width</span>
+                <input class="da3wa-input" name="width" type="number" min="120" max="420" value="180" />
+              </label>
+              <label>
+                <span>Height</span>
+                <input class="da3wa-input" name="height" type="number" min="80" max="320" value="180" />
+              </label>
+              <label>
+                <span>X position</span>
+                <input class="da3wa-input" name="x" type="number" min="0" max="100" />
+              </label>
+              <label>
+                <span>Y position</span>
+                <input class="da3wa-input" name="y" type="number" min="0" max="100" />
+              </label>
+            </div>
+          </section>
+
+          <section class="da3wa-form-section">
+            <h3>Palette</h3>
+            <div class="da3wa-form-grid">
+              <label>
+                <span>Table color</span>
+                <input class="da3wa-input da3wa-input--color" name="tableColor" type="color" value="#F3EBDC" />
+              </label>
+              <label>
+                <span>Border color</span>
+                <input class="da3wa-input da3wa-input--color" name="borderColor" type="color" value="#BC9B61" />
+              </label>
+              <label>
+                <span>Chair color</span>
+                <input class="da3wa-input da3wa-input--color" name="chairColor" type="color" value="#24554A" />
+              </label>
+            </div>
+          </section>
+        </div>
+
+        <div class="da3wa-sheet__footer">
+          <div></div>
+          <div class="da3wa-sheet__footer-actions">
+            <button class="da3wa-button da3wa-button--secondary" type="button" data-close-modal="tableModal">Cancel</button>
+            <button class="da3wa-button da3wa-button--primary" type="submit">Save table</button>
+          </div>
+        </div>
+      </form>
+    </dialog>
+
+    <div class="da3wa-toast-rail" id="toastRail" aria-live="polite" aria-atomic="true"></div>
+    <script type="module" src="./dashboard.js"></script>
+  </body>
+</html>

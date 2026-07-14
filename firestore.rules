@@ -1,0 +1,86 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function dashboardUserPath(weddingId) {
+      return /databases/$(database)/documents/weddings/$(weddingId)/dashboardUsers/$(request.auth.uid);
+    }
+
+    function dashboardUser(weddingId) {
+      return get(dashboardUserPath(weddingId));
+    }
+
+    function isDashboardMember(weddingId) {
+      return isSignedIn() && exists(dashboardUserPath(weddingId));
+    }
+
+    function canViewDashboard(weddingId) {
+      return isDashboardMember(weddingId) && dashboardUser(weddingId).data.canViewDashboard == true;
+    }
+
+    function canEditGuests(weddingId) {
+      return isDashboardMember(weddingId) && dashboardUser(weddingId).data.canEditGuests == true;
+    }
+
+    function canEditSeating(weddingId) {
+      return isDashboardMember(weddingId) && dashboardUser(weddingId).data.canEditSeating == true;
+    }
+
+    function canCheckIn(weddingId) {
+      return isDashboardMember(weddingId) && dashboardUser(weddingId).data.canCheckIn == true;
+    }
+
+    function isPublicWedding(weddingId) {
+      return get(/databases/$(database)/documents/weddings/$(weddingId)).data.status == "active";
+    }
+
+    function isGuestRsvpUpdate(weddingId) {
+      return isPublicWedding(weddingId)
+        && request.resource.data.diff(resource.data).changedKeys().hasOnly(["rsvpStatus", "updatedAt"])
+        && request.resource.data.guestToken == resource.data.guestToken
+        && request.resource.data.rsvpStatus in ["pending", "confirmed", "declined"];
+    }
+
+    match /weddings/{weddingId} {
+      allow read: if canViewDashboard(weddingId) || resource.data.status == "active";
+      allow create, update, delete: if isDashboardMember(weddingId) && request.auth.uid == request.resource.data.ownerUserId;
+
+      match /dashboardUsers/{userId} {
+        allow read: if isDashboardMember(weddingId);
+        allow create, update, delete: if isDashboardMember(weddingId) && dashboardUser(weddingId).data.canManageUsers == true;
+      }
+
+      match /tables/{tableId} {
+        allow read: if canViewDashboard(weddingId) || isPublicWedding(weddingId);
+        allow create, update, delete: if canEditSeating(weddingId);
+      }
+
+      match /guests/{guestId} {
+        allow read: if canViewDashboard(weddingId);
+        allow create, delete: if canEditGuests(weddingId);
+        allow update: if canEditGuests(weddingId) || canCheckIn(weddingId) || isGuestRsvpUpdate(weddingId);
+
+        // TODO:
+        // Guest-token access is not strongly securable with this schema from the client alone,
+        // because guests are looked up by guestToken stored inside documents in a collection.
+        // Production recommendation:
+        // 1. Move guest-facing reads/writes behind Callable HTTPS Cloud Functions, OR
+        // 2. Mirror guest-facing data into a token-keyed public collection such as
+        //    publicGuestInvites/{guestToken}, OR
+        // 3. Use custom auth/session exchange before allowing RSVP or check-in writes.
+        //
+        // With the current collection structure, do not expose list access publicly.
+        allow list: if false;
+      }
+
+      match /publicGuests/{guestToken} {
+        allow get: if isPublicWedding(weddingId);
+        allow list: if false;
+        allow create, update, delete: if false;
+      }
+    }
+  }
+}

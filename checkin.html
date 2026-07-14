@@ -1,0 +1,58 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Hostess Check-In</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Amiri:wght@400;700&family=Cinzel:wght@400;500;600&family=Cormorant+Garamond:wght@400;500;600;700&family=Noto+Naskh+Arabic:wght@400;500;600;700&display=swap"
+      rel="stylesheet"
+    />
+    <link rel="stylesheet" href="./styles.css" />
+  </head>
+  <body class="dashboard-body">
+    <main class="dashboard-shell checkin-shell">
+      <section class="dashboard-auth-card" id="checkinAuthGate">
+        <p class="section-kicker">Event Door</p>
+        <h1>Hostess Check-In</h1>
+        <p>Sign in for search mode and live counters, or open a guest QR link to view a guest card instantly.</p>
+        <form class="dashboard-login-form" id="checkinLoginForm">
+          <label>
+            <span>Email</span>
+            <input name="email" type="email" autocomplete="email" />
+          </label>
+          <label>
+            <span>Password</span>
+            <input name="password" type="password" autocomplete="current-password" />
+          </label>
+          <button class="luxury-button luxury-button--primary" type="submit"><span>Sign In</span></button>
+        </form>
+        <p class="dashboard-auth-status" id="checkinAuthStatus"></p>
+      </section>
+
+      <section class="dashboard-app" id="checkinApp" hidden>
+        <header class="dashboard-header">
+          <div>
+            <p class="section-kicker">Guest Arrival</p>
+            <h1 id="checkinWeddingTitle">Check-In Console</h1>
+            <p id="checkinCounter">Checked in 0 guests</p>
+          </div>
+        </header>
+        <div class="dashboard-card" id="guestCheckinCard"></div>
+        <div class="dashboard-card" id="manualSearchPanel" hidden>
+          <div class="dashboard-toolbar">
+            <div class="dashboard-search">
+              <input id="manualSearchInput" type="search" placeholder="Search guest by name or phone" />
+            </div>
+          </div>
+          <div class="dashboard-list" id="manualSearchResults"></div>
+        </div>
+      </section>
+    </main>
+
+    <div class="toast-rail" id="toastRail" aria-live="polite" aria-atomic="true"></div>
+    <script type="module" src="./checkin.js"></script>
+  </body>
+</html>

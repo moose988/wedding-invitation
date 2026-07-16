@@ -1,7 +1,6 @@
 import {
   addDoc,
   collection,
-  deleteDoc,
   doc,
   getDoc,
   getDocs,
@@ -10,6 +9,7 @@ import {
   onAuthStateChanged,
   onSnapshot,
   query,
+  runTransaction,
   serverTimestamp,
   signOut,
   updateDoc,
@@ -20,6 +20,8 @@ import { exportGuests } from "./export.js";
 
 const params = new URLSearchParams(window.location.search);
 const lastWeddingStorageKey = "da3wa:lastDashboardWeddingId";
+const demoDashboardStorageKey = "da3wa:demoDashboardState:v4";
+const guestDirectoryPageSize = 6;
 
 const plannerPalette = {
   tableColor: "#F3EBDC",
@@ -118,6 +120,7 @@ const demoGuests = [
     fullNameAr: "نور أحمد",
     phone: "971500000001",
     side: "bride",
+    additionalGuests: 2,
     rsvpStatus: "confirmed",
     guestToken: "demo-token-1",
     tableId: "table-a",
@@ -137,6 +140,7 @@ const demoGuests = [
     fullNameAr: "عمر حسن",
     phone: "971500000002",
     side: "groom",
+    additionalGuests: 1,
     rsvpStatus: "pending",
     guestToken: "demo-token-2",
     tableId: "table-b",
@@ -156,6 +160,7 @@ const demoGuests = [
     fullNameAr: "ليلى سعيد",
     phone: "971500000003",
     side: "bride",
+    additionalGuests: 0,
     rsvpStatus: "declined",
     guestToken: "demo-token-3",
     tableId: "",
@@ -175,6 +180,7 @@ const demoGuests = [
     fullNameAr: "خالد منصور",
     phone: "971500000004",
     side: "groom",
+    additionalGuests: 3,
     rsvpStatus: "confirmed",
     guestToken: "demo-token-4",
     tableId: "table-a",
@@ -194,6 +200,7 @@ const demoGuests = [
     fullNameAr: "ميرا رحمن",
     phone: "971500000005",
     side: "family",
+    additionalGuests: 1,
     rsvpStatus: "pending",
     guestToken: "demo-token-5",
     tableId: "",
@@ -207,11 +214,549 @@ const demoGuests = [
     createdAt: "Today, 10:11 AM",
     updatedAt: "Today, 10:11 AM",
   },
+  {
+    id: "guest-6",
+    fullName: "Aisha Nasser",
+    fullNameAr: "",
+    phone: "971500000006",
+    side: "bride",
+    additionalGuests: 0,
+    rsvpStatus: "confirmed",
+    guestToken: "demo-token-6",
+    tableId: "",
+    tableName: "",
+    seatNumber: "",
+    checkedIn: false,
+    checkedInAt: null,
+    notes: "Bride college friend",
+    inviteSentAt: "Today, 9:20 AM",
+    reminderSentAt: null,
+    createdAt: "Today, 9:20 AM",
+    updatedAt: "Today, 9:20 AM",
+  },
+  {
+    id: "guest-7",
+    fullName: "Hamad Ali",
+    fullNameAr: "",
+    phone: "971500000007",
+    side: "groom",
+    additionalGuests: 4,
+    rsvpStatus: "confirmed",
+    guestToken: "demo-token-7",
+    tableId: "",
+    tableName: "",
+    seatNumber: "",
+    checkedIn: false,
+    checkedInAt: null,
+    notes: "Large family party",
+    inviteSentAt: "Yesterday, 6:45 PM",
+    reminderSentAt: "Today, 12:30 PM",
+    createdAt: "Yesterday, 6:45 PM",
+    updatedAt: "Today, 12:30 PM",
+  },
+  {
+    id: "guest-8",
+    fullName: "Mariam Saleh",
+    fullNameAr: "",
+    phone: "971500000008",
+    side: "family",
+    additionalGuests: 2,
+    rsvpStatus: "pending",
+    guestToken: "demo-token-8",
+    tableId: "",
+    tableName: "",
+    seatNumber: "",
+    checkedIn: false,
+    checkedInAt: null,
+    notes: "Needs reminder",
+    inviteSentAt: "Yesterday, 1:05 PM",
+    reminderSentAt: null,
+    createdAt: "Yesterday, 1:05 PM",
+    updatedAt: "Yesterday, 1:05 PM",
+  },
+  {
+    id: "guest-9",
+    fullName: "Yousef Khalifa",
+    fullNameAr: "",
+    phone: "971500000009",
+    side: "groom",
+    additionalGuests: 1,
+    rsvpStatus: "confirmed",
+    guestToken: "demo-token-9",
+    tableId: "",
+    tableName: "",
+    seatNumber: "",
+    checkedIn: true,
+    checkedInAt: "Today, 7:55 PM",
+    notes: "Checked in early",
+    inviteSentAt: "Today, 11:40 AM",
+    reminderSentAt: null,
+    createdAt: "Today, 11:40 AM",
+    updatedAt: "Today, 7:55 PM",
+  },
+  {
+    id: "guest-10",
+    fullName: "Leila Omar",
+    fullNameAr: "",
+    phone: "971500000010",
+    side: "bride",
+    additionalGuests: 5,
+    rsvpStatus: "confirmed",
+    guestToken: "demo-token-10",
+    tableId: "",
+    tableName: "",
+    seatNumber: "",
+    checkedIn: false,
+    checkedInAt: null,
+    notes: "VIP, keep near family",
+    inviteSentAt: "Monday, 5:10 PM",
+    reminderSentAt: "Today, 2:15 PM",
+    createdAt: "Monday, 5:10 PM",
+    updatedAt: "Today, 2:15 PM",
+  },
+  {
+    id: "guest-11",
+    fullName: "Faris Mansoor",
+    fullNameAr: "",
+    phone: "971500000011",
+    side: "family",
+    additionalGuests: 3,
+    rsvpStatus: "pending",
+    guestToken: "demo-token-11",
+    tableId: "",
+    tableName: "",
+    seatNumber: "",
+    checkedIn: false,
+    checkedInAt: null,
+    notes: "Family group",
+    inviteSentAt: null,
+    reminderSentAt: null,
+    createdAt: "Today, 12:05 PM",
+    updatedAt: "Today, 12:05 PM",
+  },
+  {
+    id: "guest-12",
+    fullName: "Noura Saeed",
+    fullNameAr: "",
+    phone: "971500000012",
+    side: "bride",
+    additionalGuests: 1,
+    rsvpStatus: "declined",
+    guestToken: "demo-token-12",
+    tableId: "",
+    tableName: "",
+    seatNumber: "",
+    checkedIn: false,
+    checkedInAt: null,
+    notes: "Travel conflict",
+    inviteSentAt: "Sunday, 8:30 PM",
+    reminderSentAt: null,
+    createdAt: "Sunday, 8:30 PM",
+    updatedAt: "Yesterday, 10:14 AM",
+  },
+  {
+    id: "guest-13",
+    fullName: "Rashed Adel",
+    fullNameAr: "",
+    phone: "971500000013",
+    side: "groom",
+    additionalGuests: 2,
+    rsvpStatus: "confirmed",
+    guestToken: "demo-token-13",
+    tableId: "",
+    tableName: "",
+    seatNumber: "",
+    checkedIn: false,
+    checkedInAt: null,
+    notes: "Prefers aisle seating",
+    inviteSentAt: "Today, 8:15 AM",
+    reminderSentAt: null,
+    createdAt: "Today, 8:15 AM",
+    updatedAt: "Today, 8:15 AM",
+  },
+  {
+    id: "guest-14",
+    fullName: "Salma Ibrahim",
+    fullNameAr: "",
+    phone: "971500000014",
+    side: "family",
+    additionalGuests: 0,
+    rsvpStatus: "confirmed",
+    guestToken: "demo-token-14",
+    tableId: "",
+    tableName: "",
+    seatNumber: "",
+    checkedIn: false,
+    checkedInAt: null,
+    notes: "Vegetarian meal",
+    inviteSentAt: "Yesterday, 11:50 AM",
+    reminderSentAt: null,
+    createdAt: "Yesterday, 11:50 AM",
+    updatedAt: "Yesterday, 11:50 AM",
+  },
+  {
+    id: "guest-15",
+    fullName: "Kareem Noor",
+    fullNameAr: "",
+    phone: "971500000015",
+    side: "both",
+    additionalGuests: 6,
+    rsvpStatus: "pending",
+    guestToken: "demo-token-15",
+    tableId: "",
+    tableName: "",
+    seatNumber: "",
+    checkedIn: false,
+    checkedInAt: null,
+    notes: "Large mixed-side group",
+    inviteSentAt: "Today, 1:25 PM",
+    reminderSentAt: null,
+    createdAt: "Today, 1:25 PM",
+    updatedAt: "Today, 1:25 PM",
+  },
+  {
+    id: "guest-16",
+    fullName: "Dana Fouad",
+    fullNameAr: "",
+    phone: "971500000016",
+    side: "bride",
+    additionalGuests: 2,
+    rsvpStatus: "confirmed",
+    guestToken: "demo-token-16",
+    tableId: "table-c",
+    tableName: "Rose",
+    seatNumber: "1",
+    checkedIn: false,
+    checkedInAt: null,
+    notes: "Bride cousin",
+    inviteSentAt: "Today, 9:50 AM",
+    reminderSentAt: null,
+    createdAt: "Today, 9:50 AM",
+    updatedAt: "Today, 9:50 AM",
+  },
+  {
+    id: "guest-17",
+    fullName: "Omar Zayed",
+    fullNameAr: "",
+    phone: "971500000017",
+    side: "groom",
+    additionalGuests: 1,
+    rsvpStatus: "confirmed",
+    guestToken: "demo-token-17",
+    tableId: "table-b",
+    tableName: "Jasmine",
+    seatNumber: "7",
+    checkedIn: true,
+    checkedInAt: "Today, 8:03 PM",
+    notes: "Groom work friend",
+    inviteSentAt: "Yesterday, 7:40 PM",
+    reminderSentAt: null,
+    createdAt: "Yesterday, 7:40 PM",
+    updatedAt: "Today, 8:03 PM",
+  },
+  {
+    id: "guest-18",
+    fullName: "Hessa Al Maktoum",
+    fullNameAr: "",
+    phone: "971500000018",
+    side: "family",
+    additionalGuests: 3,
+    rsvpStatus: "pending",
+    guestToken: "demo-token-18",
+    tableId: "",
+    tableName: "",
+    seatNumber: "",
+    checkedIn: false,
+    checkedInAt: null,
+    notes: "Awaiting family count",
+    inviteSentAt: "Monday, 1:20 PM",
+    reminderSentAt: "Today, 4:10 PM",
+    createdAt: "Monday, 1:20 PM",
+    updatedAt: "Today, 4:10 PM",
+  },
+  {
+    id: "guest-19",
+    fullName: "Sultan Al Qasimi",
+    fullNameAr: "",
+    phone: "971500000019",
+    side: "groom",
+    additionalGuests: 0,
+    rsvpStatus: "pending",
+    guestToken: "demo-token-19",
+    tableId: "",
+    tableName: "",
+    seatNumber: "",
+    checkedIn: false,
+    checkedInAt: null,
+    notes: "Needs phone follow-up",
+    inviteSentAt: null,
+    reminderSentAt: null,
+    createdAt: "Today, 2:05 PM",
+    updatedAt: "Today, 2:05 PM",
+  },
+  {
+    id: "guest-20",
+    fullName: "Reem Abdullah",
+    fullNameAr: "",
+    phone: "971500000020",
+    side: "bride",
+    additionalGuests: 1,
+    rsvpStatus: "confirmed",
+    guestToken: "demo-token-20",
+    tableId: "table-c",
+    tableName: "Rose",
+    seatNumber: "3",
+    checkedIn: false,
+    checkedInAt: null,
+    notes: "Requests quiet seating",
+    inviteSentAt: "Sunday, 6:00 PM",
+    reminderSentAt: "Yesterday, 6:30 PM",
+    createdAt: "Sunday, 6:00 PM",
+    updatedAt: "Yesterday, 6:30 PM",
+  },
+  {
+    id: "guest-21",
+    fullName: "Mansoor Habib",
+    fullNameAr: "",
+    phone: "971500000021",
+    side: "family",
+    additionalGuests: 4,
+    rsvpStatus: "confirmed",
+    guestToken: "demo-token-21",
+    tableId: "",
+    tableName: "",
+    seatNumber: "",
+    checkedIn: false,
+    checkedInAt: null,
+    notes: "Family table preferred",
+    inviteSentAt: "Yesterday, 10:35 AM",
+    reminderSentAt: null,
+    createdAt: "Yesterday, 10:35 AM",
+    updatedAt: "Yesterday, 10:35 AM",
+  },
+  {
+    id: "guest-22",
+    fullName: "Fatima Salem",
+    fullNameAr: "",
+    phone: "971500000022",
+    side: "bride",
+    additionalGuests: 0,
+    rsvpStatus: "declined",
+    guestToken: "demo-token-22",
+    tableId: "",
+    tableName: "",
+    seatNumber: "",
+    checkedIn: false,
+    checkedInAt: null,
+    notes: "Sent regrets",
+    inviteSentAt: "Friday, 4:25 PM",
+    reminderSentAt: null,
+    createdAt: "Friday, 4:25 PM",
+    updatedAt: "Monday, 9:15 AM",
+  },
+  {
+    id: "guest-23",
+    fullName: "Adel Younis",
+    fullNameAr: "",
+    phone: "971500000023",
+    side: "groom",
+    additionalGuests: 2,
+    rsvpStatus: "confirmed",
+    guestToken: "demo-token-23",
+    tableId: "table-a",
+    tableName: "Moonlight",
+    seatNumber: "8",
+    checkedIn: true,
+    checkedInAt: "Today, 8:12 PM",
+    notes: "VIP business guest",
+    inviteSentAt: "Today, 8:25 AM",
+    reminderSentAt: null,
+    createdAt: "Today, 8:25 AM",
+    updatedAt: "Today, 8:12 PM",
+  },
+  {
+    id: "guest-24",
+    fullName: "Rana Mahdi",
+    fullNameAr: "",
+    phone: "971500000024",
+    side: "both",
+    additionalGuests: 1,
+    rsvpStatus: "pending",
+    guestToken: "demo-token-24",
+    tableId: "",
+    tableName: "",
+    seatNumber: "",
+    checkedIn: false,
+    checkedInAt: null,
+    notes: "Friend of both families",
+    inviteSentAt: "Yesterday, 3:10 PM",
+    reminderSentAt: null,
+    createdAt: "Yesterday, 3:10 PM",
+    updatedAt: "Yesterday, 3:10 PM",
+  },
+  {
+    id: "guest-25",
+    fullName: "Tariq Nabil",
+    fullNameAr: "",
+    phone: "971500000025",
+    side: "groom",
+    additionalGuests: 5,
+    rsvpStatus: "confirmed",
+    guestToken: "demo-token-25",
+    tableId: "",
+    tableName: "",
+    seatNumber: "",
+    checkedIn: false,
+    checkedInAt: null,
+    notes: "Large party, assign together",
+    inviteSentAt: "Monday, 11:15 AM",
+    reminderSentAt: "Today, 5:05 PM",
+    createdAt: "Monday, 11:15 AM",
+    updatedAt: "Today, 5:05 PM",
+  },
+  {
+    id: "guest-26",
+    fullName: "Amal Kareem",
+    fullNameAr: "",
+    phone: "971500000026",
+    side: "bride",
+    additionalGuests: 2,
+    rsvpStatus: "confirmed",
+    guestToken: "demo-token-26",
+    tableId: "",
+    tableName: "",
+    seatNumber: "",
+    checkedIn: false,
+    checkedInAt: null,
+    notes: "Requires accessible route",
+    inviteSentAt: "Today, 12:45 PM",
+    reminderSentAt: null,
+    createdAt: "Today, 12:45 PM",
+    updatedAt: "Today, 12:45 PM",
+  },
+  {
+    id: "guest-27",
+    fullName: "Majid Farah",
+    fullNameAr: "",
+    phone: "971500000027",
+    side: "family",
+    additionalGuests: 0,
+    rsvpStatus: "pending",
+    guestToken: "demo-token-27",
+    tableId: "",
+    tableName: "",
+    seatNumber: "",
+    checkedIn: false,
+    checkedInAt: null,
+    notes: "No RSVP yet",
+    inviteSentAt: "Today, 10:30 AM",
+    reminderSentAt: null,
+    createdAt: "Today, 10:30 AM",
+    updatedAt: "Today, 10:30 AM",
+  },
+  {
+    id: "guest-28",
+    fullName: "Lina Jamal",
+    fullNameAr: "",
+    phone: "971500000028",
+    side: "bride",
+    additionalGuests: 1,
+    rsvpStatus: "confirmed",
+    guestToken: "demo-token-28",
+    tableId: "table-c",
+    tableName: "Rose",
+    seatNumber: "5",
+    checkedIn: true,
+    checkedInAt: "Today, 8:18 PM",
+    notes: "Makeup artist guest",
+    inviteSentAt: "Yesterday, 9:05 AM",
+    reminderSentAt: null,
+    createdAt: "Yesterday, 9:05 AM",
+    updatedAt: "Today, 8:18 PM",
+  },
+  {
+    id: "guest-29",
+    fullName: "Bilal Hamdan",
+    fullNameAr: "",
+    phone: "971500000029",
+    side: "groom",
+    additionalGuests: 3,
+    rsvpStatus: "declined",
+    guestToken: "demo-token-29",
+    tableId: "",
+    tableName: "",
+    seatNumber: "",
+    checkedIn: false,
+    checkedInAt: null,
+    notes: "Unable to travel",
+    inviteSentAt: "Saturday, 2:50 PM",
+    reminderSentAt: null,
+    createdAt: "Saturday, 2:50 PM",
+    updatedAt: "Yesterday, 7:20 PM",
+  },
+  {
+    id: "guest-30",
+    fullName: "Samar Hadi",
+    fullNameAr: "",
+    phone: "971500000030",
+    side: "family",
+    additionalGuests: 2,
+    rsvpStatus: "confirmed",
+    guestToken: "demo-token-30",
+    tableId: "",
+    tableName: "",
+    seatNumber: "",
+    checkedIn: false,
+    checkedInAt: null,
+    notes: "Prefers near entrance",
+    inviteSentAt: "Today, 3:35 PM",
+    reminderSentAt: null,
+    createdAt: "Today, 3:35 PM",
+    updatedAt: "Today, 3:35 PM",
+  },
 ];
+
+const seatingTestGuests = [
+  ["test-guest-1", "Aisha Nasser", "971551000001", "bride", 0],
+  ["test-guest-2", "Hamad Ali", "971551000002", "groom", 1],
+  ["test-guest-3", "Mariam Saleh", "971551000003", "family", 2],
+  ["test-guest-4", "Yousef Khalifa", "971551000004", "groom", 3],
+  ["test-guest-5", "Leila Omar", "971551000005", "bride", 0],
+  ["test-guest-6", "Faris Mansoor", "971551000006", "family", 1],
+  ["test-guest-7", "Noura Saeed", "971551000007", "bride", 2],
+  ["test-guest-8", "Rashed Adel", "971551000008", "groom", 3],
+  ["test-guest-9", "Salma Ibrahim", "971551000009", "family", 0],
+  ["test-guest-10", "Omar Zayed", "971551000010", "groom", 1],
+  ["test-guest-11", "Dana Fouad", "971551000011", "bride", 2],
+  ["test-guest-12", "Kareem Noor", "971551000012", "family", 3],
+].map(([id, fullName, phone, side, additionalGuests]) => ({
+  id,
+  fullName,
+  fullNameAr: "",
+  phone,
+  side,
+  additionalGuests,
+  rsvpStatus: "confirmed",
+  guestToken: `${id}-token`,
+  tableId: "",
+  tableName: "",
+  seatNumber: "",
+  seatingAssignments: [],
+  checkedIn: false,
+  checkedInAt: null,
+  notes: "Demo seating test guest",
+  inviteSentAt: null,
+  reminderSentAt: null,
+  createdAt: "Demo",
+  updatedAt: "Demo",
+}));
+
+const demoSeedGuests = [...demoGuests, ...seatingTestGuests];
+const previewWeddingIds = new Set(["luxury-wedding-demo"]);
 
 const state = {
   weddingId: params.get("wedding") || "",
-  mode: params.get("demo") === "1" ? "demo" : "live",
+  mode: params.get("demo") === "1" || previewWeddingIds.has(params.get("wedding") || "") ? "demo" : "live",
   services: null,
   currentUser: null,
   permissions: null,
@@ -226,6 +771,11 @@ const state = {
   selectedSeatId: "",
   seatingMode: "layout",
   guestAssignmentSearch: "",
+  assignmentSession: null,
+  activePartyGuestId: "",
+  activeModalOperation: "",
+  modalError: "",
+  returnFocusSelector: "",
   plannerZoom: 1,
   dragState: null,
   guestFilters: {
@@ -233,6 +783,7 @@ const state = {
     rsvp: "all",
     side: "all",
   },
+  guestPageIndex: 0,
   libraryFilters: {
     rsvp: "all",
     side: "all",
@@ -269,6 +820,14 @@ const elements = {
   tableModal: document.getElementById("tableModal"),
   tableForm: document.getElementById("tableForm"),
   tableModalTitle: document.getElementById("tableModalTitle"),
+  tableDeleteButton: document.getElementById("tableDeleteButton"),
+  tableDeleteModal: document.getElementById("tableDeleteModal"),
+  tableDeleteContent: document.getElementById("tableDeleteContent"),
+  tableDeleteConfirmButton: document.getElementById("tableDeleteConfirmButton"),
+  assignmentModal: document.getElementById("assignmentModal"),
+  assignmentContent: document.getElementById("assignmentContent"),
+  chairDetailsModal: document.getElementById("chairDetailsModal"),
+  chairDetailsContent: document.getElementById("chairDetailsContent"),
   toastRail: document.getElementById("toastRail"),
 };
 
@@ -276,6 +835,11 @@ init();
 
 async function init() {
   bindEvents();
+
+  if (state.mode === "demo") {
+    loadDemoDashboard();
+    return;
+  }
 
   if (!isFirebaseConfigured()) {
     redirectToLogin("firebase-not-configured");
@@ -317,6 +881,14 @@ function bindEvents() {
   });
   elements.guestForm?.addEventListener("submit", saveGuest);
   elements.tableForm?.addEventListener("submit", saveTable);
+  elements.tableDeleteButton?.addEventListener("click", () => {
+    if (state.selectedTableId) {
+      openTableDeleteModal(state.selectedTableId);
+    }
+  });
+  elements.tableDeleteConfirmButton?.addEventListener("click", () => {
+    void deleteSelectedTableFromModal();
+  });
   elements.guestDeleteButton?.addEventListener("click", async () => {
     if (!state.selectedGuestId) {
       return;
@@ -346,6 +918,9 @@ function bindEvents() {
   document.addEventListener("keydown", handleDocumentKeydown);
   elements.guestModal?.addEventListener("click", handleDialogBackdropClick);
   elements.tableModal?.addEventListener("click", handleDialogBackdropClick);
+  elements.tableDeleteModal?.addEventListener("click", handleDialogBackdropClick);
+  elements.assignmentModal?.addEventListener("click", handleDialogBackdropClick);
+  elements.chairDetailsModal?.addEventListener("click", handleDialogBackdropClick);
   elements.guestModal?.addEventListener("cancel", (event) => {
     if (state.dirtyGuestForm && !window.confirm("Discard guest changes?")) {
       event.preventDefault();
@@ -356,6 +931,16 @@ function bindEvents() {
       event.preventDefault();
     }
   });
+  [elements.tableDeleteModal, elements.assignmentModal, elements.chairDetailsModal].forEach((modal) => {
+    modal?.addEventListener("cancel", (event) => {
+      if (state.activeModalOperation) {
+        event.preventDefault();
+      }
+      if (modal === elements.assignmentModal) {
+        cancelAssignmentSession();
+      }
+    });
+  });
   elements.guestModal?.addEventListener("close", () => {
     document.body.classList.remove("is-modal-open");
     state.dirtyGuestForm = false;
@@ -364,9 +949,23 @@ function bindEvents() {
     document.body.classList.remove("is-modal-open");
     state.dirtyTableForm = false;
   });
+  [elements.tableDeleteModal, elements.assignmentModal, elements.chairDetailsModal].forEach((modal) => {
+    modal?.addEventListener("close", () => {
+      if (![elements.guestModal, elements.tableModal, elements.tableDeleteModal, elements.assignmentModal, elements.chairDetailsModal].some((item) => item?.open)) {
+        document.body.classList.remove("is-modal-open");
+      }
+      if (!state.activeModalOperation) {
+        state.modalError = "";
+      }
+      if (modal === elements.chairDetailsModal && !state.assignmentSession) {
+        state.activePartyGuestId = "";
+        renderActiveView();
+      }
+      restoreModalFocus();
+    });
+  });
   window.addEventListener("scroll", closeGuestMenu, true);
   window.addEventListener("resize", closeGuestMenu);
-
   window.addEventListener("pointermove", handlePlannerPointerMove);
   window.addEventListener("pointerup", handlePlannerPointerUp);
 }
@@ -381,6 +980,9 @@ function handleDocumentClick(event) {
 
   const closeTrigger = event.target.closest("[data-close-modal]");
   if (closeTrigger) {
+    if (state.activeModalOperation) {
+      return;
+    }
     const modal = document.getElementById(closeTrigger.dataset.closeModal);
     if (closeTrigger.dataset.closeModal === "guestModal" && state.dirtyGuestForm) {
       const shouldClose = window.confirm("Discard guest changes?");
@@ -396,18 +998,25 @@ function handleDocumentClick(event) {
       }
       state.dirtyTableForm = false;
     }
+    if (closeTrigger.dataset.closeModal === "assignmentModal") {
+      cancelAssignmentSession();
+    }
     modal?.close();
     return;
   }
 
   const actionNode = event.target.closest("[data-action]");
   if (actionNode) {
+    if (actionNode.disabled || actionNode.getAttribute("aria-disabled") === "true") {
+      event.preventDefault();
+      return;
+    }
     const action = actionNode.dataset.action;
     const fromGuestMenu = Boolean(actionNode.closest(".guest-menu"));
     if (fromGuestMenu) {
       closeGuestMenu({ restoreFocus: false });
     }
-    void handleAction(action, actionNode.dataset);
+    void handleAction(action, actionNode.dataset, event);
     return;
   }
 
@@ -420,12 +1029,18 @@ function handleDialogBackdropClick(event) {
   if (event.target !== event.currentTarget) {
     return;
   }
+  if (state.activeModalOperation) {
+    return;
+  }
   const modal = event.currentTarget;
   if (modal.id === "guestModal" && state.dirtyGuestForm && !window.confirm("Discard guest changes?")) {
     return;
   }
   if (modal.id === "tableModal" && state.dirtyTableForm && !window.confirm("Discard table changes?")) {
     return;
+  }
+  if (modal.id === "assignmentModal") {
+    cancelAssignmentSession();
   }
   modal.close();
 }
@@ -444,6 +1059,7 @@ function handleDocumentInput(event) {
   const search = event.target.closest("[data-guest-search]");
   if (search) {
     state.guestFilters.search = search.value.trim();
+    state.guestPageIndex = 0;
     closeGuestMenu({ restoreFocus: false });
     renderActiveView();
     return;
@@ -452,7 +1068,11 @@ function handleDocumentInput(event) {
   const seatSearch = event.target.closest("[data-seat-search]");
   if (seatSearch) {
     state.guestAssignmentSearch = seatSearch.value.trim().toLowerCase();
-    renderActiveView();
+    if (elements.assignmentModal?.open) {
+      renderAssignmentModal();
+    } else {
+      renderActiveView();
+    }
   }
 }
 
@@ -460,6 +1080,7 @@ function handleDocumentChange(event) {
   const guestFilter = event.target.closest("[data-guest-filter]");
   if (guestFilter) {
     state.guestFilters[guestFilter.dataset.guestFilter] = guestFilter.value;
+    state.guestPageIndex = 0;
     closeGuestMenu({ restoreFocus: false });
     renderActiveView();
     return;
@@ -520,18 +1141,57 @@ function loadDemoDashboard(message = "Preview mode is on. Firebase setup can be 
     canManageUsers: true,
   };
   state.wedding = demoWedding;
-  state.guests = demoGuests.map((guest) => ({
+  const savedDemoState = readDemoDashboardState();
+  const demoSourceGuests = mergeDemoSeedGuests(savedDemoState?.guests || []);
+  state.guests = demoSourceGuests.map((guest) => ({
     ...guest,
-    inviteLink: buildInviteLink(guest.guestToken),
-    qrCodeValue: buildCheckinLink(guest.guestToken),
+    additionalGuests: normalizeAdditionalGuests(guest.additionalGuests),
+    inviteLink: guest.inviteLink || buildInviteLink(guest.guestToken),
+    qrCodeValue: guest.qrCodeValue || buildCheckinLink(guest.guestToken),
   }));
   state.loadingGuests = false;
-  state.tables = hydrateTables(demoTables);
+  state.tables = hydrateTables(savedDemoState?.tables || demoTables);
   state.loadingTables = false;
   state.selectedTableId = state.tables[0]?.id || "";
   showDashboard();
   renderAll();
   showToast(message, "info");
+}
+
+function mergeDemoSeedGuests(savedGuests) {
+  const savedById = new Map(savedGuests.map((guest) => [guest.id, guest]));
+  const merged = demoSeedGuests.map((seedGuest) => ({
+    ...seedGuest,
+    ...(savedById.get(seedGuest.id) || {}),
+  }));
+  const customGuests = savedGuests.filter((guest) => !demoSeedGuests.some((seedGuest) => seedGuest.id === guest.id));
+  return [...merged, ...customGuests];
+}
+
+function readDemoDashboardState() {
+  try {
+    const saved = localStorage.getItem(demoDashboardStorageKey);
+    if (!saved) {
+      return null;
+    }
+    const parsed = JSON.parse(saved);
+    return Array.isArray(parsed.guests) && Array.isArray(parsed.tables) ? parsed : null;
+  } catch {
+    return null;
+  }
+}
+
+function persistDemoDashboardState() {
+  if (state.mode !== "demo") {
+    return;
+  }
+  localStorage.setItem(
+    demoDashboardStorageKey,
+    JSON.stringify({
+      guests: state.guests,
+      tables: state.tables,
+    })
+  );
 }
 
 async function bootstrapDashboard() {
@@ -795,6 +1455,10 @@ function renderGuestPage() {
   }
 
   const guests = getFilteredGuests();
+  const totalGuestPages = Math.max(1, Math.ceil(guests.length / guestDirectoryPageSize));
+  state.guestPageIndex = clamp(state.guestPageIndex, 0, totalGuestPages - 1);
+  const pageStart = state.guestPageIndex * guestDirectoryPageSize;
+  const visibleGuests = guests.slice(pageStart, pageStart + guestDirectoryPageSize);
   const selectedCount = state.selectedGuestIds.length;
   const anySelectedVisible = guests.some((guest) => state.selectedGuestIds.includes(guest.id));
 
@@ -814,9 +1478,6 @@ function renderGuestPage() {
               ["all", "All Sides"],
               ["bride", "Bride"],
               ["groom", "Groom"],
-              ["both", "Both"],
-              ["family", "Family"],
-              ["other", "Other"],
             ])}
           </div>
           <span class="pill">${guests.length} result${guests.length === 1 ? "" : "s"}</span>
@@ -861,12 +1522,17 @@ function renderGuestPage() {
                   </tr>
                 </thead>
                 <tbody>
-                  ${guests.map((guest) => renderGuestRow(guest)).join("")}
+                  ${visibleGuests.map((guest) => renderGuestRow(guest)).join("")}
                 </tbody>
               </table>
             </article>
+            <article class="guest-page-controls" aria-label="Guest directory pages">
+              <button class="da3wa-button da3wa-button--secondary" type="button" data-action="guest-page-prev" ${state.guestPageIndex === 0 ? 'disabled aria-disabled="true"' : ""}>←</button>
+              <span>Showing ${pageStart + 1}-${Math.min(pageStart + guestDirectoryPageSize, guests.length)} of ${guests.length}</span>
+              <button class="da3wa-button da3wa-button--secondary" type="button" data-action="guest-page-next" ${state.guestPageIndex >= totalGuestPages - 1 ? 'disabled aria-disabled="true"' : ""}>→</button>
+            </article>
             <div class="guest-cards">
-              ${guests.map((guest) => renderGuestCard(guest)).join("")}
+              ${visibleGuests.map((guest) => renderGuestCard(guest)).join("")}
             </div>
           `
       }
@@ -900,13 +1566,12 @@ function renderSeatingPage() {
           <span class="pill">${saveStateLabel}</span>
         </div>
         <div class="planner-toolbar__actions">
-          ${actionButton("Zoom out", "planner-zoom-out")}
-          <span class="pill">${Math.round(state.plannerZoom * 100)}%</span>
-          ${actionButton("Zoom in", "planner-zoom-in")}
-          ${actionButton("Fit", "planner-fit")}
-          ${actionButton("Auto arrange", "planner-auto-arrange", !can("canEditSeating"))}
+          <div class="planner-zoom-controls" aria-label="Planner zoom controls">
+            ${actionButton("Zoom out", "planner-zoom-out")}
+            <span class="pill">${Math.round(state.plannerZoom * 100)}%</span>
+            ${actionButton("Zoom in", "planner-zoom-in")}
+          </div>
           ${actionButton("Add table", "open-add-table", !can("canEditSeating"), "primary")}
-          ${actionButton("Add hall object", "add-hall-object")}
         </div>
       </article>
 
@@ -928,17 +1593,11 @@ function renderSeatingPage() {
             ${state.hallObjects.map((item) => renderHallObject(item)).join("")}
             ${state.tables.length ? state.tables.map((table) => renderPlannerTable(table)).join("") : `<div class="da3wa-empty">No tables yet. Create your first table to start mapping the hall.</div>`}
           </div>
+          ${state.assignmentSession ? `<div class="assignment-dock">${renderAssignmentControls()}</div>` : ""}
         </article>
 
         <div class="planner-panel__stack">
           <article class="planner-panel">
-            <div class="planner-panel__header">
-              <div>
-                <p class="da3wa-eyebrow">Selected table</p>
-                <h3 class="planner-panel__title">${escapeHtml(selectedTable?.name || "No table selected")}</h3>
-              </div>
-              ${selectedTable ? actionButton("Edit", "edit-table", !can("canEditSeating")) : ""}
-            </div>
             ${
               selectedTable
                 ? renderTableInspector(selectedTable)
@@ -949,8 +1608,8 @@ function renderSeatingPage() {
           <article class="planner-panel">
             <div class="planner-panel__header">
               <div>
-                <p class="da3wa-eyebrow">${state.seatingMode === "assignment" ? "Waiting list" : "Planner library"}</p>
-                <h3 class="planner-panel__title">${state.seatingMode === "assignment" ? "Unassigned guests" : "Tables & hall objects"}</h3>
+                <p class="da3wa-eyebrow">${state.seatingMode === "assignment" ? "Guest assignment" : "Planner library"}</p>
+                <h3 class="planner-panel__title">${state.seatingMode === "assignment" ? "Unassigned guests" : "Tables"}</h3>
               </div>
             </div>
             ${
@@ -960,19 +1619,9 @@ function renderSeatingPage() {
             }
           </article>
 
-          ${
-            selectedSeat && state.seatingMode === "assignment"
-              ? `
-                <article class="seat-assignment">
-                  ${renderSeatAssignment(selectedSeat)}
-                </article>
-              `
-              : `
-                <article class="planner-panel">
-                  <div class="da3wa-empty">Switch to assignment mode and select a chair to open seat assignment controls.</div>
-                </article>
-              `
-          }
+          <article class="planner-panel">
+            ${state.assignmentSession ? renderAssignmentPanelHint() : renderAssignmentStatusPanel(selectedSeat)}
+          </article>
         </div>
       </div>
     </section>
@@ -1221,7 +1870,7 @@ function renderGuestCard(guest) {
 
 function renderPlannerTable(table) {
   const isSelected = table.id === state.selectedTableId;
-  const guests = getTableGuests(table.id);
+  const occupied = getTableAssignments(table.id).length;
   const width = Number(table.width || defaultWidthForShape(table.shape));
   const height = Number(table.height || defaultHeightForShape(table.shape));
   const transform = `translate(-50%, -50%) scale(${state.plannerZoom}) rotate(${Number(table.rotation || 0)}deg)`;
@@ -1245,7 +1894,7 @@ function renderPlannerTable(table) {
         >
           <div class="planner-table__label">
             <strong>${escapeHtml(table.label || table.name)}</strong>
-            <span>${guests.length}/${Number(table.seatCount || 0)} seated</span>
+            <span>${occupied}/${Number(table.seatCount || 0)} seated</span>
           </div>
         </button>
       </div>
@@ -1254,24 +1903,31 @@ function renderPlannerTable(table) {
 }
 
 function renderPlannerChair(table, chair) {
-  const guest = chair.guestId ? state.guests.find((item) => item.id === chair.guestId) : null;
-  const statusClass = chairStatusClass(chair, guest);
+  const assignment = getChairAssignment(table.id, chair);
+  const guest = assignment?.guestId ? state.guests.find((item) => item.id === assignment.guestId) : null;
+  const statusClass = chairStatusClass(chair, guest, assignment);
   const isSelected = state.selectedSeatId === buildSeatKey(table.id, chair.id);
+  const isTemporary = isChairTemporarilySelected(table.id, chair.id);
+  const isPartyHighlighted = assignment?.guestId && assignment.guestId === state.activePartyGuestId;
+  const label = assignment
+    ? assignment.partyMemberIndex === 0
+      ? getInitials(guest?.fullName) || "M"
+      : `+${assignment.partyMemberIndex}`
+    : String(chair.seatNumber);
   return `
     <button
-      class="planner-chair planner-chair--${escapeAttribute(statusClass)} ${isSelected ? "is-selected" : ""}"
+      class="planner-chair planner-chair--${escapeAttribute(statusClass)} ${isSelected ? "is-selected" : ""} ${isTemporary ? "is-temporary" : ""} ${isPartyHighlighted ? "is-party-highlighted" : ""}"
       type="button"
       style="left:${chair.x}%; top:${chair.y}%; --chair-color:${escapeAttribute(resolveChairColor(statusClass, table))};"
-      title="${escapeAttribute(guest ? `${guest.fullName} · Seat ${chair.seatNumber}` : `Seat ${chair.seatNumber}`)}"
+      title="${escapeAttribute(assignment ? `${partyMemberLabel(guest, assignment.partyMemberIndex)} - ${table.name} chair ${chair.seatNumber}` : `Available chair ${chair.seatNumber}`)}"
       data-action="select-seat"
       data-table-id="${table.id}"
       data-chair-id="${chair.id}"
     >
-      ${escapeHtml(guest ? getInitials(guest.fullName) || String(chair.seatNumber) : String(chair.seatNumber))}
+      <span>${escapeHtml(label)}</span>
     </button>
   `;
 }
-
 function renderHallObject(item) {
   return `
     <div class="hall-object hall-object--${escapeAttribute(item.type)}" style="left:${item.x}%; top:${item.y}%;">
@@ -1281,38 +1937,33 @@ function renderHallObject(item) {
 }
 
 function renderTableInspector(table) {
-  const guests = getTableGuests(table.id);
-  const brideCount = guests.filter((guest) => guest.side === "bride").length;
-  const groomCount = guests.filter((guest) => guest.side === "groom").length;
-  const vipCount = guests.filter((guest) => /vip/i.test(guest.notes || "")).length;
+  const assignments = getTableAssignments(table.id);
+  const capacity = Number(table.seatCount || table.capacity || 0);
   return `
-    <div class="planner-inspector__stats">
-      ${plannerStat("Shape", prettifyShape(table.shape))}
-      ${plannerStat("Zone", table.floorZone || "Main hall")}
-      ${plannerStat("Capacity", String(table.seatCount || table.capacity || 0))}
-      ${plannerStat("Occupied", String(guests.length))}
-      ${plannerStat("Available", String(Math.max(0, Number(table.seatCount || 0) - guests.length)))}
-      ${plannerStat("Bride side", String(brideCount))}
-      ${plannerStat("Groom side", String(groomCount))}
-      ${plannerStat("VIP count", String(vipCount))}
-      ${plannerStat("Size", `${Number(table.width || 0)} × ${Number(table.height || 0)}`)}
-      ${plannerStat("Rotation", `${Number(table.rotation || 0)}°`)}
+    <div class="planner-table-summary">
+      <div>
+        <span>Table</span>
+        <strong>${escapeHtml(table.name || "Table")}</strong>
+      </div>
+      <div>
+        <span>Occupied</span>
+        <strong>${assignments.length}/${capacity}</strong>
+      </div>
     </div>
     <div class="guest-toolbar__summary">
-      ${actionButton("Duplicate", "duplicate-table", !can("canEditSeating"), "secondary", table.id)}
+      ${actionButton("Edit", "edit-table", !can("canEditSeating"), "secondary", table.id)}
       ${actionButton("Delete", "delete-table", !can("canEditSeating"), "ghost", table.id)}
     </div>
   `;
 }
-
 function renderLayoutLibrary() {
   const tables = state.tables
     .map((table) => {
-      const guests = getTableGuests(table.id);
+      const occupied = getTableAssignments(table.id).length;
       return `
         <button class="planner-table-list__button ${table.id === state.selectedTableId ? "is-selected" : ""}" type="button" data-action="select-table" data-table-id="${table.id}">
           <strong>${escapeHtml(table.name)}</strong>
-          <small>${escapeHtml(table.label || prettifyShape(table.shape))} · ${guests.length}/${Number(table.seatCount || 0)} seated</small>
+          <small>${escapeHtml(table.label || prettifyShape(table.shape))} · ${occupied}/${Number(table.seatCount || 0)} seated</small>
         </button>
       `;
     })
@@ -1358,8 +2009,6 @@ function renderAssignmentLibrary(unassignedGuests) {
           <option value="all" ${state.libraryFilters.side === "all" ? "selected" : ""}>All sides</option>
           <option value="bride" ${state.libraryFilters.side === "bride" ? "selected" : ""}>Bride</option>
           <option value="groom" ${state.libraryFilters.side === "groom" ? "selected" : ""}>Groom</option>
-          <option value="family" ${state.libraryFilters.side === "family" ? "selected" : ""}>Family</option>
-          <option value="other" ${state.libraryFilters.side === "other" ? "selected" : ""}>Other</option>
         </select>
       </label>
       <label>
@@ -1382,6 +2031,57 @@ function renderAssignmentLibrary(unassignedGuests) {
           : '<div class="da3wa-empty">No matching unassigned guests.</div>'
       }
     </div>
+  `;
+}
+
+function renderAssignmentStatusPanel(selectedSeat) {
+  if (state.seatingMode !== "assignment") {
+    return "";
+  }
+
+  if (!selectedSeat) {
+    return `<div class="da3wa-empty">Click an empty chair to assign a party, or click an occupied chair to inspect that party.</div>`;
+  }
+
+  return `<div class="da3wa-empty">Selected ${escapeHtml(selectedSeat.table.name)} chair ${escapeHtml(String(selectedSeat.chair.seatNumber))}. Choose a guest or inspect the assigned party to continue.</div>`;
+}
+
+function renderAssignmentControls() {
+  const session = state.assignmentSession;
+  const guest = state.guests.find((item) => item.id === session.guestId);
+  const selectedCount = session.selectedChairs.length;
+  const required = session.requiredSeats;
+  const canComplete = selectedCount > 0 && !state.activeModalOperation;
+  return `
+    <div class="assignment-dock__main">
+      <div>
+        <p class="da3wa-eyebrow">Assignment in progress</p>
+        <h3 class="planner-panel__title">${escapeHtml(guest?.fullName || "Guest party")}</h3>
+        <p class="planner-note">Select one or more chairs on the map. Amber chairs are temporary until you complete the assignment.</p>
+      </div>
+      ${badge(`${selectedCount} of ${required}`, selectedCount === required ? "confirmed" : "pending")}
+    </div>
+    <div class="assignment-progress">
+      <strong>${selectedCount} of ${required} chairs selected</strong>
+      <span>${escapeHtml(getSelectedChairSummary(session.selectedChairs) || "No chairs selected yet")}</span>
+    </div>
+    ${state.modalError ? `<div class="planner-warning-list"><span class="warning-chip">${escapeHtml(state.modalError)}</span></div>` : ""}
+    <div class="assignment-dock__actions">
+      <button class="da3wa-button da3wa-button--secondary" type="button" data-action="cancel-assignment">Cancel</button>
+      <button class="da3wa-button da3wa-button--primary ${!canComplete ? "is-disabled" : ""}" type="button" data-action="complete-assignment" ${!canComplete ? 'disabled aria-disabled="true"' : ""}>Complete assignment</button>
+    </div>
+  `;
+}
+
+function renderAssignmentPanelHint() {
+  return `
+    <div class="planner-panel__header">
+      <div>
+        <p class="da3wa-eyebrow">Assignment controls</p>
+        <h3 class="planner-panel__title">Below the map</h3>
+      </div>
+    </div>
+    <p class="planner-note">Use the buttons beneath the seating map when you are ready to save or cancel the move.</p>
   `;
 }
 
@@ -1482,7 +2182,7 @@ function exportCard(title, description, format, action) {
 
 function actionButton(label, action, disabled = false, tone = "secondary", id = "") {
   return `
-    <button class="da3wa-button da3wa-button--${tone} ${disabled ? "is-disabled" : ""}" type="button" data-action="${escapeAttribute(action)}" ${id ? `data-id="${escapeAttribute(id)}"` : ""} ${disabled ? 'aria-disabled="true"' : ""}>
+    <button class="da3wa-button da3wa-button--${tone} ${disabled ? "is-disabled" : ""}" type="button" data-action="${escapeAttribute(action)}" ${id ? `data-id="${escapeAttribute(id)}"` : ""} ${disabled ? 'disabled aria-disabled="true"' : ""}>
       ${escapeHtml(label)}
     </button>
   `;
@@ -1490,7 +2190,7 @@ function actionButton(label, action, disabled = false, tone = "secondary", id = 
 
 function menuItem(label, action, guestId, disabled = false) {
   return `
-    <button class="guest-menu__item ${disabled ? "is-disabled" : ""}" type="button" role="menuitem" data-action="${escapeAttribute(action)}" data-guest-id="${escapeAttribute(guestId)}" ${disabled ? 'aria-disabled="true"' : ""}>
+    <button class="guest-menu__item ${disabled ? "is-disabled" : ""}" type="button" role="menuitem" data-action="${escapeAttribute(action)}" data-guest-id="${escapeAttribute(guestId)}" ${disabled ? 'disabled aria-disabled="true"' : ""}>
       ${escapeHtml(label)}
     </button>
   `;
@@ -1590,7 +2290,7 @@ function badge(label, tone) {
   return `<span class="guest-badge guest-badge--${escapeAttribute(String(tone).toLowerCase().replace(/\s+/g, "-"))}">${escapeHtml(label)}</span>`;
 }
 
-async function handleAction(action, dataset) {
+async function handleAction(action, dataset, event = null) {
   switch (action) {
     case "open-add-guest":
       await openGuestModal();
@@ -1745,8 +2445,21 @@ async function handleAction(action, dataset) {
         }
       }
       return;
+    case "guest-page-prev":
+      state.guestPageIndex = Math.max(0, state.guestPageIndex - 1);
+      closeGuestMenu({ restoreFocus: false });
+      renderActiveView();
+      return;
+    case "guest-page-next":
+      state.guestPageIndex += 1;
+      closeGuestMenu({ restoreFocus: false });
+      renderActiveView();
+      return;
     case "set-seating-mode":
       state.seatingMode = dataset.mode;
+      if (state.seatingMode !== "assignment") {
+        cancelAssignmentSession();
+      }
       renderActiveView();
       return;
     case "planner-zoom-in":
@@ -1755,14 +2468,8 @@ async function handleAction(action, dataset) {
     case "planner-zoom-out":
       setPlannerZoom(state.plannerZoom - 0.1);
       return;
-    case "planner-fit":
-      setPlannerZoom(1);
-      return;
-    case "planner-auto-arrange":
-      await handleAutoArrange();
-      return;
-    case "add-hall-object":
-      addHallObject();
+    case "load-test-guests":
+      loadSeatingTestGuests();
       return;
     case "select-table":
       state.selectedTableId = dataset.tableId;
@@ -1781,14 +2488,6 @@ async function handleAction(action, dataset) {
     case "delete-table":
       await confirmDeleteTable(dataset.id);
       return;
-    case "select-seat":
-      state.selectedTableId = dataset.tableId;
-      state.selectedSeatId = buildSeatKey(dataset.tableId, dataset.chairId);
-      if (state.seatingMode === "layout") {
-        state.seatingMode = "assignment";
-      }
-      renderActiveView();
-      return;
     case "assign-seat":
       await assignGuestToChair(dataset.tableId, dataset.chairId, dataset.guestId);
       return;
@@ -1797,6 +2496,31 @@ async function handleAction(action, dataset) {
       await assignGuestToChair(tableId, chairId, "");
       return;
     }
+    case "select-seat":
+      state.selectedTableId = dataset.tableId;
+      state.selectedSeatId = buildSeatKey(dataset.tableId, dataset.chairId);
+      if (state.seatingMode === "layout") {
+        state.seatingMode = "assignment";
+      }
+      handleAssignmentChairClick(dataset.tableId, dataset.chairId, event?.target);
+      return;
+    case "choose-assignment-guest":
+      chooseGuestForAssignment(dataset.guestId);
+      return;
+    case "complete-assignment":
+      await completeAssignmentSession();
+      return;
+    case "cancel-assignment":
+      cancelAssignmentSession();
+      elements.assignmentModal?.close();
+      renderActiveView();
+      return;
+    case "move-party":
+      beginMoveParty(dataset.guestId || dataset.id);
+      return;
+    case "unassign-party":
+      await unassignParty(dataset.guestId || dataset.id);
+      return;
     default:
       return;
   }
@@ -1804,8 +2528,10 @@ async function handleAction(action, dataset) {
 
 function calculateDashboardStats(guests, tables) {
   const totalSeats = tables.reduce((sum, table) => sum + Number(table.seatCount || table.capacity || 0), 0);
-  const seatedGuests = guests.filter((guest) => guest.tableId).length;
-  const withoutSeat = guests.filter((guest) => guest.rsvpStatus === "confirmed" && !guest.tableId).length;
+  const assignedSeats = countAssignedSeats(tables);
+  const seatedGuests = guests.filter((guest) => getGuestAssignedSeats(guest.id).length > 0).length;
+  const withoutSeat = guests.filter((guest) => guest.rsvpStatus === "confirmed" && getGuestRemainingSeats(guest) > 0).length;
+  const unassignedPeople = guests.reduce((sum, guest) => sum + getGuestRemainingSeats(guest), 0);
   const total = guests.length;
   const confirmed = guests.filter((guest) => guest.rsvpStatus === "confirmed").length;
   const pending = guests.filter((guest) => guest.rsvpStatus === "pending").length;
@@ -1820,8 +2546,9 @@ function calculateDashboardStats(guests, tables) {
     notCheckedIn: guests.filter((guest) => !guest.checkedIn).length,
     totalSeats,
     seatedGuests,
-    unassignedGuests: guests.filter((guest) => !guest.tableId).length,
-    remainingSeats: Math.max(0, totalSeats - seatedGuests),
+    assignedSeats,
+    unassignedGuests: unassignedPeople,
+    remainingSeats: Math.max(0, totalSeats - assignedSeats),
     withoutSeat,
     confirmedPct: percentage(confirmed, total),
     pendingPct: percentage(pending, total),
@@ -1832,11 +2559,11 @@ function calculateDashboardStats(guests, tables) {
 }
 
 function calculateAttention(guests, tables) {
-  const confirmedWithoutTables = guests.filter((guest) => guest.rsvpStatus === "confirmed" && !guest.tableId).length;
+  const confirmedWithoutTables = guests.filter((guest) => guest.rsvpStatus === "confirmed" && getGuestRemainingSeats(guest) > 0).length;
   const pendingGuests = guests.filter((guest) => guest.rsvpStatus === "pending").length;
   const incompleteInfo = guests.filter((guest) => !guest.phone || !guest.fullName).length;
-  const overCapacity = tables.filter((table) => getTableGuests(table.id).length > Number(table.seatCount || table.capacity || 0)).length;
-  const conflicts = guests.filter((guest) => guest.rsvpStatus === "declined" && guest.tableId).length;
+  const overCapacity = tables.filter((table) => getTableAssignments(table.id).length > Number(table.seatCount || table.capacity || 0)).length;
+  const conflicts = guests.filter((guest) => guest.rsvpStatus === "declined" && getGuestAssignedSeats(guest.id).length > 0).length;
 
   return [
     {
@@ -1944,6 +2671,80 @@ function getFilteredGuests() {
 function normalizeAdditionalGuests(value) {
   const numberValue = Number(value);
   return Number.isInteger(numberValue) && numberValue >= 0 ? numberValue : 0;
+}
+
+function getPartySize(guest) {
+  return 1 + normalizeAdditionalGuests(guest?.additionalGuests);
+}
+
+function normalizeAssignment(assignment, tableId, chair) {
+  if (!assignment && !chair?.guestId) {
+    return null;
+  }
+  const guestId = assignment?.guestId || chair?.guestId || "";
+  if (!guestId) {
+    return null;
+  }
+  const partyMemberIndex = Number.isInteger(Number(assignment?.partyMemberIndex)) ? Number(assignment.partyMemberIndex) : 0;
+  return {
+    tableId: assignment?.tableId || tableId,
+    seatNumber: Number(assignment?.seatNumber || chair?.seatNumber || 0),
+    guestId,
+    partyMemberIndex,
+    isMainGuest: partyMemberIndex === 0,
+  };
+}
+
+function getChairAssignment(tableId, chair) {
+  return normalizeAssignment(chair?.assignment, tableId, chair);
+}
+
+function getAllAssignments(tables = state.tables) {
+  return tables.flatMap((table) =>
+    (table.chairs || [])
+      .map((chair) => {
+        const assignment = getChairAssignment(table.id, chair);
+        return assignment ? { ...assignment, chairId: chair.id, tableName: table.name, chair } : null;
+      })
+      .filter(Boolean)
+  );
+}
+
+function getTableAssignments(tableId) {
+  return getAllAssignments().filter((assignment) => assignment.tableId === tableId);
+}
+
+function getGuestAssignedSeats(guestId, tables = state.tables) {
+  if (!guestId) {
+    return [];
+  }
+  return getAllAssignments(tables).filter((assignment) => assignment.guestId === guestId);
+}
+
+function countAssignedSeats(tables = state.tables) {
+  return getAllAssignments(tables).length;
+}
+
+function getGuestRemainingSeats(guest) {
+  return Math.max(0, getPartySize(guest) - getGuestAssignedSeats(guest.id).length);
+}
+
+function uniqueGuestsFromAssignments(assignments) {
+  const seen = new Set();
+  return assignments
+    .map((assignment) => state.guests.find((guest) => guest.id === assignment.guestId))
+    .filter((guest) => {
+      if (!guest || seen.has(guest.id)) {
+        return false;
+      }
+      seen.add(guest.id);
+      return true;
+    });
+}
+
+function partyMemberLabel(guest, partyMemberIndex) {
+  const name = guest?.fullName || "Guest";
+  return partyMemberIndex === 0 ? name : `${name} - Companion ${partyMemberIndex}`;
 }
 
 function parseAdditionalGuests(value) {
@@ -2061,6 +2862,13 @@ async function saveGuest(event) {
     return;
   }
   elements.guestForm.additionalGuests.setCustomValidity("");
+  const assignedSeats = guestId ? getGuestAssignedSeats(guestId).length : 0;
+  if (assignedSeats > 1 + additionalGuests) {
+    elements.guestForm.additionalGuests.setCustomValidity(`This guest already has ${assignedSeats} assigned chairs. Unassign or move seats before reducing the party size.`);
+    elements.guestForm.reportValidity();
+    return;
+  }
+  elements.guestForm.additionalGuests.setCustomValidity("");
 
   const ownedPayload = {
     fullName,
@@ -2103,6 +2911,7 @@ async function saveGuest(event) {
     state.dirtyGuestForm = false;
     elements.guestModal.close();
     state.tables = hydrateTables(state.tables);
+    persistDemoDashboardState();
     renderAll();
     showToast("Guest saved successfully.", "success");
     return;
@@ -2170,25 +2979,34 @@ async function deleteGuest(guestId) {
   }
 
   if (state.mode === "demo") {
-    state.guests = state.guests.filter((guest) => guest.id !== guestId);
-    state.tables = hydrateTables(
-      state.tables.map((table) => ({
-        ...table,
-        chairs: table.chairs.map((chair) => ({
-          ...chair,
-          guestId: chair.guestId === guestId ? "" : chair.guestId,
-          status: chair.guestId === guestId ? "available" : chair.status,
-        })),
-      }))
-    );
+    const nextTables = clearGuestFromTables(state.tables, guestId);
+    const nextGuests = state.guests.filter((guest) => guest.id !== guestId);
+    state.guests = nextGuests;
+    state.tables = hydrateTables(nextTables);
+    state.guests = syncGuestSeatingSummaries(nextGuests, state.tables);
+    persistDemoDashboardState();
     renderAll();
     showToast("Guest deleted.", "success");
     return;
   }
 
   try {
-    await deleteDoc(doc(state.services.db, "weddings", state.weddingId, "guests", guestId));
-    await syncTablesAndGuests();
+    const batch = writeBatch(state.services.db);
+    const nextTables = clearGuestFromTables(state.tables, guestId);
+    const nextGuests = state.guests.filter((guest) => guest.id !== guestId);
+    nextTables.forEach((table) => {
+      batch.update(doc(state.services.db, "weddings", state.weddingId, "tables", table.id), {
+        chairs: table.chairs,
+        guestIds: [...new Set(table.chairs.map((chair) => getChairAssignment(table.id, chair)?.guestId).filter(Boolean))],
+        updatedAt: serverTimestamp(),
+      });
+    });
+    batch.delete(doc(state.services.db, "weddings", state.weddingId, "guests", guestId));
+    await batch.commit();
+    state.tables = hydrateTables(nextTables);
+    state.guests = syncGuestSeatingSummaries(nextGuests, state.tables);
+    state.selectedSeatId = "";
+    renderAll();
     showToast("Guest deleted.", "success");
   } catch (error) {
     console.error(error);
@@ -2205,6 +3023,9 @@ function openTableModal(table = null) {
   state.selectedTableId = table?.id || "";
   state.dirtyTableForm = false;
   elements.tableModalTitle.textContent = table ? "Edit Table" : "Create Table";
+  if (elements.tableDeleteButton) {
+    elements.tableDeleteButton.hidden = !table;
+  }
   elements.tableForm.reset();
   elements.tableForm.name.value = table?.name || "";
   elements.tableForm.label.value = table?.label || "";
@@ -2247,6 +3068,18 @@ async function saveTable(event) {
     y: Number(elements.tableForm.y.value || 0),
     chairs: state.tables.find((table) => table.id === state.selectedTableId)?.chairs || [],
   });
+  const occupiedSeats = state.selectedTableId ? getTableAssignments(state.selectedTableId).length : 0;
+  if (payload.seatCount < occupiedSeats || payload.capacity < occupiedSeats) {
+    showToast(`This table has ${occupiedSeats} occupied chairs. Unassign guests before reducing capacity.`, "error");
+    return;
+  }
+  const removedAssignedSeat = state.selectedTableId
+    ? getTableAssignments(state.selectedTableId).some((assignment) => Number(assignment.seatNumber) > payload.seatCount)
+    : false;
+  if (removedAssignedSeat) {
+    showToast("This seat count would remove an assigned chair. Unassign or move that party first.", "error");
+    return;
+  }
 
   if (state.mode === "demo") {
     if (state.selectedTableId) {
@@ -2258,6 +3091,7 @@ async function saveTable(event) {
     state.selectedTableId = payload.id;
     state.dirtyTableForm = false;
     elements.tableModal.close();
+    persistDemoDashboardState();
     renderAll();
     showToast("Table saved successfully.", "success");
     return;
@@ -2302,12 +3136,14 @@ async function duplicateTable(table) {
       ...chair,
       id: createId("chair"),
       guestId: "",
+      assignment: null,
       status: "available",
     })),
   });
 
   if (state.mode === "demo") {
     state.tables = [...state.tables, duplicated];
+    persistDemoDashboardState();
     renderAll();
     showToast("Table duplicated.", "success");
     return;
@@ -2327,15 +3163,60 @@ async function duplicateTable(table) {
 }
 
 async function confirmDeleteTable(tableId) {
-  const table = state.tables.find((item) => item.id === tableId);
-  if (!table) {
+  openTableDeleteModal(tableId);
+}
+
+function openTableDeleteModal(tableId) {
+  if (!can("canEditSeating")) {
+    showToast("Your role does not allow seating edits.", "error");
     return;
   }
-  const confirmed = window.confirm(`Delete ${table.name}? Assigned guests will become unassigned.`);
-  if (!confirmed) {
+  state.selectedTableId = tableId;
+  state.modalError = "";
+  renderTableDeleteModal();
+  document.body.classList.add("is-modal-open");
+  elements.tableDeleteModal.showModal();
+}
+
+function renderTableDeleteModal() {
+  const table = state.tables.find((item) => item.id === state.selectedTableId);
+  if (!table || !elements.tableDeleteContent) {
     return;
   }
-  await deleteTable(tableId);
+  const assignments = getTableAssignments(table.id);
+  const occupied = assignments.length;
+  elements.tableDeleteContent.innerHTML = `
+    <div class="da3wa-sheet__header">
+      <div>
+        <p class="da3wa-eyebrow">Delete table</p>
+        <h2>${escapeHtml(table.name || "Table")}</h2>
+      </div>
+      <button class="da3wa-icon-button" type="button" data-close-modal="tableDeleteModal" aria-label="Close delete table modal" ${state.activeModalOperation ? "disabled" : ""}>x</button>
+    </div>
+    <div class="da3wa-sheet__body">
+      <div class="delete-summary-grid">
+        ${plannerStat("Table", table.name || "Table")}
+        ${plannerStat("Capacity", String(table.seatCount || table.capacity || 0))}
+        ${plannerStat("Occupied chairs", String(occupied))}
+      </div>
+      ${occupied ? `<div class="planner-warning-list"><span class="warning-chip">This table contains assigned guests. Confirming will clear every linked seating assignment before deletion.</span></div>` : ""}
+      ${state.modalError ? `<div class="planner-warning-list"><span class="warning-chip">${escapeHtml(state.modalError)}</span></div>` : ""}
+    </div>
+    <div class="da3wa-sheet__footer">
+      <button class="da3wa-button da3wa-button--secondary" type="button" data-close-modal="tableDeleteModal" ${state.activeModalOperation ? "disabled" : ""}>Cancel</button>
+      <button class="da3wa-button da3wa-button--danger" type="button" id="tableDeleteConfirmButton" ${state.activeModalOperation ? "disabled" : ""}>${state.activeModalOperation === "delete-table" ? "Deleting..." : "Delete table"}</button>
+    </div>
+  `;
+  elements.tableDeleteContent.querySelector("#tableDeleteConfirmButton")?.addEventListener("click", () => {
+    void deleteSelectedTableFromModal();
+  });
+}
+
+async function deleteSelectedTableFromModal() {
+  if (state.activeModalOperation) {
+    return;
+  }
+  await deleteTable(state.selectedTableId);
 }
 
 async function deleteTable(tableId) {
@@ -2343,14 +3224,23 @@ async function deleteTable(tableId) {
     showToast("Your role does not allow seating edits.", "error");
     return;
   }
+  const table = state.tables.find((item) => item.id === tableId);
+  if (!table) {
+    return;
+  }
+  state.activeModalOperation = "delete-table";
+  state.modalError = "";
+  renderTableDeleteModal();
 
   if (state.mode === "demo") {
-    state.guests = state.guests.map((guest) =>
-      guest.tableId === tableId ? { ...guest, tableId: "", tableName: "", seatNumber: "" } : guest
-    );
-    state.tables = state.tables.filter((table) => table.id !== tableId);
+    const remainingTables = state.tables.filter((item) => item.id !== tableId);
+    state.tables = hydrateTables(remainingTables);
+    state.guests = syncGuestSeatingSummaries(state.guests, state.tables);
     state.selectedTableId = state.tables[0]?.id || "";
     state.selectedSeatId = "";
+    state.activeModalOperation = "";
+    elements.tableDeleteModal?.close();
+    persistDemoDashboardState();
     renderAll();
     showToast("Table deleted.", "success");
     return;
@@ -2358,59 +3248,28 @@ async function deleteTable(tableId) {
 
   try {
     const batch = writeBatch(state.services.db);
+    const affectedGuestIds = [...new Set(getTableAssignments(tableId).map((assignment) => assignment.guestId))];
+    const nextTables = hydrateTables(state.tables.filter((item) => item.id !== tableId));
+    const nextGuests = syncGuestSeatingSummaries(state.guests, nextTables);
     batch.delete(doc(state.services.db, "weddings", state.weddingId, "tables", tableId));
-    state.guests
-      .filter((guest) => guest.tableId === tableId)
-      .forEach((guest) => {
-        batch.update(doc(state.services.db, "weddings", state.weddingId, "guests", guest.id), {
-          tableId: "",
-          tableName: "",
-          seatNumber: "",
-          updatedAt: serverTimestamp(),
-        });
-      });
-    await batch.commit();
-    showToast("Table deleted.", "success");
-  } catch (error) {
-    console.error(error);
-    showToast("Table deletion failed.", "error");
-  }
-}
-
-async function handleAutoArrange() {
-  if (!state.tables.length) {
-    return;
-  }
-  const arranged = state.tables.map((table, index) => ({
-    ...table,
-    x: 20 + (index % 3) * 28,
-    y: 24 + Math.floor(index / 3) * 28,
-  }));
-
-  if (state.mode === "demo") {
-    state.tables = arranged;
-    renderAll();
-    showToast("Tables arranged into a ballroom grid.", "success");
-    return;
-  }
-
-  setSaveState("saving");
-  try {
-    const batch = writeBatch(state.services.db);
-    arranged.forEach((table) => {
-      batch.update(doc(state.services.db, "weddings", state.weddingId, "tables", table.id), {
-        x: table.x,
-        y: table.y,
-        updatedAt: serverTimestamp(),
-      });
+    affectedGuestIds.forEach((guestId) => {
+      const nextGuest = nextGuests.find((guest) => guest.id === guestId);
+      batch.update(doc(state.services.db, "weddings", state.weddingId, "guests", guestId), buildGuestSeatingPatch(nextGuest));
     });
     await batch.commit();
-    setSaveState("saved");
-    showToast("Tables arranged into a ballroom grid.", "success");
+    state.tables = nextTables;
+    state.guests = nextGuests;
+    state.selectedTableId = state.tables[0]?.id || "";
+    state.selectedSeatId = "";
+    state.activeModalOperation = "";
+    elements.tableDeleteModal?.close();
+    renderAll();
+    showToast("Table deleted.", "success");
   } catch (error) {
     console.error(error);
-    setSaveState("saved");
-    showToast("Auto arrange failed.", "error");
+    state.activeModalOperation = "";
+    state.modalError = error.message || "Table deletion failed.";
+    renderTableDeleteModal();
   }
 }
 
@@ -2419,31 +3278,27 @@ function setPlannerZoom(nextZoom) {
   renderActiveView();
 }
 
-function addHallObject() {
-  const types = [
-    ["stage", "Stage"],
-    ["entrance", "Entrance"],
-    ["dance-floor", "Dance floor"],
-    ["aisle", "Aisle"],
-    ["buffet", "Buffet"],
-    ["dj", "DJ"],
-    ["photo-area", "Photo area"],
-    ["divider", "Divider"],
-    ["text-label", "Label"],
-  ];
-  const [type, label] = types[state.hallObjects.length % types.length];
-  state.hallObjects = [
-    ...state.hallObjects,
-    {
-      id: createId("object"),
-      type,
-      label,
-      x: 16 + (state.hallObjects.length % 4) * 18,
-      y: 18 + (state.hallObjects.length % 3) * 18,
-    },
-  ];
-  renderActiveView();
-  showToast("Local hall object added. Persistence can be layered in later.", "info");
+function loadSeatingTestGuests() {
+  if (state.mode !== "demo") {
+    showToast("Test guests are only available in demo mode.", "error");
+    return;
+  }
+  const existingIds = new Set(state.guests.map((guest) => guest.id));
+  const nextGuests = seatingTestGuests
+    .filter((guest) => !existingIds.has(guest.id))
+    .map((guest) => ({
+      ...guest,
+      inviteLink: buildInviteLink(guest.guestToken),
+      qrCodeValue: buildCheckinLink(guest.guestToken),
+    }));
+  if (!nextGuests.length) {
+    showToast("Test guests are already loaded.", "info");
+    return;
+  }
+  state.guests = [...state.guests, ...nextGuests];
+  persistDemoDashboardState();
+  renderAll();
+  showToast("Loaded 12 unassigned seating test guests.", "success");
 }
 
 function handlePlannerPointerDown(event) {
@@ -2486,6 +3341,7 @@ function handlePlannerPointerMove(event) {
   const rect = canvas.getBoundingClientRect();
   const dx = ((event.clientX - state.dragState.startX) / rect.width) * 100;
   const dy = ((event.clientY - state.dragState.startY) / rect.height) * 100;
+  state.dragState.moved = state.dragState.moved || Math.abs(event.clientX - state.dragState.startX) > 3 || Math.abs(event.clientY - state.dragState.startY) > 3;
   const nextX = clamp(state.dragState.originalX + dx, 8, 92);
   const nextY = clamp(state.dragState.originalY + dy, 12, 88);
   state.tables = state.tables.map((table) =>
@@ -2499,15 +3355,28 @@ async function handlePlannerPointerUp() {
     return;
   }
 
-  const { tableId } = state.dragState;
+  const { tableId, moved, originalX, originalY } = state.dragState;
   state.dragState = null;
-
-  if (state.mode === "demo") {
-    return;
-  }
 
   const table = state.tables.find((item) => item.id === tableId);
   if (!table) {
+    return;
+  }
+
+  if (!moved || (Math.abs(Number(table.x || 0) - originalX) < 0.01 && Math.abs(Number(table.y || 0) - originalY) < 0.01)) {
+    renderActiveView();
+    return;
+  }
+
+  if (state.mode === "demo") {
+    persistDemoDashboardState();
+    return;
+  }
+
+  if (!can("canEditSeating")) {
+    state.tables = state.tables.map((item) => (item.id === tableId ? { ...item, x: originalX, y: originalY } : item));
+    renderActiveView();
+    showToast("Your role does not allow table layout edits.", "error");
     return;
   }
 
@@ -2522,8 +3391,494 @@ async function handlePlannerPointerUp() {
   } catch (error) {
     console.error(error);
     setSaveState("saved");
-    showToast("Table move could not be saved.", "error");
   }
+}
+
+function rememberModalFocus(trigger) {
+  if (trigger?.dataset?.tableId && trigger?.dataset?.chairId) {
+    state.returnFocusSelector = `[data-action="select-seat"][data-table-id="${CSS.escape(trigger.dataset.tableId)}"][data-chair-id="${CSS.escape(trigger.dataset.chairId)}"]`;
+  } else {
+    state.returnFocusSelector = "";
+  }
+}
+
+function restoreModalFocus() {
+  if (!state.returnFocusSelector) {
+    return;
+  }
+  document.querySelector(state.returnFocusSelector)?.focus();
+  state.returnFocusSelector = "";
+}
+
+function openCenteredModal(modal, renderFn, focusSelector = "button, input, select, textarea, [tabindex]:not([tabindex='-1'])") {
+  renderFn?.();
+  document.body.classList.add("is-modal-open");
+  if (!modal.open) {
+    modal.showModal();
+  }
+  requestAnimationFrame(() => modal.querySelector(focusSelector)?.focus());
+}
+
+function handleAssignmentChairClick(tableId, chairId, trigger) {
+  if (!can("canEditSeating")) {
+    showToast("Your role does not allow seating edits.", "error");
+    return;
+  }
+  const table = state.tables.find((item) => item.id === tableId);
+  const chair = table?.chairs.find((item) => item.id === chairId);
+  if (!table || !chair) {
+    return;
+  }
+  rememberModalFocus(trigger);
+  const assignment = getChairAssignment(tableId, chair);
+  if (state.assignmentSession) {
+    toggleTemporaryChair(tableId, chairId);
+    return;
+  }
+  if (assignment?.guestId) {
+    state.activePartyGuestId = assignment.guestId;
+    openCenteredModal(elements.chairDetailsModal, () => renderChairDetailsModal(assignment.guestId));
+    renderActiveView();
+    return;
+  }
+  state.guestAssignmentSearch = "";
+  state.assignmentSession = {
+    mode: "assign",
+    guestId: "",
+    requiredSeats: 0,
+    startingTableId: tableId,
+    selectedChairs: [{ tableId, chairId }],
+    existingAssignments: [],
+  };
+  openCenteredModal(elements.assignmentModal, renderAssignmentModal, "[data-seat-search]");
+  renderActiveView();
+}
+
+function renderAssignmentModal() {
+  if (!elements.assignmentContent || !state.assignmentSession) {
+    return;
+  }
+  const session = state.assignmentSession;
+  const guest = session.guestId ? state.guests.find((item) => item.id === session.guestId) : null;
+  const candidates = getSeatCandidates(session.guestId).filter((item) => getGuestRemainingSeats(item) > 0 || item.id === session.guestId);
+  const filtered = candidates.filter((item) => {
+    if (!state.guestAssignmentSearch) {
+      return true;
+    }
+    return [item.fullName, item.phone].some((value) => String(value || "").toLowerCase().includes(state.guestAssignmentSearch));
+  });
+  const selectedCount = session.selectedChairs.length;
+  elements.assignmentContent.innerHTML = `
+    <div class="da3wa-sheet__header">
+      <div>
+        <p class="da3wa-eyebrow">Assign party</p>
+        <h2>${guest ? escapeHtml(guest.fullName) : "Choose a guest"}</h2>
+      </div>
+      <button class="da3wa-icon-button" type="button" data-action="cancel-assignment" aria-label="Close assignment modal">x</button>
+    </div>
+    <div class="da3wa-sheet__body">
+      ${guest ? `
+        <div class="assignment-progress">
+          <strong>${selectedCount} of ${session.requiredSeats} chairs selected</strong>
+          <span>${escapeHtml(getSelectedChairSummary(session.selectedChairs))}</span>
+        </div>
+        ${state.modalError ? `<div class="planner-warning-list"><span class="warning-chip">${escapeHtml(state.modalError)}</span></div>` : ""}
+        <p class="planner-note">Use the canvas behind this modal to add or remove empty chairs. You can save a partial party assignment and finish the remaining seats later.</p>
+      ` : `
+        <label class="planner-drawer__search">
+          <span>Search by guest name or phone</span>
+          <input class="da3wa-input" type="search" value="${escapeAttribute(state.guestAssignmentSearch)}" data-seat-search />
+        </label>
+        <div class="assignment-guest-list">
+          ${filtered.length ? filtered.map(renderAssignmentGuestOption).join("") : `<div class="da3wa-empty">${candidates.length ? "No matching guests need seats." : "All guests are assigned"}</div>`}
+        </div>
+      `}
+    </div>
+    <div class="da3wa-sheet__footer">
+      <button class="da3wa-button da3wa-button--secondary" type="button" data-action="cancel-assignment">Cancel</button>
+      <div class="da3wa-sheet__footer-actions">
+        ${guest ? actionButton("Complete assignment", "complete-assignment", selectedCount < 1 || Boolean(state.activeModalOperation), "primary") : ""}
+      </div>
+    </div>
+  `;
+}
+
+function renderAssignmentGuestOption(guest) {
+  const assignedCount = getGuestAssignedSeats(guest.id).length;
+  const partySize = getPartySize(guest);
+  const remaining = Math.max(0, partySize - assignedCount);
+  return `
+    <button class="assignment-guest-option" type="button" data-action="choose-assignment-guest" data-guest-id="${guest.id}">
+      <strong>${escapeHtml(guest.fullName || "Guest")}</strong>
+      <span>${escapeHtml(guest.side || "Side not set")} - party of ${partySize}</span>
+      <small>${assignedCount} of ${partySize} seats assigned - ${remaining} remaining</small>
+    </button>
+  `;
+}
+
+function chooseGuestForAssignment(guestId) {
+  const session = state.assignmentSession;
+  const guest = state.guests.find((item) => item.id === guestId);
+  if (!session || !guest) {
+    return;
+  }
+  const existingAssignments = getGuestAssignedSeats(guest.id);
+  const remainingSeats = Math.max(0, getPartySize(guest) - existingAssignments.length);
+  if (!remainingSeats) {
+    showToast("This party is already fully assigned.", "info");
+    return;
+  }
+  session.guestId = guest.id;
+  session.requiredSeats = remainingSeats;
+  session.existingAssignments = existingAssignments;
+  session.selectedChairs = session.selectedChairs.slice(0, remainingSeats);
+  state.activePartyGuestId = guest.id;
+  elements.assignmentModal?.close();
+  renderActiveView();
+}
+
+function toggleTemporaryChair(tableId, chairId) {
+  const session = state.assignmentSession;
+  if (!session?.guestId) {
+    return;
+  }
+  const table = state.tables.find((item) => item.id === tableId);
+  const chair = table?.chairs.find((item) => item.id === chairId);
+  if (!table || !chair) {
+    return;
+  }
+  const existingIndex = session.selectedChairs.findIndex((item) => item.tableId === tableId && item.chairId === chairId);
+  if (existingIndex >= 0) {
+    session.selectedChairs.splice(existingIndex, 1);
+    state.modalError = "";
+    renderActiveView();
+    return;
+  }
+  if (getChairAssignment(tableId, chair)) {
+    showToast("That chair is already assigned to another party.", "error");
+    return;
+  }
+  if (session.selectedChairs.length >= session.requiredSeats) {
+    showToast("This party already has the required number of chairs selected.", "error");
+    return;
+  }
+  if (session.selectedChairs.some((item) => item.tableId !== tableId)) {
+    // Already split; no extra confirmation needed.
+  } else if (session.startingTableId !== tableId) {
+    const confirmed = window.confirm("This will split the party across tables. Continue?");
+    if (!confirmed) {
+      return;
+    }
+  }
+  session.selectedChairs.push({ tableId, chairId });
+  state.modalError = "";
+  renderActiveView();
+}
+
+function isChairTemporarilySelected(tableId, chairId) {
+  return Boolean(state.assignmentSession?.selectedChairs.some((item) => item.tableId === tableId && item.chairId === chairId));
+}
+
+function getSelectedChairSummary(chairs) {
+  return chairs
+    .map((item) => {
+      const table = state.tables.find((row) => row.id === item.tableId);
+      const chair = table?.chairs.find((row) => row.id === item.chairId);
+      return `${table?.name || "Table"} chair ${chair?.seatNumber || "?"}`;
+    })
+    .join(", ");
+}
+
+async function completeAssignmentSession() {
+  if (state.activeModalOperation || !can("canEditSeating")) {
+    return;
+  }
+  const session = state.assignmentSession;
+  const guest = state.guests.find((item) => item.id === session?.guestId);
+  if (!session || !guest) {
+    return;
+  }
+  if (session.selectedChairs.length < 1) {
+    state.modalError = "Select at least one chair before saving.";
+    renderAssignmentWorkflow();
+    return;
+  }
+  state.activeModalOperation = "assignment";
+  renderAssignmentWorkflow();
+  try {
+    await savePartyAssignment(guest, session.selectedChairs, session.mode === "move");
+    state.activeModalOperation = "";
+    cancelAssignmentSession({ keepModal: true });
+    elements.assignmentModal?.close();
+    elements.chairDetailsModal?.close();
+    renderAll();
+    showToast("Party assignment saved.", "success");
+  } catch (error) {
+    console.error(error);
+    state.activeModalOperation = "";
+    state.modalError = error.message || "Assignment failed.";
+    renderAssignmentWorkflow();
+  }
+}
+
+function cancelAssignmentSession({ keepModal = false } = {}) {
+  state.assignmentSession = null;
+  state.activePartyGuestId = "";
+  state.modalError = "";
+  if (!keepModal && elements.assignmentModal?.open) {
+    elements.assignmentModal.close();
+  }
+}
+
+function renderAssignmentWorkflow() {
+  if (elements.assignmentModal?.open) {
+    renderAssignmentModal();
+    return;
+  }
+  renderActiveView();
+}
+
+async function savePartyAssignment(guest, selectedChairs, movingParty = false) {
+  if (state.mode === "demo") {
+    const nextTables = applyPartyAssignmentToTables(state.tables, guest, selectedChairs, movingParty);
+    state.tables = hydrateTables(nextTables);
+    state.guests = syncGuestSeatingSummaries(state.guests, state.tables);
+    persistDemoDashboardState();
+    renderAll();
+    return;
+  }
+
+  let savedTables = null;
+  let savedGuests = null;
+  await runTransaction(state.services.db, async (transaction) => {
+    const tableRefs = state.tables.map((table) => doc(state.services.db, "weddings", state.weddingId, "tables", table.id));
+    const tableSnapshots = await Promise.all(tableRefs.map((ref) => transaction.get(ref)));
+    const liveTables = hydrateTables(tableSnapshots.filter((snapshot) => snapshot.exists()).map((snapshot) => ({ id: snapshot.id, ...snapshot.data() })));
+    for (const item of selectedChairs) {
+      const table = liveTables.find((row) => row.id === item.tableId);
+      const chair = table?.chairs.find((row) => row.id === item.chairId);
+      const assignment = chair ? getChairAssignment(table.id, chair) : null;
+      if (!table || !chair) {
+        throw new Error("One of the selected chairs no longer exists.");
+      }
+      if (assignment && assignment.guestId !== guest.id) {
+        throw new Error(`${table.name} chair ${chair.seatNumber} was assigned in another session.`);
+      }
+    }
+    const nextTables = applyPartyAssignmentToTables(liveTables, guest, selectedChairs, movingParty);
+    const nextGuests = syncGuestSeatingSummaries(state.guests, nextTables);
+    savedTables = hydrateTables(nextTables);
+    savedGuests = nextGuests;
+    nextTables.forEach((table) => {
+      transaction.update(doc(state.services.db, "weddings", state.weddingId, "tables", table.id), {
+        chairs: table.chairs,
+        guestIds: [...new Set(table.chairs.map((chair) => getChairAssignment(table.id, chair)?.guestId).filter(Boolean))],
+        updatedAt: serverTimestamp(),
+      });
+    });
+    const nextGuest = nextGuests.find((item) => item.id === guest.id);
+    transaction.update(doc(state.services.db, "weddings", state.weddingId, "guests", guest.id), buildGuestSeatingPatch(nextGuest));
+  });
+  if (savedTables && savedGuests) {
+    state.tables = savedTables;
+    state.guests = savedGuests;
+  }
+}
+
+function applyPartyAssignmentToTables(tables, guest, selectedChairs, movingParty = false) {
+  const selectedKeys = new Set(selectedChairs.map((item) => buildSeatKey(item.tableId, item.chairId)));
+  const existing = getGuestAssignedSeats(guest.id, tables).sort((a, b) => a.partyMemberIndex - b.partyMemberIndex);
+  const startIndex = movingParty ? 0 : existing.length;
+  return tables.map((table) => ({
+    ...table,
+    chairs: table.chairs.map((chair) => {
+      const key = buildSeatKey(table.id, chair.id);
+      const selectedIndex = selectedChairs.findIndex((item) => buildSeatKey(item.tableId, item.chairId) === key);
+      const currentAssignment = getChairAssignment(table.id, chair);
+      if ((movingParty || selectedKeys.has(key)) && currentAssignment?.guestId === guest.id && selectedIndex < 0) {
+        return { ...chair, guestId: "", assignment: null, status: "available" };
+      }
+      if (selectedIndex >= 0) {
+        const partyMemberIndex = startIndex + selectedIndex;
+        return {
+          ...chair,
+          guestId: guest.id,
+          status: "assigned",
+          assignment: {
+            tableId: table.id,
+            seatNumber: Number(chair.seatNumber),
+            guestId: guest.id,
+            partyMemberIndex,
+            isMainGuest: partyMemberIndex === 0,
+          },
+        };
+      }
+      return chair;
+    }),
+  }));
+}
+
+function syncGuestSeatingSummaries(guests, tables) {
+  return guests.map((guest) => ({ ...guest, ...buildGuestSeatingPatchFromTables(guest, tables, false) }));
+}
+
+function buildGuestSeatingPatch(guest) {
+  return {
+    seatingAssignments: guest.seatingAssignments || [],
+    tableId: guest.tableId || "",
+    tableName: guest.tableName || "",
+    seatNumber: guest.seatNumber || "",
+    updatedAt: serverTimestamp(),
+  };
+}
+
+function buildGuestSeatingPatchFromTables(guest, tables, includeTimestamp = true) {
+  const assignments = getGuestAssignedSeats(guest.id, tables).sort((a, b) => a.partyMemberIndex - b.partyMemberIndex);
+  const primary = assignments.find((assignment) => assignment.partyMemberIndex === 0) || assignments[0];
+  const patch = {
+    seatingAssignments: assignments.map((assignment) => ({
+      tableId: assignment.tableId,
+      seatNumber: Number(assignment.seatNumber),
+      guestId: assignment.guestId,
+      partyMemberIndex: Number(assignment.partyMemberIndex),
+      isMainGuest: assignment.partyMemberIndex === 0,
+    })),
+    tableId: primary?.tableId || "",
+    tableName: primary?.tableName || "",
+    seatNumber: primary ? String(primary.seatNumber) : "",
+  };
+  if (includeTimestamp) {
+    patch.updatedAt = serverTimestamp();
+  }
+  return patch;
+}
+
+function renderChairDetailsModal(guestId) {
+  const guest = state.guests.find((item) => item.id === guestId);
+  if (!elements.chairDetailsContent || !guest) {
+    return;
+  }
+  const assignments = getGuestAssignedSeats(guestId).sort((a, b) => a.partyMemberIndex - b.partyMemberIndex);
+  elements.chairDetailsContent.innerHTML = `
+    <div class="da3wa-sheet__header">
+      <div>
+        <p class="da3wa-eyebrow">Chair details</p>
+        <h2>${escapeHtml(guest.fullName || "Guest")}</h2>
+      </div>
+      <button class="da3wa-icon-button" type="button" data-close-modal="chairDetailsModal" aria-label="Close chair details">x</button>
+    </div>
+    <div class="da3wa-sheet__body">
+      <div class="assignment-progress">
+        <strong>Party size ${getPartySize(guest)}</strong>
+        <span>${assignments.length} of ${getPartySize(guest)} seats assigned</span>
+      </div>
+      <div class="chair-detail-list">
+        ${assignments.map((assignment) => `
+          <div class="chair-detail-row">
+            <strong>${escapeHtml(partyMemberLabel(guest, assignment.partyMemberIndex))}</strong>
+            <span>${escapeHtml(assignment.tableName || assignment.tableId)} - Chair ${escapeHtml(String(assignment.seatNumber))}${assignment.partyMemberIndex === 0 ? " - Main guest chair" : ""}</span>
+          </div>
+        `).join("")}
+      </div>
+      ${state.modalError ? `<div class="planner-warning-list"><span class="warning-chip">${escapeHtml(state.modalError)}</span></div>` : ""}
+    </div>
+    <div class="da3wa-sheet__footer">
+      <button class="da3wa-button da3wa-button--secondary" type="button" data-close-modal="chairDetailsModal">Close</button>
+      <div class="da3wa-sheet__footer-actions">
+        ${actionButton("Move party", "move-party", Boolean(state.activeModalOperation), "secondary", guest.id)}
+        ${actionButton("Unassign entire party", "unassign-party", Boolean(state.activeModalOperation), "danger", guest.id)}
+      </div>
+    </div>
+  `;
+}
+
+function beginMoveParty(guestId) {
+  const guest = state.guests.find((item) => item.id === guestId);
+  if (!guest) {
+    return;
+  }
+  const existingAssignments = getGuestAssignedSeats(guestId);
+  state.assignmentSession = {
+    mode: "move",
+    guestId,
+    requiredSeats: getPartySize(guest),
+    startingTableId: existingAssignments[0]?.tableId || "",
+    selectedChairs: [],
+    existingAssignments,
+  };
+  state.activePartyGuestId = guestId;
+  elements.chairDetailsModal?.close();
+  renderActiveView();
+  showToast("Select the new chair or chairs on the seating canvas.", "info");
+}
+
+async function unassignParty(guestId) {
+  if (state.activeModalOperation || !can("canEditSeating")) {
+    return;
+  }
+  const guest = state.guests.find((item) => item.id === guestId);
+  if (!guest) {
+    return;
+  }
+  state.activeModalOperation = "unassign";
+  renderChairDetailsModal(guestId);
+  try {
+    await clearPartyAssignments(guestId);
+    state.activeModalOperation = "";
+    state.activePartyGuestId = "";
+    elements.chairDetailsModal?.close();
+    showToast("Party unassigned.", "success");
+  } catch (error) {
+    console.error(error);
+    state.activeModalOperation = "";
+    state.modalError = error.message || "Unassign failed.";
+    renderChairDetailsModal(guestId);
+  }
+}
+
+async function clearPartyAssignments(guestId) {
+  if (state.mode === "demo") {
+    state.tables = hydrateTables(clearGuestFromTables(state.tables, guestId));
+    state.guests = syncGuestSeatingSummaries(state.guests, state.tables);
+    persistDemoDashboardState();
+    renderAll();
+    return;
+  }
+  const batch = writeBatch(state.services.db);
+  const nextTables = clearGuestFromTables(state.tables, guestId);
+  const nextGuests = syncGuestSeatingSummaries(state.guests, nextTables);
+  nextTables.forEach((table) => {
+    batch.update(doc(state.services.db, "weddings", state.weddingId, "tables", table.id), {
+      chairs: table.chairs,
+      guestIds: [...new Set(table.chairs.map((chair) => getChairAssignment(table.id, chair)?.guestId).filter(Boolean))],
+      updatedAt: serverTimestamp(),
+    });
+  });
+  batch.update(doc(state.services.db, "weddings", state.weddingId, "guests", guestId), {
+    seatingAssignments: [],
+    tableId: "",
+    tableName: "",
+    seatNumber: "",
+    updatedAt: serverTimestamp(),
+  });
+  await batch.commit();
+  state.tables = hydrateTables(nextTables);
+  state.guests = nextGuests;
+  state.selectedSeatId = "";
+  renderAll();
+}
+
+function clearGuestFromTables(tables, guestId) {
+  return tables.map((table) => ({
+    ...table,
+    chairs: table.chairs.map((chair) => {
+      const assignment = getChairAssignment(table.id, chair);
+      if (assignment?.guestId !== guestId) {
+        return chair;
+      }
+      return { ...chair, guestId: "", assignment: null, status: "available" };
+    }),
+  }));
 }
 
 async function assignGuestToChair(tableId, chairId, guestId) {
@@ -2550,17 +3905,44 @@ async function assignGuestToChair(tableId, chairId, guestId) {
     showToast("Pending RSVP guest seated. Consider confirming attendance.", "info");
   }
 
-  const previousGuestId = targetChair.guestId || "";
+  const targetAssignment = getChairAssignment(table.id, targetChair);
+  const previousGuestId = targetAssignment?.guestId || targetChair.guestId || "";
   const sourceSeat = guestId ? findGuestSeat(guestId) : null;
 
   const nextTables = state.tables.map((item) => ({
     ...item,
     chairs: item.chairs.map((chair) => {
       if (item.id === tableId && chair.id === chairId) {
-        return { ...chair, guestId, status: guestId ? "assigned" : "available" };
+        return {
+          ...chair,
+          guestId,
+          assignment: guestId
+            ? {
+                tableId: item.id,
+                seatNumber: Number(chair.seatNumber),
+                guestId,
+                partyMemberIndex: 0,
+                isMainGuest: true,
+              }
+            : null,
+          status: guestId ? "assigned" : "available",
+        };
       }
       if (sourceSeat && item.id === sourceSeat.tableId && chair.id === sourceSeat.chairId) {
-        return { ...chair, guestId: previousGuestId, status: previousGuestId ? "assigned" : "available" };
+        return {
+          ...chair,
+          guestId: previousGuestId,
+          assignment: previousGuestId
+            ? {
+                tableId: item.id,
+                seatNumber: Number(chair.seatNumber),
+                guestId: previousGuestId,
+                partyMemberIndex: 0,
+                isMainGuest: true,
+              }
+            : null,
+          status: previousGuestId ? "assigned" : "available",
+        };
       }
       return chair;
     }),
@@ -2573,6 +3955,15 @@ async function assignGuestToChair(tableId, chairId, guestId) {
         tableId,
         tableName: table.name,
         seatNumber: String(targetChair.seatNumber),
+        seatingAssignments: [
+          {
+            tableId,
+            seatNumber: Number(targetChair.seatNumber),
+            guestId,
+            partyMemberIndex: 0,
+            isMainGuest: true,
+          },
+        ],
       };
     }
     if (item.id === previousGuestId) {
@@ -2584,12 +3975,21 @@ async function assignGuestToChair(tableId, chairId, guestId) {
           tableId: sourceSeat.tableId,
           tableName: sourceTable?.name || "",
           seatNumber: String(sourceChair?.seatNumber || ""),
+          seatingAssignments: [
+            {
+              tableId: sourceSeat.tableId,
+              seatNumber: Number(sourceChair?.seatNumber || 0),
+              guestId: previousGuestId,
+              partyMemberIndex: 0,
+              isMainGuest: true,
+            },
+          ],
         };
       }
-      return { ...item, tableId: "", tableName: "", seatNumber: "" };
+      return { ...item, tableId: "", tableName: "", seatNumber: "", seatingAssignments: [] };
     }
     if (!guestId && item.id === previousGuestId) {
-      return { ...item, tableId: "", tableName: "", seatNumber: "" };
+      return { ...item, tableId: "", tableName: "", seatNumber: "", seatingAssignments: [] };
     }
     return item;
   });
@@ -2609,13 +4009,22 @@ async function assignGuestToChair(tableId, chairId, guestId) {
     nextTables.forEach((item) => {
       batch.update(doc(state.services.db, "weddings", state.weddingId, "tables", item.id), {
         chairs: item.chairs,
-        guestIds: item.chairs.filter((chair) => chair.guestId).map((chair) => chair.guestId),
+        guestIds: [...new Set(item.chairs.map((chair) => getChairAssignment(item.id, chair)?.guestId).filter(Boolean))],
         updatedAt: serverTimestamp(),
       });
     });
 
     if (guestId) {
       batch.update(doc(state.services.db, "weddings", state.weddingId, "guests", guestId), {
+        seatingAssignments: [
+          {
+            tableId,
+            seatNumber: Number(targetChair.seatNumber),
+            guestId,
+            partyMemberIndex: 0,
+            isMainGuest: true,
+          },
+        ],
         tableId,
         tableName: table.name,
         seatNumber: String(targetChair.seatNumber),
@@ -2628,6 +4037,15 @@ async function assignGuestToChair(tableId, chairId, guestId) {
         const sourceTable = nextTables.find((item) => item.id === sourceSeat.tableId);
         const sourceChair = sourceTable?.chairs.find((chair) => chair.id === sourceSeat.chairId);
         batch.update(doc(state.services.db, "weddings", state.weddingId, "guests", previousGuestId), {
+          seatingAssignments: [
+            {
+              tableId: sourceSeat.tableId,
+              seatNumber: Number(sourceChair?.seatNumber || 0),
+              guestId: previousGuestId,
+              partyMemberIndex: 0,
+              isMainGuest: true,
+            },
+          ],
           tableId: sourceSeat.tableId,
           tableName: sourceTable?.name || "",
           seatNumber: String(sourceChair?.seatNumber || ""),
@@ -2635,6 +4053,7 @@ async function assignGuestToChair(tableId, chairId, guestId) {
         });
       } else {
         batch.update(doc(state.services.db, "weddings", state.weddingId, "guests", previousGuestId), {
+          seatingAssignments: [],
           tableId: "",
           tableName: "",
           seatNumber: "",
@@ -2721,10 +4140,20 @@ function hydrateTables(tables) {
       const matchingGuest = state.guests.find(
         (guest) => guest.tableId === next.id && String(guest.seatNumber || "") === String(chair.seatNumber)
       );
+      const assignment = normalizeAssignment(chair.assignment, next.id, chair) || (matchingGuest
+        ? {
+            tableId: next.id,
+            seatNumber: Number(chair.seatNumber),
+            guestId: matchingGuest.id,
+            partyMemberIndex: 0,
+            isMainGuest: true,
+          }
+        : null);
       return {
         ...chair,
-        guestId: matchingGuest?.id || chair.guestId || "",
-        status: matchingGuest ? "assigned" : chair.guestId ? "assigned" : chair.status || "available",
+        guestId: assignment?.guestId || "",
+        assignment,
+        status: assignment ? "assigned" : chair.status || "available",
       };
     });
     return next;
@@ -2768,6 +4197,7 @@ function generateChairs(shape, seatCount, width, height, previousChairs) {
       id: previous.id || createId("chair"),
       seatNumber: index + 1,
       guestId: previous.guestId || "",
+      assignment: previous.assignment || null,
       status: previous.status || "available",
       x: position.x,
       y: position.y,
@@ -2831,7 +4261,7 @@ function distributePerimeterSeats(seatCount) {
 }
 
 function getTableGuests(tableId) {
-  return state.guests.filter((guest) => guest.tableId === tableId);
+  return uniqueGuestsFromAssignments(getTableAssignments(tableId));
 }
 
 function getSelectedTable() {
@@ -2839,14 +4269,8 @@ function getSelectedTable() {
 }
 
 function findGuestSeat(guestId) {
-  for (const table of state.tables) {
-    for (const chair of table.chairs) {
-      if (chair.guestId === guestId) {
-        return { tableId: table.id, chairId: chair.id };
-      }
-    }
-  }
-  return null;
+  const assignment = getGuestAssignedSeats(guestId)[0];
+  return assignment ? { tableId: assignment.tableId, chairId: assignment.chairId } : null;
 }
 
 function getSelectedSeat() {
@@ -2856,16 +4280,17 @@ function getSelectedSeat() {
   const [tableId, chairId] = state.selectedSeatId.split("::");
   const table = state.tables.find((item) => item.id === tableId);
   const chair = table?.chairs.find((item) => item.id === chairId);
-  const guest = chair?.guestId ? state.guests.find((item) => item.id === chair.guestId) : null;
+  const assignment = chair ? getChairAssignment(table.id, chair) : null;
+  const guest = assignment?.guestId ? state.guests.find((item) => item.id === assignment.guestId) : null;
   if (!table || !chair) {
     return null;
   }
-  return { table, chair, guest };
+  return { table, chair, guest, assignment };
 }
 
 function getAssignableGuests() {
   return state.guests
-    .filter((guest) => !guest.tableId)
+    .filter((guest) => getGuestRemainingSeats(guest) > 0)
     .filter((guest) => {
       if (state.libraryFilters.rsvp === "pending" && guest.rsvpStatus !== "pending") {
         return false;
@@ -2883,6 +4308,7 @@ function getAssignableGuests() {
 
 function getSeatCandidates(currentGuestId) {
   return [...state.guests]
+    .filter((guest) => getGuestRemainingSeats(guest) > 0 || guest.id === currentGuestId)
     .filter((guest) => {
       if (!state.guestAssignmentSearch) {
         return true;
@@ -2907,12 +4333,12 @@ function getSeatCandidates(currentGuestId) {
 
 function guestPriorityScore(guest) {
   const statusPriority = { confirmed: 0, pending: 1, declined: 2 };
-  const seatedPenalty = guest.tableId ? 4 : 0;
+  const seatedPenalty = getGuestAssignedSeats(guest.id).length ? 4 : 0;
   const vipBoost = /vip/i.test(guest.notes || "") ? -1 : 0;
   return (statusPriority[guest.rsvpStatus] ?? 3) + seatedPenalty + vipBoost;
 }
 
-function chairStatusClass(chair, guest) {
+function chairStatusClass(chair, guest, assignment = null) {
   if (chair.vip) {
     return "vip";
   }
@@ -2922,7 +4348,7 @@ function chairStatusClass(chair, guest) {
   if (guest?.rsvpStatus === "pending") {
     return "warning";
   }
-  if (guest) {
+  if (guest || assignment) {
     return "assigned";
   }
   return chair.status || "available";
@@ -2943,7 +4369,7 @@ function resolveChairColor(status, table) {
     case "conflict":
       return "#B25B54";
     default:
-      return table.chairColor || plannerPalette.chairColor;
+      return "#F8FAF6";
   }
 }
 

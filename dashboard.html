@@ -94,9 +94,6 @@
                 <select class="da3wa-input" name="side">
                   <option value="bride">Bride</option>
                   <option value="groom">Groom</option>
-                  <option value="both">Both</option>
-                  <option value="family">Family</option>
-                  <option value="other">Other</option>
                 </select>
               </label>
               <label>
@@ -209,13 +206,25 @@
         </div>
 
         <div class="da3wa-sheet__footer">
-          <div></div>
+          <button class="da3wa-button da3wa-button--danger" type="button" id="tableDeleteButton" hidden>Delete Table</button>
           <div class="da3wa-sheet__footer-actions">
             <button class="da3wa-button da3wa-button--secondary" type="button" data-close-modal="tableModal">Cancel</button>
             <button class="da3wa-button da3wa-button--primary" type="submit">Save table</button>
           </div>
         </div>
       </form>
+    </dialog>
+
+    <dialog class="da3wa-dialog da3wa-dialog--modal" id="tableDeleteModal">
+      <section class="da3wa-sheet da3wa-sheet--guest" id="tableDeleteContent" aria-live="polite"></section>
+    </dialog>
+
+    <dialog class="da3wa-dialog da3wa-dialog--modal" id="assignmentModal">
+      <section class="da3wa-sheet da3wa-sheet--guest da3wa-sheet--assignment" id="assignmentContent" aria-live="polite"></section>
+    </dialog>
+
+    <dialog class="da3wa-dialog da3wa-dialog--modal" id="chairDetailsModal">
+      <section class="da3wa-sheet da3wa-sheet--guest" id="chairDetailsContent" aria-live="polite"></section>
     </dialog>
 
     <div class="da3wa-toast-rail" id="toastRail" aria-live="polite" aria-atomic="true"></div>

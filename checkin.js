@@ -293,6 +293,19 @@ async function checkInGuest(guestId) {
       checkedInAt: serverTimestamp(),
       updatedAt: serverTimestamp(),
     });
+    if (guest.guestToken) {
+      // Keep the token-keyed public mirror in sync so re-opening this guest's
+      // QR link shows them as already checked in.
+      await updateDoc(doc(state.services.db, "weddings", state.weddingId, "publicGuests", guest.guestToken), {
+        checkedIn: true,
+        checkedInAt: serverTimestamp(),
+        updatedAt: serverTimestamp(),
+      }).catch((error) => {
+        console.warn("Check-in mirror update failed.", error);
+      });
+    }
+    guest.checkedIn = true;
+    renderGuestCard();
     showToast("Guest checked in successfully.", "success");
   } catch (error) {
     console.error(error);

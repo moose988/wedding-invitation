@@ -1,6 +1,7 @@
 import {
   addDoc,
   collection,
+  deleteDoc,
   doc,
   getDoc,
   getDocs,
@@ -11,6 +12,7 @@ import {
   query,
   runTransaction,
   serverTimestamp,
+  setDoc,
   signOut,
   updateDoc,
   where,
@@ -817,6 +819,9 @@ const elements = {
   guestForm: document.getElementById("guestForm"),
   guestModalTitle: document.getElementById("guestModalTitle"),
   guestDeleteButton: document.getElementById("guestDeleteButton"),
+  bulkAddModal: document.getElementById("bulkAddModal"),
+  bulkAddForm: document.getElementById("bulkAddForm"),
+  bulkAddPreview: document.getElementById("bulkAddPreview"),
   tableModal: document.getElementById("tableModal"),
   tableForm: document.getElementById("tableForm"),
   tableModalTitle: document.getElementById("tableModalTitle"),
@@ -881,6 +886,8 @@ function bindEvents() {
   });
   elements.guestForm?.addEventListener("submit", saveGuest);
   elements.tableForm?.addEventListener("submit", saveTable);
+  elements.bulkAddForm?.addEventListener("submit", saveBulkGuests);
+  elements.bulkAddForm?.entries?.addEventListener("input", updateBulkAddPreview);
   elements.tableDeleteButton?.addEventListener("click", () => {
     if (state.selectedTableId) {
       openTableDeleteModal(state.selectedTableId);
@@ -917,6 +924,7 @@ function bindEvents() {
   document.addEventListener("change", handleDocumentChange);
   document.addEventListener("keydown", handleDocumentKeydown);
   elements.guestModal?.addEventListener("click", handleDialogBackdropClick);
+  elements.bulkAddModal?.addEventListener("click", handleDialogBackdropClick);
   elements.tableModal?.addEventListener("click", handleDialogBackdropClick);
   elements.tableDeleteModal?.addEventListener("click", handleDialogBackdropClick);
   elements.assignmentModal?.addEventListener("click", handleDialogBackdropClick);
@@ -928,6 +936,11 @@ function bindEvents() {
   });
   elements.tableModal?.addEventListener("cancel", (event) => {
     if (state.dirtyTableForm && !window.confirm("Discard table changes?")) {
+      event.preventDefault();
+    }
+  });
+  elements.bulkAddModal?.addEventListener("cancel", (event) => {
+    if (bulkAddHasContent() && !window.confirm("Discard this guest list?")) {
       event.preventDefault();
     }
   });
@@ -949,9 +962,9 @@ function bindEvents() {
     document.body.classList.remove("is-modal-open");
     state.dirtyTableForm = false;
   });
-  [elements.tableDeleteModal, elements.assignmentModal, elements.chairDetailsModal].forEach((modal) => {
+  [elements.tableDeleteModal, elements.assignmentModal, elements.chairDetailsModal, elements.bulkAddModal].forEach((modal) => {
     modal?.addEventListener("close", () => {
-      if (![elements.guestModal, elements.tableModal, elements.tableDeleteModal, elements.assignmentModal, elements.chairDetailsModal].some((item) => item?.open)) {
+      if (![elements.guestModal, elements.tableModal, elements.tableDeleteModal, elements.assignmentModal, elements.chairDetailsModal, elements.bulkAddModal].some((item) => item?.open)) {
         document.body.classList.remove("is-modal-open");
       }
       if (!state.activeModalOperation) {
@@ -998,6 +1011,11 @@ function handleDocumentClick(event) {
       }
       state.dirtyTableForm = false;
     }
+    if (closeTrigger.dataset.closeModal === "bulkAddModal" && bulkAddHasContent()) {
+      if (!window.confirm("Discard this guest list?")) {
+        return;
+      }
+    }
     if (closeTrigger.dataset.closeModal === "assignmentModal") {
       cancelAssignmentSession();
     }
@@ -1037,6 +1055,9 @@ function handleDialogBackdropClick(event) {
     return;
   }
   if (modal.id === "tableModal" && state.dirtyTableForm && !window.confirm("Discard table changes?")) {
+    return;
+  }
+  if (modal.id === "bulkAddModal" && bulkAddHasContent() && !window.confirm("Discard this guest list?")) {
     return;
   }
   if (modal.id === "assignmentModal") {
@@ -1142,6 +1163,7 @@ function loadDemoDashboard(message = "Preview mode is on. Firebase setup can be 
   };
   state.wedding = demoWedding;
   const savedDemoState = readDemoDashboardState();
+  state.deletedSeedGuestIds = Array.isArray(savedDemoState?.deletedSeedGuestIds) ? savedDemoState.deletedSeedGuestIds : [];
   const demoSourceGuests = mergeDemoSeedGuests(savedDemoState?.guests || []);
   state.guests = demoSourceGuests.map((guest) => ({
     ...guest,
@@ -1160,10 +1182,13 @@ function loadDemoDashboard(message = "Preview mode is on. Firebase setup can be 
 
 function mergeDemoSeedGuests(savedGuests) {
   const savedById = new Map(savedGuests.map((guest) => [guest.id, guest]));
-  const merged = demoSeedGuests.map((seedGuest) => ({
-    ...seedGuest,
-    ...(savedById.get(seedGuest.id) || {}),
-  }));
+  const deletedSeedIds = new Set(state.deletedSeedGuestIds || []);
+  const merged = demoSeedGuests
+    .filter((seedGuest) => !deletedSeedIds.has(seedGuest.id))
+    .map((seedGuest) => ({
+      ...seedGuest,
+      ...(savedById.get(seedGuest.id) || {}),
+    }));
   const customGuests = savedGuests.filter((guest) => !demoSeedGuests.some((seedGuest) => seedGuest.id === guest.id));
   return [...merged, ...customGuests];
 }
@@ -1190,6 +1215,7 @@ function persistDemoDashboardState() {
     JSON.stringify({
       guests: state.guests,
       tables: state.tables,
+      deletedSeedGuestIds: state.deletedSeedGuestIds || [],
     })
   );
 }
@@ -1268,6 +1294,9 @@ function renderGlobalActions() {
   if (state.activeView === "overview" || state.activeView === "guests") {
     actions.push(actionButton("Add guest", "open-add-guest", !can("canEditGuests"), "primary"));
   }
+  if (state.activeView === "guests") {
+    actions.push(actionButton("Bulk add", "open-bulk-add", !can("canEditGuests"), "secondary"));
+  }
   if (state.activeView === "seating") {
     actions.push(actionButton("Add table", "open-add-table", !can("canEditSeating"), "primary"));
   }
@@ -1321,6 +1350,7 @@ function renderOverviewPage() {
   const attention = calculateAttention(state.guests, state.tables);
   const recentActivity = deriveRecentActivity(state.guests);
   const distribution = calculateSideDistribution(state.guests);
+  const sideStats = calculateSideStats(state.guests, state.tables);
 
   elements.pageContent.innerHTML = `
     <section class="overview-page">
@@ -1345,6 +1375,12 @@ function renderOverviewPage() {
         ${renderKpiCard("Declined", stats.declined, `${stats.declinedPct}% declined`, "Unavailable")}
         ${renderKpiCard("Checked in", stats.checkedIn, `${stats.checkinPct}% arrived`, "Venue arrivals")}
         ${renderKpiCard("Without seats", stats.withoutSeat, `${stats.withoutSeatPct}% need placement`, "Seating attention")}
+      </section>
+
+      <section class="side-overview">
+        ${renderSideOverviewCard("Groom side", "groom", sideStats.groom)}
+        ${renderSideOverviewCard("Bride side", "bride", sideStats.bride)}
+        ${sideStats.other.guestCount ? renderSideOverviewCard("Family & shared", "other", sideStats.other) : ""}
       </section>
 
       <section class="overview-analytics">
@@ -1478,6 +1514,8 @@ function renderGuestPage() {
               ["all", "All Sides"],
               ["bride", "Bride"],
               ["groom", "Groom"],
+              ["family", "Family"],
+              ["both", "Both sides"],
             ])}
           </div>
           <span class="pill">${guests.length} result${guests.length === 1 ? "" : "s"}</span>
@@ -1549,6 +1587,7 @@ function renderSeatingPage() {
   const selectedTable = getSelectedTable();
   const selectedSeat = getSelectedSeat();
   const seatingStats = calculateDashboardStats(state.guests, state.tables);
+  const sideStats = calculateSideStats(state.guests, state.tables);
   const unassignedGuests = getAssignableGuests();
   const saveStateLabel = state.saveState === "saving" ? "Saving layout..." : "Saved";
 
@@ -1563,6 +1602,8 @@ function renderSeatingPage() {
           <span class="pill">${state.tables.length} tables</span>
           <span class="pill">${seatingStats.totalSeats} seats</span>
           <span class="pill">${seatingStats.unassignedGuests} unassigned guests</span>
+          <span class="pill pill--groom">Groom seated ${sideStats.groom.seated}/${sideStats.groom.confirmed}</span>
+          <span class="pill pill--bride">Bride seated ${sideStats.bride.seated}/${sideStats.bride.confirmed}</span>
           <span class="pill">${saveStateLabel}</span>
         </div>
         <div class="planner-toolbar__actions">
@@ -1722,6 +1763,7 @@ function renderSharePage() {
 
   elements.pageContent.innerHTML = `
     <section class="share-page">
+      ${renderSenderCard()}
       <div class="share-grid">
         ${cards
           .map(
@@ -1741,6 +1783,40 @@ function renderSharePage() {
           .join("")}
       </div>
     </section>
+  `;
+}
+
+function renderSenderCard() {
+  const excluded = state.guests.filter((guest) => !normalizeWhatsAppPhone(guest.phone) || !guest.guestToken).length;
+  const familyCount = getSenderGuests("family").length;
+  const senderOption = (label, side, note = "") => {
+    const count = getSenderGuests(side).length;
+    return `
+      <div class="sender-option">
+        <div class="sender-option__copy">
+          <strong>${escapeHtml(label)}</strong>
+          <span>${count} guest${count === 1 ? "" : "s"} ready to invite${note ? ` · ${escapeHtml(note)}` : ""}${count > 150 ? " · long list — the link may be too large for some messaging apps" : ""}</span>
+        </div>
+        <div class="sender-option__actions">
+          ${actionButton("Open", "open-sender", !count, "secondary", side)}
+          ${actionButton("Copy link", "copy-sender", !count, "primary", side)}
+        </div>
+      </div>
+    `;
+  };
+  return `
+    <article class="share-card share-card--sender">
+      <p class="da3wa-eyebrow">WhatsApp sender</p>
+      <h3>Send invitations from the couple's own phones</h3>
+      <p>Each link opens a ready-made sending page listing the guests with a one-tap WhatsApp button per guest. Send the groom's link to the groom and the bride's link to the bride — every invitation goes out from their own number. Guests marked "Both sides" appear in both lists.</p>
+      <div class="sender-options">
+        ${senderOption("Groom side", "groom")}
+        ${senderOption("Bride side", "bride")}
+        ${familyCount ? senderOption("Family", "family", "family guests appear only here and in All guests") : ""}
+        ${senderOption("All guests", "all")}
+      </div>
+      ${excluded ? `<p class="da3wa-form-hint">${excluded} guest${excluded === 1 ? " is" : "s are"} excluded for a missing phone number or invitation link.</p>` : ""}
+    </article>
   `;
 }
 
@@ -1774,6 +1850,31 @@ function renderKpiCard(title, value, meta, note) {
       <div class="kpi-card__meta">
         <span>${escapeHtml(meta)}</span>
         <strong>${escapeHtml(note)}</strong>
+      </div>
+    </article>
+  `;
+}
+
+function renderSideOverviewCard(title, sideKey, bucket) {
+  return `
+    <article class="analytics-card side-card side-card--${escapeAttribute(sideKey)}">
+      <header class="side-card__head">
+        <div>
+          <p class="da3wa-eyebrow">${escapeHtml(title)}</p>
+          <h3>${escapeHtml(String(bucket.confirmedSeats))} attending</h3>
+        </div>
+        <span class="pill">${escapeHtml(String(bucket.guestCount))} invited · ${escapeHtml(String(bucket.partyTotal))} seats</span>
+      </header>
+      <div class="side-card__stats">
+        <div class="side-stat"><strong>${escapeHtml(String(bucket.confirmed))}</strong><span>Confirmed</span></div>
+        <div class="side-stat"><strong>${escapeHtml(String(bucket.pending))}</strong><span>Pending</span></div>
+        <div class="side-stat"><strong>${escapeHtml(String(bucket.declined))}</strong><span>Not coming</span></div>
+        <div class="side-stat"><strong>${escapeHtml(String(bucket.seated))}/${escapeHtml(String(bucket.confirmed))}</strong><span>Seated</span></div>
+      </div>
+      <div class="progress-stack">
+        ${progressRow("Confirmed", bucket.confirmed, bucket.guestCount, "sage")}
+        ${progressRow("Pending", bucket.pending, bucket.guestCount, "amber")}
+        ${progressRow("Not coming", bucket.declined, bucket.guestCount, "rose")}
       </div>
     </article>
   `;
@@ -1939,6 +2040,12 @@ function renderHallObject(item) {
 function renderTableInspector(table) {
   const assignments = getTableAssignments(table.id);
   const capacity = Number(table.seatCount || table.capacity || 0);
+  const sideCounts = { groom: 0, bride: 0, other: 0 };
+  assignments.forEach((assignment) => {
+    const guest = state.guests.find((item) => item.id === assignment.guestId);
+    const key = guest && ["groom", "bride"].includes(guest.side) ? guest.side : "other";
+    sideCounts[key] += 1;
+  });
   return `
     <div class="planner-table-summary">
       <div>
@@ -1949,6 +2056,11 @@ function renderTableInspector(table) {
         <span>Occupied</span>
         <strong>${assignments.length}/${capacity}</strong>
       </div>
+    </div>
+    <div class="guest-toolbar__summary planner-side-summary">
+      <span class="pill pill--groom">Groom ${sideCounts.groom}</span>
+      <span class="pill pill--bride">Bride ${sideCounts.bride}</span>
+      ${sideCounts.other ? `<span class="pill">Shared ${sideCounts.other}</span>` : ""}
     </div>
     <div class="guest-toolbar__summary">
       ${actionButton("Edit", "edit-table", !can("canEditSeating"), "secondary", table.id)}
@@ -2009,6 +2121,8 @@ function renderAssignmentLibrary(unassignedGuests) {
           <option value="all" ${state.libraryFilters.side === "all" ? "selected" : ""}>All sides</option>
           <option value="bride" ${state.libraryFilters.side === "bride" ? "selected" : ""}>Bride</option>
           <option value="groom" ${state.libraryFilters.side === "groom" ? "selected" : ""}>Groom</option>
+          <option value="family" ${state.libraryFilters.side === "family" ? "selected" : ""}>Family</option>
+          <option value="both" ${state.libraryFilters.side === "both" ? "selected" : ""}>Both sides</option>
         </select>
       </label>
       <label>
@@ -2295,6 +2409,21 @@ async function handleAction(action, dataset, event = null) {
     case "open-add-guest":
       await openGuestModal();
       return;
+    case "open-bulk-add":
+      openBulkAddModal();
+      return;
+    case "open-sender": {
+      const senderLink = buildSenderLink(dataset.id || "all");
+      const senderWindow = window.open(senderLink, "_blank", "noopener");
+      if (!senderWindow) {
+        await copyText(senderLink);
+        showToast("Popup blocked — the sender link was copied instead.", "info");
+      }
+      return;
+    }
+    case "copy-sender":
+      await copyText(buildSenderLink(dataset.id || "all"));
+      return;
     case "open-add-table":
       openTableModal();
       return;
@@ -2414,6 +2543,7 @@ async function handleAction(action, dataset, event = null) {
         });
       } else {
         guest.reminderSentAt = new Date().toLocaleString();
+        persistDemoDashboardState();
       }
       window.open(url, "_blank", "noopener");
       showToast("Reminder link opened.", "success");
@@ -2630,6 +2760,38 @@ function deriveRecentActivity(guests) {
     .slice(0, 6);
 }
 
+function calculateSideStats(guests, tables = state.tables) {
+  const buckets = {
+    groom: emptySideBucket(),
+    bride: emptySideBucket(),
+    other: emptySideBucket(),
+  };
+
+  guests.forEach((guest) => {
+    const bucket = buckets[guest.side] || buckets.other;
+    const partySize = getPartySize(guest);
+    bucket.guestCount += 1;
+    bucket.partyTotal += partySize;
+    if (guest.rsvpStatus === "confirmed") {
+      bucket.confirmed += 1;
+      bucket.confirmedSeats += partySize;
+      if (getGuestAssignedSeats(guest.id, tables).length > 0) {
+        bucket.seated += 1;
+      }
+    } else if (guest.rsvpStatus === "declined") {
+      bucket.declined += 1;
+    } else {
+      bucket.pending += 1;
+    }
+  });
+
+  return buckets;
+}
+
+function emptySideBucket() {
+  return { guestCount: 0, partyTotal: 0, confirmed: 0, confirmedSeats: 0, pending: 0, declined: 0, seated: 0 };
+}
+
 function calculateSideDistribution(guests) {
   const bride = guests.filter((guest) => guest.side === "bride").length;
   const groom = guests.filter((guest) => guest.side === "groom").length;
@@ -2748,7 +2910,7 @@ function partyMemberLabel(guest, partyMemberIndex) {
 }
 
 function parseAdditionalGuests(value) {
-  const trimmed = String(value ?? "").trim();
+  const trimmed = normalizeDigits(String(value ?? "").trim());
   if (!/^\d+$/.test(trimmed)) {
     return null;
   }
@@ -2798,20 +2960,32 @@ async function updateBulkRsvp(status) {
     state.guests = state.guests.map((guest) =>
       ids.includes(guest.id) ? { ...guest, rsvpStatus: status, updatedAt: new Date().toLocaleString() } : guest
     );
+    persistDemoDashboardState();
     renderAll();
     showToast("Selected guests updated.", "success");
     return;
   }
 
   try {
-    const batch = writeBatch(state.services.db);
-    ids.forEach((guestId) => {
-      batch.update(doc(state.services.db, "weddings", state.weddingId, "guests", guestId), {
-        rsvpStatus: status,
-        updatedAt: serverTimestamp(),
+    const chunkSize = 200;
+    for (let index = 0; index < ids.length; index += chunkSize) {
+      const batch = writeBatch(state.services.db);
+      ids.slice(index, index + chunkSize).forEach((guestId) => {
+        batch.update(doc(state.services.db, "weddings", state.weddingId, "guests", guestId), {
+          rsvpStatus: status,
+          updatedAt: serverTimestamp(),
+        });
+        const guest = state.guests.find((item) => item.id === guestId);
+        if (guest?.guestToken) {
+          batch.set(
+            doc(state.services.db, "weddings", state.weddingId, "publicGuests", guest.guestToken),
+            { rsvpStatus: status, updatedAt: serverTimestamp() },
+            { merge: true }
+          );
+        }
       });
-    });
-    await batch.commit();
+      await batch.commit();
+    }
     showToast("Selected guests updated.", "success");
   } catch (error) {
     console.error(error);
@@ -2920,11 +3094,13 @@ async function saveGuest(event) {
   try {
     if (guestId) {
       await updateDoc(doc(state.services.db, "weddings", state.weddingId, "guests", guestId), ownedPayload);
+      await syncPublicGuest(guestId, { ...existingGuest, ...ownedPayload }, ["fullName", "phone", "side", "additionalGuests"]);
     } else {
-      await addDoc(collection(state.services.db, "weddings", state.weddingId, "guests"), {
+      const guestRef = await addDoc(collection(state.services.db, "weddings", state.weddingId, "guests"), {
         ...createPayload,
         createdAt: serverTimestamp(),
       });
+      await syncPublicGuest(guestRef.id, createPayload);
     }
     state.dirtyGuestForm = false;
     elements.guestModal.close();
@@ -2933,6 +3109,210 @@ async function saveGuest(event) {
   } catch (error) {
     console.error(error);
     showToast("We could not save this guest.", "error");
+  }
+}
+
+function buildPublicGuestPayload(guestId, guest) {
+  return {
+    guestId,
+    guestToken: guest.guestToken || "",
+    fullName: guest.fullName || "",
+    fullNameAr: guest.fullNameAr || "",
+    phone: guest.phone || "",
+    side: guest.side || "",
+    additionalGuests: normalizeAdditionalGuests(guest.additionalGuests),
+    rsvpStatus: guest.rsvpStatus || "pending",
+    tableId: guest.tableId || "",
+    tableName: guest.tableName || "",
+    seatNumber: guest.seatNumber || "",
+    checkedIn: Boolean(guest.checkedIn),
+    checkedInAt: guest.checkedInAt || null,
+    updatedAt: serverTimestamp(),
+  };
+}
+
+const publicGuestMirrorKeys = [
+  "fullName",
+  "fullNameAr",
+  "phone",
+  "side",
+  "additionalGuests",
+  "rsvpStatus",
+  "tableId",
+  "tableName",
+  "seatNumber",
+  "checkedIn",
+  "checkedInAt",
+];
+
+// fields === null writes the full mirror doc (guest creation only). Update
+// paths must pass the changed field names so a patch from stale local state
+// can never clobber values other actors own (e.g. the guest's own RSVP).
+async function syncPublicGuest(guestId, guest, fields = null) {
+  if (state.mode !== "live" || !guest?.guestToken) {
+    return;
+  }
+  try {
+    const mirrorRef = doc(state.services.db, "weddings", state.weddingId, "publicGuests", guest.guestToken);
+    if (!fields) {
+      await setDoc(mirrorRef, buildPublicGuestPayload(guestId, guest));
+      return;
+    }
+    const fullPayload = buildPublicGuestPayload(guestId, guest);
+    const patch = { updatedAt: serverTimestamp() };
+    fields
+      .filter((key) => publicGuestMirrorKeys.includes(key))
+      .forEach((key) => {
+        patch[key] = fullPayload[key];
+      });
+    await setDoc(mirrorRef, patch, { merge: true });
+  } catch (error) {
+    console.error("Public invitation mirror update failed.", error);
+    showToast("Saved, but the guest's public invitation page could not be refreshed.", "error");
+  }
+}
+
+async function removePublicGuest(guestToken) {
+  if (state.mode !== "live" || !guestToken) {
+    return;
+  }
+  try {
+    await deleteDoc(doc(state.services.db, "weddings", state.weddingId, "publicGuests", guestToken));
+  } catch (error) {
+    console.error("Public invitation mirror delete failed.", error);
+  }
+}
+
+function bulkAddHasContent() {
+  return Boolean(elements.bulkAddForm?.entries?.value.trim());
+}
+
+function openBulkAddModal() {
+  if (!can("canEditGuests")) {
+    showToast("Your role does not allow guest editing.", "error");
+    return;
+  }
+  elements.bulkAddForm?.reset();
+  updateBulkAddPreview();
+  document.body.classList.add("is-modal-open");
+  elements.bulkAddModal.showModal();
+  requestAnimationFrame(() => {
+    elements.bulkAddForm?.entries?.focus();
+  });
+}
+
+function parseBulkEntries(raw) {
+  return String(raw || "")
+    .split(/\r?\n/)
+    .map((line) => line.trim())
+    .filter(Boolean)
+    .map((line) => {
+      const parts = line.split(/[,،\t]/).map((part) => part.trim());
+      const additionalGuests = parseAdditionalGuests(parts[2] || "0");
+      return {
+        fullName: parts[0] || "",
+        phone: cleanPhone(parts[1] || ""),
+        additionalGuests: additionalGuests === null ? 0 : additionalGuests,
+      };
+    })
+    .filter((entry) => entry.fullName);
+}
+
+function updateBulkAddPreview() {
+  if (!elements.bulkAddPreview) {
+    return;
+  }
+  const entries = parseBulkEntries(elements.bulkAddForm?.entries?.value);
+  const withPhone = entries.filter((entry) => entry.phone).length;
+  elements.bulkAddPreview.textContent = entries.length
+    ? `${entries.length} guest${entries.length === 1 ? "" : "s"} ready to add · ${withPhone} with phone numbers`
+    : "Nothing to add yet — paste at least one line.";
+}
+
+async function saveBulkGuests(event) {
+  event.preventDefault();
+  if (!can("canEditGuests")) {
+    showToast("Your role does not allow guest editing.", "error");
+    return;
+  }
+  const entries = parseBulkEntries(elements.bulkAddForm.entries.value);
+  if (!entries.length) {
+    showToast("Add at least one guest line first.", "error");
+    return;
+  }
+  const side = elements.bulkAddForm.side.value;
+  const payloads = entries.map((entry) => {
+    const token = generateGuestToken();
+    return {
+      fullName: entry.fullName,
+      fullNameAr: "",
+      phone: entry.phone,
+      side,
+      additionalGuests: entry.additionalGuests,
+      rsvpStatus: "pending",
+      guestToken: token,
+      inviteLink: buildInviteLink(token),
+      tableId: "",
+      tableName: "",
+      seatNumber: "",
+      qrCodeValue: buildCheckinLink(token),
+      checkedIn: false,
+      checkedInAt: null,
+      notes: "",
+      inviteSentAt: null,
+      reminderSentAt: null,
+      updatedAt: serverTimestamp(),
+    };
+  });
+
+  if (state.mode === "demo") {
+    state.guests = [
+      ...state.guests,
+      ...payloads.map((payload) => ({
+        id: createId("guest"),
+        ...materializeDemoPayload(payload),
+        createdAt: demoNow(),
+      })),
+    ];
+    elements.bulkAddModal.close();
+    persistDemoDashboardState();
+    renderAll();
+    showToast(`${payloads.length} guest${payloads.length === 1 ? "" : "s"} added.`, "success");
+    return;
+  }
+
+  let committed = 0;
+  try {
+    const chunkSize = 200;
+    for (let index = 0; index < payloads.length; index += chunkSize) {
+      const chunk = payloads.slice(index, index + chunkSize);
+      const batch = writeBatch(state.services.db);
+      chunk.forEach((payload) => {
+        const guestRef = doc(collection(state.services.db, "weddings", state.weddingId, "guests"));
+        batch.set(guestRef, { ...payload, createdAt: serverTimestamp() });
+        batch.set(
+          doc(state.services.db, "weddings", state.weddingId, "publicGuests", payload.guestToken),
+          buildPublicGuestPayload(guestRef.id, payload)
+        );
+      });
+      await batch.commit();
+      committed += chunk.length;
+    }
+    elements.bulkAddForm.reset();
+    elements.bulkAddModal.close();
+    showToast(`${payloads.length} guest${payloads.length === 1 ? "" : "s"} added.`, "success");
+  } catch (error) {
+    console.error(error);
+    if (committed > 0) {
+      const remaining = entries.slice(committed);
+      elements.bulkAddForm.entries.value = remaining
+        .map((entry) => [entry.fullName, entry.phone, entry.additionalGuests || ""].filter(Boolean).join(", "))
+        .join("\n");
+      updateBulkAddPreview();
+      showToast(`Added ${committed} guests before an error occurred. The remaining lines are still in the box — press Add again to retry them.`, "error");
+    } else {
+      showToast("We could not add these guests.", "error");
+    }
   }
 }
 
@@ -2953,6 +3333,7 @@ async function updateGuest(guestId, payload) {
     const existingGuest = state.guests.find((guest) => guest.id === guestId);
     const demoPayload = materializeDemoPayload(payload, existingGuest);
     state.guests = state.guests.map((guest) => (guest.id === guestId ? { ...guest, ...demoPayload } : guest));
+    persistDemoDashboardState();
     renderAll();
     showToast("Guest updated.", "success");
     return;
@@ -2964,6 +3345,10 @@ async function updateGuest(guestId, payload) {
 
   try {
     await updateDoc(doc(state.services.db, "weddings", state.weddingId, "guests", guestId), payload);
+    const existingGuest = state.guests.find((guest) => guest.id === guestId);
+    if (existingGuest) {
+      await syncPublicGuest(guestId, { ...existingGuest, ...payload }, Object.keys(payload));
+    }
     await syncTablesAndGuests();
     showToast("Guest updated.", "success");
   } catch (error) {
@@ -2984,6 +3369,9 @@ async function deleteGuest(guestId) {
     state.guests = nextGuests;
     state.tables = hydrateTables(nextTables);
     state.guests = syncGuestSeatingSummaries(nextGuests, state.tables);
+    if (demoSeedGuests.some((seedGuest) => seedGuest.id === guestId)) {
+      state.deletedSeedGuestIds = [...new Set([...(state.deletedSeedGuestIds || []), guestId])];
+    }
     persistDemoDashboardState();
     renderAll();
     showToast("Guest deleted.", "success");
@@ -2991,6 +3379,7 @@ async function deleteGuest(guestId) {
   }
 
   try {
+    const removedGuest = state.guests.find((guest) => guest.id === guestId);
     const batch = writeBatch(state.services.db);
     const nextTables = clearGuestFromTables(state.tables, guestId);
     const nextGuests = state.guests.filter((guest) => guest.id !== guestId);
@@ -3002,6 +3391,9 @@ async function deleteGuest(guestId) {
       });
     });
     batch.delete(doc(state.services.db, "weddings", state.weddingId, "guests", guestId));
+    if (removedGuest?.guestToken) {
+      batch.delete(doc(state.services.db, "weddings", state.weddingId, "publicGuests", removedGuest.guestToken));
+    }
     await batch.commit();
     state.tables = hydrateTables(nextTables);
     state.guests = syncGuestSeatingSummaries(nextGuests, state.tables);
@@ -3263,6 +3655,12 @@ async function deleteTable(tableId) {
     state.selectedSeatId = "";
     state.activeModalOperation = "";
     elements.tableDeleteModal?.close();
+    for (const guestId of affectedGuestIds) {
+      const nextGuest = nextGuests.find((guest) => guest.id === guestId);
+      if (nextGuest) {
+        await syncPublicGuest(nextGuest.id, nextGuest, ["tableId", "tableName", "seatNumber"]);
+      }
+    }
     renderAll();
     showToast("Table deleted.", "success");
   } catch (error) {
@@ -3682,6 +4080,10 @@ async function savePartyAssignment(guest, selectedChairs, movingParty = false) {
   if (savedTables && savedGuests) {
     state.tables = savedTables;
     state.guests = savedGuests;
+    const savedGuest = savedGuests.find((item) => item.id === guest.id);
+    if (savedGuest) {
+      await syncPublicGuest(savedGuest.id, savedGuest, ["tableId", "tableName", "seatNumber"]);
+    }
   }
 }
 
@@ -3865,6 +4267,10 @@ async function clearPartyAssignments(guestId) {
   state.tables = hydrateTables(nextTables);
   state.guests = nextGuests;
   state.selectedSeatId = "";
+  const clearedGuest = nextGuests.find((item) => item.id === guestId);
+  if (clearedGuest) {
+    await syncPublicGuest(clearedGuest.id, clearedGuest, ["tableId", "tableName", "seatNumber"]);
+  }
   renderAll();
 }
 
@@ -3999,6 +4405,7 @@ async function assignGuestToChair(tableId, chairId, guestId) {
   renderAll();
 
   if (state.mode === "demo") {
+    persistDemoDashboardState();
     showToast(guestId ? "Guest assigned to seat." : "Seat cleared.", "success");
     return;
   }
@@ -4064,6 +4471,12 @@ async function assignGuestToChair(tableId, chairId, guestId) {
 
     await batch.commit();
     setSaveState("saved");
+    for (const affectedId of [guestId, previousGuestId].filter(Boolean)) {
+      const affectedGuest = nextGuests.find((item) => item.id === affectedId);
+      if (affectedGuest) {
+        await syncPublicGuest(affectedGuest.id, affectedGuest, ["tableId", "tableName", "seatNumber"]);
+      }
+    }
     showToast(guestId ? "Guest assigned to seat." : "Seat cleared.", "success");
   } catch (error) {
     console.error(error);
@@ -4079,7 +4492,7 @@ async function syncTablesAndGuests() {
     return;
   }
 
-  if (!state.tables.length) {
+  if (!state.tables.length || !can("canEditSeating")) {
     return;
   }
 
@@ -4088,7 +4501,7 @@ async function syncTablesAndGuests() {
   nextTables.forEach((table) => {
     batch.update(doc(state.services.db, "weddings", state.weddingId, "tables", table.id), {
       chairs: table.chairs,
-      guestIds: state.guests.filter((guest) => guest.tableId === table.id).map((guest) => guest.id),
+      guestIds: [...new Set(table.chairs.map((chair) => getChairAssignment(table.id, chair)?.guestId).filter(Boolean))],
       updatedAt: serverTimestamp(),
     });
   });
@@ -4495,8 +4908,25 @@ function setSaveState(value) {
 }
 
 async function copyText(text) {
-  await navigator.clipboard.writeText(text);
-  showToast("Copied to clipboard.", "success");
+  try {
+    if (navigator.clipboard?.writeText) {
+      await navigator.clipboard.writeText(text);
+    } else {
+      const helper = document.createElement("textarea");
+      helper.value = text;
+      helper.setAttribute("readonly", "");
+      helper.style.position = "fixed";
+      helper.style.opacity = "0";
+      document.body.appendChild(helper);
+      helper.select();
+      document.execCommand("copy");
+      helper.remove();
+    }
+    showToast("Copied to clipboard.", "success");
+  } catch (error) {
+    console.error(error);
+    showToast("Could not copy the link automatically.", "error");
+  }
 }
 
 function percentage(value, total) {
@@ -4559,7 +4989,7 @@ function buildWhatsAppReminderLink(guest) {
   if (!guest) {
     return "";
   }
-  const phone = cleanPhone(guest.phone);
+  const phone = normalizeWhatsAppPhone(guest.phone);
   if (!phone) {
     return "";
   }
@@ -4569,7 +4999,33 @@ function buildWhatsAppReminderLink(guest) {
 }
 
 function cleanPhone(phone) {
-  return String(phone || "").replace(/[^\d]/g, "");
+  return normalizeDigits(String(phone || "")).replace(/[^\d]/g, "");
+}
+
+// Maps Arabic-Indic (٠-٩) and Extended Arabic-Indic (۰-۹) digits to ASCII.
+function normalizeDigits(value) {
+  return String(value ?? "").replace(/[٠-٩۰-۹]/g, (digit) => String(digit.charCodeAt(0) & 0xf));
+}
+
+// wa.me links require country-code-prefixed numbers with no leading zero.
+// Local formats like 0501234567 get the wedding's country code prepended.
+function normalizeWhatsAppPhone(phone) {
+  const raw = String(phone || "").trim();
+  const digits = cleanPhone(phone);
+  if (!digits) {
+    return "";
+  }
+  if (raw.startsWith("+")) {
+    return digits;
+  }
+  if (digits.startsWith("00")) {
+    return digits.replace(/^0+/, "");
+  }
+  if (digits.startsWith("0")) {
+    const countryCode = String(state.wedding?.whatsappCountryCode || "971");
+    return `${countryCode}${digits.replace(/^0+/, "")}`;
+  }
+  return digits;
 }
 
 function buildInviteLink(guestToken) {
@@ -4578,6 +5034,50 @@ function buildInviteLink(guestToken) {
 
 function buildCheckinLink(guestToken) {
   return new URL(`checkin.html?wedding=${encodeURIComponent(state.weddingId)}&guest=${encodeURIComponent(guestToken)}`, window.location.href).toString();
+}
+
+// "Both sides" guests belong to the groom AND bride sender lists; "family"
+// guests get their own list so nobody silently falls through the cracks.
+function senderSideMatches(guest, side) {
+  if (side === "all") {
+    return true;
+  }
+  if (guest.side === side) {
+    return true;
+  }
+  return guest.side === "both" && (side === "groom" || side === "bride");
+}
+
+function getSenderGuests(side = "all") {
+  return state.guests.filter((guest) => normalizeWhatsAppPhone(guest.phone) && guest.guestToken && senderSideMatches(guest, side));
+}
+
+function buildSenderLink(side = "all") {
+  const guests = getSenderGuests(side)
+    .map((guest) => ({
+      n: guest.fullName || "",
+      a: guest.fullNameAr || "",
+      p: normalizeWhatsAppPhone(guest.phone),
+      s: guest.side || "",
+      t: guest.guestToken || "",
+    }));
+  const payload = {
+    v: 1,
+    w: state.weddingId,
+    c: state.wedding?.coupleName || "",
+    side,
+    g: guests,
+  };
+  return new URL(`send.html#data=${encodeSenderPayload(payload)}`, window.location.href).toString();
+}
+
+function encodeSenderPayload(payload) {
+  const bytes = new TextEncoder().encode(JSON.stringify(payload));
+  let binary = "";
+  bytes.forEach((byte) => {
+    binary += String.fromCharCode(byte);
+  });
+  return btoa(binary).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
 }
 
 function generateGuestToken() {

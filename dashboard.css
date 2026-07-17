@@ -1752,6 +1752,8 @@ a {
     position: fixed;
     inset: 16px auto 16px 16px;
     width: min(320px, calc(100vw - 32px));
+    height: auto;
+    overflow-y: auto;
     transform: translateX(calc(-100% - 24px));
     transition: transform 180ms ease;
     z-index: 40;
@@ -1924,5 +1926,149 @@ a {
     animation: none !important;
     transition: none !important;
     scroll-behavior: auto !important;
+  }
+}
+
+/* Side overview (groom / bride breakdown) */
+.side-overview {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+  gap: 18px;
+}
+
+.side-card {
+  display: grid;
+  gap: 16px;
+  border-top: 4px solid var(--da3wa-border);
+}
+
+.side-card--groom {
+  border-top-color: var(--da3wa-primary);
+}
+
+.side-card--bride {
+  border-top-color: var(--da3wa-gold);
+}
+
+.side-card--other {
+  border-top-color: var(--da3wa-border-strong);
+}
+
+.side-card__head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.side-card__head h3 {
+  margin: 4px 0 0;
+  font-family: var(--da3wa-font-display);
+}
+
+.side-card__stats {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(96px, 1fr));
+  gap: 10px;
+}
+
+.side-stat {
+  display: grid;
+  gap: 2px;
+  padding: 10px 12px;
+  border-radius: var(--da3wa-radius-sm);
+  background: var(--da3wa-surface-muted);
+  border: 1px solid var(--da3wa-border);
+}
+
+.side-stat strong {
+  font-size: 1.15rem;
+}
+
+.side-stat span {
+  color: var(--da3wa-text-soft);
+  font-size: 0.78rem;
+}
+
+.pill--groom {
+  background: var(--da3wa-primary-soft);
+  color: var(--da3wa-primary-strong);
+}
+
+.pill--bride {
+  background: var(--da3wa-gold-soft);
+  color: #7c5d2b;
+}
+
+.planner-side-summary {
+  flex-wrap: wrap;
+}
+
+/* WhatsApp sender card */
+.share-card--sender {
+  border-left: 4px solid var(--da3wa-primary);
+}
+
+.sender-options {
+  display: grid;
+  gap: 12px;
+}
+
+.sender-option {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  flex-wrap: wrap;
+  padding: 12px 14px;
+  border-radius: var(--da3wa-radius-sm);
+  border: 1px solid var(--da3wa-border);
+  background: var(--da3wa-surface-muted);
+}
+
+.sender-option__copy {
+  display: grid;
+  gap: 2px;
+}
+
+.sender-option__copy span {
+  color: var(--da3wa-text-soft);
+  font-size: 0.82rem;
+}
+
+.sender-option__actions {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+/* Bulk add form */
+.bulk-add-textarea {
+  min-height: 160px;
+  resize: vertical;
+  font-family: var(--da3wa-font-ui);
+  line-height: 1.5;
+  padding-top: 12px;
+}
+
+.da3wa-form-hint {
+  margin: 10px 0 0;
+  color: var(--da3wa-text-soft);
+  font-size: 0.85rem;
+}
+
+@media (max-width: 700px) {
+  .side-overview {
+    grid-template-columns: 1fr;
+  }
+
+  .sender-option {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .sender-option__actions .da3wa-button {
+    flex: 1;
   }
 }

@@ -94,6 +94,8 @@
                 <select class="da3wa-input" name="side">
                   <option value="bride">Bride</option>
                   <option value="groom">Groom</option>
+                  <option value="family">Family</option>
+                  <option value="both">Both sides</option>
                 </select>
               </label>
               <label>
@@ -109,6 +111,47 @@
           <div class="da3wa-sheet__footer-actions">
             <button class="da3wa-button da3wa-button--secondary" type="button" data-close-modal="guestModal">Cancel</button>
             <button class="da3wa-button da3wa-button--primary" type="submit">Save guest</button>
+          </div>
+        </div>
+      </form>
+    </dialog>
+
+    <dialog class="da3wa-dialog da3wa-dialog--modal" id="bulkAddModal">
+      <form class="da3wa-sheet da3wa-sheet--guest" id="bulkAddForm" method="dialog">
+        <div class="da3wa-sheet__header">
+          <div>
+            <p class="da3wa-eyebrow">Guest Import</p>
+            <h2 id="bulkAddModalTitle">Add guests in bulk</h2>
+          </div>
+          <button class="da3wa-icon-button" type="button" data-close-modal="bulkAddModal" aria-label="Close bulk add form">×</button>
+        </div>
+
+        <div class="da3wa-sheet__body">
+          <section class="da3wa-form-section">
+            <h3>Paste the list</h3>
+            <div class="da3wa-form-grid">
+              <label class="is-full">
+                <span>One guest per line — “Name, phone” (phone and extra seats optional: “Name, phone, 2”)</span>
+                <textarea class="da3wa-input bulk-add-textarea" name="entries" rows="8" placeholder="Noor Ahmed, 0501234567&#10;Omar Saleh, +971 50 765 4321, 2&#10;Huda Mansour"></textarea>
+              </label>
+              <label>
+                <span>Assign everyone to side</span>
+                <select class="da3wa-input" name="side">
+                  <option value="groom">Groom</option>
+                  <option value="bride">Bride</option>
+                  <option value="family">Family</option>
+                  <option value="both">Both sides</option>
+                </select>
+              </label>
+            </div>
+            <p class="da3wa-form-hint" id="bulkAddPreview" aria-live="polite"></p>
+          </section>
+        </div>
+
+        <div class="da3wa-sheet__footer">
+          <div class="da3wa-sheet__footer-actions">
+            <button class="da3wa-button da3wa-button--secondary" type="button" data-close-modal="bulkAddModal">Cancel</button>
+            <button class="da3wa-button da3wa-button--primary" type="submit">Add guests</button>
           </div>
         </div>
       </form>

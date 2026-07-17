@@ -41,7 +41,8 @@ service cloud.firestore {
       return isPublicWedding(weddingId)
         && request.resource.data.diff(resource.data).changedKeys().hasOnly(["rsvpStatus", "updatedAt"])
         && request.resource.data.guestToken == resource.data.guestToken
-        && request.resource.data.rsvpStatus in ["pending", "confirmed", "declined"];
+        && request.resource.data.rsvpStatus in ["pending", "confirmed", "declined"]
+        && request.resource.data.updatedAt == request.time;
     }
 
     match /weddings/{weddingId} {
@@ -79,7 +80,21 @@ service cloud.firestore {
       match /publicGuests/{guestToken} {
         allow get: if isPublicWedding(weddingId);
         allow list: if false;
-        allow create, update, delete: if false;
+        // Dashboard members maintain this token-keyed mirror of guest-facing
+        // fields so invitation/check-in pages can load guests without list access.
+        // Check-in-only and seating-only members may patch exactly the fields
+        // their role owns. Holding the token (it is the doc id) also authorizes
+        // a guest to update their own RSVP answer, mirroring the guests rule.
+        allow create, delete: if canEditGuests(weddingId);
+        allow update: if canEditGuests(weddingId)
+          || (canCheckIn(weddingId)
+            && request.resource.data.diff(resource.data).changedKeys().hasOnly(["checkedIn", "checkedInAt", "updatedAt"]))
+          || (canEditSeating(weddingId)
+            && request.resource.data.diff(resource.data).changedKeys().hasOnly(["tableId", "tableName", "seatNumber", "updatedAt"]))
+          || (isPublicWedding(weddingId)
+            && request.resource.data.diff(resource.data).changedKeys().hasOnly(["rsvpStatus", "updatedAt"])
+            && request.resource.data.rsvpStatus in ["pending", "confirmed", "declined"]
+            && request.resource.data.updatedAt == request.time);
       }
     }
   }

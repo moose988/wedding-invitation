@@ -1,0 +1,270 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="robots" content="noindex" />
+    <title>Invitation Sender | DA3WA</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,500;9..144,600&family=Manrope:wght@400;500;600;700;800&family=Noto+Naskh+Arabic:wght@400;500;600;700&display=swap"
+      rel="stylesheet"
+    />
+    <style>
+      :root {
+        --sender-bg: #f6f1e8;
+        --sender-surface: #fffdf8;
+        --sender-border: #dccfb8;
+        --sender-text: #2f312d;
+        --sender-text-soft: #666455;
+        --sender-primary: #1f5a4d;
+        --sender-primary-strong: #16463c;
+        --sender-primary-soft: #dbe9e4;
+        --sender-gold: #b89156;
+        --sender-gold-soft: #efe3cf;
+        --sender-danger: #9f4b41;
+        --sender-font-ui: "Manrope", "Segoe UI", sans-serif;
+        --sender-font-display: "Fraunces", "Georgia", serif;
+        --sender-font-ar: "Noto Naskh Arabic", serif;
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+
+      body {
+        margin: 0;
+        min-height: 100vh;
+        background: var(--sender-bg);
+        color: var(--sender-text);
+        font-family: var(--sender-font-ui);
+        -webkit-font-smoothing: antialiased;
+      }
+
+      .sender-shell {
+        max-width: 640px;
+        margin: 0 auto;
+        padding: 16px 14px calc(40px + env(safe-area-inset-bottom, 0px));
+      }
+
+      .sender-header {
+        position: sticky;
+        top: 10px;
+        z-index: 10;
+        background: rgba(255, 253, 248, 0.94);
+        backdrop-filter: blur(12px);
+        border: 1px solid rgba(205, 187, 151, 0.6);
+        border-radius: 20px;
+        padding: 18px;
+        box-shadow: 0 14px 34px rgba(47, 49, 45, 0.08);
+      }
+
+      .sender-eyebrow {
+        margin: 0 0 4px;
+        font-size: 0.72rem;
+        font-weight: 700;
+        letter-spacing: 0.14em;
+        text-transform: uppercase;
+        color: var(--sender-gold);
+      }
+
+      .sender-header h1 {
+        margin: 0;
+        font-family: var(--sender-font-display);
+        font-size: 1.45rem;
+        line-height: 1.25;
+      }
+
+      .sender-header p {
+        margin: 8px 0 0;
+        color: var(--sender-text-soft);
+        font-size: 0.9rem;
+        line-height: 1.5;
+      }
+
+      .sender-progress {
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        margin-top: 14px;
+      }
+
+      .sender-progress__track {
+        flex: 1;
+        height: 8px;
+        border-radius: 999px;
+        background: var(--sender-gold-soft);
+        overflow: hidden;
+      }
+
+      .sender-progress__bar {
+        height: 100%;
+        width: 0%;
+        border-radius: 999px;
+        background: var(--sender-primary);
+        transition: width 0.3s ease;
+      }
+
+      .sender-progress__label {
+        font-size: 0.82rem;
+        font-weight: 700;
+        color: var(--sender-primary-strong);
+        white-space: nowrap;
+      }
+
+      .sender-list {
+        margin-top: 16px;
+        display: grid;
+        gap: 10px;
+      }
+
+      .sender-row {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 12px;
+        background: var(--sender-surface);
+        border: 1px solid var(--sender-border);
+        border-radius: 16px;
+        padding: 14px;
+      }
+
+      .sender-row.is-sent {
+        border-color: var(--sender-primary-soft);
+        background: #f4f9f7;
+      }
+
+      .sender-row__info {
+        min-width: 0;
+        display: grid;
+        gap: 2px;
+      }
+
+      .sender-row__name {
+        font-weight: 700;
+        font-size: 0.98rem;
+        overflow-wrap: anywhere;
+      }
+
+      .sender-row__name-ar {
+        font-family: var(--sender-font-ar);
+        font-size: 0.95rem;
+        color: var(--sender-text-soft);
+      }
+
+      .sender-row__meta {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        flex-wrap: wrap;
+        font-size: 0.8rem;
+        color: var(--sender-text-soft);
+      }
+
+      .sender-chip {
+        display: inline-flex;
+        padding: 2px 10px;
+        border-radius: 999px;
+        font-size: 0.72rem;
+        font-weight: 700;
+        letter-spacing: 0.04em;
+        text-transform: uppercase;
+      }
+
+      .sender-chip--groom {
+        background: var(--sender-primary-soft);
+        color: var(--sender-primary-strong);
+      }
+
+      .sender-chip--bride {
+        background: var(--sender-gold-soft);
+        color: #7c5d2b;
+      }
+
+      .sender-chip--other {
+        background: #eee9df;
+        color: var(--sender-text-soft);
+      }
+
+      .sender-row__actions {
+        display: grid;
+        gap: 4px;
+        justify-items: end;
+        flex-shrink: 0;
+      }
+
+      .sender-send {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        gap: 8px;
+        min-height: 44px;
+        padding: 0 18px;
+        border: none;
+        border-radius: 12px;
+        background: var(--sender-primary);
+        color: #fffdf8;
+        font-family: var(--sender-font-ui);
+        font-size: 0.9rem;
+        font-weight: 700;
+        cursor: pointer;
+        text-decoration: none;
+      }
+
+      .sender-send:active {
+        transform: scale(0.98);
+      }
+
+      .is-sent .sender-send {
+        background: var(--sender-primary-soft);
+        color: var(--sender-primary-strong);
+      }
+
+      .sender-send.is-disabled {
+        background: #eee9df;
+        color: var(--sender-text-soft);
+        cursor: default;
+        font-size: 0.8rem;
+      }
+
+      .sender-undo {
+        border: none;
+        background: none;
+        padding: 4px;
+        color: var(--sender-text-soft);
+        font-size: 0.75rem;
+        text-decoration: underline;
+        cursor: pointer;
+      }
+
+      .sender-empty {
+        margin-top: 20vh;
+        text-align: center;
+        padding: 24px;
+      }
+
+      .sender-empty h1 {
+        font-family: var(--sender-font-display);
+        font-size: 1.3rem;
+      }
+
+      .sender-empty p {
+        color: var(--sender-text-soft);
+        line-height: 1.6;
+      }
+
+      .sender-footnote {
+        margin-top: 22px;
+        text-align: center;
+        color: var(--sender-text-soft);
+        font-size: 0.8rem;
+        line-height: 1.6;
+      }
+    </style>
+  </head>
+  <body>
+    <main class="sender-shell" id="senderShell"></main>
+    <script type="module" src="./send.js"></script>
+  </body>
+</html>

@@ -1,8 +1,10 @@
 import {
-  initFirebase,
-  isFirebaseConfigured,
+  collection,
   doc,
   getDoc,
+  getDocs,
+  initFirebase,
+  isFirebaseConfigured,
   serverTimestamp,
   updateDoc,
 } from "./firebase-config.js";
@@ -550,6 +552,18 @@ async function updateRsvp(status) {
         updatedAt: serverTimestamp(),
       }
     );
+    if (state.guestToken) {
+      // Keep the token-keyed public mirror fresh so reloading this page shows the saved answer.
+      await updateDoc(
+        doc(initFirebase().db, "weddings", state.weddingId, "publicGuests", state.guestToken),
+        {
+          rsvpStatus: status,
+          updatedAt: serverTimestamp(),
+        }
+      ).catch((error) => {
+        console.warn("RSVP mirror update failed.", error);
+      });
+    }
     state.guest.rsvpStatus = status;
     renderFirebaseRsvp(document.getElementById("rsvpMount"));
     showToast("Your RSVP has been updated.", "success");

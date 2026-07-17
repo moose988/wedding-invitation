@@ -77,6 +77,14 @@ service cloud.firestore {
         allow list: if false;
       }
 
+      // Aggregated side-level stats (counts + seated roster, no phones or
+      // tokens) published by the dashboard for the read-only side.html pages.
+      match /publicStats/{docId} {
+        allow get: if isPublicWedding(weddingId) || canViewDashboard(weddingId);
+        allow list: if false;
+        allow create, update, delete: if isDashboardMember(weddingId);
+      }
+
       match /publicGuests/{guestToken} {
         allow get: if isPublicWedding(weddingId);
         allow list: if false;

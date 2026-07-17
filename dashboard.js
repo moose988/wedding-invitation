@@ -1250,6 +1250,7 @@ function startListeners() {
     state.guests = snapshot.docs.map((docSnapshot) => ({ id: docSnapshot.id, ...docSnapshot.data() }));
     state.loadingGuests = false;
     renderAll();
+    void syncPublicStats();
   });
 
   state.unsubTables = onSnapshot(collection(state.services.db, "weddings", state.weddingId, "tables"), (snapshot) => {
@@ -1257,7 +1258,77 @@ function startListeners() {
     state.selectedTableId = state.selectedTableId || state.tables[0]?.id || "";
     state.loadingTables = false;
     renderAll();
+    void syncPublicStats();
   });
+}
+
+// Which guests belong on a side-status page. "Both sides" guests show on
+// the groom AND bride pages; anything else lands on the family page.
+function sideViewMatches(guest, side) {
+  if (side === "groom" || side === "bride") {
+    return guest.side === side || guest.side === "both";
+  }
+  return !["groom", "bride", "both"].includes(guest.side);
+}
+
+function buildPublicStatsPayload() {
+  const sides = {};
+  const roster = {};
+  ["groom", "bride", "family"].forEach((side) => {
+    const guests = state.guests.filter((guest) => sideViewMatches(guest, side));
+    const confirmed = guests.filter((guest) => guest.rsvpStatus === "confirmed");
+    sides[side] = {
+      invited: guests.length,
+      seats: guests.reduce((sum, guest) => sum + getPartySize(guest), 0),
+      confirmed: confirmed.length,
+      confirmedSeats: confirmed.reduce((sum, guest) => sum + getPartySize(guest), 0),
+      pending: guests.filter((guest) => !["confirmed", "declined"].includes(guest.rsvpStatus)).length,
+      declined: guests.filter((guest) => guest.rsvpStatus === "declined").length,
+      seated: guests.filter((guest) => getGuestAssignedSeats(guest.id).length > 0).length,
+      invitesSent: guests.filter((guest) => guest.inviteSentAt || guest.reminderSentAt).length,
+    };
+    roster[side] = guests.map((guest) => ({
+      id: guest.id,
+      n: guest.fullName || "",
+      a: guest.fullNameAr || "",
+      r: ["confirmed", "declined"].includes(guest.rsvpStatus) ? guest.rsvpStatus : "pending",
+      p: getPartySize(guest),
+      seats: getGuestAssignedSeats(guest.id).map((assignment) => ({
+        t: assignment.tableName || "",
+        n: Number(assignment.seatNumber) || 0,
+      })),
+    }));
+  });
+  return { coupleName: state.wedding?.coupleName || "", sides, roster };
+}
+
+let lastPublicStatsJson = "";
+
+// Publishes side-level stats to a public doc the standalone side.html pages
+// read. Runs on every snapshot delivery; the JSON compare keeps it from
+// writing unless something actually changed.
+async function syncPublicStats() {
+  if (state.mode !== "live" || !state.weddingId || !state.services?.db || !can("canViewDashboard")) {
+    return;
+  }
+  if (state.loadingGuests || state.loadingTables) {
+    return;
+  }
+  const payload = buildPublicStatsPayload();
+  const json = JSON.stringify(payload);
+  if (json === lastPublicStatsJson) {
+    return;
+  }
+  lastPublicStatsJson = json;
+  try {
+    await setDoc(doc(state.services.db, "weddings", state.weddingId, "publicStats", "summary"), {
+      ...payload,
+      updatedAt: serverTimestamp(),
+    });
+  } catch (error) {
+    lastPublicStatsJson = "";
+    console.error("Side status page sync failed.", error);
+  }
 }
 
 function showDashboard() {
@@ -1764,6 +1835,7 @@ function renderSharePage() {
   elements.pageContent.innerHTML = `
     <section class="share-page">
       ${renderSenderCard()}
+      ${renderSideViewCard()}
       <div class="share-grid">
         ${cards
           .map(
@@ -1783,6 +1855,36 @@ function renderSharePage() {
           .join("")}
       </div>
     </section>
+  `;
+}
+
+function renderSideViewCard() {
+  const sideOption = (label, side, arabicLabel) => {
+    const count = state.guests.filter((guest) => sideViewMatches(guest, side)).length;
+    return `
+      <div class="sender-option">
+        <div class="sender-option__copy">
+          <strong>${escapeHtml(label)} <span class="side-view-ar" dir="rtl">${escapeHtml(arabicLabel)}</span></strong>
+          <span>${count} guest${count === 1 ? "" : "s"} on this page</span>
+        </div>
+        <div class="sender-option__actions">
+          ${actionButton("Open", "open-side-view", !count, "secondary", side)}
+          ${actionButton("Copy link", "copy-side-view", !count, "primary", side)}
+        </div>
+      </div>
+    `;
+  };
+  return `
+    <article class="share-card share-card--sender">
+      <p class="da3wa-eyebrow">Side status pages</p>
+      <h3>A simple page for each family — no dashboard needed</h3>
+      <p>Each link opens a read-only page showing just that side's numbers and seating plan: who is coming, who declined, invitations sent, and where everyone sits. Share it with the groom's or bride's family so they can follow along without seeing the full dashboard.</p>
+      <div class="sender-options">
+        ${sideOption("Groom side", "groom", "أهل العريس")}
+        ${sideOption("Bride side", "bride", "أهل العروس")}
+        ${sideOption("Family & shared", "family", "العائلة")}
+      </div>
+    </article>
   `;
 }
 
@@ -2423,6 +2525,18 @@ async function handleAction(action, dataset, event = null) {
     }
     case "copy-sender":
       await copyText(buildSenderLink(dataset.id || "all"));
+      return;
+    case "open-side-view": {
+      const sideViewLink = buildSideViewLink(dataset.id || "groom");
+      const sideViewWindow = window.open(sideViewLink, "_blank", "noopener");
+      if (!sideViewWindow) {
+        await copyText(sideViewLink);
+        showToast("Popup blocked — the side page link was copied instead.", "info");
+      }
+      return;
+    }
+    case "copy-side-view":
+      await copyText(buildSideViewLink(dataset.id || "groom"));
       return;
     case "open-add-table":
       openTableModal();
@@ -5069,6 +5183,17 @@ function buildSenderLink(side = "all") {
     g: guests,
   };
   return new URL(`send.html#data=${encodeSenderPayload(payload)}`, window.location.href).toString();
+}
+
+function buildSideViewLink(side) {
+  const linkParams = new URLSearchParams();
+  if (state.mode === "demo") {
+    linkParams.set("demo", "1");
+  } else {
+    linkParams.set("wedding", state.weddingId);
+  }
+  linkParams.set("side", side);
+  return new URL(`side.html?${linkParams.toString()}`, window.location.href).toString();
 }
 
 function encodeSenderPayload(payload) {

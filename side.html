@@ -1,0 +1,325 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="robots" content="noindex" />
+    <title>Wedding Side Status | DA3WA</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,500;9..144,600&family=Manrope:wght@400;500;600;700;800&family=Noto+Naskh+Arabic:wght@400;500;600;700&display=swap"
+      rel="stylesheet"
+    />
+    <style>
+      :root {
+        --side-bg: #f6f1e8;
+        --side-surface: #fffdf8;
+        --side-border: #dccfb8;
+        --side-text: #2f312d;
+        --side-text-soft: #666455;
+        --side-primary: #1f5a4d;
+        --side-primary-strong: #16463c;
+        --side-primary-soft: #dbe9e4;
+        --side-gold: #b89156;
+        --side-gold-soft: #efe3cf;
+        --side-rose: #9f4b41;
+        --side-font-ui: "Manrope", "Segoe UI", sans-serif;
+        --side-font-display: "Fraunces", "Georgia", serif;
+        --side-font-ar: "Noto Naskh Arabic", serif;
+        --side-accent: var(--side-primary);
+        --side-accent-soft: var(--side-primary-soft);
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+
+      body {
+        margin: 0;
+        min-height: 100vh;
+        background: var(--side-bg);
+        color: var(--side-text);
+        font-family: var(--side-font-ui);
+        -webkit-font-smoothing: antialiased;
+      }
+
+      .side-shell {
+        max-width: 720px;
+        margin: 0 auto;
+        padding: 16px 14px calc(40px + env(safe-area-inset-bottom, 0px));
+        display: grid;
+        gap: 14px;
+      }
+
+      .side-header {
+        background: var(--side-surface);
+        border: 1px solid var(--side-border);
+        border-top: 4px solid var(--side-accent);
+        border-radius: 20px;
+        padding: 20px;
+        box-shadow: 0 14px 34px rgba(47, 49, 45, 0.07);
+      }
+
+      .side-eyebrow {
+        margin: 0 0 4px;
+        font-size: 0.72rem;
+        font-weight: 700;
+        letter-spacing: 0.14em;
+        text-transform: uppercase;
+        color: var(--side-gold);
+      }
+
+      .side-header h1 {
+        margin: 0;
+        font-family: var(--side-font-display);
+        font-size: 1.5rem;
+        line-height: 1.25;
+      }
+
+      .side-header .side-ar {
+        font-family: var(--side-font-ar);
+        color: var(--side-text-soft);
+        font-size: 1.02rem;
+      }
+
+      .side-header p {
+        margin: 8px 0 0;
+        color: var(--side-text-soft);
+        font-size: 0.9rem;
+        line-height: 1.5;
+      }
+
+      .side-tiles {
+        display: grid;
+        grid-template-columns: repeat(2, 1fr);
+        gap: 10px;
+      }
+
+      .side-tile {
+        background: var(--side-surface);
+        border: 1px solid var(--side-border);
+        border-radius: 16px;
+        padding: 16px;
+        display: grid;
+        gap: 2px;
+      }
+
+      .side-tile strong {
+        font-size: 1.6rem;
+        font-family: var(--side-font-display);
+      }
+
+      .side-tile--coming strong {
+        color: var(--side-primary-strong);
+      }
+
+      .side-tile--declined strong {
+        color: var(--side-rose);
+      }
+
+      .side-tile span {
+        color: var(--side-text-soft);
+        font-size: 0.8rem;
+      }
+
+      .side-card {
+        background: var(--side-surface);
+        border: 1px solid var(--side-border);
+        border-radius: 20px;
+        padding: 18px;
+      }
+
+      .side-card h2 {
+        margin: 0 0 4px;
+        font-family: var(--side-font-display);
+        font-size: 1.1rem;
+      }
+
+      .side-card > p {
+        margin: 0 0 14px;
+        color: var(--side-text-soft);
+        font-size: 0.84rem;
+      }
+
+      .floor-map {
+        position: relative;
+        width: 100%;
+        aspect-ratio: 5 / 4;
+        border: 1px dashed var(--side-border);
+        border-radius: 16px;
+        background:
+          radial-gradient(circle at 30% 20%, rgba(184, 145, 86, 0.08), transparent 55%),
+          #fbf8f1;
+        overflow: hidden;
+      }
+
+      .floor-table {
+        position: absolute;
+        transform: translate(-0%, -0%);
+        background: #f3ebdc;
+        border: 2px solid #bc9b61;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        text-align: center;
+        flex-direction: column;
+        gap: 1px;
+      }
+
+      .floor-table--round {
+        border-radius: 50%;
+      }
+
+      .floor-table:not(.floor-table--round) {
+        border-radius: 12px;
+      }
+
+      .floor-table__name {
+        font-size: 0.62rem;
+        font-weight: 800;
+        line-height: 1.1;
+        max-width: 90%;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+      }
+
+      .floor-table__count {
+        font-size: 0.58rem;
+        color: var(--side-text-soft);
+      }
+
+      .floor-chair {
+        position: absolute;
+        width: 12px;
+        height: 12px;
+        border-radius: 50%;
+        transform: translate(-50%, -50%);
+        border: 2px solid #cdbb97;
+        background: #fffdf8;
+      }
+
+      .floor-chair--occupied {
+        background: #d9d2c2;
+        border-color: #b8ae97;
+      }
+
+      .floor-chair--side {
+        background: var(--side-accent);
+        border-color: var(--side-accent);
+      }
+
+      .floor-legend {
+        display: flex;
+        gap: 14px;
+        flex-wrap: wrap;
+        margin-top: 12px;
+        font-size: 0.76rem;
+        color: var(--side-text-soft);
+      }
+
+      .floor-legend span {
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+      }
+
+      .floor-legend i {
+        width: 11px;
+        height: 11px;
+        border-radius: 50%;
+        display: inline-block;
+        border: 2px solid #cdbb97;
+        background: #fffdf8;
+      }
+
+      .floor-legend .legend-side i {
+        background: var(--side-accent);
+        border-color: var(--side-accent);
+      }
+
+      .floor-legend .legend-occupied i {
+        background: #d9d2c2;
+        border-color: #b8ae97;
+      }
+
+      .roster-group {
+        border-top: 1px solid var(--side-border);
+        padding: 12px 0;
+      }
+
+      .roster-group:last-child {
+        padding-bottom: 0;
+      }
+
+      .roster-group h3 {
+        margin: 0 0 8px;
+        font-size: 0.82rem;
+        text-transform: uppercase;
+        letter-spacing: 0.08em;
+        color: var(--side-gold);
+      }
+
+      .roster-row {
+        display: flex;
+        align-items: baseline;
+        justify-content: space-between;
+        gap: 10px;
+        padding: 5px 0;
+        font-size: 0.92rem;
+      }
+
+      .roster-row .roster-name {
+        font-weight: 600;
+        overflow-wrap: anywhere;
+      }
+
+      .roster-row .roster-name small {
+        font-family: var(--side-font-ar);
+        color: var(--side-text-soft);
+        font-weight: 400;
+        margin-inline-start: 6px;
+      }
+
+      .roster-row .roster-meta {
+        color: var(--side-text-soft);
+        font-size: 0.78rem;
+        white-space: nowrap;
+      }
+
+      .side-empty {
+        margin-top: 18vh;
+        text-align: center;
+        padding: 24px;
+      }
+
+      .side-empty h1 {
+        font-family: var(--side-font-display);
+        font-size: 1.3rem;
+      }
+
+      .side-empty p {
+        color: var(--side-text-soft);
+        line-height: 1.6;
+      }
+
+      .side-footnote {
+        text-align: center;
+        color: var(--side-text-soft);
+        font-size: 0.78rem;
+        line-height: 1.6;
+      }
+
+      @media (min-width: 600px) {
+        .side-tiles {
+          grid-template-columns: repeat(4, 1fr);
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <main class="side-shell" id="sideShell"></main>
+    <script type="module" src="./side.js"></script>
+  </body>
+</html>

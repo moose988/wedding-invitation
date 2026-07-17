@@ -3914,3 +3914,129 @@ body.invitation-open .dress-swatch__mood {
     font-size: 0.78rem;
   }
 }
+
+/* ============================================================
+   Desktop "printed invitation card" presentation.
+   The opened invitation renders as one continuous portrait card
+   centered on the lace backdrop, instead of full-width web
+   sections. Mobile (<700px) keeps its own layout untouched.
+   ============================================================ */
+@media (min-width: 700px) {
+  body.invitation-open .site-content {
+    width: min(94vw, 780px);
+    margin: 40px auto 72px;
+    padding: 56px 26px 46px;
+    border: 1px solid rgba(176, 146, 92, 0.4);
+    outline: 1px solid rgba(176, 146, 92, 0.28);
+    outline-offset: -12px;
+    border-radius: 30px;
+    background:
+      radial-gradient(circle at 50% 0%, rgba(241, 223, 191, 0.35), transparent 46%),
+      linear-gradient(180deg, #fdf9f1 0%, #f9f2e6 52%, #fbf5ea 100%);
+    box-shadow:
+      0 40px 90px rgba(96, 78, 52, 0.28),
+      0 6px 24px rgba(96, 78, 52, 0.14);
+  }
+
+  /* Sections melt into the card: one sheet of paper, not stacked panels */
+  body.invitation-open .site-content .section {
+    padding: 26px 0;
+  }
+
+  body.invitation-open .site-content .section-frame {
+    width: min(100%, 620px);
+    padding: 0 12px;
+    border: none;
+    border-radius: 0;
+    background: none;
+    box-shadow: none;
+    backdrop-filter: none;
+  }
+
+  body.invitation-open .site-content .section-frame::before {
+    display: none;
+  }
+
+  /* Ornamental divider between sections */
+  body.invitation-open .site-content .section:not(.hero)::before {
+    content: "✦";
+    display: block;
+    width: min(340px, 70%);
+    margin: 0 auto 26px;
+    text-align: center;
+    font-size: 0.82rem;
+    line-height: 1;
+    color: rgba(159, 125, 69, 0.62);
+    background:
+      linear-gradient(90deg, transparent 0%, rgba(176, 146, 92, 0.38) 14%, rgba(176, 146, 92, 0.38) 42%, transparent 42%),
+      linear-gradient(90deg, transparent 58%, rgba(176, 146, 92, 0.38) 58%, rgba(176, 146, 92, 0.38) 86%, transparent 100%);
+    background-position: center;
+    background-size: 100% 1px;
+    background-repeat: no-repeat;
+  }
+
+  /* Hero becomes the top of the card: arched framed photo, then names */
+  body.invitation-open .hero-frame {
+    display: grid;
+    justify-items: center;
+    gap: 8px;
+    min-height: 0;
+    padding: 0 12px;
+    background: none;
+  }
+
+  body.invitation-open .hero-backdrop {
+    position: relative;
+    inset: auto;
+    width: min(400px, 82%);
+    aspect-ratio: 4 / 4.8;
+    border-radius: 300px 300px 22px 22px;
+    border: 1px solid rgba(176, 146, 92, 0.55);
+    outline: 1px solid rgba(176, 146, 92, 0.3);
+    outline-offset: 7px;
+    box-shadow: 0 26px 60px rgba(96, 78, 52, 0.24);
+    transform: none;
+    filter: saturate(0.94) sepia(0.02);
+  }
+
+  body.invitation-open .hero-backdrop::after {
+    border-radius: inherit;
+    background: linear-gradient(180deg, rgba(6, 5, 4, 0) 72%, rgba(6, 5, 4, 0.14) 100%);
+  }
+
+  body.invitation-open .hero-content-panel {
+    width: 100%;
+    margin-top: 18px;
+    padding: 0;
+    border: none;
+    border-radius: 0;
+    background: none;
+    box-shadow: none;
+    backdrop-filter: none;
+    text-align: center;
+  }
+
+  body.invitation-open .hero-flourish {
+    display: none;
+  }
+
+  /* The blossom branch reads as clutter on the stationery card - the arch
+     frame and dividers carry the ornament on desktop. Mobile keeps it. */
+  body.invitation-open .hero-blossom--top-right {
+    display: none;
+  }
+
+  /* Type settles into stationery scale inside the card */
+  body.invitation-open .hero-names__arabic {
+    font-size: clamp(2.6rem, 4.6vw, 3.4rem);
+  }
+
+  body.invitation-open .hero-names__english {
+    letter-spacing: 0.34em;
+  }
+
+  body.invitation-open .site-content .countdown-grid,
+  body.invitation-open .site-content .hero-countdown {
+    width: 100%;
+  }
+}

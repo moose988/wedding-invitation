@@ -1091,6 +1091,15 @@ function handleDocumentInput(event) {
     state.guestAssignmentSearch = seatSearch.value.trim().toLowerCase();
     if (elements.assignmentModal?.open) {
       renderAssignmentModal();
+      requestAnimationFrame(() => {
+        const nextSearch = elements.assignmentModal.querySelector("[data-seat-search]");
+        if (!nextSearch) {
+          return;
+        }
+        nextSearch.focus();
+        const cursorPosition = nextSearch.value.length;
+        nextSearch.setSelectionRange?.(cursorPosition, cursorPosition);
+      });
     } else {
       renderActiveView();
     }
@@ -1111,6 +1120,15 @@ function handleDocumentChange(event) {
   if (selectedGuest) {
     toggleGuestSelection(selectedGuest.value, selectedGuest.checked);
     renderActiveView();
+    return;
+  }
+
+  const guestRsvpStatus = event.target.closest("[data-guest-rsvp-status]");
+  if (guestRsvpStatus) {
+    void updateGuest(guestRsvpStatus.dataset.guestId, {
+      rsvpStatus: guestRsvpStatus.value,
+      updatedAt: serverTimestamp(),
+    });
     return;
   }
 
@@ -1173,6 +1191,7 @@ function loadDemoDashboard(message = "Preview mode is on. Firebase setup can be 
   }));
   state.loadingGuests = false;
   state.tables = hydrateTables(savedDemoState?.tables || demoTables);
+  state.hallObjects = hydrateHallObjects(savedDemoState?.hallObjects);
   state.loadingTables = false;
   state.selectedTableId = state.tables[0]?.id || "";
   showDashboard();
@@ -1215,6 +1234,7 @@ function persistDemoDashboardState() {
     JSON.stringify({
       guests: state.guests,
       tables: state.tables,
+      hallObjects: state.hallObjects,
       deletedSeedGuestIds: state.deletedSeedGuestIds || [],
     })
   );
@@ -1343,10 +1363,12 @@ function renderAll() {
 
 function renderChrome() {
   const meta = pageMeta[state.activeView];
-  elements.pageEyebrow.textContent = meta.eyebrow;
-  elements.pageTitle.textContent = meta.title;
-  elements.pageDescription.textContent = meta.description;
-  elements.liveIndicator.innerHTML = state.mode === "demo" ? "Preview mode" : "Live data";
+  const isSeatingView = state.activeView === "seating";
+  document.body.classList.toggle("is-seating-view", isSeatingView);
+  elements.pageEyebrow.textContent = isSeatingView ? "" : meta.eyebrow;
+  elements.pageTitle.textContent = isSeatingView ? "" : meta.title;
+  elements.pageDescription.textContent = isSeatingView ? "" : meta.description;
+  elements.liveIndicator.innerHTML = isSeatingView ? "" : state.mode === "demo" ? "Preview mode" : "Live data";
 
   document.querySelectorAll("[data-nav-view]").forEach((button) => {
     button.classList.toggle("is-active", button.dataset.navView === state.activeView);
@@ -1368,10 +1390,9 @@ function renderGlobalActions() {
   if (state.activeView === "guests") {
     actions.push(actionButton("Bulk add", "open-bulk-add", !can("canEditGuests"), "secondary"));
   }
-  if (state.activeView === "seating") {
-    actions.push(actionButton("Add table", "open-add-table", !can("canEditSeating"), "primary"));
+  if (state.activeView !== "seating") {
+    actions.push(actionButton("Refresh", "refresh-dashboard", false, "secondary"));
   }
-  actions.push(actionButton("Refresh", "refresh-dashboard", false, "secondary"));
 
   elements.globalActions.innerHTML = actions.join("");
 }
@@ -1626,7 +1647,6 @@ function renderGuestPage() {
                     <th>Side</th>
                     <th>RSVP</th>
                     <th>Invitation</th>
-                    <th>Check-In</th>
                     <th>Actions</th>
                   </tr>
                 </thead>
@@ -1659,8 +1679,8 @@ function renderSeatingPage() {
   const selectedSeat = getSelectedSeat();
   const seatingStats = calculateDashboardStats(state.guests, state.tables);
   const sideStats = calculateSideStats(state.guests, state.tables);
-  const unassignedGuests = getAssignableGuests();
   const saveStateLabel = state.saveState === "saving" ? "Saving layout..." : "Saved";
+  const assignmentStatusPanel = state.assignmentSession ? renderAssignmentPanelHint() : renderAssignmentStatusPanel(selectedSeat);
 
   elements.pageContent.innerHTML = `
     <section class="seating-page">
@@ -1670,18 +1690,22 @@ function renderSeatingPage() {
             <button class="${state.seatingMode === "layout" ? "is-active" : ""}" type="button" data-action="set-seating-mode" data-mode="layout">Layout mode</button>
             <button class="${state.seatingMode === "assignment" ? "is-active" : ""}" type="button" data-action="set-seating-mode" data-mode="assignment">Assignment mode</button>
           </div>
-          <span class="pill">${state.tables.length} tables</span>
-          <span class="pill">${seatingStats.totalSeats} seats</span>
-          <span class="pill">${seatingStats.unassignedGuests} unassigned guests</span>
-          <span class="pill pill--groom">Groom seated ${sideStats.groom.seated}/${sideStats.groom.confirmed}</span>
-          <span class="pill pill--bride">Bride seated ${sideStats.bride.seated}/${sideStats.bride.confirmed}</span>
-          <span class="pill">${saveStateLabel}</span>
         </div>
         <div class="planner-toolbar__actions">
-          <div class="planner-zoom-controls" aria-label="Planner zoom controls">
-            ${actionButton("Zoom out", "planner-zoom-out")}
-            <span class="pill">${Math.round(state.plannerZoom * 100)}%</span>
-            ${actionButton("Zoom in", "planner-zoom-in")}
+          <div class="planner-zoom-stack">
+            <div class="planner-zoom-controls" aria-label="Planner zoom controls">
+              ${actionButton("Zoom out", "planner-zoom-out")}
+              ${actionButton("Zoom in", "planner-zoom-in")}
+              <span class="pill">${Math.round(state.plannerZoom * 100)}%</span>
+            </div>
+            <div class="planner-zoom-stats" aria-label="Planner status">
+              <span class="pill">${state.tables.length} tables</span>
+              <span class="pill">${seatingStats.totalSeats} seats</span>
+              <span class="pill">${seatingStats.unassignedGuests} unassigned guests</span>
+              <span class="pill pill--groom">Groom seated ${sideStats.groom.seated}/${sideStats.groom.confirmed}</span>
+              <span class="pill pill--bride">Bride seated ${sideStats.bride.seated}/${sideStats.bride.confirmed}</span>
+              <span class="pill">${saveStateLabel}</span>
+            </div>
           </div>
           ${actionButton("Add table", "open-add-table", !can("canEditSeating"), "primary")}
         </div>
@@ -1700,8 +1724,6 @@ function renderSeatingPage() {
           </div>
           <div class="planner-canvas" id="plannerCanvas">
             <div class="planner-canvas__floor"></div>
-            <div class="planner-floor-marker planner-floor-marker--stage">Stage</div>
-            <div class="planner-floor-marker planner-floor-marker--entrance">Entrance</div>
             ${state.hallObjects.map((item) => renderHallObject(item)).join("")}
             ${state.tables.length ? state.tables.map((table) => renderPlannerTable(table)).join("") : `<div class="da3wa-empty">No tables yet. Create your first table to start mapping the hall.</div>`}
           </div>
@@ -1717,23 +1739,21 @@ function renderSeatingPage() {
             }
           </article>
 
-          <article class="planner-panel">
-            <div class="planner-panel__header">
-              <div>
-                <p class="da3wa-eyebrow">${state.seatingMode === "assignment" ? "Guest assignment" : "Planner library"}</p>
-                <h3 class="planner-panel__title">${state.seatingMode === "assignment" ? "Unassigned guests" : "Tables"}</h3>
-              </div>
-            </div>
-            ${
-              state.seatingMode === "assignment"
-                ? renderAssignmentLibrary(unassignedGuests)
-                : renderLayoutLibrary()
-            }
-          </article>
+          ${
+            state.seatingMode === "layout"
+              ? `<article class="planner-panel">
+                  <div class="planner-panel__header">
+                    <div>
+                      <p class="da3wa-eyebrow">Planner library</p>
+                      <h3 class="planner-panel__title">Tables</h3>
+                    </div>
+                  </div>
+                  ${renderLayoutLibrary()}
+                </article>`
+              : ""
+          }
 
-          <article class="planner-panel">
-            ${state.assignmentSession ? renderAssignmentPanelHint() : renderAssignmentStatusPanel(selectedSeat)}
-          </article>
+          ${assignmentStatusPanel ? `<article class="planner-panel">${assignmentStatusPanel}</article>` : ""}
         </div>
       </div>
     </section>
@@ -2026,18 +2046,17 @@ function renderGuestRow(guest) {
       <td><input type="checkbox" value="${guest.id}" data-guest-select ${isSelected ? "checked" : ""} aria-label="Select ${escapeAttribute(guest.fullName || "guest")}" /></td>
       <td>
         <div class="guest-primary">
-          <strong>${escapeHtml(guest.fullName || "Guest")}</strong>
+          <button class="guest-name-button" type="button" data-action="edit-guest" data-id="${escapeAttribute(guest.id)}">${escapeHtml(guest.fullName || "Guest")}</button>
         </div>
       </td>
       <td>${escapeHtml(guest.phone || "Not set")}</td>
       <td><span class="guest-count">${escapeHtml(String(normalizeAdditionalGuests(guest.additionalGuests)))}</span></td>
       <td>${badge(guest.side || "other", "plain")}</td>
-      <td>${badge(guest.rsvpStatus || "pending", guest.rsvpStatus || "pending")}</td>
+      <td>${renderGuestRsvpSelect(guest)}</td>
       <td>${badge(guest.inviteLink || guest.guestToken ? "Invitation ready" : "Not ready", guest.inviteLink || guest.guestToken ? "invited" : "plain")}</td>
-      <td>${badge(guest.checkedIn ? "Checked in" : "Not checked in", guest.checkedIn ? "checked-in" : "plain")}</td>
       <td>
         <div class="guest-row__actions">
-          ${actionButton("View", "edit-guest", false, "secondary", guest.id)}
+          ${renderGuestInlineActions(guest)}
           <button class="guest-row__menu-toggle" id="guest-menu-trigger-${escapeAttribute(guest.id)}" type="button" data-action="toggle-guest-menu" data-guest-id="${guest.id}" aria-label="Open guest actions" aria-haspopup="menu" aria-expanded="${menuOpen ? "true" : "false"}" aria-controls="guestActionMenu">⋯</button>
           <span class="is-hidden" data-invite-link="${escapeAttribute(inviteLink)}"></span>
           <span class="is-hidden" data-qr-link="${escapeAttribute(qrLink)}"></span>
@@ -2052,22 +2071,44 @@ function renderGuestCard(guest) {
     <article class="guest-card">
       <div class="guest-card__header">
         <div class="guest-primary">
-          <strong>${escapeHtml(guest.fullName || "Guest")}</strong>
+          <button class="guest-name-button" type="button" data-action="edit-guest" data-id="${escapeAttribute(guest.id)}">${escapeHtml(guest.fullName || "Guest")}</button>
         </div>
-        ${badge(guest.rsvpStatus || "pending", guest.rsvpStatus || "pending")}
+        ${renderGuestRsvpSelect(guest)}
       </div>
       <div class="guest-card__meta">
         <span>Phone: ${escapeHtml(guest.phone || "Not set")}</span>
         <span>Additional guests: ${escapeHtml(String(normalizeAdditionalGuests(guest.additionalGuests)))}</span>
         <span>Side: ${escapeHtml(guest.side || "other")}</span>
         <span>${guest.inviteLink || guest.guestToken ? "Invitation ready" : "Invitation not ready"}</span>
-        <span>${guest.checkedIn ? "Checked in" : "Not checked in"}</span>
       </div>
       <div class="guest-card__actions">
         ${actionButton("Edit", "edit-guest", !can("canEditGuests"), "secondary", guest.id)}
         ${actionButton("Copy link", "copy-guest-invite", false, "ghost", guest.id)}
+        ${renderGuestInlineActions(guest)}
       </div>
     </article>
+  `;
+}
+
+function renderGuestInlineActions(guest) {
+  const reminderDisabled = !buildWhatsAppReminderLink(guest);
+  return `
+    <div class="guest-inline-actions" aria-label="Quick actions for ${escapeAttribute(guest.fullName || "guest")}">
+      <button class="guest-quick-button" type="button" data-action="open-reminder" data-guest-id="${escapeAttribute(guest.id)}" ${reminderDisabled ? 'disabled aria-disabled="true"' : ""}>WhatsApp</button>
+      <button class="guest-quick-button" type="button" data-action="copy-guest-qr" data-guest-id="${escapeAttribute(guest.id)}">QR</button>
+    </div>
+  `;
+}
+
+function renderGuestRsvpSelect(guest) {
+  const status = guest.rsvpStatus || "pending";
+  const disabled = !can("canEditGuests");
+  return `
+    <select class="guest-rsvp-select guest-rsvp-select--${escapeAttribute(status)}" data-guest-rsvp-status data-guest-id="${escapeAttribute(guest.id)}" ${disabled ? 'disabled aria-disabled="true"' : ""} aria-label="Change RSVP status for ${escapeAttribute(guest.fullName || "guest")}">
+      <option value="confirmed" ${status === "confirmed" ? "selected" : ""}>Confirmed</option>
+      <option value="pending" ${status === "pending" ? "selected" : ""}>Pending</option>
+      <option value="declined" ${status === "declined" ? "selected" : ""}>Declined</option>
+    </select>
   `;
 }
 
@@ -2132,10 +2173,33 @@ function renderPlannerChair(table, chair) {
   `;
 }
 function renderHallObject(item) {
+  const icon = item.type === "stage" ? renderStageIcon() : renderEntranceIcon();
   return `
-    <div class="hall-object hall-object--${escapeAttribute(item.type)}" style="left:${item.x}%; top:${item.y}%;">
-      ${escapeHtml(item.label)}
+    <div
+      class="hall-object hall-object--${escapeAttribute(item.type)}"
+      style="left:${item.x}%; top:${item.y}%;"
+      title="Drag ${escapeAttribute(item.label)}"
+      data-hall-object-id="${escapeAttribute(item.id)}"
+    >
+      ${icon}
+      <span>${escapeHtml(item.label)}</span>
     </div>
+  `;
+}
+
+function renderStageIcon() {
+  return `
+    <span class="hall-object__icon hall-object__icon--stage" aria-hidden="true">
+      <span></span>
+    </span>
+  `;
+}
+
+function renderEntranceIcon() {
+  return `
+    <span class="hall-object__icon hall-object__icon--entrance" aria-hidden="true">
+      <span></span>
+    </span>
   `;
 }
 
@@ -2196,13 +2260,6 @@ function renderLayoutLibrary() {
 
   return `
     <div class="planner-table-list">${tables || '<div class="da3wa-empty">No tables yet.</div>'}</div>
-    <div class="planner-panel__header" style="margin-top:16px;">
-      <div>
-        <p class="da3wa-eyebrow">Hall objects</p>
-        <h3 class="planner-panel__title">Non-persistent markers</h3>
-      </div>
-    </div>
-    <div class="planner-object-list">${objects}</div>
   `;
 }
 
@@ -2256,7 +2313,7 @@ function renderAssignmentStatusPanel(selectedSeat) {
   }
 
   if (!selectedSeat) {
-    return `<div class="da3wa-empty">Click an empty chair to assign a party, or click an occupied chair to inspect that party.</div>`;
+    return "";
   }
 
   return `<div class="da3wa-empty">Selected ${escapeHtml(selectedSeat.table.name)} chair ${escapeHtml(String(selectedSeat.chair.seatNumber))}. Choose a guest or inspect the assigned party to continue.</div>`;
@@ -2413,7 +2470,6 @@ function menuItem(label, action, guestId, disabled = false) {
 }
 
 function renderGuestActionMenu(guest, trigger) {
-  const reminderLink = buildWhatsAppReminderLink(guest);
   const menu = document.createElement("div");
   menu.className = "guest-menu";
   menu.id = "guestActionMenu";
@@ -2421,12 +2477,7 @@ function renderGuestActionMenu(guest, trigger) {
   menu.setAttribute("aria-label", `Actions for ${guest.fullName || "guest"}`);
   menu.innerHTML = `
     ${menuItem("Edit guest", "edit-guest", guest.id)}
-    ${menuItem("Mark confirmed", "mark-confirmed", guest.id)}
-    ${menuItem("Mark pending", "mark-pending", guest.id)}
-    ${menuItem("Mark declined", "mark-declined", guest.id)}
-    ${menuItem("WhatsApp reminder", "open-reminder", guest.id, !reminderLink)}
     ${menuItem("Copy invitation link", "copy-guest-invite", guest.id)}
-    ${menuItem("Copy QR link", "copy-guest-qr", guest.id)}
     ${menuItem("Mark checked in", "toggle-checkin", guest.id, !can("canCheckIn"))}
     ${menuItem("Delete guest", "delete-guest", guest.id, !can("canEditGuests"))}
   `;
@@ -3535,7 +3586,6 @@ function openTableModal(table = null) {
   elements.tableForm.reset();
   elements.tableForm.name.value = table?.name || "";
   elements.tableForm.label.value = table?.label || "";
-  elements.tableForm.capacity.value = table?.capacity || table?.seatCount || 8;
   elements.tableForm.shape.value = table?.shape || "round";
   elements.tableForm.seatCount.value = table?.seatCount || table?.capacity || 8;
   elements.tableForm.floorZone.value = table?.floorZone || "";
@@ -3544,8 +3594,6 @@ function openTableModal(table = null) {
   elements.tableForm.chairColor.value = table?.chairColor || plannerPalette.chairColor;
   elements.tableForm.width.value = table?.width || defaultWidthForShape(table?.shape);
   elements.tableForm.height.value = table?.height || defaultHeightForShape(table?.shape);
-  elements.tableForm.x.value = table?.x ?? 20;
-  elements.tableForm.y.value = table?.y ?? 20;
   document.body.classList.add("is-modal-open");
   elements.tableModal.showModal();
 }
@@ -3557,12 +3605,13 @@ async function saveTable(event) {
     return;
   }
 
+  const existingTable = state.tables.find((table) => table.id === state.selectedTableId);
   const payload = createPlannerTable({
     id: state.selectedTableId || createId("table"),
     name: elements.tableForm.name.value.trim(),
     label: elements.tableForm.label.value.trim(),
-    capacity: Number(elements.tableForm.capacity.value || 0),
-    seatCount: Number(elements.tableForm.seatCount.value || elements.tableForm.capacity.value || 0),
+    capacity: Number(elements.tableForm.seatCount.value || 0),
+    seatCount: Number(elements.tableForm.seatCount.value || 0),
     shape: elements.tableForm.shape.value,
     floorZone: elements.tableForm.floorZone.value.trim(),
     tableColor: elements.tableForm.tableColor.value,
@@ -3570,9 +3619,9 @@ async function saveTable(event) {
     chairColor: elements.tableForm.chairColor.value,
     width: Number(elements.tableForm.width.value || 180),
     height: Number(elements.tableForm.height.value || 180),
-    x: Number(elements.tableForm.x.value || 0),
-    y: Number(elements.tableForm.y.value || 0),
-    chairs: state.tables.find((table) => table.id === state.selectedTableId)?.chairs || [],
+    x: Number(existingTable?.x ?? 20),
+    y: Number(existingTable?.y ?? 20),
+    chairs: existingTable?.chairs || [],
   });
   const occupiedSeats = state.selectedTableId ? getTableAssignments(state.selectedTableId).length : 0;
   if (payload.seatCount < occupiedSeats || payload.capacity < occupiedSeats) {
@@ -3818,8 +3867,27 @@ function handlePlannerPointerDown(event) {
     return;
   }
   const tableNode = event.target.closest("[data-table-drag-id]");
+  const objectNode = event.target.closest("[data-hall-object-id]");
   const seatNode = event.target.closest("[data-action='select-seat']");
-  if (!tableNode || seatNode) {
+  if ((!tableNode && !objectNode) || seatNode) {
+    return;
+  }
+
+  if (objectNode) {
+    const objectId = objectNode.dataset.hallObjectId;
+    const hallObject = state.hallObjects.find((item) => item.id === objectId);
+    if (!hallObject) {
+      return;
+    }
+    state.dragState = {
+      type: "hall-object",
+      objectId,
+      startX: event.clientX,
+      startY: event.clientY,
+      originalX: Number(hallObject.x || 0),
+      originalY: Number(hallObject.y || 0),
+    };
+    objectNode.setPointerCapture?.(event.pointerId);
     return;
   }
 
@@ -3831,6 +3899,7 @@ function handlePlannerPointerDown(event) {
 
   state.selectedTableId = tableId;
   state.dragState = {
+    type: "table",
     tableId,
     startX: event.clientX,
     startY: event.clientY,
@@ -3854,11 +3923,18 @@ function handlePlannerPointerMove(event) {
   const dx = ((event.clientX - state.dragState.startX) / rect.width) * 100;
   const dy = ((event.clientY - state.dragState.startY) / rect.height) * 100;
   state.dragState.moved = state.dragState.moved || Math.abs(event.clientX - state.dragState.startX) > 3 || Math.abs(event.clientY - state.dragState.startY) > 3;
-  const nextX = clamp(state.dragState.originalX + dx, 8, 92);
-  const nextY = clamp(state.dragState.originalY + dy, 12, 88);
-  state.tables = state.tables.map((table) =>
-    table.id === state.dragState.tableId ? { ...table, x: nextX, y: nextY } : table
-  );
+  const isHallObject = state.dragState.type === "hall-object";
+  const nextX = clamp(state.dragState.originalX + dx, isHallObject ? 5 : 8, isHallObject ? 95 : 92);
+  const nextY = clamp(state.dragState.originalY + dy, isHallObject ? 5 : 12, isHallObject ? 95 : 88);
+  if (isHallObject) {
+    state.hallObjects = state.hallObjects.map((item) =>
+      item.id === state.dragState.objectId ? { ...item, x: nextX, y: nextY } : item
+    );
+  } else {
+    state.tables = state.tables.map((table) =>
+      table.id === state.dragState.tableId ? { ...table, x: nextX, y: nextY } : table
+    );
+  }
   renderActiveView();
 }
 
@@ -3867,8 +3943,27 @@ async function handlePlannerPointerUp() {
     return;
   }
 
-  const { tableId, moved, originalX, originalY } = state.dragState;
+  const { type, tableId, objectId, moved, originalX, originalY } = state.dragState;
   state.dragState = null;
+
+  if (type === "hall-object") {
+    const hallObject = state.hallObjects.find((item) => item.id === objectId);
+    if (!hallObject) {
+      return;
+    }
+    if (!moved || (Math.abs(Number(hallObject.x || 0) - originalX) < 0.01 && Math.abs(Number(hallObject.y || 0) - originalY) < 0.01)) {
+      renderActiveView();
+      return;
+    }
+    if (!can("canEditSeating")) {
+      state.hallObjects = state.hallObjects.map((item) => (item.id === objectId ? { ...item, x: originalX, y: originalY } : item));
+      renderActiveView();
+      showToast("Your role does not allow layout edits.", "error");
+      return;
+    }
+    persistDemoDashboardState();
+    return;
+  }
 
   const table = state.tables.find((item) => item.id === tableId);
   if (!table) {
@@ -4905,6 +5000,14 @@ function createHallObjects() {
     { id: "stage-default", type: "stage", label: "Stage", x: 50, y: 8 },
     { id: "entrance-default", type: "entrance", label: "Entrance", x: 50, y: 90 },
   ];
+}
+
+function hydrateHallObjects(savedObjects) {
+  const savedById = new Map(Array.isArray(savedObjects) ? savedObjects.map((item) => [item.id, item]) : []);
+  return createHallObjects().map((item) => ({
+    ...item,
+    ...(savedById.get(item.id) || {}),
+  }));
 }
 
 function redirectToLogin(message = "session-required") {

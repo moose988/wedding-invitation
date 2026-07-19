@@ -325,8 +325,7 @@ a {
 }
 
 .da3wa-topbar {
-  position: sticky;
-  top: 16px;
+  position: static;
   z-index: 20;
   justify-content: space-between;
   align-items: flex-start;
@@ -334,6 +333,10 @@ a {
   padding: 18px 20px;
   border-radius: 24px;
   max-width: var(--da3wa-content);
+}
+
+body.is-seating-view .da3wa-topbar {
+  display: none;
 }
 
 .da3wa-topbar__intro {
@@ -384,6 +387,10 @@ a {
 .da3wa-page {
   max-width: var(--da3wa-content);
   margin: 0 auto;
+}
+
+body.is-seating-view .da3wa-page {
+  margin-top: 0;
 }
 
 .da3wa-button,
@@ -728,6 +735,7 @@ a {
 .attention-item strong,
 .activity-item strong,
 .guest-primary strong,
+.guest-name-button,
 .planner-table-list__button strong {
   color: var(--da3wa-text);
 }
@@ -776,6 +784,12 @@ a {
 .planner-toolbar__actions {
   flex-wrap: wrap;
   align-items: center;
+}
+
+.planner-toolbar__actions {
+  align-items: flex-start;
+  justify-content: flex-start;
+  flex-direction: column;
 }
 
 .guest-toolbar {
@@ -898,6 +912,23 @@ a {
   gap: 4px;
 }
 
+.guest-name-button {
+  width: fit-content;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  font: inherit;
+  font-weight: 800;
+  text-align: left;
+  cursor: pointer;
+}
+
+.guest-name-button:hover,
+.guest-name-button:focus-visible {
+  color: var(--da3wa-primary);
+  text-decoration: underline;
+}
+
 .guest-count {
   display: inline-flex;
   min-width: 34px;
@@ -927,7 +958,63 @@ a {
 .guest-row__actions {
   display: flex;
   justify-content: flex-end;
+  align-items: center;
+  flex-wrap: wrap;
   gap: 8px;
+}
+
+.guest-inline-actions {
+  display: inline-flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.guest-rsvp-select,
+.guest-quick-button {
+  min-height: 34px;
+  padding: 0 10px;
+  border-radius: 10px;
+  border: 1px solid rgba(205, 187, 151, 0.62);
+  background: #fffdfa;
+  color: var(--da3wa-text-soft);
+  font-size: 12px;
+  font-weight: 800;
+  cursor: pointer;
+}
+
+.guest-rsvp-select {
+  min-width: 122px;
+  appearance: auto;
+}
+
+.guest-rsvp-select--confirmed {
+  background: rgba(31, 90, 77, 0.12);
+  border-color: rgba(31, 90, 77, 0.32);
+  color: var(--da3wa-primary);
+}
+
+.guest-rsvp-select--pending {
+  background: rgba(184, 145, 86, 0.14);
+  border-color: rgba(184, 145, 86, 0.32);
+  color: #7a5a27;
+}
+
+.guest-rsvp-select--declined {
+  background: rgba(178, 91, 84, 0.12);
+  border-color: rgba(178, 91, 84, 0.3);
+  color: #8f3f38;
+}
+
+.guest-rsvp-select:hover,
+.guest-quick-button:hover {
+  background: rgba(31, 90, 77, 0.08);
+}
+
+.guest-rsvp-select:disabled,
+.guest-quick-button:disabled {
+  opacity: 0.48;
+  cursor: not-allowed;
 }
 
 .guest-row__menu-toggle {
@@ -1056,11 +1143,12 @@ a {
 }
 
 .planner-toolbar {
-  position: sticky;
-  top: 112px;
-  z-index: 10;
   background: rgba(255, 253, 248, 0.92);
   border-radius: 20px;
+  align-items: flex-start;
+  flex-direction: column;
+  justify-content: flex-start;
+  gap: 12px;
 }
 
 .planner-toolbar__cluster {
@@ -1078,6 +1166,22 @@ a {
   border-radius: 14px;
   background: rgba(246, 241, 232, 0.82);
   border: 1px solid rgba(205, 187, 151, 0.5);
+}
+
+.planner-zoom-stack {
+  display: grid;
+  justify-items: start;
+  gap: 8px;
+  width: max-content;
+  max-width: 100%;
+}
+
+.planner-zoom-stats {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: start;
+  gap: 8px;
+  max-width: 100%;
 }
 
 .planner-toggle {
@@ -1180,26 +1284,29 @@ a {
 .hall-object {
   position: absolute;
   z-index: 1;
-  padding: 8px 12px;
-  border-radius: 12px;
-  background: rgba(255, 253, 248, 0.9);
-  border: 1px solid rgba(205, 187, 151, 0.6);
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 12px 8px 8px;
+  border-radius: 999px;
+  background: rgba(255, 253, 248, 0.94);
+  border: 1px solid rgba(205, 187, 151, 0.72);
   color: var(--da3wa-text-soft);
   font-size: 12px;
   font-weight: 800;
   letter-spacing: 0.08em;
   text-transform: uppercase;
+  box-shadow: 0 10px 24px rgba(76, 61, 33, 0.12);
+  user-select: none;
 }
 
-.planner-floor-marker--stage,
-.hall-object--stage {
+.planner-floor-marker--stage {
   top: 4%;
   left: 50%;
   transform: translateX(-50%);
 }
 
-.planner-floor-marker--entrance,
-.hall-object--entrance {
+.planner-floor-marker--entrance {
   left: 50%;
   bottom: 4%;
   transform: translateX(-50%);
@@ -1207,6 +1314,82 @@ a {
 
 .hall-object {
   z-index: 2;
+  transform: translate(-50%, -50%);
+  cursor: grab;
+  touch-action: none;
+}
+
+.hall-object:active {
+  cursor: grabbing;
+}
+
+.hall-object--stage {
+  color: #68481e;
+  background: linear-gradient(180deg, rgba(255, 253, 248, 0.98), rgba(247, 234, 207, 0.96));
+}
+
+.hall-object--entrance {
+  color: #1f5f51;
+  background: linear-gradient(180deg, rgba(255, 253, 248, 0.98), rgba(223, 239, 232, 0.96));
+}
+
+.hall-object__icon {
+  position: relative;
+  width: 28px;
+  height: 28px;
+  flex: 0 0 28px;
+  border-radius: 999px;
+  background: #fffaf1;
+  border: 1px solid rgba(184, 145, 86, 0.36);
+}
+
+.hall-object__icon--stage::before {
+  content: "";
+  position: absolute;
+  left: 7px;
+  right: 7px;
+  top: 6px;
+  height: 12px;
+  border-radius: 5px 5px 2px 2px;
+  background: #b89156;
+  box-shadow: 0 4px 0 #68481e;
+}
+
+.hall-object__icon--stage span {
+  position: absolute;
+  left: 6px;
+  right: 6px;
+  bottom: 5px;
+  height: 2px;
+  border-radius: 999px;
+  background: rgba(104, 72, 30, 0.42);
+}
+
+.hall-object__icon--entrance {
+  background: #f3fbf6;
+  border-color: rgba(31, 95, 81, 0.28);
+}
+
+.hall-object__icon--entrance::before {
+  content: "";
+  position: absolute;
+  left: 8px;
+  top: 6px;
+  width: 12px;
+  height: 16px;
+  border: 2px solid #1f5f51;
+  border-bottom: 0;
+  border-radius: 7px 7px 2px 2px;
+}
+
+.hall-object__icon--entrance span {
+  position: absolute;
+  left: 14px;
+  top: 12px;
+  width: 4px;
+  height: 4px;
+  border-radius: 999px;
+  background: #b89156;
 }
 
 .planner-table {
@@ -1218,6 +1401,25 @@ a {
 
 .planner-table.is-selected {
   z-index: 5;
+}
+
+.planner-table.is-selected::before {
+  content: "Selected";
+  position: absolute;
+  left: 50%;
+  top: -22px;
+  z-index: 8;
+  transform: translateX(-50%);
+  padding: 5px 10px;
+  border-radius: 999px;
+  background: #1f5a4d;
+  color: #fff;
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  box-shadow: 0 8px 18px rgba(31, 90, 77, 0.24);
+  pointer-events: none;
 }
 
 .planner-table__inner {
@@ -1280,10 +1482,26 @@ a {
 }
 
 .planner-table.is-selected .planner-table__surface {
+  border-color: #1f5a4d;
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.68), rgba(255, 255, 255, 0.12)),
+    #dff0ea;
   box-shadow:
     inset 0 1px 0 rgba(255, 255, 255, 0.65),
-    0 0 0 4px rgba(31, 90, 77, 0.12),
-    0 18px 30px rgba(76, 61, 33, 0.16);
+    0 0 0 4px rgba(31, 90, 77, 0.16),
+    0 0 0 9px rgba(184, 145, 86, 0.18),
+    0 18px 30px rgba(31, 90, 77, 0.22);
+}
+
+.planner-table.is-selected .planner-table__label {
+  color: #1f5a4d;
+}
+
+.planner-table.is-selected .planner-chair {
+  border-color: #1f5a4d;
+  box-shadow:
+    0 0 0 3px rgba(31, 90, 77, 0.12),
+    0 8px 16px rgba(31, 90, 77, 0.16);
 }
 
 .planner-chair {
@@ -1600,6 +1818,16 @@ a {
   grid-template-rows: auto 1fr auto;
 }
 
+.da3wa-sheet--table {
+  width: min(760px, calc(100vw - 32px));
+  max-height: min(90vh, 760px);
+  height: auto;
+  margin: 0;
+  border-radius: 24px;
+  overflow: hidden;
+  animation: modalIn 180ms ease;
+}
+
 .da3wa-sheet--guest {
   width: min(680px, calc(100vw - 32px));
   max-height: min(90vh, 720px);
@@ -1738,6 +1966,7 @@ a {
 }
 
 @media (prefers-reduced-motion: reduce) {
+  .da3wa-sheet--table,
   .da3wa-sheet--guest {
     animation: none;
   }
@@ -1780,7 +2009,6 @@ a {
 
 @media (max-width: 900px) {
   .da3wa-topbar {
-    position: static;
     flex-direction: column;
     align-items: stretch;
   }
@@ -1799,6 +2027,18 @@ a {
 
   .planner-toolbar {
     position: static;
+  }
+
+  .planner-zoom-stack {
+    justify-items: start;
+    width: 100%;
+  }
+
+  .planner-zoom-stats {
+    grid-template-columns: 1fr;
+    justify-content: stretch;
+    max-width: 100%;
+    width: 100%;
   }
 
   .guest-table-wrap {
@@ -1823,6 +2063,11 @@ a {
   }
 
   .da3wa-sheet--guest {
+    width: calc(100vw - 32px);
+    border-radius: 20px;
+  }
+
+  .da3wa-sheet--table {
     width: calc(100vw - 32px);
     border-radius: 20px;
   }

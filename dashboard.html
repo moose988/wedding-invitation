@@ -157,8 +157,8 @@
       </form>
     </dialog>
 
-    <dialog class="da3wa-dialog da3wa-dialog--sheet" id="tableModal">
-      <form class="da3wa-sheet" id="tableForm" method="dialog">
+    <dialog class="da3wa-dialog da3wa-dialog--modal" id="tableModal">
+      <form class="da3wa-sheet da3wa-sheet--table" id="tableForm" method="dialog">
         <div class="da3wa-sheet__header">
           <div>
             <p class="da3wa-eyebrow">Planner Table</p>
@@ -203,10 +203,6 @@
             <h3>Capacity and geometry</h3>
             <div class="da3wa-form-grid">
               <label>
-                <span>Capacity</span>
-                <input class="da3wa-input" name="capacity" type="number" min="1" required />
-              </label>
-              <label>
                 <span>Seat count</span>
                 <input class="da3wa-input" name="seatCount" type="number" min="2" max="30" value="8" required />
               </label>
@@ -217,14 +213,6 @@
               <label>
                 <span>Height</span>
                 <input class="da3wa-input" name="height" type="number" min="80" max="320" value="180" />
-              </label>
-              <label>
-                <span>X position</span>
-                <input class="da3wa-input" name="x" type="number" min="0" max="100" />
-              </label>
-              <label>
-                <span>Y position</span>
-                <input class="da3wa-input" name="y" type="number" min="0" max="100" />
               </label>
             </div>
           </section>

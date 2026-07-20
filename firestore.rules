@@ -18,19 +18,48 @@ service cloud.firestore {
     }
 
     function canViewDashboard(weddingId) {
-      return isDashboardMember(weddingId) && dashboardUser(weddingId).data.canViewDashboard == true;
+      return isDashboardMember(weddingId) &&
+        dashboardUser(weddingId).data.canViewDashboard == true;
     }
 
     function canEditGuests(weddingId) {
-      return isDashboardMember(weddingId) && dashboardUser(weddingId).data.canEditGuests == true;
+      return isDashboardMember(weddingId) &&
+        dashboardUser(weddingId).data.canEditGuests == true;
     }
 
     function canEditSeating(weddingId) {
-      return isDashboardMember(weddingId) && dashboardUser(weddingId).data.canEditSeating == true;
+      return (isDashboardMember(weddingId) &&
+        dashboardUser(weddingId).data.canEditSeating == true) || isSeatingEditor(weddingId);
+    }
+
+    // Editor links are exchanged by Cloud Functions for custom Firebase Auth
+    // tokens. The live access record is checked on every Firestore request,
+    // which makes revoke/regenerate effective for already-open sessions too.
+    function seatingAccess(weddingId, role) {
+      return get(/databases/$(database)/documents/weddings/$(weddingId)/seatingAccess/$(role));
+    }
+
+    function isSeatingEditor(weddingId) {
+      return isSignedIn()
+        && request.auth.token.seatingEditor == true
+        && request.auth.token.seatingWeddingId == weddingId
+        && request.auth.token.seatingRole in ["bride", "groom"]
+        && seatingAccess(weddingId, request.auth.token.seatingRole).data.status == "active"
+        && seatingAccess(weddingId, request.auth.token.seatingRole).data.version == request.auth.token.seatingAccessVersion;
+    }
+
+    function canReadSeating(weddingId) {
+      return canViewDashboard(weddingId) || isSeatingEditor(weddingId);
     }
 
     function canCheckIn(weddingId) {
-      return isDashboardMember(weddingId) && dashboardUser(weddingId).data.canCheckIn == true;
+      return isDashboardMember(weddingId) &&
+        dashboardUser(weddingId).data.canCheckIn == true;
+    }
+
+    function canManageUsers(weddingId) {
+      return isDashboardMember(weddingId) &&
+        dashboardUser(weddingId).data.canManageUsers == true;
     }
 
     function isPublicWedding(weddingId) {
@@ -39,41 +68,58 @@ service cloud.firestore {
 
     function isGuestRsvpUpdate(weddingId) {
       return isPublicWedding(weddingId)
-        && request.resource.data.diff(resource.data).changedKeys().hasOnly(["rsvpStatus", "updatedAt"])
+        && request.resource.data.diff(resource.data).changedKeys().hasOnly(["rsvpStatus", "additionalGuests", "updatedAt"])
         && request.resource.data.guestToken == resource.data.guestToken
         && request.resource.data.rsvpStatus in ["pending", "confirmed", "declined"]
+        && request.resource.data.additionalGuests is int
+        && request.resource.data.additionalGuests >= 0
+        && request.resource.data.additionalGuests <= 10
         && request.resource.data.updatedAt == request.time;
+    }
+
+    function isGuestSeatingUpdate(weddingId) {
+      return canEditSeating(weddingId)
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly([
+          "tableId",
+          "tableName",
+          "seatNumber",
+          "seatingAssignments",
+          "updatedAt"
+        ]);
     }
 
     match /weddings/{weddingId} {
       allow read: if canViewDashboard(weddingId) || resource.data.status == "active";
-      allow create, update, delete: if isDashboardMember(weddingId) && request.auth.uid == request.resource.data.ownerUserId;
+
+      allow create: if isSignedIn() &&
+        request.auth.uid == request.resource.data.ownerUserId;
+
+      allow update: if isDashboardMember(weddingId) &&
+        request.auth.uid == resource.data.ownerUserId;
+
+      allow delete: if isDashboardMember(weddingId) &&
+        request.auth.uid == resource.data.ownerUserId;
 
       match /dashboardUsers/{userId} {
         allow read: if isDashboardMember(weddingId);
-        allow create, update, delete: if isDashboardMember(weddingId) && dashboardUser(weddingId).data.canManageUsers == true;
+        allow create, update, delete: if canManageUsers(weddingId);
+      }
+
+      match /seatingAccess/{role} {
+        allow read: if isDashboardMember(weddingId) &&
+          request.auth.uid == get(/databases/$(database)/documents/weddings/$(weddingId)).data.ownerUserId;
+        allow write: if false;
       }
 
       match /tables/{tableId} {
-        allow read: if canViewDashboard(weddingId) || isPublicWedding(weddingId);
+        allow read: if canReadSeating(weddingId) || isPublicWedding(weddingId);
         allow create, update, delete: if canEditSeating(weddingId);
       }
 
       match /guests/{guestId} {
-        allow read: if canViewDashboard(weddingId);
+        allow read: if canReadSeating(weddingId);
         allow create, delete: if canEditGuests(weddingId);
-        allow update: if canEditGuests(weddingId) || canCheckIn(weddingId) || isGuestRsvpUpdate(weddingId);
-
-        // TODO:
-        // Guest-token access is not strongly securable with this schema from the client alone,
-        // because guests are looked up by guestToken stored inside documents in a collection.
-        // Production recommendation:
-        // 1. Move guest-facing reads/writes behind Callable HTTPS Cloud Functions, OR
-        // 2. Mirror guest-facing data into a token-keyed public collection such as
-        //    publicGuestInvites/{guestToken}, OR
-        // 3. Use custom auth/session exchange before allowing RSVP or check-in writes.
-        //
-        // With the current collection structure, do not expose list access publicly.
+        allow update: if canEditGuests(weddingId) || canCheckIn(weddingId) || isGuestRsvpUpdate(weddingId) || isGuestSeatingUpdate(weddingId);
         allow list: if false;
       }
 
@@ -98,10 +144,13 @@ service cloud.firestore {
           || (canCheckIn(weddingId)
             && request.resource.data.diff(resource.data).changedKeys().hasOnly(["checkedIn", "checkedInAt", "updatedAt"]))
           || (canEditSeating(weddingId)
-            && request.resource.data.diff(resource.data).changedKeys().hasOnly(["tableId", "tableName", "seatNumber", "updatedAt"]))
+            && request.resource.data.diff(resource.data).changedKeys().hasOnly(["seatingAssignments", "tableId", "tableName", "seatNumber", "updatedAt"]))
           || (isPublicWedding(weddingId)
-            && request.resource.data.diff(resource.data).changedKeys().hasOnly(["rsvpStatus", "updatedAt"])
+            && request.resource.data.diff(resource.data).changedKeys().hasOnly(["rsvpStatus", "additionalGuests", "updatedAt"])
             && request.resource.data.rsvpStatus in ["pending", "confirmed", "declined"]
+            && request.resource.data.additionalGuests is int
+            && request.resource.data.additionalGuests >= 0
+            && request.resource.data.additionalGuests <= 10
             && request.resource.data.updatedAt == request.time);
       }
     }

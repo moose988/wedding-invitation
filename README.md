@@ -37,6 +37,7 @@ weddings/{weddingId}
 weddings/{weddingId}/guests/{guestId}
 weddings/{weddingId}/tables/{tableId}
 weddings/{weddingId}/dashboardUsers/{userId}
+weddings/{weddingId}/seatingAccess/{bride|groom}
 ```
 
 ## 3. Example wedding document
@@ -163,7 +164,16 @@ You can deploy this as a static Firebase Hosting site:
 2. Run `firebase login`
 3. Run `firebase init hosting`
 4. Set the public directory to this project folder.
-5. Deploy with `firebase deploy`
+5. Install the Functions dependencies: `cd functions; npm install; cd ..`
+6. Set the server-only encryption secret used to store recoverable owner links:
+
+```text
+firebase functions:secrets:set SEATING_LINK_ENCRYPTION_KEY
+```
+
+Use a long random value and keep it private. It is never sent to the browser.
+
+7. Deploy rules, Functions, and Hosting with `firebase deploy`.
 
 Any static host also works if Firebase Auth and Firestore are configured for the deployed domain.
 
@@ -175,7 +185,15 @@ Any static host also works if Firebase Auth and Firestore are configured for the
 - Safest production approach:
   - Use Cloud Functions or a token-keyed public mirror collection for guest-facing reads.
   - Validate guest tokens server-side before allowing RSVP or check-in writes.
-  - Keep planner-only fields separate from guest-facing fields.
+- Keep planner-only fields separate from guest-facing fields.
+
+### Bride & groom seating editor links
+
+The Invitations page gives the wedding owner exactly two fixed seating-editor cards: Bride and Groom. Creating, opening, copying, regenerating, and revoking a link calls the deployed `manageSeatingEditorAccess` Cloud Function. The function verifies `ownerUserId`, creates a 256-bit random token, stores its SHA-256 lookup value and an AES-GCM encrypted owner-recovery copy, and returns the plaintext link only to the owner. It exchanges a valid link for a Firebase custom token restricted to one wedding and one role.
+
+Firestore rules allow this custom-token identity to read the wedding's existing `guests` and `tables` data and update only seating fields plus table documents. It cannot read dashboard users, invitation access records, check-in data, exports, or another wedding. Revoking or regenerating increments the access version in `seatingAccess`; rules compare that version on every request, so previously issued editor sessions immediately lose Firestore access as well.
+
+The secure editor route is `dashboard.html?seatingEditor=1&token=...`. After the one-time exchange, the raw token is removed from the address bar and the route exposes only the existing shared Seating Planner.
 
 ## Notes about the current implementation
 

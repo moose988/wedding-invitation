@@ -1,3 +1,6 @@
 .claude/
 .omc/
 .DS_Store
+.firebase/
+*.log
+functions/node_modules/

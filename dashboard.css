@@ -1103,6 +1103,18 @@ body.is-seating-view .da3wa-page {
   color: var(--da3wa-primary);
 }
 
+.guest-badge--reservation-ready {
+  background: rgba(45, 122, 87, 0.14);
+  color: var(--da3wa-success);
+  border: 1px solid rgba(45, 122, 87, 0.24);
+}
+
+.guest-badge--reservation-missing {
+  background: rgba(202, 148, 64, 0.16);
+  color: #8a5d05;
+  border: 1px solid rgba(202, 148, 64, 0.28);
+}
+
 .guest-badge--invited,
 .guest-badge--assigned {
   background: rgba(184, 145, 86, 0.14);

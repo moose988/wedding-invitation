@@ -89,7 +89,10 @@ const state = {
   wedding: structuredClone(demoWedding),
   guest: null,
   tables: [...demoTables],
+  hallObjects: createHallObjects(),
   assignedTable: null,
+  seatPlanTransform: { scale: 1, x: 0, y: 0 },
+  seatPlanGesture: null,
   firebaseReady: false,
   invitationOpening: false,
   labelIndex: 0,
@@ -185,8 +188,10 @@ async function loadFirebaseInvitation(weddingId, guestToken) {
 
   state.wedding = normaliseWedding(wedding);
   state.guest = guest;
+  state.hallObjects = hydrateHallObjects(state.wedding.hallObjects);
   state.tables = tables;
-  state.assignedTable = tables.find((table) => table.id === guest.tableId) || null;
+  const primaryAssignment = getInvitationSeatAssignments(guest)[0];
+  state.assignedTable = tables.find((table) => table.id === (primaryAssignment?.tableId || guest.tableId)) || null;
 }
 
 async function loadWedding(weddingId) {
@@ -392,15 +397,42 @@ function renderFirebaseRsvp(mount) {
     pending: "Please confirm your attendance.",
   };
   const guest = state.guest;
+  const attending = guest.rsvpStatus === "confirmed";
   mount.innerHTML = `
-    <div class="firebase-rsvp-panel">
+    <form class="firebase-rsvp-panel rsvp-form" id="firebaseRsvpForm">
       <p class="firebase-rsvp-status">${statusCopy[guest.rsvpStatus] || statusCopy.pending}</p>
-      <div class="firebase-rsvp-actions">
-        <button class="luxury-button luxury-button--primary" type="button" data-rsvp-status="confirmed">Confirm Attendance</button>
-        <button class="luxury-button luxury-button--secondary" type="button" data-rsvp-status="declined">Decline</button>
+      <div class="rsvp-phases">
+        <section class="rsvp-phase" data-rsvp-step="1">
+          <p class="rsvp-phase__number">01</p>
+          <h3>Are you attending?</h3>
+          <div class="rsvp-choice" role="radiogroup" aria-label="Attendance">
+            <label class="rsvp-answer">
+              <input type="radio" name="status" value="confirmed" ${attending ? "checked" : ""} required />
+              <span>Yes</span>
+            </label>
+            <label class="rsvp-answer">
+              <input type="radio" name="status" value="declined" ${guest.rsvpStatus === "declined" ? "checked" : ""} required />
+              <span>No</span>
+            </label>
+          </div>
+        </section>
+        <section class="rsvp-phase" data-rsvp-step="2" ${attending ? "" : "hidden"}>
+          <p class="rsvp-phase__number">02</p>
+          <h3>How many additional guests are coming?</h3>
+          <label class="rsvp-input-line rsvp-input-line--compact">
+            <span class="sr-only">Additional guests</span>
+            <input name="additionalGuests" type="number" min="0" max="10" inputmode="numeric" placeholder="0" value="${escapeAttribute(String(normalizeAdditionalGuests(guest.additionalGuests)))}" />
+          </label>
+        </section>
       </div>
-    </div>
+      <button class="luxury-button luxury-button--primary rsvp-form__submit" type="submit">
+        ${icons.reply}<span>Send RSVP</span>
+      </button>
+    </form>
   `;
+  const form = document.getElementById("firebaseRsvpForm");
+  form?.addEventListener("submit", handleFirebaseRsvpSubmit);
+  setupRsvpPhases(form);
 }
 
 function renderDemoRsvp(mount) {
@@ -411,8 +443,7 @@ function renderDemoRsvp(mount) {
         <p class="rsvp-summary__eyebrow">${escapeHtml(saved.status)}</p>
         <h3>Your reply has been saved</h3>
         <p>Thank you. Your response is stored on this device for the demo invitation.</p>
-        ${saved.name ? `<p><strong>Name:</strong> ${escapeHtml(saved.name)}</p>` : ""}
-        ${saved.guests ? `<p><strong>Guests:</strong> ${escapeHtml(saved.guests)}</p>` : ""}
+        ${saved.additionalGuests ? `<p><strong>Additional guests:</strong> ${escapeHtml(saved.additionalGuests)}</p>` : ""}
         <button class="luxury-button luxury-button--secondary" type="button" data-edit-rsvp><span>Edit RSVP</span></button>
       </div>
     `;
@@ -438,23 +469,14 @@ function renderDemoRsvp(mount) {
         </section>
         <section class="rsvp-phase" data-rsvp-step="2" ${saved?.status === "Yes" ? "" : "hidden"}>
           <p class="rsvp-phase__number">02</p>
-          <h3>Your name</h3>
-          <label class="rsvp-input-line">
-            <span class="sr-only">Guest name</span>
-            <input name="name" type="text" autocomplete="name" placeholder="Name" value="${escapeAttribute(saved?.name || "")}" required />
-          </label>
-          <button class="luxury-button luxury-button--secondary rsvp-next" type="button" data-rsvp-next="3"><span>Continue</span></button>
-        </section>
-        <section class="rsvp-phase" data-rsvp-step="3" ${saved?.name ? "" : "hidden"}>
-          <p class="rsvp-phase__number">03</p>
-          <h3>How many guests?</h3>
+          <h3>How many additional guests are coming?</h3>
           <label class="rsvp-input-line rsvp-input-line--compact">
-            <span class="sr-only">Number of guests</span>
-            <input name="guests" type="number" min="0" max="10" inputmode="numeric" placeholder="1" value="${escapeAttribute(saved?.guests || "1")}" required />
+            <span class="sr-only">Additional guests</span>
+            <input name="additionalGuests" type="number" min="0" max="10" inputmode="numeric" placeholder="0" value="${escapeAttribute(saved?.additionalGuests || saved?.guests || "0")}" />
           </label>
         </section>
       </div>
-      <button class="luxury-button luxury-button--primary rsvp-form__submit" type="submit" ${saved?.name ? "" : "hidden"}>
+      <button class="luxury-button luxury-button--primary rsvp-form__submit" type="submit" ${saved?.status ? "" : "hidden"}>
         ${icons.reply}<span>Send RSVP</span>
       </button>
     </form>
@@ -472,24 +494,34 @@ function renderSeatSection() {
   }
 
   elements.seatingSection.hidden = false;
-  const assignedTable = state.assignedTable;
-  const hasSeat = Boolean(assignedTable || state.guest.tableName || state.guest.seatNumber);
+  const assignments = getInvitationSeatAssignments(state.guest);
+  const assignedTable = state.tables.find((table) => table.id === assignments[0]?.tableId) || state.assignedTable;
+  const hasSeat = assignments.length > 0;
+  const seatNumbers = assignments.map((assignment) => assignment.seatNumber).filter(Boolean).join(", ");
 
   document.getElementById("seatDetailsMount").innerHTML = hasSeat
     ? `
       <div class="seat-details-grid">
-        <article class="seat-detail-card"><span>Table Name</span><strong>${escapeHtml(state.guest.tableName || assignedTable?.name || "Pending")}</strong></article>
-        <article class="seat-detail-card"><span>Table Label</span><strong>${escapeHtml(assignedTable?.label || state.guest.tableId || "Pending")}</strong></article>
-        <article class="seat-detail-card"><span>Seat Number</span><strong>${escapeHtml(state.guest.seatNumber || "Will be shared at the venue")}</strong></article>
-        <article class="seat-detail-card"><span>Floor Zone</span><strong>${escapeHtml(assignedTable?.floorZone || "Main Hall")}</strong></article>
+        <article class="seat-detail-card"><span>Guest Name</span><strong>${escapeHtml(state.guest.fullName || "Guest")}</strong></article>
+        <article class="seat-detail-card"><span>Table Name</span><strong>${escapeHtml(assignments[0]?.tableName || assignedTable?.name || "Pending")}</strong></article>
+        <article class="seat-detail-card"><span>Seat Numbers</span><strong>${escapeHtml(seatNumbers || "Pending")}</strong></article>
+        <article class="seat-detail-card"><span>People</span><strong>${escapeHtml(String(getPartySize(state.guest)))}</strong></article>
+        <article class="seat-detail-card"><span>Event Date</span><strong>${escapeHtml(formatDate(state.wedding.date))}</strong></article>
+        <article class="seat-detail-card"><span>Event Time</span><strong>${escapeHtml(state.wedding.time || "")}</strong></article>
+        <article class="seat-detail-card"><span>Venue</span><strong>${escapeHtml(state.wedding.venue || "")}</strong></article>
+      </div>
+      <div class="guest-seat-list">
+        ${assignments.map((assignment) => `
+          <span>${escapeHtml(assignment.label)} - ${escapeHtml(assignment.tableName || "Table")} seat ${escapeHtml(String(assignment.seatNumber))}</span>
+        `).join("")}
       </div>
     `
     : '<p class="seat-empty-copy">Your seating details will be shared soon.</p>';
 
-  renderSeatingMap(state.tables, state.guest.tableId);
+  renderSeatingMap(state.tables, assignments);
 }
 
-function renderSeatingMap(tables, assignedTableId) {
+function renderSeatingMap(tables, assignments = []) {
   const map = document.getElementById("seatingMap");
   if (!map) {
     return;
@@ -500,21 +532,208 @@ function renderSeatingMap(tables, assignedTableId) {
     return;
   }
 
-  map.innerHTML = tables
+  const assignedTableIds = new Set(assignments.map((assignment) => assignment.tableId));
+  const assignedSeatKeys = new Set(assignments.map((assignment) => `${assignment.tableId}::${assignment.seatNumber}`));
+  map.innerHTML = `
+    <div class="seat-plan-toolbar" aria-label="Seating plan controls">
+      <button type="button" data-seat-plan-control="zoom-out">-</button>
+      <button type="button" data-seat-plan-control="fit">Fit</button>
+      <button type="button" data-seat-plan-control="zoom-in">+</button>
+    </div>
+    <div class="seat-plan-viewport" id="seatPlanViewport">
+      <div class="seat-plan-canvas" id="seatPlanCanvas" style="transform:translate(${state.seatPlanTransform.x}px, ${state.seatPlanTransform.y}px) scale(${state.seatPlanTransform.scale});">
+        <div class="seat-plan-floor"></div>
+        ${state.hallObjects.map(renderInvitationHallObject).join("")}
+        ${tables
     .map((table) => {
-      const isAssigned = table.id === assignedTableId;
+      const isAssigned = assignedTableIds.has(table.id);
+      const width = Number(table.width || defaultWidthForShape(table.shape));
+      const height = Number(table.height || defaultHeightForShape(table.shape));
       return `
         <article
-          class="seat-map-table seat-map-table--${escapeAttribute(table.shape || "round")} ${isAssigned ? "is-assigned" : ""}"
-          style="left:${Number(table.x || 0)}%;top:${Number(table.y || 0)}%;"
+          class="seat-plan-table ${isAssigned ? "is-assigned" : ""}"
+          style="left:${Number(table.x || 0)}%;top:${Number(table.y || 0)}%;width:${width}px;height:${height}px;"
         >
-          <strong>${escapeHtml(table.label || table.name)}</strong>
-          <span>${escapeHtml(table.name || "Table")}</span>
-          ${isAssigned ? '<small>You are here</small>' : ""}
+          ${(table.chairs || []).map((chair) => renderInvitationChair(table, chair, assignedSeatKeys)).join("")}
+          <div class="seat-plan-table__surface seat-plan-table__surface--${escapeAttribute(table.shape || "round")}">
+            <strong>${escapeHtml(table.label || table.name)}</strong>
+            <span>${escapeHtml(table.name || "Table")}</span>
+            ${isAssigned ? '<small>Your table</small>' : ""}
+          </div>
         </article>
       `;
     })
-    .join("");
+    .join("")}
+      </div>
+    </div>
+  `;
+  bindSeatPlanInteractions();
+}
+
+function getPartySize(guest) {
+  return 1 + normalizeAdditionalGuests(guest?.additionalGuests);
+}
+
+function personKeyForIndex(index) {
+  return Number(index) === 0 ? "main" : `guest-${Number(index)}`;
+}
+
+function partyLabelForIndex(index) {
+  return Number(index) === 0 ? "Main Guest" : `Guest ${Number(index)}`;
+}
+
+function partyIndexFromKey(personKey) {
+  if (personKey === "main") {
+    return 0;
+  }
+  const match = String(personKey || "").match(/^guest-(\d+)$/);
+  return match ? Number(match[1]) : 0;
+}
+
+function getInvitationSeatAssignments(guest) {
+  const structured = Array.isArray(guest?.seatingAssignments) ? guest.seatingAssignments : [];
+  const source = structured.length
+    ? structured
+    : guest?.tableId && guest?.seatNumber
+      ? [{ tableId: guest.tableId, tableName: guest.tableName, seatNumber: guest.seatNumber, personKey: "main", label: "Main Guest" }]
+      : [];
+  return source
+    .map((assignment, index) => {
+      const personKey = assignment.personKey || personKeyForIndex(Number.isInteger(Number(assignment.partyMemberIndex)) ? Number(assignment.partyMemberIndex) : index);
+      const partyIndex = partyIndexFromKey(personKey);
+      const table = state.tables.find((item) => item.id === assignment.tableId);
+      return {
+        tableId: assignment.tableId || "",
+        tableName: assignment.tableName || table?.name || "",
+        seatNumber: String(assignment.seatNumber || ""),
+        personKey,
+        label: assignment.label || partyLabelForIndex(partyIndex),
+      };
+    })
+    .filter((assignment) => assignment.tableId && assignment.seatNumber)
+    .sort((a, b) => partyIndexFromKey(a.personKey) - partyIndexFromKey(b.personKey));
+}
+
+function renderInvitationChair(table, chair, assignedSeatKeys) {
+  const key = `${table.id}::${chair.seatNumber}`;
+  const isAssignedToInvite = assignedSeatKeys.has(key);
+  const assignment = getInvitationSeatAssignments(state.guest).find((item) => item.tableId === table.id && String(item.seatNumber) === String(chair.seatNumber));
+  return `
+    <span
+      class="seat-plan-chair ${isAssignedToInvite ? "is-yours" : ""} ${chair.assignment || chair.guestId ? "is-occupied" : ""}"
+      style="left:${Number(chair.x || 0)}%;top:${Number(chair.y || 0)}%;"
+      title="${escapeAttribute(isAssignedToInvite ? `${assignment?.label || "Your seat"} - seat ${chair.seatNumber}` : `Seat ${chair.seatNumber}`)}"
+    >${escapeHtml(isAssignedToInvite ? assignment?.label?.replace("Main Guest", "Main").replace("Guest ", "G") || String(chair.seatNumber) : String(chair.seatNumber))}</span>
+  `;
+}
+
+function renderInvitationHallObject(item) {
+  return `
+    <div class="seat-plan-object seat-plan-object--${escapeAttribute(item.type)}" style="left:${Number(item.x || 0)}%;top:${Number(item.y || 0)}%;">
+      <span>${escapeHtml(item.label || item.type)}</span>
+    </div>
+  `;
+}
+
+function bindSeatPlanInteractions() {
+  const viewport = document.getElementById("seatPlanViewport");
+  const canvas = document.getElementById("seatPlanCanvas");
+  const toolbar = document.querySelector(".seat-plan-toolbar");
+  if (!viewport || !canvas) {
+    return;
+  }
+  const applyTransform = () => {
+    canvas.style.transform = `translate(${state.seatPlanTransform.x}px, ${state.seatPlanTransform.y}px) scale(${state.seatPlanTransform.scale})`;
+  };
+  const zoomBy = (delta) => {
+    state.seatPlanTransform.scale = clamp(state.seatPlanTransform.scale + delta, 0.55, 2.5);
+    applyTransform();
+  };
+  const activePointers = new Map();
+  const pointerDistance = () => {
+    const points = [...activePointers.values()];
+    if (points.length < 2) {
+      return 0;
+    }
+    return Math.hypot(points[0].clientX - points[1].clientX, points[0].clientY - points[1].clientY);
+  };
+  toolbar?.addEventListener("click", (event) => {
+    const control = event.target.closest("[data-seat-plan-control]")?.dataset.seatPlanControl;
+    if (control === "zoom-in") zoomBy(0.15);
+    if (control === "zoom-out") zoomBy(-0.15);
+    if (control === "fit") {
+      state.seatPlanTransform = { scale: 1, x: 0, y: 0 };
+      applyTransform();
+    }
+  });
+  viewport.addEventListener("wheel", (event) => {
+    event.preventDefault();
+    zoomBy(event.deltaY < 0 ? 0.08 : -0.08);
+  }, { passive: false });
+  viewport.addEventListener("pointerdown", (event) => {
+    viewport.setPointerCapture?.(event.pointerId);
+    activePointers.set(event.pointerId, { clientX: event.clientX, clientY: event.clientY });
+    state.seatPlanGesture = { pointerId: event.pointerId, startX: event.clientX, startY: event.clientY, x: state.seatPlanTransform.x, y: state.seatPlanTransform.y };
+    if (activePointers.size === 2) {
+      state.seatPlanGesture = {
+        mode: "pinch",
+        distance: pointerDistance(),
+        scale: state.seatPlanTransform.scale,
+      };
+    }
+  });
+  viewport.addEventListener("pointermove", (event) => {
+    if (activePointers.has(event.pointerId)) {
+      activePointers.set(event.pointerId, { clientX: event.clientX, clientY: event.clientY });
+    }
+    const gesture = state.seatPlanGesture;
+    if (!gesture) {
+      return;
+    }
+    if (gesture.mode === "pinch") {
+      const nextDistance = pointerDistance();
+      if (gesture.distance && nextDistance) {
+        state.seatPlanTransform.scale = clamp(gesture.scale * (nextDistance / gesture.distance), 0.55, 2.5);
+        applyTransform();
+      }
+      return;
+    }
+    if (gesture.pointerId !== event.pointerId) {
+      return;
+    }
+    state.seatPlanTransform.x = gesture.x + event.clientX - gesture.startX;
+    state.seatPlanTransform.y = gesture.y + event.clientY - gesture.startY;
+    applyTransform();
+  });
+  ["pointerup", "pointercancel", "pointerleave"].forEach((eventName) => {
+    viewport.addEventListener(eventName, (event) => {
+      activePointers.delete(event.pointerId);
+      state.seatPlanGesture = null;
+    });
+  });
+}
+
+function createHallObjects() {
+  return [
+    { id: "stage-default", type: "stage", label: "Stage", x: 50, y: 8 },
+    { id: "entrance-default", type: "entrance", label: "Entrance", x: 50, y: 90 },
+  ];
+}
+
+function hydrateHallObjects(savedObjects) {
+  const savedById = new Map(Array.isArray(savedObjects) ? savedObjects.map((item) => [item.id, item]) : []);
+  return createHallObjects().map((item) => ({
+    ...item,
+    ...(savedById.get(item.id) || {}),
+  }));
+}
+
+function defaultWidthForShape(shape) {
+  return ["rectangle", "conference", "long-banquet"].includes(shape) ? 230 : ["horseshoe", "u-shape", "open-u"].includes(shape) ? 220 : 180;
+}
+
+function defaultHeightForShape(shape) {
+  return ["rectangle", "conference", "long-banquet"].includes(shape) ? 140 : ["horseshoe", "u-shape", "open-u"].includes(shape) ? 180 : 180;
 }
 
 async function renderGuestQrPass() {
@@ -539,16 +758,18 @@ async function renderGuestQrPass() {
   await renderQrCode(document.getElementById("guestQrCode"), checkinUrl, { size: 220 });
 }
 
-async function updateRsvp(status) {
+async function updateRsvp(status, additionalGuests = 0) {
   if (state.mode !== "firebase" || !state.guest?.guestId) {
     return;
   }
 
   try {
+    const nextAdditionalGuests = status === "confirmed" ? normalizeAdditionalGuests(additionalGuests) : 0;
     await updateDoc(
       doc(initFirebase().db, "weddings", state.weddingId, "guests", state.guest.guestId),
       {
         rsvpStatus: status,
+        additionalGuests: nextAdditionalGuests,
         updatedAt: serverTimestamp(),
       }
     );
@@ -558,6 +779,7 @@ async function updateRsvp(status) {
         doc(initFirebase().db, "weddings", state.weddingId, "publicGuests", state.guestToken),
         {
           rsvpStatus: status,
+          additionalGuests: nextAdditionalGuests,
           updatedAt: serverTimestamp(),
         }
       ).catch((error) => {
@@ -565,6 +787,7 @@ async function updateRsvp(status) {
       });
     }
     state.guest.rsvpStatus = status;
+    state.guest.additionalGuests = nextAdditionalGuests;
     renderFirebaseRsvp(document.getElementById("rsvpMount"));
     showToast("Your RSVP has been updated.", "success");
   } catch (error) {
@@ -705,7 +928,7 @@ function handleDemoRsvpSubmit(event) {
   if (statusValue === "No") {
     localStorage.setItem(
       rsvpStorageKey,
-      JSON.stringify({ status: "No", name: "", guests: "0", savedAt: new Date().toISOString() })
+      JSON.stringify({ status: "No", additionalGuests: "0", savedAt: new Date().toISOString() })
     );
     state.isRsvpEditing = false;
     renderRsvp();
@@ -714,8 +937,7 @@ function handleDemoRsvpSubmit(event) {
 
   const response = {
     status: statusValue,
-    name: String(form.elements.name.value || "").trim(),
-    guests: String(form.elements.guests.value || "").trim(),
+    additionalGuests: String(form.elements.additionalGuests.value || "0").trim(),
     savedAt: new Date().toISOString(),
   };
 
@@ -724,18 +946,23 @@ function handleDemoRsvpSubmit(event) {
   renderRsvp();
 }
 
+async function handleFirebaseRsvpSubmit(event) {
+  event.preventDefault();
+  const form = event.currentTarget;
+  const statusValue = form.elements.status.value;
+  const additionalGuests = statusValue === "confirmed" ? form.elements.additionalGuests.value : 0;
+  await updateRsvp(statusValue, additionalGuests);
+}
+
 function setupRsvpPhases(form) {
   if (!form) {
     return;
   }
 
   const statusInputs = form.querySelectorAll('input[name="status"]');
-  const nameInput = form.elements.name;
-  const guestsInput = form.elements.guests;
-  const nameStep = form.querySelector('[data-rsvp-step="2"]');
-  const guestStep = form.querySelector('[data-rsvp-step="3"]');
+  const additionalGuestsInput = form.elements.additionalGuests;
+  const additionalGuestsStep = form.querySelector('[data-rsvp-step="2"]');
   const submitButton = form.querySelector(".rsvp-form__submit");
-  const nextButton = form.querySelector("[data-rsvp-next]");
 
   const revealStep = (step, focusTarget) => {
     const section = form.querySelector(`[data-rsvp-step="${step}"]`);
@@ -757,39 +984,21 @@ function setupRsvpPhases(form) {
     section.classList.remove("is-visible");
   };
 
-  const advanceToGuestStep = () => {
-    if (!nameInput.reportValidity()) {
-      return;
-    }
-    revealStep("3", guestsInput);
-    submitButton.hidden = false;
-  };
-
   const updateFlow = (statusValue) => {
-    if (statusValue === "Yes") {
-      nameInput.required = true;
-      guestsInput.required = true;
-      revealStep("2", nameInput);
+    const isAttending = statusValue === "Yes" || statusValue === "confirmed";
+    if (isAttending) {
+      additionalGuestsInput.required = true;
+      revealStep("2", additionalGuestsInput);
+      submitButton.hidden = false;
       return;
     }
-    nameInput.required = false;
-    guestsInput.required = false;
-    nameInput.value = "";
-    guestsInput.value = "0";
-    hideStep(nameStep);
-    hideStep(guestStep);
-    submitButton.hidden = statusValue !== "No";
+    additionalGuestsInput.required = false;
+    additionalGuestsInput.value = "0";
+    hideStep(additionalGuestsStep);
+    submitButton.hidden = !(statusValue === "No" || statusValue === "declined");
   };
 
   statusInputs.forEach((input) => input.addEventListener("change", () => updateFlow(input.value)));
-  nextButton?.addEventListener("click", advanceToGuestStep);
-  nameInput?.addEventListener("keydown", (event) => {
-    if (event.key !== "Enter") {
-      return;
-    }
-    event.preventDefault();
-    advanceToGuestStep();
-  });
 }
 
 function readSavedRsvp() {
@@ -799,6 +1008,18 @@ function readSavedRsvp() {
   } catch (error) {
     return null;
   }
+}
+
+function normalizeAdditionalGuests(value) {
+  const parsed = Number.parseInt(value, 10);
+  if (!Number.isFinite(parsed)) {
+    return 0;
+  }
+  return Math.min(Math.max(parsed, 0), 10);
+}
+
+function clamp(value, min, max) {
+  return Math.min(Math.max(Number(value) || 0, min), max);
 }
 
 function setupRevealObserver() {

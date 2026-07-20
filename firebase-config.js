@@ -10,8 +10,10 @@ import {
   onAuthStateChanged,
   setPersistence,
   signInWithEmailAndPassword,
+  signInWithCustomToken,
   signOut,
 } from "https://www.gstatic.com/firebasejs/10.12.5/firebase-auth.js";
+import { getFunctions, httpsCallable } from "https://www.gstatic.com/firebasejs/10.12.5/firebase-functions.js";
 import {
   addDoc,
   collection,
@@ -61,6 +63,7 @@ export function initFirebase() {
   const app = getApps().length ? getApp() : initializeApp(config);
   const auth = getAuth(app);
   const db = getFirestore(app);
+  const functions = getFunctions(app);
 
   isSupported()
     .then((supported) => {
@@ -76,7 +79,7 @@ export function initFirebase() {
     console.warn("Auth persistence could not be enabled.", error);
   });
 
-  cachedServices = { app, auth, db, config };
+  cachedServices = { app, auth, db, functions, config };
   return cachedServices;
 }
 
@@ -96,7 +99,9 @@ export {
   serverTimestamp,
   setDoc,
   signInWithEmailAndPassword,
+  signInWithCustomToken,
   signOut,
+  httpsCallable,
   updateDoc,
   where,
   writeBatch,

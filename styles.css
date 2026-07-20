@@ -2967,6 +2967,198 @@ body.invitation-open .dress-swatch__mood {
   font-family: "Cinzel", serif;
 }
 
+.guest-seat-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-top: 16px;
+}
+
+.guest-seat-list span {
+  padding: 8px 12px;
+  border-radius: 999px;
+  background: rgba(78, 93, 85, 0.1);
+  border: 1px solid rgba(78, 93, 85, 0.16);
+  color: #4e5d55;
+  font-weight: 700;
+  font-size: 0.88rem;
+}
+
+.seat-plan-toolbar {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-bottom: 12px;
+}
+
+.seat-plan-toolbar button {
+  min-width: 42px;
+  min-height: 38px;
+  border: 1px solid rgba(198, 168, 106, 0.28);
+  border-radius: 12px;
+  background: rgba(255, 252, 247, 0.94);
+  color: #4e5d55;
+  font-weight: 800;
+  cursor: pointer;
+}
+
+.seat-plan-viewport {
+  position: relative;
+  min-height: 560px;
+  border-radius: 24px;
+  overflow: hidden;
+  touch-action: none;
+  cursor: grab;
+  background:
+    linear-gradient(rgba(198, 168, 106, 0.12) 1px, transparent 1px) 0 0 / 22px 22px,
+    linear-gradient(90deg, rgba(198, 168, 106, 0.12) 1px, transparent 1px) 0 0 / 22px 22px,
+    linear-gradient(180deg, rgba(249, 245, 238, 0.98), rgba(238, 232, 223, 0.9));
+}
+
+.seat-plan-viewport:active {
+  cursor: grabbing;
+}
+
+.seat-plan-canvas {
+  position: absolute;
+  inset: 0;
+  width: 1100px;
+  height: 720px;
+  transform-origin: 0 0;
+  transition: transform 120ms ease;
+}
+
+.seat-plan-floor {
+  position: absolute;
+  inset: 20px;
+  border-radius: 22px;
+  border: 1px dashed rgba(198, 168, 106, 0.34);
+  pointer-events: none;
+}
+
+.seat-plan-object {
+  position: absolute;
+  z-index: 2;
+  transform: translate(-50%, -50%);
+  padding: 8px 12px;
+  border-radius: 999px;
+  background: rgba(255, 252, 247, 0.96);
+  border: 1px solid rgba(198, 168, 106, 0.36);
+  color: #6b6d61;
+  font-family: "Cinzel", serif;
+  font-size: 0.78rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.seat-plan-object--stage {
+  color: #856536;
+  background: rgba(244, 232, 205, 0.96);
+}
+
+.seat-plan-object--entrance {
+  color: #4e5d55;
+  background: rgba(226, 239, 233, 0.96);
+}
+
+.seat-plan-table {
+  position: absolute;
+  z-index: 4;
+  transform: translate(-50%, -50%);
+}
+
+.seat-plan-table__surface {
+  position: absolute;
+  inset: 14%;
+  display: grid;
+  place-items: center;
+  align-content: center;
+  gap: 3px;
+  padding: 10px;
+  text-align: center;
+  border-radius: 999px;
+  border: 2px solid rgba(198, 168, 106, 0.42);
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.94), rgba(244, 236, 223, 0.9));
+  color: #4f584f;
+  box-shadow: 0 14px 34px rgba(127, 104, 67, 0.12);
+}
+
+.seat-plan-table__surface--rectangle,
+.seat-plan-table__surface--conference,
+.seat-plan-table__surface--long-banquet {
+  border-radius: 24px;
+}
+
+.seat-plan-table__surface--square {
+  border-radius: 18px;
+}
+
+.seat-plan-table__surface--horseshoe,
+.seat-plan-table__surface--u-shape,
+.seat-plan-table__surface--open-u {
+  border-radius: 26px 26px 18px 18px;
+  clip-path: polygon(0 0, 100% 0, 100% 100%, 74% 100%, 74% 34%, 26% 34%, 26% 100%, 0 100%);
+}
+
+.seat-plan-table__surface strong {
+  font-family: "Cinzel", serif;
+  font-size: 0.78rem;
+}
+
+.seat-plan-table__surface span,
+.seat-plan-table__surface small {
+  font-size: 0.7rem;
+  color: #6b6d61;
+}
+
+.seat-plan-table.is-assigned .seat-plan-table__surface {
+  border-color: #4e5d55;
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.96), rgba(226, 239, 233, 0.96));
+  box-shadow:
+    0 0 0 5px rgba(78, 93, 85, 0.14),
+    0 0 0 10px rgba(198, 168, 106, 0.16),
+    0 16px 42px rgba(78, 93, 85, 0.18);
+}
+
+.seat-plan-chair {
+  position: absolute;
+  z-index: 7;
+  width: 34px;
+  height: 34px;
+  margin-left: -17px;
+  margin-top: -17px;
+  display: grid;
+  place-items: center;
+  border-radius: 999px;
+  border: 2px solid rgba(78, 93, 85, 0.34);
+  background: rgba(255, 252, 247, 0.96);
+  color: #4e5d55;
+  font-size: 0.62rem;
+  font-weight: 900;
+  box-shadow: 0 8px 18px rgba(127, 104, 67, 0.12);
+}
+
+.seat-plan-chair.is-occupied {
+  background: #4e5d55;
+  border-color: #3c4d45;
+  color: #fff;
+}
+
+.seat-plan-chair.is-yours {
+  width: 44px;
+  height: 44px;
+  margin-left: -22px;
+  margin-top: -22px;
+  background: #c6a86a;
+  border-color: #856536;
+  color: #2f281c;
+  box-shadow:
+    0 0 0 5px rgba(198, 168, 106, 0.28),
+    0 0 0 10px rgba(78, 93, 85, 0.14),
+    0 14px 28px rgba(127, 104, 67, 0.26);
+}
+
 .firebase-rsvp-panel,
 .qr-pass__content,
 .share-grid,
@@ -4044,6 +4236,37 @@ body.invitation-open .site-content .hero-countdown {
 
 /* Phones: slimmer lace margin and clearance for the sticky RSVP bar */
 @media (max-width: 699px) {
+  .seat-plan-toolbar {
+    justify-content: stretch;
+  }
+
+  .seat-plan-toolbar button {
+    flex: 1;
+  }
+
+  .seat-plan-viewport {
+    min-height: 480px;
+  }
+
+  .seat-plan-canvas {
+    width: 920px;
+    height: 640px;
+  }
+
+  .seat-plan-chair {
+    width: 30px;
+    height: 30px;
+    margin-left: -15px;
+    margin-top: -15px;
+  }
+
+  .seat-plan-chair.is-yours {
+    width: 40px;
+    height: 40px;
+    margin-left: -20px;
+    margin-top: -20px;
+  }
+
   body.invitation-open .site-content {
     margin: 10px auto calc(124px + env(safe-area-inset-bottom, 0px));
   }

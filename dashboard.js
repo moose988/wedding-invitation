@@ -2617,6 +2617,7 @@ function renderSeatAssignment(selectedSeat) {
                     data-table-id="${selectedSeat.table.id}"
                     data-chair-id="${selectedSeat.chair.id}"
                     data-guest-id="${guest.id}"
+                    ${state.activeModalOperation ? 'disabled aria-disabled="true"' : ""}
                   >
                     <strong>${escapeHtml(guest.fullName)}</strong>
                     <small>${escapeHtml(guest.side || "other")} · ${escapeHtml(guest.rsvpStatus || "pending")} · ${existingSeat ? "Move from another seat" : "Assign here"}</small>
@@ -4660,9 +4661,25 @@ async function savePartyAssignment(guest, selectedChairs, movingParty = false) {
   let savedTables = null;
   let savedGuests = null;
   await runTransaction(state.services.db, async (transaction) => {
-    const tableRefs = state.tables.map((table) => doc(state.services.db, "weddings", state.weddingId, "tables", table.id));
-    const tableSnapshots = await Promise.all(tableRefs.map((ref) => transaction.get(ref)));
-    const liveTables = hydrateTables(tableSnapshots.filter((snapshot) => snapshot.exists()).map((snapshot) => ({ id: snapshot.id, ...snapshot.data() })));
+    const tablesSnapshot = await transaction.get(query(collection(state.services.db, "weddings", state.weddingId, "tables")));
+    const guestSnapshot = await transaction.get(doc(state.services.db, "weddings", state.weddingId, "guests", guest.id));
+    if (!guestSnapshot.exists()) {
+      throw new Error("This guest no longer exists. The seating plan has been refreshed.");
+    }
+    const liveGuest = { ...guest, id: guestSnapshot.id, ...guestSnapshot.data() };
+    const liveTables = hydrateTables(tablesSnapshot.docs.map((snapshot) => ({ id: snapshot.id, ...snapshot.data() })));
+    const selectedKeys = new Set(selectedChairs.map((item) => buildSeatKey(item.tableId, item.chairId)));
+    if (selectedKeys.size !== selectedChairs.length) {
+      throw new Error("The same chair cannot be selected twice.");
+    }
+    const currentPersonIndexes = new Set(getGuestAssignedSeats(liveGuest.id, liveTables).map((assignment) => Number(assignment.partyMemberIndex)));
+    const availablePartySeats = Math.max(0, getPartySize(liveGuest) - currentPersonIndexes.size);
+    if (movingParty && selectedChairs.length !== getPartySize(liveGuest)) {
+      throw new Error("Select one destination chair for every person in this party.");
+    }
+    if (!movingParty && selectedChairs.length > availablePartySeats) {
+      throw new Error("This party no longer has enough unassigned members for the selected chairs.");
+    }
     for (const item of selectedChairs) {
       const table = liveTables.find((row) => row.id === item.tableId);
       const chair = table?.chairs.find((row) => row.id === item.chairId);
@@ -4670,12 +4687,13 @@ async function savePartyAssignment(guest, selectedChairs, movingParty = false) {
       if (!table || !chair) {
         throw new Error("One of the selected chairs no longer exists.");
       }
-      if (assignment && assignment.guestId !== guest.id) {
+      if (assignment && assignment.guestId !== liveGuest.id) {
         throw new Error(`${table.name} chair ${chair.seatNumber} was assigned in another session.`);
       }
     }
-    const nextTables = applyPartyAssignmentToTables(liveTables, guest, selectedChairs, movingParty);
-    const nextGuests = syncGuestSeatingSummaries(state.guests, nextTables);
+    const nextTables = applyPartyAssignmentToTables(liveTables, liveGuest, selectedChairs, movingParty);
+    const liveGuests = state.guests.map((item) => (item.id === liveGuest.id ? liveGuest : item));
+    const nextGuests = syncGuestSeatingSummaries(liveGuests, nextTables);
     savedTables = hydrateTables(nextTables, nextGuests);
     savedGuests = nextGuests;
     nextTables.forEach((table) => {
@@ -4685,8 +4703,8 @@ async function savePartyAssignment(guest, selectedChairs, movingParty = false) {
         updatedAt: serverTimestamp(),
       });
     });
-    const nextGuest = nextGuests.find((item) => item.id === guest.id);
-    transaction.update(doc(state.services.db, "weddings", state.weddingId, "guests", guest.id), buildGuestSeatingPatch(nextGuest));
+    const nextGuest = nextGuests.find((item) => item.id === liveGuest.id);
+    transaction.update(doc(state.services.db, "weddings", state.weddingId, "guests", liveGuest.id), buildGuestSeatingPatch(nextGuest));
   });
   if (savedTables && savedGuests) {
     state.tables = savedTables;
@@ -4701,7 +4719,8 @@ async function savePartyAssignment(guest, selectedChairs, movingParty = false) {
 function applyPartyAssignmentToTables(tables, guest, selectedChairs, movingParty = false) {
   const selectedKeys = new Set(selectedChairs.map((item) => buildSeatKey(item.tableId, item.chairId)));
   const existing = getGuestAssignedSeats(guest.id, tables).sort((a, b) => a.partyMemberIndex - b.partyMemberIndex);
-  const startIndex = movingParty ? 0 : existing.length;
+  const occupiedPartyIndexes = new Set(existing.map((assignment) => Number(assignment.partyMemberIndex)));
+  const availablePartyIndexes = Array.from({ length: getPartySize(guest) }, (_, index) => index).filter((index) => movingParty || !occupiedPartyIndexes.has(index));
   return tables.map((table) => ({
     ...table,
     chairs: table.chairs.map((chair) => {
@@ -4712,7 +4731,7 @@ function applyPartyAssignmentToTables(tables, guest, selectedChairs, movingParty
         return { ...chair, guestId: "", assignment: null, status: "available" };
       }
       if (selectedIndex >= 0) {
-        const partyMemberIndex = startIndex + selectedIndex;
+        const partyMemberIndex = availablePartyIndexes[selectedIndex];
         return {
           ...chair,
           guestId: guest.id,
@@ -4956,9 +4975,8 @@ async function clearPartyAssignments(guestId, expectedSignature = "") {
   let nextTables = [];
   let nextGuests = [];
   await runTransaction(state.services.db, async (transaction) => {
-    const tableRefs = state.tables.map((table) => doc(state.services.db, "weddings", state.weddingId, "tables", table.id));
-    const snapshots = await Promise.all(tableRefs.map((ref) => transaction.get(ref)));
-    const liveTables = hydrateTables(snapshots.filter((snapshot) => snapshot.exists()).map((snapshot) => ({ id: snapshot.id, ...snapshot.data() })));
+    const tablesSnapshot = await transaction.get(query(collection(state.services.db, "weddings", state.weddingId, "tables")));
+    const liveTables = hydrateTables(tablesSnapshot.docs.map((snapshot) => ({ id: snapshot.id, ...snapshot.data() })));
     const liveParty = resolvePartyForGuestId(guestId, liveTables);
     if (!liveParty) throw new Error("This party no longer exists. The seating plan has been refreshed.");
     if (expectedSignature && partyAssignmentSignature(liveParty) !== expectedSignature) {
@@ -4967,7 +4985,8 @@ async function clearPartyAssignments(guestId, expectedSignature = "") {
     nextTables = clearGuestFromTables(liveTables, guestId);
     const guestSnapshot = await transaction.get(doc(state.services.db, "weddings", state.weddingId, "guests", guestId));
     if (!guestSnapshot.exists()) throw new Error("This party no longer exists. The seating plan has been refreshed.");
-    nextGuests = state.guests.map((guest) => guest.id === guestId ? { ...guest, ...buildGuestSeatingPatchFromTables({ id: guestId }, nextTables, false) } : guest);
+    const liveGuest = { id: guestSnapshot.id, ...guestSnapshot.data() };
+    nextGuests = state.guests.map((guest) => guest.id === guestId ? { ...guest, ...liveGuest, ...buildGuestSeatingPatchFromTables(liveGuest, nextTables, false) } : guest);
     nextTables.forEach((table) => {
       transaction.update(doc(state.services.db, "weddings", state.weddingId, "tables", table.id), {
         chairs: table.chairs,
@@ -5040,9 +5059,8 @@ async function unassignSingleSeat(tableId, chairId) {
   let savedTables = null;
   let savedGuests = null;
   await runTransaction(state.services.db, async (transaction) => {
-    const tableRefs = state.tables.map((table) => doc(state.services.db, "weddings", state.weddingId, "tables", table.id));
-    const tableSnapshots = await Promise.all(tableRefs.map((ref) => transaction.get(ref)));
-    const liveTables = hydrateTables(tableSnapshots.filter((snapshot) => snapshot.exists()).map((snapshot) => ({ id: snapshot.id, ...snapshot.data() })));
+    const tablesSnapshot = await transaction.get(query(collection(state.services.db, "weddings", state.weddingId, "tables")));
+    const liveTables = hydrateTables(tablesSnapshot.docs.map((snapshot) => ({ id: snapshot.id, ...snapshot.data() })));
     const liveSeat = getSeatByIds(tableId, chairId, liveTables);
     const liveAssignment = liveSeat?.chair ? getChairAssignment(tableId, liveSeat.chair) : null;
     if (!liveSeat) {
@@ -5052,7 +5070,13 @@ async function unassignSingleSeat(tableId, chairId) {
       throw new Error("The selected chair has changed. Refresh and try again.");
     }
     const nextTables = clearSeatFromTables(liveTables, tableId, chairId);
-    const nextGuests = syncGuestSeatingSummaries(state.guests, nextTables);
+    const guestSnapshot = await transaction.get(doc(state.services.db, "weddings", state.weddingId, "guests", guestId));
+    if (!guestSnapshot.exists()) {
+      throw new Error("The guest no longer exists. The seating plan has been refreshed.");
+    }
+    const liveGuest = { id: guestSnapshot.id, ...guestSnapshot.data() };
+    const liveGuests = state.guests.map((guest) => (guest.id === liveGuest.id ? { ...guest, ...liveGuest } : guest));
+    const nextGuests = syncGuestSeatingSummaries(liveGuests, nextTables);
     savedTables = hydrateTables(nextTables, nextGuests);
     savedGuests = nextGuests;
     const nextTable = nextTables.find((table) => table.id === tableId);
@@ -5147,9 +5171,8 @@ async function movePartyToTable(guestId, destinationTableId) {
   if (!guest) {
     throw new Error("Guest not found.");
   }
-  const partySize = getPartySize(guest);
-
-  const buildMovedTables = (tables) => {
+  const buildMovedTables = (tables, partyGuest) => {
+    const partySize = getPartySize(partyGuest);
     const clearedTables = clearGuestFromTables(tables, guestId);
     const destination = clearedTables.find((table) => table.id === destinationTableId);
     if (!destination) {
@@ -5160,11 +5183,11 @@ async function movePartyToTable(guestId, destinationTableId) {
       throw new Error(`${destination.name} only has ${availableChairs.length} available chair${availableChairs.length === 1 ? "" : "s"} for a party of ${partySize}.`);
     }
     const selectedChairs = availableChairs.slice(0, partySize).map((chair) => ({ tableId: destination.id, chairId: chair.id }));
-    return applyPartyAssignmentToTables(clearedTables, guest, selectedChairs, true);
+    return applyPartyAssignmentToTables(clearedTables, partyGuest, selectedChairs, true);
   };
 
   if (state.mode === "demo") {
-    const nextTables = buildMovedTables(state.tables);
+    const nextTables = buildMovedTables(state.tables, guest);
     const nextGuests = syncGuestSeatingSummaries(state.guests, nextTables);
     state.tables = hydrateTables(nextTables, nextGuests);
     state.guests = nextGuests;
@@ -5178,16 +5201,21 @@ async function movePartyToTable(guestId, destinationTableId) {
   let savedTables = null;
   let savedGuests = null;
   await runTransaction(state.services.db, async (transaction) => {
-    const tableRefs = state.tables.map((table) => doc(state.services.db, "weddings", state.weddingId, "tables", table.id));
-    const tableSnapshots = await Promise.all(tableRefs.map((ref) => transaction.get(ref)));
-    const liveTables = hydrateTables(tableSnapshots.filter((snapshot) => snapshot.exists()).map((snapshot) => ({ id: snapshot.id, ...snapshot.data() })));
-    const nextTables = buildMovedTables(liveTables);
-    const nextGuests = syncGuestSeatingSummaries(state.guests, nextTables);
+    const tablesSnapshot = await transaction.get(query(collection(state.services.db, "weddings", state.weddingId, "tables")));
+    const guestSnapshot = await transaction.get(doc(state.services.db, "weddings", state.weddingId, "guests", guestId));
+    if (!guestSnapshot.exists()) {
+      throw new Error("This party no longer exists. The seating plan has been refreshed.");
+    }
+    const liveGuest = { ...guest, id: guestSnapshot.id, ...guestSnapshot.data() };
+    const liveTables = hydrateTables(tablesSnapshot.docs.map((snapshot) => ({ id: snapshot.id, ...snapshot.data() })));
+    const nextTables = buildMovedTables(liveTables, liveGuest);
+    const liveGuests = state.guests.map((item) => (item.id === liveGuest.id ? liveGuest : item));
+    const nextGuests = syncGuestSeatingSummaries(liveGuests, nextTables);
     savedTables = hydrateTables(nextTables, nextGuests);
     savedGuests = nextGuests;
     const affectedTableIds = new Set([
       destinationTableId,
-      ...getGuestAssignedSeats(guestId, liveTables).map((assignment) => assignment.tableId),
+      ...getGuestAssignedSeats(liveGuest.id, liveTables).map((assignment) => assignment.tableId),
     ]);
     nextTables
       .filter((table) => affectedTableIds.has(table.id))
@@ -5198,8 +5226,8 @@ async function movePartyToTable(guestId, destinationTableId) {
           updatedAt: serverTimestamp(),
         });
       });
-      const nextGuest = nextGuests.find((item) => item.id === guestId);
-    transaction.update(doc(state.services.db, "weddings", state.weddingId, "guests", guestId), buildGuestSeatingPatch(nextGuest));
+    const nextGuest = nextGuests.find((item) => item.id === liveGuest.id);
+    transaction.update(doc(state.services.db, "weddings", state.weddingId, "guests", liveGuest.id), buildGuestSeatingPatch(nextGuest));
   });
   if (savedTables && savedGuests) {
     state.tables = savedTables;
@@ -5215,22 +5243,35 @@ async function movePartyToTable(guestId, destinationTableId) {
 }
 
 async function assignGuestToChair(tableId, chairId, guestId) {
-  if (!can("canEditSeating")) {
+  if (state.activeModalOperation || !can("canEditSeating")) {
     showToast("Your role does not allow seating edits.", "error");
     return;
   }
 
   const table = state.tables.find((item) => item.id === tableId);
-  if (!table) {
-    return;
-  }
-
-  const targetChair = table.chairs.find((chair) => chair.id === chairId);
-  if (!targetChair) {
-    return;
-  }
-
+  const targetChair = table?.chairs.find((chair) => chair.id === chairId);
   const guest = guestId ? state.guests.find((item) => item.id === guestId) : null;
+  if (!table || !targetChair || !guest) {
+    showToast("That guest or chair is no longer available. The seating plan has been refreshed.", "error");
+    return;
+  }
+
+  const targetAssignment = getChairAssignment(table.id, targetChair);
+  if (targetAssignment?.guestId === guest.id) {
+    showToast("This party member is already assigned to this chair.", "info");
+    return;
+  }
+
+  if (targetAssignment?.guestId) {
+    showToast("This chair is assigned to another guest. Clear it before assigning someone else.", "error");
+    return;
+  }
+
+  if (getGuestRemainingSeats(guest) < 1) {
+    showToast("Every person in this party already has a chair.", "info");
+    return;
+  }
+
   if (guest?.rsvpStatus === "declined") {
     showToast("Declined guest assignment noted. Review before finalizing the floor plan.", "info");
   }
@@ -5238,195 +5279,23 @@ async function assignGuestToChair(tableId, chairId, guestId) {
     showToast("Pending RSVP guest seated. Consider confirming attendance.", "info");
   }
 
-  const targetAssignment = getChairAssignment(table.id, targetChair);
-  const previousGuestId = targetAssignment?.guestId || targetChair.guestId || "";
-  const sourceSeat = guestId ? findGuestSeat(guestId) : null;
-
-  const nextTables = state.tables.map((item) => ({
-    ...item,
-    chairs: item.chairs.map((chair) => {
-      if (item.id === tableId && chair.id === chairId) {
-        return {
-          ...chair,
-          guestId,
-          assignment: guestId
-            ? {
-                tableId: item.id,
-                tableName: item.name,
-                seatNumber: Number(chair.seatNumber),
-                guestId,
-                partyMemberIndex: 0,
-                personKey: "main",
-                label: "Main Guest",
-                isMainGuest: true,
-              }
-            : null,
-          status: guestId ? "assigned" : "available",
-        };
-      }
-      if (sourceSeat && item.id === sourceSeat.tableId && chair.id === sourceSeat.chairId) {
-        return {
-          ...chair,
-          guestId: previousGuestId,
-          assignment: previousGuestId
-            ? {
-                tableId: item.id,
-                tableName: item.name,
-                seatNumber: Number(chair.seatNumber),
-                guestId: previousGuestId,
-                partyMemberIndex: 0,
-                personKey: "main",
-                label: "Main Guest",
-                isMainGuest: true,
-              }
-            : null,
-          status: previousGuestId ? "assigned" : "available",
-        };
-      }
-      return chair;
-    }),
-  }));
-
-  const nextGuests = state.guests.map((item) => {
-    if (item.id === guestId) {
-      return {
-        ...item,
-        tableId,
-        tableName: table.name,
-        seatNumber: String(targetChair.seatNumber),
-        seatingAssignments: [
-          {
-            tableId,
-            tableName: table.name,
-            seatNumber: Number(targetChair.seatNumber),
-            guestId,
-            partyMemberIndex: 0,
-            personKey: "main",
-            label: "Main Guest",
-            isMainGuest: true,
-          },
-        ],
-      };
-    }
-    if (item.id === previousGuestId) {
-      if (sourceSeat) {
-        const sourceTable = state.tables.find((row) => row.id === sourceSeat.tableId);
-        const sourceChair = sourceTable?.chairs.find((chair) => chair.id === sourceSeat.chairId);
-        return {
-          ...item,
-          tableId: sourceSeat.tableId,
-          tableName: sourceTable?.name || "",
-          seatNumber: String(sourceChair?.seatNumber || ""),
-          seatingAssignments: [
-            {
-              tableId: sourceSeat.tableId,
-              tableName: sourceTable?.name || "",
-              seatNumber: Number(sourceChair?.seatNumber || 0),
-              guestId: previousGuestId,
-              partyMemberIndex: 0,
-              personKey: "main",
-              label: "Main Guest",
-              isMainGuest: true,
-            },
-          ],
-        };
-      }
-      return { ...item, tableId: "", tableName: "", seatNumber: "", seatingAssignments: [] };
-    }
-    if (!guestId && item.id === previousGuestId) {
-      return { ...item, tableId: "", tableName: "", seatNumber: "", seatingAssignments: [] };
-    }
-    return item;
-  });
-
-  state.tables = hydrateTables(nextTables, nextGuests);
-  state.guests = nextGuests;
-  renderAll();
-
-  if (state.mode === "demo") {
-    persistDemoDashboardState();
-    showToast(guestId ? "Guest assigned to seat." : "Seat cleared.", "success");
-    return;
-  }
-
+  state.activeModalOperation = "assign-seat";
   setSaveState("saving");
+  renderActiveView();
   try {
-    const batch = writeBatch(state.services.db);
-    nextTables.forEach((item) => {
-      batch.update(doc(state.services.db, "weddings", state.weddingId, "tables", item.id), {
-        chairs: item.chairs,
-        guestIds: [...new Set(item.chairs.map((chair) => getChairAssignment(item.id, chair)?.guestId).filter(Boolean))],
-        updatedAt: serverTimestamp(),
-      });
-    });
-
-    if (guestId) {
-      batch.update(doc(state.services.db, "weddings", state.weddingId, "guests", guestId), {
-        seatingAssignments: [
-          {
-            tableId,
-            tableName: table.name,
-            seatNumber: Number(targetChair.seatNumber),
-            guestId,
-            partyMemberIndex: 0,
-            personKey: "main",
-            label: "Main Guest",
-            isMainGuest: true,
-          },
-        ],
-        tableId,
-        tableName: table.name,
-        seatNumber: String(targetChair.seatNumber),
-        updatedAt: serverTimestamp(),
-      });
-    }
-
-    if (previousGuestId) {
-      if (sourceSeat) {
-        const sourceTable = nextTables.find((item) => item.id === sourceSeat.tableId);
-        const sourceChair = sourceTable?.chairs.find((chair) => chair.id === sourceSeat.chairId);
-        batch.update(doc(state.services.db, "weddings", state.weddingId, "guests", previousGuestId), {
-          seatingAssignments: [
-            {
-              tableId: sourceSeat.tableId,
-              tableName: sourceTable?.name || "",
-              seatNumber: Number(sourceChair?.seatNumber || 0),
-              guestId: previousGuestId,
-              partyMemberIndex: 0,
-              personKey: "main",
-              label: "Main Guest",
-              isMainGuest: true,
-            },
-          ],
-          tableId: sourceSeat.tableId,
-          tableName: sourceTable?.name || "",
-          seatNumber: String(sourceChair?.seatNumber || ""),
-          updatedAt: serverTimestamp(),
-        });
-      } else {
-        batch.update(doc(state.services.db, "weddings", state.weddingId, "guests", previousGuestId), {
-          seatingAssignments: [],
-          tableId: "",
-          tableName: "",
-          seatNumber: "",
-          updatedAt: serverTimestamp(),
-        });
-      }
-    }
-
-    await batch.commit();
+    await savePartyAssignment(guest, [{ tableId, chairId }], false);
+    state.activeModalOperation = "";
     setSaveState("saved");
-    for (const affectedId of [guestId, previousGuestId].filter(Boolean)) {
-      const affectedGuest = nextGuests.find((item) => item.id === affectedId);
-      if (affectedGuest) {
-        await syncPublicGuest(affectedGuest.id, affectedGuest, ["seatingAssignments", "tableId", "tableName", "seatNumber"]);
-      }
-    }
-    showToast(guestId ? "Guest assigned to seat." : "Seat cleared.", "success");
+    state.selectedTableId = tableId;
+    state.selectedSeatId = buildSeatKey(tableId, chairId);
+    renderAll();
+    showToast("Guest assigned to seat.", "success");
   } catch (error) {
     console.error(error);
+    state.activeModalOperation = "";
     setSaveState("saved");
-    showToast("Seat assignment failed.", "error");
+    renderAll();
+    showToast(error.message || "This chair was assigned by another editor. The seating plan has been refreshed.", "error");
   }
 }
 

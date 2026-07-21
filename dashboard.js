@@ -3355,6 +3355,36 @@ function partyMemberLabel(guest, partyMemberIndex) {
   return partyLabelForIndex(partyMemberIndex);
 }
 
+// Firestore web transactions can only read document references here.  Keep the
+// collection query outside the transaction, then re-read every discovered
+// table reference inside it before calculating or writing seating changes.
+// This gives the transaction a consistent snapshot without passing a Query to
+// transaction.get(), which otherwise fails before our validation can run.
+async function getLiveTableRefs() {
+  const snapshot = await getDocs(collection(state.services.db, "weddings", state.weddingId, "tables"));
+  return snapshot.docs.map((tableSnapshot) => tableSnapshot.ref);
+}
+
+async function getLiveTablesInTransaction(transaction, tableRefs) {
+  const tableSnapshots = await Promise.all(tableRefs.map((tableRef) => transaction.get(tableRef)));
+  return hydrateTables(
+    tableSnapshots
+      .filter((tableSnapshot) => tableSnapshot.exists())
+      .map((tableSnapshot) => ({ id: tableSnapshot.id, ...tableSnapshot.data() }))
+  );
+}
+
+async function getPublicGuestMirrorInTransaction(transaction, guest) {
+  if (!guest?.guestToken) return null;
+  return transaction.get(doc(state.services.db, "weddings", state.weddingId, "publicGuests", guest.guestToken));
+}
+
+function updatePublicGuestSeatingMirrorInTransaction(transaction, mirrorSnapshot, guest) {
+  if (mirrorSnapshot?.exists()) {
+    transaction.update(mirrorSnapshot.ref, buildGuestSeatingPatch(guest));
+  }
+}
+
 // A party is represented by one real guest document. Every chair belonging to
 // that party carries that stable guest document ID plus a personKey/index for
 // the main guest or an additional member; there are no separate guest records
@@ -4188,13 +4218,17 @@ async function deleteTable(tableId) {
       const liveTable = hydrateTables([{ id: liveTableSnapshot.id, ...liveTableSnapshot.data() }])[0];
       affectedGuestIds = [...new Set(getAllAssignments([liveTable]).map((assignment) => assignment.guestId).filter(Boolean))];
       const guestSnapshots = await Promise.all(affectedGuestIds.map((guestId) => transaction.get(doc(state.services.db, "weddings", state.weddingId, "guests", guestId))));
-      nextGuests = guestSnapshots.filter((snapshot) => snapshot.exists()).map((snapshot) => {
-        const guest = { id: snapshot.id, ...snapshot.data() };
+      const liveGuests = guestSnapshots.filter((snapshot) => snapshot.exists()).map((snapshot) => ({ id: snapshot.id, ...snapshot.data(), ref: snapshot.ref }));
+      const publicMirrorSnapshots = await Promise.all(liveGuests.map((guest) => getPublicGuestMirrorInTransaction(transaction, guest)));
+      nextGuests = liveGuests.map(({ ref, ...guest }) => {
         const assignments = (guest.seatingAssignments || []).filter((assignment) => assignment.tableId !== tableId);
         const primary = assignments.find((assignment) => Number(assignment.partyMemberIndex) === 0) || assignments[0];
         const nextGuest = { ...guest, seatingAssignments: assignments, tableId: primary?.tableId || "", tableName: primary?.tableName || "", seatNumber: primary ? String(primary.seatNumber) : "" };
-        transaction.update(snapshot.ref, buildGuestSeatingPatch(nextGuest));
         return nextGuest;
+      });
+      nextGuests.forEach((nextGuest, index) => {
+        transaction.update(liveGuests[index].ref, buildGuestSeatingPatch(nextGuest));
+        updatePublicGuestSeatingMirrorInTransaction(transaction, publicMirrorSnapshots[index], nextGuest);
       });
       transaction.delete(liveTableSnapshot.ref);
     });
@@ -4205,12 +4239,6 @@ async function deleteTable(tableId) {
     state.selectedSeatId = "";
     state.activeModalOperation = "";
     elements.tableDeleteModal?.close();
-    for (const guestId of affectedGuestIds) {
-      const nextGuest = nextGuests.find((guest) => guest.id === guestId);
-      if (nextGuest) {
-        await syncPublicGuest(nextGuest.id, nextGuest, ["seatingAssignments", "tableId", "tableName", "seatNumber"]);
-      }
-    }
     renderAll();
     showToast("Table deleted.", "success");
   } catch (error) {
@@ -4660,14 +4688,15 @@ async function savePartyAssignment(guest, selectedChairs, movingParty = false) {
 
   let savedTables = null;
   let savedGuests = null;
+  const tableRefs = await getLiveTableRefs();
   await runTransaction(state.services.db, async (transaction) => {
-    const tablesSnapshot = await transaction.get(query(collection(state.services.db, "weddings", state.weddingId, "tables")));
     const guestSnapshot = await transaction.get(doc(state.services.db, "weddings", state.weddingId, "guests", guest.id));
     if (!guestSnapshot.exists()) {
       throw new Error("This guest no longer exists. The seating plan has been refreshed.");
     }
     const liveGuest = { ...guest, id: guestSnapshot.id, ...guestSnapshot.data() };
-    const liveTables = hydrateTables(tablesSnapshot.docs.map((snapshot) => ({ id: snapshot.id, ...snapshot.data() })));
+    const liveTables = await getLiveTablesInTransaction(transaction, tableRefs);
+    const liveMirrorSnapshot = await getPublicGuestMirrorInTransaction(transaction, liveGuest);
     const selectedKeys = new Set(selectedChairs.map((item) => buildSeatKey(item.tableId, item.chairId)));
     if (selectedKeys.size !== selectedChairs.length) {
       throw new Error("The same chair cannot be selected twice.");
@@ -4683,10 +4712,10 @@ async function savePartyAssignment(guest, selectedChairs, movingParty = false) {
     for (const item of selectedChairs) {
       const table = liveTables.find((row) => row.id === item.tableId);
       const chair = table?.chairs.find((row) => row.id === item.chairId);
-      const assignment = chair ? getChairAssignment(table.id, chair) : null;
       if (!table || !chair) {
         throw new Error("One of the selected chairs no longer exists.");
       }
+      const assignment = getChairAssignment(table.id, chair);
       if (assignment && assignment.guestId !== liveGuest.id) {
         throw new Error(`${table.name} chair ${chair.seatNumber} was assigned in another session.`);
       }
@@ -4705,14 +4734,11 @@ async function savePartyAssignment(guest, selectedChairs, movingParty = false) {
     });
     const nextGuest = nextGuests.find((item) => item.id === liveGuest.id);
     transaction.update(doc(state.services.db, "weddings", state.weddingId, "guests", liveGuest.id), buildGuestSeatingPatch(nextGuest));
+    updatePublicGuestSeatingMirrorInTransaction(transaction, liveMirrorSnapshot, nextGuest);
   });
   if (savedTables && savedGuests) {
     state.tables = savedTables;
     state.guests = savedGuests;
-    const savedGuest = savedGuests.find((item) => item.id === guest.id);
-    if (savedGuest) {
-      await syncPublicGuest(savedGuest.id, savedGuest, ["seatingAssignments", "tableId", "tableName", "seatNumber"]);
-    }
   }
 }
 
@@ -4974,9 +5000,9 @@ async function clearPartyAssignments(guestId, expectedSignature = "") {
   }
   let nextTables = [];
   let nextGuests = [];
+  const tableRefs = await getLiveTableRefs();
   await runTransaction(state.services.db, async (transaction) => {
-    const tablesSnapshot = await transaction.get(query(collection(state.services.db, "weddings", state.weddingId, "tables")));
-    const liveTables = hydrateTables(tablesSnapshot.docs.map((snapshot) => ({ id: snapshot.id, ...snapshot.data() })));
+    const liveTables = await getLiveTablesInTransaction(transaction, tableRefs);
     const liveParty = resolvePartyForGuestId(guestId, liveTables);
     if (!liveParty) throw new Error("This party no longer exists. The seating plan has been refreshed.");
     if (expectedSignature && partyAssignmentSignature(liveParty) !== expectedSignature) {
@@ -4986,6 +5012,7 @@ async function clearPartyAssignments(guestId, expectedSignature = "") {
     const guestSnapshot = await transaction.get(doc(state.services.db, "weddings", state.weddingId, "guests", guestId));
     if (!guestSnapshot.exists()) throw new Error("This party no longer exists. The seating plan has been refreshed.");
     const liveGuest = { id: guestSnapshot.id, ...guestSnapshot.data() };
+    const liveMirrorSnapshot = await getPublicGuestMirrorInTransaction(transaction, liveGuest);
     nextGuests = state.guests.map((guest) => guest.id === guestId ? { ...guest, ...liveGuest, ...buildGuestSeatingPatchFromTables(liveGuest, nextTables, false) } : guest);
     nextTables.forEach((table) => {
       transaction.update(doc(state.services.db, "weddings", state.weddingId, "tables", table.id), {
@@ -4995,14 +5022,11 @@ async function clearPartyAssignments(guestId, expectedSignature = "") {
       });
     });
     transaction.update(guestSnapshot.ref, buildGuestSeatingPatch(nextGuests.find((guest) => guest.id === guestId)));
+    updatePublicGuestSeatingMirrorInTransaction(transaction, liveMirrorSnapshot, nextGuests.find((guest) => guest.id === guestId));
   });
   state.tables = hydrateTables(nextTables, nextGuests);
   state.guests = nextGuests;
   state.selectedSeatId = "";
-  const clearedGuest = nextGuests.find((item) => item.id === guestId);
-  if (clearedGuest) {
-    await syncPublicGuest(clearedGuest.id, clearedGuest, ["seatingAssignments", "tableId", "tableName", "seatNumber"]);
-  }
   renderAll();
 }
 
@@ -5058,9 +5082,9 @@ async function unassignSingleSeat(tableId, chairId) {
 
   let savedTables = null;
   let savedGuests = null;
+  const tableRefs = await getLiveTableRefs();
   await runTransaction(state.services.db, async (transaction) => {
-    const tablesSnapshot = await transaction.get(query(collection(state.services.db, "weddings", state.weddingId, "tables")));
-    const liveTables = hydrateTables(tablesSnapshot.docs.map((snapshot) => ({ id: snapshot.id, ...snapshot.data() })));
+    const liveTables = await getLiveTablesInTransaction(transaction, tableRefs);
     const liveSeat = getSeatByIds(tableId, chairId, liveTables);
     const liveAssignment = liveSeat?.chair ? getChairAssignment(tableId, liveSeat.chair) : null;
     if (!liveSeat) {
@@ -5075,6 +5099,7 @@ async function unassignSingleSeat(tableId, chairId) {
       throw new Error("The guest no longer exists. The seating plan has been refreshed.");
     }
     const liveGuest = { id: guestSnapshot.id, ...guestSnapshot.data() };
+    const liveMirrorSnapshot = await getPublicGuestMirrorInTransaction(transaction, liveGuest);
     const liveGuests = state.guests.map((guest) => (guest.id === liveGuest.id ? { ...guest, ...liveGuest } : guest));
     const nextGuests = syncGuestSeatingSummaries(liveGuests, nextTables);
     savedTables = hydrateTables(nextTables, nextGuests);
@@ -5087,15 +5112,12 @@ async function unassignSingleSeat(tableId, chairId) {
     });
     const nextGuest = nextGuests.find((guest) => guest.id === guestId);
     transaction.update(doc(state.services.db, "weddings", state.weddingId, "guests", guestId), buildGuestSeatingPatch(nextGuest));
+    updatePublicGuestSeatingMirrorInTransaction(transaction, liveMirrorSnapshot, nextGuest);
   });
   if (savedTables && savedGuests) {
     state.tables = savedTables;
     state.guests = savedGuests;
     state.selectedSeatId = "";
-    const nextGuest = savedGuests.find((guest) => guest.id === guestId);
-    if (nextGuest) {
-      await syncPublicGuest(nextGuest.id, nextGuest, ["seatingAssignments", "tableId", "tableName", "seatNumber"]);
-    }
     renderAll();
   }
 }
@@ -5200,14 +5222,15 @@ async function movePartyToTable(guestId, destinationTableId) {
 
   let savedTables = null;
   let savedGuests = null;
+  const tableRefs = await getLiveTableRefs();
   await runTransaction(state.services.db, async (transaction) => {
-    const tablesSnapshot = await transaction.get(query(collection(state.services.db, "weddings", state.weddingId, "tables")));
     const guestSnapshot = await transaction.get(doc(state.services.db, "weddings", state.weddingId, "guests", guestId));
     if (!guestSnapshot.exists()) {
       throw new Error("This party no longer exists. The seating plan has been refreshed.");
     }
     const liveGuest = { ...guest, id: guestSnapshot.id, ...guestSnapshot.data() };
-    const liveTables = hydrateTables(tablesSnapshot.docs.map((snapshot) => ({ id: snapshot.id, ...snapshot.data() })));
+    const liveTables = await getLiveTablesInTransaction(transaction, tableRefs);
+    const liveMirrorSnapshot = await getPublicGuestMirrorInTransaction(transaction, liveGuest);
     const nextTables = buildMovedTables(liveTables, liveGuest);
     const liveGuests = state.guests.map((item) => (item.id === liveGuest.id ? liveGuest : item));
     const nextGuests = syncGuestSeatingSummaries(liveGuests, nextTables);
@@ -5228,16 +5251,13 @@ async function movePartyToTable(guestId, destinationTableId) {
       });
     const nextGuest = nextGuests.find((item) => item.id === liveGuest.id);
     transaction.update(doc(state.services.db, "weddings", state.weddingId, "guests", liveGuest.id), buildGuestSeatingPatch(nextGuest));
+    updatePublicGuestSeatingMirrorInTransaction(transaction, liveMirrorSnapshot, nextGuest);
   });
   if (savedTables && savedGuests) {
     state.tables = savedTables;
     state.guests = savedGuests;
     state.selectedTableId = destinationTableId;
     state.selectedSeatId = "";
-    const nextGuest = savedGuests.find((item) => item.id === guestId);
-    if (nextGuest) {
-      await syncPublicGuest(nextGuest.id, nextGuest, ["seatingAssignments", "tableId", "tableName", "seatNumber"]);
-    }
     renderAll();
   }
 }

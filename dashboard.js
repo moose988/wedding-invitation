@@ -1482,6 +1482,10 @@ function renderAll() {
   closeGuestMenu({ restoreFocus: false });
   renderChrome();
   renderActiveView();
+  // The standalone side/invitation pages read the public side summary.  A
+  // seating action updates local state before its listener round-trip arrives,
+  // so publish from the same authoritative table state immediately as well.
+  void syncPublicStats();
 }
 
 function renderChrome() {

@@ -93,7 +93,11 @@ async function loadLiveData() {
     coupleName: stats.coupleName || weddingSnap.data().coupleName || "The Wedding",
     stats: stats.sides?.[side] || null,
     roster: stats.roster?.[side] || [],
-    tables: tablesSnap.docs.map((docSnapshot) => ({ id: docSnapshot.id, ...docSnapshot.data() })),
+    // Keep this page on the same Firestore table identity as the dashboard.
+    // Some older records contain an embedded legacy id that is not their
+    // document ID; allowing it to win can make this page show a different
+    // seating plan from the planner.
+    tables: tablesSnap.docs.map((docSnapshot) => ({ ...docSnapshot.data(), id: docSnapshot.id })),
   };
 }
 

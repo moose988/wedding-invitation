@@ -5436,13 +5436,14 @@ function findGuestAssignmentForChair(table, chair, guests = state.guests) {
 }
 
 function createPlannerTable(table) {
+  const tableId = table.id || createId("table");
   const seatCount = Number(table.seatCount || table.capacity || 8);
   const width = Number(table.width || defaultWidthForShape(table.shape));
   const height = Number(table.height || defaultHeightForShape(table.shape));
-  const chairs = generateChairs(table.shape || "round", seatCount, width, height, table.chairs || []);
+  const chairs = generateChairs(table.shape || "round", seatCount, width, height, table.chairs || [], tableId);
 
   return {
-    id: table.id || createId("table"),
+    id: tableId,
     name: table.name || "New Table",
     label: table.label || table.name || "Table",
     capacity: seatCount,
@@ -5463,13 +5464,16 @@ function createPlannerTable(table) {
   };
 }
 
-function generateChairs(shape, seatCount, width, height, previousChairs) {
+function generateChairs(shape, seatCount, width, height, previousChairs, tableId = "table") {
   const existing = Array.isArray(previousChairs) ? previousChairs : [];
   const positions = buildChairPositions(shape, seatCount, width, height);
   return positions.map((position, index) => {
     const previous = existing[index] || existing.find((chair) => Number(chair.seatNumber) === index + 1) || {};
     return {
-      id: previous.id || createId("chair"),
+      // Legacy table documents did not store chair IDs.  IDs must be stable
+      // across every hydration so the chair selected in the UI is the same
+      // chair the live transaction validates and writes.
+      id: previous.id || `${tableId}-chair-${index + 1}`,
       seatNumber: index + 1,
       guestId: previous.guestId || "",
       assignment: previous.assignment || null,

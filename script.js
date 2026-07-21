@@ -214,7 +214,9 @@ async function loadGuestByToken(weddingId, guestToken) {
 
 async function loadTables(weddingId) {
   const snapshot = await getDocs(collection(initFirebase().db, "weddings", weddingId, "tables"));
-  return snapshot.docs.map((docSnapshot) => ({ id: docSnapshot.id, ...docSnapshot.data() }));
+  // The Firestore document ID is the table identity used by Seating.  Never
+  // let an old embedded `id` field override it on the invitation page.
+  return snapshot.docs.map((docSnapshot) => ({ ...docSnapshot.data(), id: docSnapshot.id }));
 }
 
 function normaliseWedding(wedding) {
@@ -591,6 +593,11 @@ function partyIndexFromKey(personKey) {
 }
 
 function getInvitationSeatAssignments(guest) {
+  const tableAssignments = getTableAuthoritativeSeatAssignments(guest);
+  if (tableAssignments !== null) {
+    return tableAssignments;
+  }
+
   const structured = Array.isArray(guest?.seatingAssignments) ? guest.seatingAssignments : [];
   const source = structured.length
     ? structured
@@ -611,6 +618,44 @@ function getInvitationSeatAssignments(guest) {
       };
     })
     .filter((assignment) => assignment.tableId && assignment.seatNumber)
+    .sort((a, b) => partyIndexFromKey(a.personKey) - partyIndexFromKey(b.personKey));
+}
+
+function getTableAuthoritativeSeatAssignments(guest) {
+  const guestId = String(guest?.guestId || "");
+  if (!guestId || !state.tables.length) {
+    return null;
+  }
+
+  // Older plans used only guest mirrors.  Once a plan stores chair state, the
+  // tables become authoritative, including the case where this guest has no
+  // chair at all (so a stale mirror cannot show an old assignment).
+  const tablesStoreChairState = state.tables.some((table) =>
+    (table.chairs || []).some((chair) =>
+      Object.prototype.hasOwnProperty.call(chair, "assignment") || Object.prototype.hasOwnProperty.call(chair, "guestId")
+    )
+  );
+  if (!tablesStoreChairState) {
+    return null;
+  }
+
+  return state.tables
+    .flatMap((table) =>
+      (table.chairs || []).map((chair, index) => {
+        const assignment = chair.assignment || {};
+        const assignedGuestId = String(assignment.guestId || chair.guestId || "");
+        if (assignedGuestId !== guestId) return null;
+        const partyMemberIndex = Number.isInteger(Number(assignment.partyMemberIndex)) ? Number(assignment.partyMemberIndex) : index;
+        return {
+          tableId: table.id,
+          tableName: table.name || assignment.tableName || "",
+          seatNumber: String(assignment.seatNumber || chair.seatNumber || ""),
+          personKey: assignment.personKey || personKeyForIndex(partyMemberIndex),
+          label: assignment.label || partyLabelForIndex(partyMemberIndex),
+        };
+      })
+    )
+    .filter((assignment) => assignment?.tableId && assignment.seatNumber)
     .sort((a, b) => partyIndexFromKey(a.personKey) - partyIndexFromKey(b.personKey));
 }
 

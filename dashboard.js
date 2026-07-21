@@ -1360,7 +1360,7 @@ function startListeners() {
   state.unsubGuests = onSnapshot(
     collection(state.services.db, "weddings", state.weddingId, "guests"),
     (snapshot) => {
-      state.guests = snapshot.docs.map((docSnapshot) => ({ id: docSnapshot.id, ...docSnapshot.data() }));
+      state.guests = snapshot.docs.map((docSnapshot) => ({ ...docSnapshot.data(), id: docSnapshot.id }));
       state.firestoreGuestCount = snapshot.size;
       state.firestoreGuestIds = snapshot.docs.map((docSnapshot) => docSnapshot.id);
       console.info("[Dashboard Firestore diagnostics]", {
@@ -1384,7 +1384,7 @@ function startListeners() {
   state.unsubTables = onSnapshot(
     collection(state.services.db, "weddings", state.weddingId, "tables"),
     (snapshot) => {
-      state.tables = hydrateTables(snapshot.docs.map((docSnapshot) => ({ id: docSnapshot.id, ...docSnapshot.data() })));
+      state.tables = hydrateTables(snapshot.docs.map((docSnapshot) => ({ ...docSnapshot.data(), id: docSnapshot.id })));
       state.selectedTableId = state.selectedTableId || state.tables[0]?.id || "";
       state.loadingTables = false;
       renderAll();
@@ -3370,7 +3370,7 @@ async function getLiveTablesInTransaction(transaction, tableRefs) {
   return hydrateTables(
     tableSnapshots
       .filter((tableSnapshot) => tableSnapshot.exists())
-      .map((tableSnapshot) => ({ id: tableSnapshot.id, ...tableSnapshot.data() }))
+      .map((tableSnapshot) => ({ ...tableSnapshot.data(), id: tableSnapshot.id }))
   );
 }
 
@@ -4043,7 +4043,7 @@ async function saveTable(event) {
         const tableRef = doc(state.services.db, "weddings", state.weddingId, "tables", state.selectedTableId);
         const liveSnapshot = await transaction.get(tableRef);
         if (!liveSnapshot.exists()) throw new Error("This table no longer exists. The seating plan has been refreshed.");
-        const liveTable = hydrateTables([{ id: liveSnapshot.id, ...liveSnapshot.data() }])[0];
+        const liveTable = hydrateTables([{ ...liveSnapshot.data(), id: liveSnapshot.id }])[0];
         const livePayload = createPlannerTable({ ...payload, x: liveTable.x, y: liveTable.y, chairs: liveTable.chairs });
         const liveAssignments = getAllAssignments([liveTable]);
         if (livePayload.seatCount < liveAssignments.length || liveAssignments.some((assignment) => Number(assignment.seatNumber) > livePayload.seatCount)) {
@@ -4067,8 +4067,10 @@ async function saveTable(event) {
         }
       }
     } else {
-      await addDoc(collection(state.services.db, "weddings", state.weddingId, "tables"), {
+      const tableRef = doc(collection(state.services.db, "weddings", state.weddingId, "tables"));
+      await setDoc(tableRef, {
         ...payload,
+        id: tableRef.id,
         createdAt: serverTimestamp(),
         updatedAt: serverTimestamp(),
       });
@@ -4113,8 +4115,10 @@ async function duplicateTable(table) {
   }
 
   try {
-    await addDoc(collection(state.services.db, "weddings", state.weddingId, "tables"), {
+    const tableRef = doc(collection(state.services.db, "weddings", state.weddingId, "tables"));
+    await setDoc(tableRef, {
       ...duplicated,
+      id: tableRef.id,
       createdAt: serverTimestamp(),
       updatedAt: serverTimestamp(),
     });
@@ -4215,10 +4219,10 @@ async function deleteTable(tableId) {
     await runTransaction(state.services.db, async (transaction) => {
       const liveTableSnapshot = await transaction.get(doc(state.services.db, "weddings", state.weddingId, "tables", tableId));
       if (!liveTableSnapshot.exists()) throw new Error("This table was changed by another editor. The seating plan has been refreshed.");
-      const liveTable = hydrateTables([{ id: liveTableSnapshot.id, ...liveTableSnapshot.data() }])[0];
+      const liveTable = hydrateTables([{ ...liveTableSnapshot.data(), id: liveTableSnapshot.id }])[0];
       affectedGuestIds = [...new Set(getAllAssignments([liveTable]).map((assignment) => assignment.guestId).filter(Boolean))];
       const guestSnapshots = await Promise.all(affectedGuestIds.map((guestId) => transaction.get(doc(state.services.db, "weddings", state.weddingId, "guests", guestId))));
-      const liveGuests = guestSnapshots.filter((snapshot) => snapshot.exists()).map((snapshot) => ({ id: snapshot.id, ...snapshot.data(), ref: snapshot.ref }));
+      const liveGuests = guestSnapshots.filter((snapshot) => snapshot.exists()).map((snapshot) => ({ ...snapshot.data(), id: snapshot.id, ref: snapshot.ref }));
       const publicMirrorSnapshots = await Promise.all(liveGuests.map((guest) => getPublicGuestMirrorInTransaction(transaction, guest)));
       nextGuests = liveGuests.map(({ ref, ...guest }) => {
         const assignments = (guest.seatingAssignments || []).filter((assignment) => assignment.tableId !== tableId);
@@ -4694,7 +4698,7 @@ async function savePartyAssignment(guest, selectedChairs, movingParty = false) {
     if (!guestSnapshot.exists()) {
       throw new Error("This guest no longer exists. The seating plan has been refreshed.");
     }
-    const liveGuest = { ...guest, id: guestSnapshot.id, ...guestSnapshot.data() };
+    const liveGuest = { ...guest, ...guestSnapshot.data(), id: guestSnapshot.id };
     const liveTables = await getLiveTablesInTransaction(transaction, tableRefs);
     const liveMirrorSnapshot = await getPublicGuestMirrorInTransaction(transaction, liveGuest);
     const selectedKeys = new Set(selectedChairs.map((item) => buildSeatKey(item.tableId, item.chairId)));
@@ -5011,7 +5015,7 @@ async function clearPartyAssignments(guestId, expectedSignature = "") {
     nextTables = clearGuestFromTables(liveTables, guestId);
     const guestSnapshot = await transaction.get(doc(state.services.db, "weddings", state.weddingId, "guests", guestId));
     if (!guestSnapshot.exists()) throw new Error("This party no longer exists. The seating plan has been refreshed.");
-    const liveGuest = { id: guestSnapshot.id, ...guestSnapshot.data() };
+    const liveGuest = { ...guestSnapshot.data(), id: guestSnapshot.id };
     const liveMirrorSnapshot = await getPublicGuestMirrorInTransaction(transaction, liveGuest);
     nextGuests = state.guests.map((guest) => guest.id === guestId ? { ...guest, ...liveGuest, ...buildGuestSeatingPatchFromTables(liveGuest, nextTables, false) } : guest);
     nextTables.forEach((table) => {
@@ -5098,7 +5102,7 @@ async function unassignSingleSeat(tableId, chairId) {
     if (!guestSnapshot.exists()) {
       throw new Error("The guest no longer exists. The seating plan has been refreshed.");
     }
-    const liveGuest = { id: guestSnapshot.id, ...guestSnapshot.data() };
+    const liveGuest = { ...guestSnapshot.data(), id: guestSnapshot.id };
     const liveMirrorSnapshot = await getPublicGuestMirrorInTransaction(transaction, liveGuest);
     const liveGuests = state.guests.map((guest) => (guest.id === liveGuest.id ? { ...guest, ...liveGuest } : guest));
     const nextGuests = syncGuestSeatingSummaries(liveGuests, nextTables);
@@ -5228,7 +5232,7 @@ async function movePartyToTable(guestId, destinationTableId) {
     if (!guestSnapshot.exists()) {
       throw new Error("This party no longer exists. The seating plan has been refreshed.");
     }
-    const liveGuest = { ...guest, id: guestSnapshot.id, ...guestSnapshot.data() };
+    const liveGuest = { ...guest, ...guestSnapshot.data(), id: guestSnapshot.id };
     const liveTables = await getLiveTablesInTransaction(transaction, tableRefs);
     const liveMirrorSnapshot = await getPublicGuestMirrorInTransaction(transaction, liveGuest);
     const nextTables = buildMovedTables(liveTables, liveGuest);

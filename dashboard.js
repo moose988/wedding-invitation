@@ -38,32 +38,38 @@ const pageMeta = {
   overview: {
     eyebrow: "Event command center",
     title: "Overview",
-    description: "A live operational snapshot of guest progress, seating readiness, and on-the-day attention items.",
+    description:
+      "A live operational snapshot of guest progress, seating readiness, and on-the-day attention items.",
   },
   guests: {
     eyebrow: "Guest management",
     title: "Guest Directory",
-    description: "Search, sort, filter, and update every invitee from a single operational directory.",
+    description:
+      "Search, sort, filter, and update every invitee from a single operational directory.",
   },
   seating: {
     eyebrow: "Seat planning workspace",
     title: "Seating Planner",
-    description: "Arrange tables, inspect capacity, and assign seats without leaving the hall layout.",
+    description:
+      "Arrange tables, inspect capacity, and assign seats without leaving the hall layout.",
   },
   checkin: {
     eyebrow: "Venue operations",
     title: "Check-In Access",
-    description: "Monitor arrivals, open the hostess console, and share the secure on-site check-in link.",
+    description:
+      "Monitor arrivals, open the hostess console, and share the secure on-site check-in link.",
   },
   share: {
     eyebrow: "Invitation sharing",
     title: "Links & Invitations",
-    description: "Copy the right public or operational link for planners, hosts, and invited guests.",
+    description:
+      "Copy the right public or operational link for planners, hosts, and invited guests.",
   },
   exports: {
     eyebrow: "Data exports",
     title: "Exports",
-    description: "Download guest lists and seating views without disturbing live event data.",
+    description:
+      "Download guest lists and seating views without disturbing live event data.",
   },
 };
 
@@ -889,7 +895,11 @@ async function init() {
         redirectToLogin("access-denied");
         return;
       }
-      window.history.replaceState(null, "", `./dashboard.html?wedding=${encodeURIComponent(state.weddingId)}`);
+      window.history.replaceState(
+        null,
+        "",
+        `./dashboard.html?wedding=${encodeURIComponent(state.weddingId)}`,
+      );
     }
     await bootstrapDashboard();
   });
@@ -909,7 +919,10 @@ function bindEvents() {
   elements.guestForm?.addEventListener("submit", saveGuest);
   elements.tableForm?.addEventListener("submit", saveTable);
   elements.bulkAddForm?.addEventListener("submit", saveBulkGuests);
-  elements.bulkAddForm?.entries?.addEventListener("input", updateBulkAddPreview);
+  elements.bulkAddForm?.entries?.addEventListener(
+    "input",
+    updateBulkAddPreview,
+  );
   elements.tableDeleteButton?.addEventListener("click", () => {
     if (state.selectedTableId) {
       openTableDeleteModal(state.selectedTableId);
@@ -922,11 +935,15 @@ function bindEvents() {
     if (!state.selectedGuestId) {
       return;
     }
-    const guest = state.guests.find((item) => item.id === state.selectedGuestId);
+    const guest = state.guests.find(
+      (item) => item.id === state.selectedGuestId,
+    );
     if (!guest) {
       return;
     }
-    const confirmed = window.confirm(`Delete ${guest.fullName}? This cannot be undone.`);
+    const confirmed = window.confirm(
+      `Delete ${guest.fullName}? This cannot be undone.`,
+    );
     if (!confirmed) {
       return;
     }
@@ -948,10 +965,22 @@ function bindEvents() {
   elements.guestModal?.addEventListener("click", handleDialogBackdropClick);
   elements.bulkAddModal?.addEventListener("click", handleDialogBackdropClick);
   elements.tableModal?.addEventListener("click", handleDialogBackdropClick);
-  elements.tableDeleteModal?.addEventListener("click", handleDialogBackdropClick);
-  elements.assignmentModal?.addEventListener("click", handleDialogBackdropClick);
-  elements.chairDetailsModal?.addEventListener("click", handleDialogBackdropClick);
-  elements.missingSeatsModal?.addEventListener("click", handleDialogBackdropClick);
+  elements.tableDeleteModal?.addEventListener(
+    "click",
+    handleDialogBackdropClick,
+  );
+  elements.assignmentModal?.addEventListener(
+    "click",
+    handleDialogBackdropClick,
+  );
+  elements.chairDetailsModal?.addEventListener(
+    "click",
+    handleDialogBackdropClick,
+  );
+  elements.missingSeatsModal?.addEventListener(
+    "click",
+    handleDialogBackdropClick,
+  );
   elements.guestModal?.addEventListener("cancel", (event) => {
     if (state.dirtyGuestForm && !window.confirm("Discard guest changes?")) {
       event.preventDefault();
@@ -967,7 +996,12 @@ function bindEvents() {
       event.preventDefault();
     }
   });
-  [elements.tableDeleteModal, elements.assignmentModal, elements.chairDetailsModal, elements.missingSeatsModal].forEach((modal) => {
+  [
+    elements.tableDeleteModal,
+    elements.assignmentModal,
+    elements.chairDetailsModal,
+    elements.missingSeatsModal,
+  ].forEach((modal) => {
     modal?.addEventListener("cancel", (event) => {
       if (state.activeModalOperation) {
         event.preventDefault();
@@ -985,9 +1019,25 @@ function bindEvents() {
     document.body.classList.remove("is-modal-open");
     state.dirtyTableForm = false;
   });
-  [elements.tableDeleteModal, elements.assignmentModal, elements.chairDetailsModal, elements.missingSeatsModal, elements.bulkAddModal].forEach((modal) => {
+  [
+    elements.tableDeleteModal,
+    elements.assignmentModal,
+    elements.chairDetailsModal,
+    elements.missingSeatsModal,
+    elements.bulkAddModal,
+  ].forEach((modal) => {
     modal?.addEventListener("close", () => {
-      if (![elements.guestModal, elements.tableModal, elements.tableDeleteModal, elements.assignmentModal, elements.chairDetailsModal, elements.missingSeatsModal, elements.bulkAddModal].some((item) => item?.open)) {
+      if (
+        ![
+          elements.guestModal,
+          elements.tableModal,
+          elements.tableDeleteModal,
+          elements.assignmentModal,
+          elements.chairDetailsModal,
+          elements.missingSeatsModal,
+          elements.bulkAddModal,
+        ].some((item) => item?.open)
+      ) {
         document.body.classList.remove("is-modal-open");
       }
       if (!state.activeModalOperation) {
@@ -1022,21 +1072,30 @@ function handleDocumentClick(event) {
       return;
     }
     const modal = document.getElementById(closeTrigger.dataset.closeModal);
-    if (closeTrigger.dataset.closeModal === "guestModal" && state.dirtyGuestForm) {
+    if (
+      closeTrigger.dataset.closeModal === "guestModal" &&
+      state.dirtyGuestForm
+    ) {
       const shouldClose = window.confirm("Discard guest changes?");
       if (!shouldClose) {
         return;
       }
       state.dirtyGuestForm = false;
     }
-    if (closeTrigger.dataset.closeModal === "tableModal" && state.dirtyTableForm) {
+    if (
+      closeTrigger.dataset.closeModal === "tableModal" &&
+      state.dirtyTableForm
+    ) {
       const shouldClose = window.confirm("Discard table changes?");
       if (!shouldClose) {
         return;
       }
       state.dirtyTableForm = false;
     }
-    if (closeTrigger.dataset.closeModal === "bulkAddModal" && bulkAddHasContent()) {
+    if (
+      closeTrigger.dataset.closeModal === "bulkAddModal" &&
+      bulkAddHasContent()
+    ) {
       if (!window.confirm("Discard this guest list?")) {
         return;
       }
@@ -1050,7 +1109,10 @@ function handleDocumentClick(event) {
 
   const actionNode = event.target.closest("[data-action]");
   if (actionNode) {
-    if (actionNode.disabled || actionNode.getAttribute("aria-disabled") === "true") {
+    if (
+      actionNode.disabled ||
+      actionNode.getAttribute("aria-disabled") === "true"
+    ) {
       event.preventDefault();
       return;
     }
@@ -1063,7 +1125,11 @@ function handleDocumentClick(event) {
     return;
   }
 
-  if (state.activeGuestMenu && !event.target.closest(".guest-menu") && !event.target.closest(".guest-row__menu-toggle")) {
+  if (
+    state.activeGuestMenu &&
+    !event.target.closest(".guest-menu") &&
+    !event.target.closest(".guest-row__menu-toggle")
+  ) {
     closeGuestMenu();
   }
 }
@@ -1076,13 +1142,25 @@ function handleDialogBackdropClick(event) {
     return;
   }
   const modal = event.currentTarget;
-  if (modal.id === "guestModal" && state.dirtyGuestForm && !window.confirm("Discard guest changes?")) {
+  if (
+    modal.id === "guestModal" &&
+    state.dirtyGuestForm &&
+    !window.confirm("Discard guest changes?")
+  ) {
     return;
   }
-  if (modal.id === "tableModal" && state.dirtyTableForm && !window.confirm("Discard table changes?")) {
+  if (
+    modal.id === "tableModal" &&
+    state.dirtyTableForm &&
+    !window.confirm("Discard table changes?")
+  ) {
     return;
   }
-  if (modal.id === "bulkAddModal" && bulkAddHasContent() && !window.confirm("Discard this guest list?")) {
+  if (
+    modal.id === "bulkAddModal" &&
+    bulkAddHasContent() &&
+    !window.confirm("Discard this guest list?")
+  ) {
     return;
   }
   if (modal.id === "assignmentModal") {
@@ -1093,12 +1171,18 @@ function handleDialogBackdropClick(event) {
 
 function handleDocumentInput(event) {
   if (event.target === elements.guestForm?.fullName) {
-    event.target.setCustomValidity(event.target.value.trim() ? "" : "Enter the guest's full name.");
+    event.target.setCustomValidity(
+      event.target.value.trim() ? "" : "Enter the guest's full name.",
+    );
     return;
   }
 
   if (event.target === elements.guestForm?.additionalGuests) {
-    event.target.setCustomValidity(parseAdditionalGuests(event.target.value) === null ? "Enter a whole number of 0 or more." : "");
+    event.target.setCustomValidity(
+      parseAdditionalGuests(event.target.value) === null
+        ? "Enter a whole number of 0 or more."
+        : "",
+    );
     return;
   }
 
@@ -1117,7 +1201,8 @@ function handleDocumentInput(event) {
     if (elements.assignmentModal?.open) {
       renderAssignmentModal();
       requestAnimationFrame(() => {
-        const nextSearch = elements.assignmentModal.querySelector("[data-seat-search]");
+        const nextSearch =
+          elements.assignmentModal.querySelector("[data-seat-search]");
         if (!nextSearch) {
           return;
         }
@@ -1135,7 +1220,10 @@ async function bootstrapSeatingEditor() {
   try {
     let user = state.services.auth.currentUser;
     if (state.editorLinkToken) {
-      const exchange = httpsCallable(state.services.functions, "exchangeSeatingEditorLink");
+      const exchange = httpsCallable(
+        state.services.functions,
+        "exchangeSeatingEditorLink",
+      );
       const result = await exchange({ token: state.editorLinkToken });
       await signInWithCustomToken(state.services.auth, result.data.customToken);
       window.history.replaceState(null, "", "./dashboard.html?seatingEditor=1");
@@ -1146,13 +1234,23 @@ async function bootstrapSeatingEditor() {
     }
     const token = await user.getIdTokenResult(true);
     const claims = token.claims;
-    if (!claims.seatingEditor || !["bride", "groom", "family"].includes(claims.seatingRole) || !claims.seatingWeddingId) {
+    if (
+      !claims.seatingEditor ||
+      !["bride", "groom", "family"].includes(claims.seatingRole) ||
+      !claims.seatingWeddingId
+    ) {
       throw new Error("This access link has expired or been revoked.");
     }
     state.currentUser = user;
     state.weddingId = claims.seatingWeddingId;
     state.editorRole = claims.seatingRole;
-    state.permissions = { role: claims.seatingRole, canEditSeating: true };
+    // Family link sessions are deliberately view-only. Bride and Groom have
+    // occupancy controls, while Firestore separately limits secure-link
+    // table writes to chair assignment fields.
+    state.permissions = {
+      role: claims.seatingRole,
+      canEditSeating: ["bride", "groom"].includes(claims.seatingRole),
+    };
     state.wedding = { coupleName: "", status: "active" };
     state.activeView = "seating";
     showDashboard();
@@ -1169,9 +1267,11 @@ function showEditorAccessError() {
   elements.dashboardSidebar.hidden = true;
   elements.pageEyebrow.textContent = "Seating access";
   elements.pageTitle.textContent = "Access unavailable";
-  elements.pageDescription.textContent = "Your access link has expired or been revoked.";
+  elements.pageDescription.textContent =
+    "Your access link has expired or been revoked.";
   elements.globalActions.innerHTML = "";
-  elements.pageContent.innerHTML = '<section class="share-page"><article class="share-card"><h3>Your seating editor link is unavailable</h3><p>Please ask the dashboard owner to generate a new link.</p></article></section>';
+  elements.pageContent.innerHTML =
+    '<section class="share-page"><article class="share-card"><h3>Your seating editor link is unavailable</h3><p>Please ask the dashboard owner to generate a new link.</p></article></section>';
 }
 
 function handleDocumentChange(event) {
@@ -1210,13 +1310,19 @@ function handleDocumentChange(event) {
   const libraryFilter = event.target.closest("[data-library-filter]");
   if (libraryFilter) {
     const key = libraryFilter.dataset.libraryFilter;
-    state.libraryFilters[key] = libraryFilter.type === "checkbox" ? libraryFilter.checked : libraryFilter.value;
+    state.libraryFilters[key] =
+      libraryFilter.type === "checkbox"
+        ? libraryFilter.checked
+        : libraryFilter.value;
     renderActiveView();
   }
 }
 
 function handleDocumentKeydown(event) {
-  if (state.activeGuestMenu && ["ArrowDown", "ArrowUp", "Home", "End"].includes(event.key)) {
+  if (
+    state.activeGuestMenu &&
+    ["ArrowDown", "ArrowUp", "Home", "End"].includes(event.key)
+  ) {
     handleGuestMenuKeyboard(event);
     return;
   }
@@ -1236,7 +1342,9 @@ function handleDocumentKeydown(event) {
   }
 }
 
-function loadDemoDashboard(message = "Preview mode is on. Firebase setup can be added later.") {
+function loadDemoDashboard(
+  message = "Preview mode is on. Firebase setup can be added later.",
+) {
   state.mode = "demo";
   state.permissions = {
     role: "Demo Admin",
@@ -1249,7 +1357,9 @@ function loadDemoDashboard(message = "Preview mode is on. Firebase setup can be 
   };
   state.wedding = demoWedding;
   const savedDemoState = readDemoDashboardState();
-  state.deletedSeedGuestIds = Array.isArray(savedDemoState?.deletedSeedGuestIds) ? savedDemoState.deletedSeedGuestIds : [];
+  state.deletedSeedGuestIds = Array.isArray(savedDemoState?.deletedSeedGuestIds)
+    ? savedDemoState.deletedSeedGuestIds
+    : [];
   const demoSourceGuests = mergeDemoSeedGuests(savedDemoState?.guests || []);
   state.guests = demoSourceGuests.map((guest) => ({
     ...guest,
@@ -1279,7 +1389,9 @@ function mergeDemoSeedGuests(savedGuests) {
       ...seedGuest,
       ...(savedById.get(seedGuest.id) || {}),
     }));
-  const customGuests = savedGuests.filter((guest) => !demoSeedGuests.some((seedGuest) => seedGuest.id === guest.id));
+  const customGuests = savedGuests.filter(
+    (guest) => !demoSeedGuests.some((seedGuest) => seedGuest.id === guest.id),
+  );
   return [...merged, ...customGuests];
 }
 
@@ -1290,7 +1402,9 @@ function readDemoDashboardState() {
       return null;
     }
     const parsed = JSON.parse(saved);
-    return Array.isArray(parsed.guests) && Array.isArray(parsed.tables) ? parsed : null;
+    return Array.isArray(parsed.guests) && Array.isArray(parsed.tables)
+      ? parsed
+      : null;
   } catch {
     return null;
   }
@@ -1307,13 +1421,19 @@ function persistDemoDashboardState() {
       tables: state.tables,
       hallObjects: state.hallObjects,
       deletedSeedGuestIds: state.deletedSeedGuestIds || [],
-    })
+    }),
   );
 }
 
 async function bootstrapDashboard() {
   const permissionDoc = await getDoc(
-    doc(state.services.db, "weddings", state.weddingId, "dashboardUsers", state.currentUser.uid)
+    doc(
+      state.services.db,
+      "weddings",
+      state.weddingId,
+      "dashboardUsers",
+      state.currentUser.uid,
+    ),
   );
 
   if (!permissionDoc.exists() || !permissionDoc.data().canViewDashboard) {
@@ -1323,16 +1443,24 @@ async function bootstrapDashboard() {
 
   state.permissions = permissionDoc.data();
   rememberWeddingId(state.weddingId);
-  const weddingDoc = await getDoc(doc(state.services.db, "weddings", state.weddingId));
+  const weddingDoc = await getDoc(
+    doc(state.services.db, "weddings", state.weddingId),
+  );
   state.wedding = weddingDoc.exists() ? weddingDoc.data() : null;
   state.hallObjects = hydrateHallObjects(state.wedding?.hallObjects);
   if (isWeddingOwner()) {
     try {
-      const normalizeSides = httpsCallable(state.services.functions, "normalizeSeatingGuestSides");
+      const normalizeSides = httpsCallable(
+        state.services.functions,
+        "normalizeSeatingGuestSides",
+      );
       await normalizeSides({ weddingId: state.weddingId });
     } catch (error) {
       console.error("Guest-side normalization failed.", error);
-      showToast("Guest sides could not be normalized. Seating access may be limited until this is resolved.", "error");
+      showToast(
+        "Guest sides could not be normalized. Seating access may be limited until this is resolved.",
+        "error",
+      );
     }
   }
   showDashboard();
@@ -1342,23 +1470,34 @@ async function bootstrapDashboard() {
 }
 
 function isWeddingOwner() {
-  return Boolean(state.currentUser?.uid && state.wedding?.ownerUserId === state.currentUser.uid);
+  return Boolean(
+    state.currentUser?.uid &&
+      state.wedding?.ownerUserId === state.currentUser.uid,
+  );
+}
+
+function canManageSeatingAccess() {
+  return isWeddingOwner() || state.permissions?.canManageUsers === true;
 }
 
 function startSeatingAccessListener() {
   state.unsubSeatingAccess?.();
-  if (!isWeddingOwner()) {
+  if (!canManageSeatingAccess()) {
     state.seatingAccess = { bride: null, groom: null, family: null };
     return;
   }
-  state.unsubSeatingAccess = onSnapshot(collection(state.services.db, "weddings", state.weddingId, "seatingAccess"), (snapshot) => {
-    const next = { bride: null, groom: null, family: null };
-    snapshot.docs.forEach((item) => {
-      if (["bride", "groom", "family"].includes(item.id)) next[item.id] = { id: item.id, ...item.data() };
-    });
-    state.seatingAccess = next;
-    if (state.activeView === "share") renderActiveView();
-  });
+  state.unsubSeatingAccess = onSnapshot(
+    collection(state.services.db, "weddings", state.weddingId, "seatingAccess"),
+    (snapshot) => {
+      const next = { bride: null, groom: null, family: null };
+      snapshot.docs.forEach((item) => {
+        if (["bride", "groom", "family"].includes(item.id))
+          next[item.id] = { id: item.id, ...item.data() };
+      });
+      state.seatingAccess = next;
+      if (state.activeView === "share") renderActiveView();
+    },
+  );
 }
 
 function startListeners() {
@@ -1369,14 +1508,23 @@ function startListeners() {
   renderActiveView();
 
   const guestSource = state.editorMode
-    ? query(collection(state.services.db, "weddings", state.weddingId, "guests"), where("side", "in", editorGuestSideValues(state.editorRole)))
+    ? query(
+        collection(state.services.db, "weddings", state.weddingId, "guests"),
+        where("side", "in", editorGuestSideValues(state.editorRole)),
+      )
     : collection(state.services.db, "weddings", state.weddingId, "guests");
   state.unsubGuests = onSnapshot(
     guestSource,
     (snapshot) => {
-      state.guests = snapshot.docs.map((docSnapshot) => ({ ...docSnapshot.data(), id: docSnapshot.id, side: normalizeGuestSide(docSnapshot.data().side) }));
+      state.guests = snapshot.docs.map((docSnapshot) => ({
+        ...docSnapshot.data(),
+        id: docSnapshot.id,
+        side: normalizeGuestSide(docSnapshot.data().side),
+      }));
       state.firestoreGuestCount = snapshot.size;
-      state.firestoreGuestIds = snapshot.docs.map((docSnapshot) => docSnapshot.id);
+      state.firestoreGuestIds = snapshot.docs.map(
+        (docSnapshot) => docSnapshot.id,
+      );
       console.info("[Dashboard Firestore diagnostics]", {
         projectId: state.services.config.projectId,
         weddingId: state.weddingId,
@@ -1392,19 +1540,25 @@ function startListeners() {
       }
       void syncPublicStats();
     },
-    (error) => handleSeatingListenerError(error)
+    (error) => handleSeatingListenerError(error),
   );
 
   state.unsubTables = onSnapshot(
     collection(state.services.db, "weddings", state.weddingId, "tables"),
     (snapshot) => {
-      state.tables = hydrateTables(snapshot.docs.map((docSnapshot) => ({ ...docSnapshot.data(), id: docSnapshot.id })));
-      state.selectedTableId = state.selectedTableId || state.tables[0]?.id || "";
+      state.tables = hydrateTables(
+        snapshot.docs.map((docSnapshot) => ({
+          ...docSnapshot.data(),
+          id: docSnapshot.id,
+        })),
+      );
+      state.selectedTableId =
+        state.selectedTableId || state.tables[0]?.id || "";
       state.loadingTables = false;
       renderAll();
       void syncPublicStats();
     },
-    (error) => handleSeatingListenerError(error)
+    (error) => handleSeatingListenerError(error),
   );
 }
 
@@ -1416,7 +1570,10 @@ function handleSeatingListenerError(error) {
     showEditorAccessError();
     return;
   }
-  showToast("Live seating updates could not be loaded. Please refresh.", "error");
+  showToast(
+    "Live seating updates could not be loaded. Please refresh.",
+    "error",
+  );
 }
 
 // Side-status pages mirror the Guest Directory's side field exactly so their
@@ -1426,7 +1583,10 @@ function sideViewMatches(guest, side) {
 }
 
 function normalizeGuestSide(value) {
-  const side = String(value || "").trim().toLowerCase().replace(/[ _-]+/g, " ");
+  const side = String(value || "")
+    .trim()
+    .toLowerCase()
+    .replace(/[ _-]+/g, " ");
   if (["bride", "bride side", "brides side"].includes(side)) return "bride";
   if (["groom", "groom side", "grooms side"].includes(side)) return "groom";
   if (["both", "both sides", "shared"].includes(side)) return "both";
@@ -1439,7 +1599,17 @@ function editorGuestSideValues(role) {
     groom: ["groom", "Groom", "groom side", "Groom Side", "grooms side"],
     family: ["family", "Family", "family side", "Family Side"],
   };
-  return role === "family" ? aliases.family : [...aliases[role], "both", "Both", "both sides", "Both Sides", "shared", "Shared"];
+  return role === "family"
+    ? aliases.family
+    : [
+        ...aliases[role],
+        "both",
+        "Both",
+        "both sides",
+        "Both Sides",
+        "shared",
+        "Shared",
+      ];
 }
 
 function buildPublicStatsPayload() {
@@ -1447,22 +1617,36 @@ function buildPublicStatsPayload() {
   const roster = {};
   ["groom", "bride", "family"].forEach((side) => {
     const guests = state.guests.filter((guest) => sideViewMatches(guest, side));
-    const confirmed = guests.filter((guest) => guest.rsvpStatus === "confirmed");
+    const confirmed = guests.filter(
+      (guest) => guest.rsvpStatus === "confirmed",
+    );
     sides[side] = {
       invited: guests.length,
       seats: guests.reduce((sum, guest) => sum + getPartySize(guest), 0),
       confirmed: confirmed.length,
-      confirmedSeats: confirmed.reduce((sum, guest) => sum + getPartySize(guest), 0),
-      pending: guests.filter((guest) => !["confirmed", "declined"].includes(guest.rsvpStatus)).length,
-      declined: guests.filter((guest) => guest.rsvpStatus === "declined").length,
-      seated: guests.filter((guest) => getGuestAssignedSeats(guest.id).length > 0).length,
-      invitesSent: guests.filter((guest) => guest.inviteSentAt || guest.reminderSentAt).length,
+      confirmedSeats: confirmed.reduce(
+        (sum, guest) => sum + getPartySize(guest),
+        0,
+      ),
+      pending: guests.filter(
+        (guest) => !["confirmed", "declined"].includes(guest.rsvpStatus),
+      ).length,
+      declined: guests.filter((guest) => guest.rsvpStatus === "declined")
+        .length,
+      seated: guests.filter(
+        (guest) => getGuestAssignedSeats(guest.id).length > 0,
+      ).length,
+      invitesSent: guests.filter(
+        (guest) => guest.inviteSentAt || guest.reminderSentAt,
+      ).length,
     };
     roster[side] = guests.map((guest) => ({
       id: guest.id,
       n: guest.fullName || "",
       a: guest.fullNameAr || "",
-      r: ["confirmed", "declined"].includes(guest.rsvpStatus) ? guest.rsvpStatus : "pending",
+      r: ["confirmed", "declined"].includes(guest.rsvpStatus)
+        ? guest.rsvpStatus
+        : "pending",
       p: getPartySize(guest),
       seats: getGuestAssignedSeats(guest.id).map((assignment) => ({
         t: assignment.tableName || "",
@@ -1479,7 +1663,12 @@ let lastPublicStatsJson = "";
 // read. Runs on every snapshot delivery; the JSON compare keeps it from
 // writing unless something actually changed.
 async function syncPublicStats() {
-  if (state.mode !== "live" || !state.weddingId || !state.services?.db || !can("canViewDashboard")) {
+  if (
+    state.mode !== "live" ||
+    !state.weddingId ||
+    !state.services?.db ||
+    !can("canViewDashboard")
+  ) {
     return;
   }
   if (state.loadingGuests || state.loadingTables) {
@@ -1492,10 +1681,19 @@ async function syncPublicStats() {
   }
   lastPublicStatsJson = json;
   try {
-    await setDoc(doc(state.services.db, "weddings", state.weddingId, "publicStats", "summary"), {
-      ...payload,
-      updatedAt: serverTimestamp(),
-    });
+    await setDoc(
+      doc(
+        state.services.db,
+        "weddings",
+        state.weddingId,
+        "publicStats",
+        "summary",
+      ),
+      {
+        ...payload,
+        updatedAt: serverTimestamp(),
+      },
+    );
   } catch (error) {
     lastPublicStatsJson = "";
     console.error("Side status page sync failed.", error);
@@ -1522,16 +1720,34 @@ function renderChrome() {
   document.body.classList.toggle("is-seating-view", isSeatingView);
   document.body.classList.toggle("is-seating-editor", state.editorMode);
   elements.dashboardSidebar.hidden = state.editorMode;
-  elements.signOutButton.textContent = state.editorMode ? "End session" : "Sign out";
-  elements.pageEyebrow.textContent = state.editorMode ? "Secure shared workspace" : (isSeatingView ? "" : meta.eyebrow);
-  elements.pageTitle.textContent = state.editorMode ? `${state.editorRole[0].toUpperCase()}${state.editorRole.slice(1)} — Seating Editor` : (isSeatingView ? "" : meta.title);
-  elements.pageDescription.textContent = state.editorMode ? "Changes are synchronized live with the wedding dashboard." : (isSeatingView ? "" : meta.description);
-  elements.liveIndicator.innerHTML = state.mode === "demo"
-    ? "Preview mode"
-    : `Firestore: ${state.firestoreGuestCount} guest${state.firestoreGuestCount === 1 ? "" : "s"}`;
+  elements.signOutButton.textContent = state.editorMode
+    ? "End session"
+    : "Sign out";
+  elements.pageEyebrow.textContent = state.editorMode
+    ? "Secure shared workspace"
+    : isSeatingView
+      ? ""
+      : meta.eyebrow;
+  elements.pageTitle.textContent = state.editorMode
+    ? `${state.editorRole[0].toUpperCase()}${state.editorRole.slice(1)} — Seating Editor`
+    : isSeatingView
+      ? ""
+      : meta.title;
+  elements.pageDescription.textContent = state.editorMode
+    ? "Changes are synchronized live with the wedding dashboard."
+    : isSeatingView
+      ? ""
+      : meta.description;
+  elements.liveIndicator.innerHTML =
+    state.mode === "demo"
+      ? "Preview mode"
+      : `Firestore: ${state.firestoreGuestCount} guest${state.firestoreGuestCount === 1 ? "" : "s"}`;
 
   document.querySelectorAll("[data-nav-view]").forEach((button) => {
-    button.classList.toggle("is-active", button.dataset.navView === state.activeView);
+    button.classList.toggle(
+      "is-active",
+      button.dataset.navView === state.activeView,
+    );
   });
 
   updateSidebarState();
@@ -1549,13 +1765,29 @@ function renderGlobalActions() {
     return;
   }
   if (state.activeView === "overview" || state.activeView === "guests") {
-    actions.push(actionButton("Add guest", "open-add-guest", !can("canEditGuests"), "primary"));
+    actions.push(
+      actionButton(
+        "Add guest",
+        "open-add-guest",
+        !can("canEditGuests"),
+        "primary",
+      ),
+    );
   }
   if (state.activeView === "guests") {
-    actions.push(actionButton("Bulk add", "open-bulk-add", !can("canEditGuests"), "secondary"));
+    actions.push(
+      actionButton(
+        "Bulk add",
+        "open-bulk-add",
+        !can("canEditGuests"),
+        "secondary",
+      ),
+    );
   }
   if (state.activeView !== "seating") {
-    actions.push(actionButton("Refresh", "refresh-dashboard", false, "secondary"));
+    actions.push(
+      actionButton("Refresh", "refresh-dashboard", false, "secondary"),
+    );
   }
 
   elements.globalActions.innerHTML = actions.join("");
@@ -1599,7 +1831,8 @@ function renderActiveView() {
 
 function renderOverviewPage() {
   if (state.loadingGuests || state.loadingTables) {
-    elements.pageContent.innerHTML = '<div class="da3wa-skeleton" aria-hidden="true"></div>';
+    elements.pageContent.innerHTML =
+      '<div class="da3wa-skeleton" aria-hidden="true"></div>';
     return;
   }
 
@@ -1700,7 +1933,7 @@ function renderOverviewPage() {
                     <strong>${escapeHtml(item.title)}</strong>
                     <span>${escapeHtml(item.description)}</span>
                   </div>
-                `
+                `,
               )
               .join("")}
           </div>
@@ -1710,18 +1943,20 @@ function renderOverviewPage() {
           <p class="da3wa-eyebrow">Recent activity</p>
           <h3>Latest movement</h3>
           <div class="activity-list">
-            ${recentActivity.length
-              ? recentActivity
-                  .map(
-                    (item) => `
+            ${
+              recentActivity.length
+                ? recentActivity
+                    .map(
+                      (item) => `
                       <div class="activity-item">
                         <strong>${escapeHtml(item.title)}</strong>
                         <span>${escapeHtml(item.subtitle)}</span>
                       </div>
-                    `
-                  )
-                  .join("")
-              : `<div class="attention-item"><strong>No recent activity yet</strong><span>Live RSVP, check-in, and reminder timestamps will surface here.</span></div>`}
+                    `,
+                    )
+                    .join("")
+                : `<div class="attention-item"><strong>No recent activity yet</strong><span>Live RSVP, check-in, and reminder timestamps will surface here.</span></div>`
+            }
           </div>
         </article>
 
@@ -1743,17 +1978,26 @@ function renderOverviewPage() {
 
 function renderGuestPage() {
   if (state.loadingGuests) {
-    elements.pageContent.innerHTML = '<section class="guest-page"><div class="da3wa-skeleton" aria-hidden="true"></div></section>';
+    elements.pageContent.innerHTML =
+      '<section class="guest-page"><div class="da3wa-skeleton" aria-hidden="true"></div></section>';
     return;
   }
 
   const guests = getFilteredGuests();
-  const totalGuestPages = Math.max(1, Math.ceil(guests.length / guestDirectoryPageSize));
+  const totalGuestPages = Math.max(
+    1,
+    Math.ceil(guests.length / guestDirectoryPageSize),
+  );
   state.guestPageIndex = clamp(state.guestPageIndex, 0, totalGuestPages - 1);
   const pageStart = state.guestPageIndex * guestDirectoryPageSize;
-  const visibleGuests = guests.slice(pageStart, pageStart + guestDirectoryPageSize);
+  const visibleGuests = guests.slice(
+    pageStart,
+    pageStart + guestDirectoryPageSize,
+  );
   const selectedCount = state.selectedGuestIds.length;
-  const anySelectedVisible = guests.some((guest) => state.selectedGuestIds.includes(guest.id));
+  const anySelectedVisible = guests.some((guest) =>
+    state.selectedGuestIds.includes(guest.id),
+  );
 
   elements.pageContent.innerHTML = `
     <section class="guest-page">
@@ -1836,7 +2080,8 @@ function renderGuestPage() {
 
 function renderSeatingPage() {
   if (state.loadingTables) {
-    elements.pageContent.innerHTML = '<section class="seating-page"><div class="da3wa-skeleton" aria-hidden="true"></div></section>';
+    elements.pageContent.innerHTML =
+      '<section class="seating-page"><div class="da3wa-skeleton" aria-hidden="true"></div></section>';
     return;
   }
 
@@ -1845,7 +2090,9 @@ function renderSeatingPage() {
   const seatingStats = calculateDashboardStats(state.guests, state.tables);
   const sideStats = calculateSideStats(state.guests, state.tables);
   const isSaving = state.saveState === "saving";
-  const assignmentStatusPanel = state.assignmentSession ? renderAssignmentPanelHint() : renderAssignmentStatusPanel(selectedSeat);
+  const assignmentStatusPanel = state.assignmentSession
+    ? renderAssignmentPanelHint()
+    : renderAssignmentStatusPanel(selectedSeat);
 
   elements.pageContent.innerHTML = `
     <section class="seating-page">
@@ -1927,13 +2174,22 @@ function renderSeatingPage() {
     </section>
   `;
 
-  document.getElementById("plannerCanvas")?.addEventListener("pointerdown", handlePlannerPointerDown, { once: false });
+  document
+    .getElementById("plannerCanvas")
+    ?.addEventListener("pointerdown", handlePlannerPointerDown, {
+      once: false,
+    });
 }
 
 function renderCheckinPage() {
   const stats = calculateDashboardStats(state.guests, state.tables);
-  const recentCheckins = deriveRecentActivity(state.guests).filter((item) => item.type === "checkin").slice(0, 4);
-  const checkinLink = new URL(`checkin.html?wedding=${encodeURIComponent(state.weddingId)}`, window.location.href).toString();
+  const recentCheckins = deriveRecentActivity(state.guests)
+    .filter((item) => item.type === "checkin")
+    .slice(0, 4);
+  const checkinLink = new URL(
+    `checkin.html?wedding=${encodeURIComponent(state.weddingId)}`,
+    window.location.href,
+  ).toString();
 
   elements.pageContent.innerHTML = `
     <section class="checkin-page">
@@ -1962,18 +2218,20 @@ function renderCheckinPage() {
           <p class="da3wa-eyebrow">Recent check-ins</p>
           <h3>Latest arrivals</h3>
           <div class="activity-list">
-            ${recentCheckins.length
-              ? recentCheckins
-                  .map(
-                    (item) => `
+            ${
+              recentCheckins.length
+                ? recentCheckins
+                    .map(
+                      (item) => `
                       <div class="activity-item">
                         <strong>${escapeHtml(item.title)}</strong>
                         <span>${escapeHtml(item.subtitle)}</span>
                       </div>
-                    `
-                  )
-                  .join("")
-              : `<div class="attention-item"><strong>No arrivals recorded yet</strong><span>Recent guest check-ins will appear here.</span></div>`}
+                    `,
+                    )
+                    .join("")
+                : `<div class="attention-item"><strong>No arrivals recorded yet</strong><span>Recent guest check-ins will appear here.</span></div>`
+            }
           </div>
         </article>
       </div>
@@ -1983,37 +2241,52 @@ function renderCheckinPage() {
 
 function renderSharePage() {
   const base = new URL(window.location.href);
-  const dashboardLink = new URL(`dashboard.html?wedding=${encodeURIComponent(state.weddingId)}`, base).toString();
-  const hostessLink = new URL(`checkin.html?wedding=${encodeURIComponent(state.weddingId)}`, base).toString();
-  const invitationBase = new URL(`index.html?wedding=${encodeURIComponent(state.weddingId)}&guest={guestToken}`, base).toString();
+  const dashboardLink = new URL(
+    `dashboard.html?wedding=${encodeURIComponent(state.weddingId)}`,
+    base,
+  ).toString();
+  const hostessLink = new URL(
+    `checkin.html?wedding=${encodeURIComponent(state.weddingId)}`,
+    base,
+  ).toString();
+  const invitationBase = new URL(
+    `index.html?wedding=${encodeURIComponent(state.weddingId)}&guest={guestToken}`,
+    base,
+  ).toString();
   const previewGuest = state.guests[0];
-  const previewInvitation = buildInviteLink(previewGuest?.guestToken || "{guestToken}");
+  const previewInvitation = buildInviteLink(
+    previewGuest?.guestToken || "{guestToken}",
+  );
 
   const cards = [
     {
       title: "Guest invitation base",
-      description: "Template for personalized invitation links. Replace `{guestToken}` with the guest's secure token.",
+      description:
+        "Template for personalized invitation links. Replace `{guestToken}` with the guest's secure token.",
       value: invitationBase,
       copyAction: "copy-invitation-base",
       openAction: previewGuest ? "open-invitation-preview" : "",
     },
     {
       title: "Dashboard link",
-      description: "Use this for planners and authorized event staff. Keep it internal.",
+      description:
+        "Use this for planners and authorized event staff. Keep it internal.",
       value: dashboardLink,
       copyAction: "copy-dashboard",
       openAction: "open-dashboard",
     },
     {
       title: "Check-in link",
-      description: "Direct venue staff to the permission-gated hostess check-in page.",
+      description:
+        "Direct venue staff to the permission-gated hostess check-in page.",
       value: hostessLink,
       copyAction: "copy-checkin",
       openAction: "open-checkin",
     },
     {
       title: "Invitation preview",
-      description: "Open the current invitation experience with the first available guest preview link.",
+      description:
+        "Open the current invitation experience with the first available guest preview link.",
       value: previewInvitation,
       copyAction: "copy-preview",
       openAction: "open-invitation-preview",
@@ -2039,7 +2312,7 @@ function renderSharePage() {
                   ${card.openAction ? actionButton("Open", card.openAction, false, "secondary") : ""}
                 </div>
               </article>
-            `
+            `,
           )
           .join("")}
       </div>
@@ -2049,16 +2322,18 @@ function renderSharePage() {
 
 function renderSideViewCard() {
   const sideOption = (label, side, arabicLabel) => {
-    const count = state.guests.filter((guest) => sideViewMatches(guest, side)).length;
+    const count = state.guests.filter((guest) =>
+      sideViewMatches(guest, side),
+    ).length;
     return `
       <div class="sender-option">
         <div class="sender-option__copy">
           <strong>${escapeHtml(label)} <span class="side-view-ar" dir="rtl">${escapeHtml(arabicLabel)}</span></strong>
-          <span>${count} guest${count === 1 ? "" : "s"} on this page</span>
+          <span>${count} guest${count === 1 ? "" : "s"} on this page · ${side === "family" ? "read-only status" : "editable seating manager"}</span>
         </div>
         <div class="sender-option__actions">
-          ${actionButton("Open", "open-side-view", !count, "secondary", side)}
-          ${actionButton("Copy link", "copy-side-view", !count, "primary", side)}
+          ${actionButton(side === "family" ? "Open" : "Open manager", "open-side-view", !count, "secondary", side)}
+          ${actionButton(side === "family" ? "Copy link" : "Copy manager link", "copy-side-view", !count, "primary", side)}
         </div>
       </div>
     `;
@@ -2078,7 +2353,9 @@ function renderSideViewCard() {
 }
 
 function renderSenderCard() {
-  const excluded = state.guests.filter((guest) => !normalizeWhatsAppPhone(guest.phone) || !guest.guestToken).length;
+  const excluded = state.guests.filter(
+    (guest) => !normalizeWhatsAppPhone(guest.phone) || !guest.guestToken,
+  ).length;
   const familyCount = getSenderGuests("family").length;
   const senderOption = (label, side, note = "") => {
     const count = getSenderGuests(side).length;
@@ -2113,15 +2390,60 @@ function renderSenderCard() {
 
 function renderExportsPage() {
   const cards = [
-    exportCard("All guests", "Guest directory with contact, party size, invitation, RSVP, and attendance data.", "XLSX / CSV", "export-all"),
-    exportCard("Confirmed", "Guests with accepted RSVP status.", "XLSX / CSV", "export-confirmed"),
-    exportCard("Pending", "Guests still awaiting a response.", "XLSX / CSV", "export-pending"),
-    exportCard("Declined", "Guests who cannot attend.", "XLSX / CSV", "export-declined"),
-    exportCard("Checked in", "Guests who have arrived at the venue.", "XLSX / CSV", "export-checkedIn"),
-    exportCard("Not checked in", "Guests still expected onsite.", "XLSX / CSV", "export-notCheckedIn"),
-    exportCard("Table assignments", "Roster sorted by table and seat placement.", "XLSX / CSV", "export-tables"),
-    exportCard("Bride side", "Filtered list of bride-side guests.", "XLSX / CSV", "export-bride"),
-    exportCard("Groom side", "Filtered list of groom-side guests.", "XLSX / CSV", "export-groom"),
+    exportCard(
+      "All guests",
+      "Guest directory with contact, party size, invitation, RSVP, and attendance data.",
+      "XLSX / CSV",
+      "export-all",
+    ),
+    exportCard(
+      "Confirmed",
+      "Guests with accepted RSVP status.",
+      "XLSX / CSV",
+      "export-confirmed",
+    ),
+    exportCard(
+      "Pending",
+      "Guests still awaiting a response.",
+      "XLSX / CSV",
+      "export-pending",
+    ),
+    exportCard(
+      "Declined",
+      "Guests who cannot attend.",
+      "XLSX / CSV",
+      "export-declined",
+    ),
+    exportCard(
+      "Checked in",
+      "Guests who have arrived at the venue.",
+      "XLSX / CSV",
+      "export-checkedIn",
+    ),
+    exportCard(
+      "Not checked in",
+      "Guests still expected onsite.",
+      "XLSX / CSV",
+      "export-notCheckedIn",
+    ),
+    exportCard(
+      "Table assignments",
+      "Roster sorted by table and seat placement.",
+      "XLSX / CSV",
+      "export-tables",
+    ),
+    exportCard(
+      "Bride side",
+      "Filtered list of bride-side guests.",
+      "XLSX / CSV",
+      "export-bride",
+    ),
+    exportCard(
+      "Groom side",
+      "Filtered list of groom-side guests.",
+      "XLSX / CSV",
+      "export-groom",
+    ),
   ];
 
   elements.pageContent.innerHTML = `
@@ -2260,10 +2582,15 @@ function renderGuestCard(guest) {
 }
 
 function renderSeatingAccessCard() {
-  if (!isWeddingOwner()) return "";
+  if (!canManageSeatingAccess()) return "";
   const card = (role, label) => {
     const access = state.seatingAccess[role];
-    const status = access?.status === "active" ? "Active" : access?.status === "revoked" ? "Revoked" : "Not Created";
+    const status =
+      access?.status === "active"
+        ? "Active"
+        : access?.status === "revoked"
+          ? "Revoked"
+          : "Not Created";
     const created = access?.regeneratedAt || access?.createdAt;
     const when = created ? formatTimestamp(created) : "—";
     const hasLink = Boolean(access?.status === "active");
@@ -2286,24 +2613,64 @@ function renderSeatingAccessCard() {
     <article class="share-card share-card--sender">
       <p class="da3wa-eyebrow">Wedding Seating Access</p>
       <h3>Secure side-specific seating-editor links</h3>
-      <p>Only the wedding owner can create, copy, regenerate, or revoke these links. Each link can edit only its authorized guests and saves to the shared Firestore plan.</p>
+      <p>Only the wedding owner can create, copy, regenerate, or revoke these links. Bride and Groom links can manage every guest's chair in the shared plan; Family links are strictly read-only.</p>
       <div class="sender-options">${card("bride", "Bride")}${card("groom", "Groom")}${card("family", "Family")}</div>
     </article>`;
 }
 
 function seatingEditorLink(token) {
-  return new URL(`dashboard.html?seatingEditor=1&token=${encodeURIComponent(token)}`, window.location.href).toString();
+  // Secure side links open the mobile seating workspace. The token is still
+  // exchanged for a custom Auth token by the page; token claims, never query
+  // parameters, determine the role and permissions.
+  return new URL(
+    `side.html?token=${encodeURIComponent(token)}`,
+    window.location.href,
+  ).toString();
+}
+
+// The Bride and Groom cards in "Side status pages" intentionally use the
+// same signed, revocable manager links as the Seating Access card.  Family
+// keeps the ordinary public status URL because it is read-only.
+async function openOrCreateSideManagerLink(role, shouldOpen) {
+  if (!["bride", "groom"].includes(role)) {
+    return;
+  }
+  const access = state.seatingAccess[role];
+  if (access?.status === "active") {
+    await manageSeatingAccess(role, shouldOpen ? "open" : "reveal");
+    return;
+  }
+  await manageSeatingAccess(role, "generate");
+  if (shouldOpen) {
+    await manageSeatingAccess(role, "open");
+  }
 }
 
 async function manageSeatingAccess(role, action) {
-  if (!isWeddingOwner() || !["bride", "groom", "family"].includes(role)) {
-    showToast("Only the wedding owner can manage seating editor access.", "error");
+  if (!canManageSeatingAccess() || !["bride", "groom", "family"].includes(role)) {
+    showToast(
+      "Only the wedding owner can manage seating editor access.",
+      "error",
+    );
     return;
   }
-  if (action === "revoke" && !window.confirm(`Revoke the ${role} seating-editor link? It will stop working immediately.`)) return;
+  if (
+    action === "revoke" &&
+    !window.confirm(
+      `Revoke the ${role} seating-editor link? It will stop working immediately.`,
+    )
+  )
+    return;
   try {
-    const call = httpsCallable(state.services.functions, "manageSeatingEditorAccess");
-    const result = await call({ weddingId: state.weddingId, role, action: action === "open" ? "reveal" : action });
+    const call = httpsCallable(
+      state.services.functions,
+      "manageSeatingEditorAccess",
+    );
+    const result = await call({
+      weddingId: state.weddingId,
+      role,
+      action: action === "open" ? "reveal" : action,
+    });
     if (result.data?.token) {
       const link = seatingEditorLink(result.data.token);
       if (action === "open") {
@@ -2311,17 +2678,37 @@ async function manageSeatingAccess(role, action) {
         showToast("Secure editor link opened.", "success");
       } else {
         await copyText(link);
-        showToast(action === "reveal" ? "Secure editor link copied." : `${role[0].toUpperCase()}${role.slice(1)} editor link created and copied.`, "success");
+        showToast(
+          action === "reveal"
+            ? "Secure editor link copied."
+            : `${role[0].toUpperCase()}${role.slice(1)} editor link created and copied.`,
+          "success",
+        );
       }
-      state.seatingAccess[role] = { ...(state.seatingAccess[role] || {}), role, status: "active", regeneratedAt: new Date() };
+      state.seatingAccess[role] = {
+        ...(state.seatingAccess[role] || {}),
+        role,
+        status: "active",
+        regeneratedAt: new Date(),
+      };
     } else {
-      state.seatingAccess[role] = { ...(state.seatingAccess[role] || {}), status: "revoked", link: "" };
-      showToast(`${role[0].toUpperCase()}${role.slice(1)} editor access revoked.`, "success");
+      state.seatingAccess[role] = {
+        ...(state.seatingAccess[role] || {}),
+        status: "revoked",
+        link: "",
+      };
+      showToast(
+        `${role[0].toUpperCase()}${role.slice(1)} editor access revoked.`,
+        "success",
+      );
     }
     renderActiveView();
   } catch (error) {
     console.error(error);
-    showToast("We could not update seating editor access. Please try again.", "error");
+    showToast(
+      "We could not update seating editor access. Please try again.",
+      "error",
+    );
   }
 }
 
@@ -2383,11 +2770,14 @@ function renderPlannerTable(table) {
 
 function renderPlannerChair(table, chair) {
   const assignment = getChairAssignment(table.id, chair);
-  const guest = assignment?.guestId ? state.guests.find((item) => item.id === assignment.guestId) : null;
+  const guest = assignment?.guestId
+    ? state.guests.find((item) => item.id === assignment.guestId)
+    : null;
   const statusClass = chairStatusClass(chair, guest, assignment);
   const isSelected = state.selectedSeatId === buildSeatKey(table.id, chair.id);
   const isTemporary = isChairTemporarilySelected(table.id, chair.id);
-  const isPartyHighlighted = assignment?.guestId && assignment.guestId === state.activePartyGuestId;
+  const isPartyHighlighted =
+    assignment?.guestId && assignment.guestId === state.activePartyGuestId;
   const label = assignment
     ? assignment.partyMemberIndex === 0
       ? getInitials(guest?.fullName) || "M"
@@ -2442,8 +2832,15 @@ function renderTableInspector(table) {
   const assignments = getTableAssignments(table.id);
   const capacity = Number(table.seatCount || table.capacity || 0);
   const assignedGuests = assignments
-    .map((assignment) => ({ assignment, guest: state.guests.find((item) => item.id === assignment.guestId) }))
-    .sort((left, right) => Number(left.assignment.seatNumber || 0) - Number(right.assignment.seatNumber || 0));
+    .map((assignment) => ({
+      assignment,
+      guest: state.guests.find((item) => item.id === assignment.guestId),
+    }))
+    .sort(
+      (left, right) =>
+        Number(left.assignment.seatNumber || 0) -
+        Number(right.assignment.seatNumber || 0),
+    );
   return `
     <div class="planner-table-summary">
       <div>
@@ -2471,12 +2868,14 @@ function renderTableInspector(table) {
         ${
           assignedGuests.length
             ? assignedGuests
-                .map(({ assignment, guest }) => `
+                .map(
+                  ({ assignment, guest }) => `
                   <div class="planner-guest-pill">
                     <strong>${escapeHtml(guest?.fullName || "Guest")}</strong>
                     <small>Seat ${escapeHtml(String(assignment.seatNumber || "—"))} · ${escapeHtml(assignment.label || "Guest")}</small>
                   </div>
-                `)
+                `,
+                )
                 .join("")
             : '<div class="da3wa-empty">No guests have been assigned to this table yet.</div>'
         }
@@ -2504,7 +2903,7 @@ function renderLayoutLibrary() {
           <strong>${escapeHtml(item.label)}</strong>
           <small>${escapeHtml(prettifyShape(item.type))} marker · local demo object</small>
         </div>
-      `
+      `,
     )
     .join("");
 
@@ -2548,7 +2947,7 @@ function renderAssignmentLibrary(unassignedGuests) {
                     <strong>${escapeHtml(guest.fullName)}</strong>
                     <small>${escapeHtml(guest.side || "other")} · ${escapeHtml(guest.rsvpStatus || "pending")} · ${escapeHtml(guest.notes || "No notes")}</small>
                   </div>
-                `
+                `,
               )
               .join("")
           : '<div class="da3wa-empty">No matching unassigned guests.</div>'
@@ -2612,10 +3011,14 @@ function renderSeatAssignment(selectedSeat) {
   const availableGuests = getSeatCandidates(selectedSeat.guest?.id);
   const warnings = [];
   if (selectedSeat.guest?.rsvpStatus === "declined") {
-    warnings.push("Declined guests can be seated, but the planner should confirm this conflict.");
+    warnings.push(
+      "Declined guests can be seated, but the planner should confirm this conflict.",
+    );
   }
   if (selectedSeat.guest?.rsvpStatus === "pending") {
-    warnings.push("Pending RSVP guest seated. Consider following up before finalizing the chart.");
+    warnings.push(
+      "Pending RSVP guest seated. Consider following up before finalizing the chart.",
+    );
   }
   return `
     <div class="seat-assignment__header">
@@ -2641,7 +3044,13 @@ function renderSeatAssignment(selectedSeat) {
       <input class="da3wa-input" type="search" placeholder="Search guest, Arabic name, side, RSVP, or phone" value="${escapeAttribute(state.guestAssignmentSearch)}" data-seat-search />
       ${
         selectedSeat.guest
-          ? actionButton("Clear seat", "clear-seat", !can("canEditSeating"), "ghost", `${selectedSeat.table.id}::${selectedSeat.chair.id}`)
+          ? actionButton(
+              "Clear seat",
+              "clear-seat",
+              !can("canEditSeating"),
+              "ghost",
+              `${selectedSeat.table.id}::${selectedSeat.chair.id}`,
+            )
           : ""
       }
     </div>
@@ -2704,7 +3113,13 @@ function exportCard(title, description, format, action) {
   `;
 }
 
-function actionButton(label, action, disabled = false, tone = "secondary", id = "") {
+function actionButton(
+  label,
+  action,
+  disabled = false,
+  tone = "secondary",
+  id = "",
+) {
   return `
     <button class="da3wa-button da3wa-button--${tone} ${disabled ? "is-disabled" : ""}" type="button" data-action="${escapeAttribute(action)}" ${id ? `data-id="${escapeAttribute(id)}"` : ""} ${disabled ? 'disabled aria-disabled="true"' : ""}>
       ${escapeHtml(label)}
@@ -2746,9 +3161,16 @@ function positionGuestMenu(menu, trigger) {
   const gutter = 10;
   const viewportWidth = window.innerWidth;
   const viewportHeight = window.innerHeight;
-  const openUp = triggerRect.bottom + gutter + menuRect.height > viewportHeight && triggerRect.top > menuRect.height + gutter;
-  const top = openUp ? triggerRect.top - menuRect.height - gutter : triggerRect.bottom + gutter;
-  const left = Math.min(Math.max(gutter, triggerRect.right - menuRect.width), viewportWidth - menuRect.width - gutter);
+  const openUp =
+    triggerRect.bottom + gutter + menuRect.height > viewportHeight &&
+    triggerRect.top > menuRect.height + gutter;
+  const top = openUp
+    ? triggerRect.top - menuRect.height - gutter
+    : triggerRect.bottom + gutter;
+  const left = Math.min(
+    Math.max(gutter, triggerRect.right - menuRect.width),
+    viewportWidth - menuRect.width - gutter,
+  );
 
   menu.style.top = `${Math.max(gutter, top)}px`;
   menu.style.left = `${left}px`;
@@ -2757,9 +3179,11 @@ function positionGuestMenu(menu, trigger) {
 function closeGuestMenu(options = {}) {
   const { restoreFocus = true } = options;
   state.activeGuestMenu?.element?.remove();
-  document.querySelectorAll(".guest-row__menu-toggle[aria-expanded='true']").forEach((button) => {
-    button.setAttribute("aria-expanded", "false");
-  });
+  document
+    .querySelectorAll(".guest-row__menu-toggle[aria-expanded='true']")
+    .forEach((button) => {
+      button.setAttribute("aria-expanded", "false");
+    });
   if (restoreFocus && state.lastGuestMenuTrigger?.isConnected) {
     state.lastGuestMenuTrigger.focus();
   }
@@ -2768,7 +3192,11 @@ function closeGuestMenu(options = {}) {
 }
 
 function handleGuestMenuKeyboard(event) {
-  const items = [...(state.activeGuestMenu?.element?.querySelectorAll(".guest-menu__item:not(.is-disabled)") || [])];
+  const items = [
+    ...(state.activeGuestMenu?.element?.querySelectorAll(
+      ".guest-menu__item:not(.is-disabled)",
+    ) || []),
+  ];
   if (!items.length) {
     return;
   }
@@ -2797,7 +3225,7 @@ function selectInput(key, value, options) {
         .map(
           ([optionValue, label]) => `
             <option value="${escapeAttribute(optionValue)}" ${optionValue === value ? "selected" : ""}>${escapeHtml(label)}</option>
-          `
+          `,
         )
         .join("")}
     </select>
@@ -2810,7 +3238,9 @@ function badge(label, tone) {
 
 function renderReservationReadinessBadge(guest) {
   const readiness = getGuestSeatReadiness(guest);
-  const label = readiness.ready ? "Reservation Ready" : "Seat Assignment Missing";
+  const label = readiness.ready
+    ? "Reservation Ready"
+    : "Seat Assignment Missing";
   const tone = readiness.ready ? "reservation-ready" : "reservation-missing";
   const detail = `${readiness.assignedCount} of ${readiness.requiredCount} seats assigned`;
   return `<span class="guest-badge guest-badge--${tone}" title="${escapeAttribute(detail)}" aria-label="${escapeAttribute(`${label}: ${detail}`)}">${escapeHtml(label)}</span>`;
@@ -2832,7 +3262,10 @@ async function handleAction(action, dataset, event = null) {
       const senderWindow = window.open(senderLink, "_blank", "noopener");
       if (!senderWindow) {
         await copyText(senderLink);
-        showToast("Popup blocked — the sender link was copied instead.", "info");
+        showToast(
+          "Popup blocked — the sender link was copied instead.",
+          "info",
+        );
       }
       return;
     }
@@ -2842,7 +3275,10 @@ async function handleAction(action, dataset, event = null) {
       const senderWindow = window.open(senderLink, "_blank", "noopener");
       if (!senderWindow) {
         await copyText(senderLink);
-        showToast("Popup blocked — the sender link was copied instead.", "info");
+        showToast(
+          "Popup blocked — the sender link was copied instead.",
+          "info",
+        );
       }
       return;
     }
@@ -2853,15 +3289,26 @@ async function handleAction(action, dataset, event = null) {
       await copyText(buildSenderLink(dataset.id || "all"));
       return;
     case "open-side-view": {
+      if (["bride", "groom"].includes(dataset.id)) {
+        await openOrCreateSideManagerLink(dataset.id, true);
+        return;
+      }
       const sideViewLink = buildSideViewLink(dataset.id || "groom");
       const sideViewWindow = window.open(sideViewLink, "_blank", "noopener");
       if (!sideViewWindow) {
         await copyText(sideViewLink);
-        showToast("Popup blocked — the side page link was copied instead.", "info");
+        showToast(
+          "Popup blocked — the side page link was copied instead.",
+          "info",
+        );
       }
       return;
     }
     case "copy-side-view":
+      if (["bride", "groom"].includes(dataset.id)) {
+        await openOrCreateSideManagerLink(dataset.id, false);
+        return;
+      }
       await copyText(buildSideViewLink(dataset.id || "groom"));
       return;
     case "open-add-table":
@@ -2885,16 +3332,36 @@ async function handleAction(action, dataset, event = null) {
       state.activePartyGuestId = dataset.guestId || "";
       state.selectedSeatId = "";
       if (state.activePartyGuestId) {
-        const firstAssignment = getGuestAssignedSeats(state.activePartyGuestId)[0];
-        state.selectedTableId = firstAssignment?.tableId || state.selectedTableId || state.tables[0]?.id || "";
+        const firstAssignment = getGuestAssignedSeats(
+          state.activePartyGuestId,
+        )[0];
+        state.selectedTableId =
+          firstAssignment?.tableId ||
+          state.selectedTableId ||
+          state.tables[0]?.id ||
+          "";
       }
       renderAll();
       return;
     case "open-checkin":
-      window.open(new URL(`checkin.html?wedding=${encodeURIComponent(state.weddingId)}`, window.location.href).toString(), "_blank", "noopener");
+      window.open(
+        new URL(
+          `checkin.html?wedding=${encodeURIComponent(state.weddingId)}`,
+          window.location.href,
+        ).toString(),
+        "_blank",
+        "noopener",
+      );
       return;
     case "open-dashboard":
-      window.open(new URL(`dashboard.html?wedding=${encodeURIComponent(state.weddingId)}`, window.location.href).toString(), "_blank", "noopener");
+      window.open(
+        new URL(
+          `dashboard.html?wedding=${encodeURIComponent(state.weddingId)}`,
+          window.location.href,
+        ).toString(),
+        "_blank",
+        "noopener",
+      );
       return;
     case "open-invitation-preview": {
       const guest = state.guests[0];
@@ -2904,19 +3371,38 @@ async function handleAction(action, dataset, event = null) {
       return;
     }
     case "copy-invitation-base":
-      await copyText(new URL(`index.html?wedding=${encodeURIComponent(state.weddingId)}&guest={guestToken}`, window.location.href).toString());
+      await copyText(
+        new URL(
+          `index.html?wedding=${encodeURIComponent(state.weddingId)}&guest={guestToken}`,
+          window.location.href,
+        ).toString(),
+      );
       return;
     case "copy-dashboard":
-      await copyText(new URL(`dashboard.html?wedding=${encodeURIComponent(state.weddingId)}`, window.location.href).toString());
+      await copyText(
+        new URL(
+          `dashboard.html?wedding=${encodeURIComponent(state.weddingId)}`,
+          window.location.href,
+        ).toString(),
+      );
       return;
     case "copy-checkin":
-      await copyText(new URL(`checkin.html?wedding=${encodeURIComponent(state.weddingId)}`, window.location.href).toString());
+      await copyText(
+        new URL(
+          `checkin.html?wedding=${encodeURIComponent(state.weddingId)}`,
+          window.location.href,
+        ).toString(),
+      );
       return;
     case "generate-seating-access":
       await manageSeatingAccess(dataset.id, "generate");
       return;
     case "regenerate-seating-access":
-      if (window.confirm(`Regenerate this link? The previous ${dataset.id} link will stop working immediately.`)) {
+      if (
+        window.confirm(
+          `Regenerate this link? The previous ${dataset.id} link will stop working immediately.`,
+        )
+      ) {
         await manageSeatingAccess(dataset.id, "regenerate");
       }
       return;
@@ -2972,23 +3458,38 @@ async function handleAction(action, dataset, event = null) {
       await updateBulkRsvp("pending");
       return;
     case "edit-guest":
-      await openGuestModal(state.guests.find((item) => item.id === dataset.id || item.id === dataset.guestId));
+      await openGuestModal(
+        state.guests.find(
+          (item) => item.id === dataset.id || item.id === dataset.guestId,
+        ),
+      );
       return;
     case "delete-guest":
       await confirmDeleteGuest(dataset.guestId);
       return;
     case "mark-confirmed":
-      await updateGuest(dataset.guestId, { rsvpStatus: "confirmed", updatedAt: serverTimestamp() });
+      await updateGuest(dataset.guestId, {
+        rsvpStatus: "confirmed",
+        updatedAt: serverTimestamp(),
+      });
       return;
     case "mark-pending":
-      await updateGuest(dataset.guestId, { rsvpStatus: "pending", updatedAt: serverTimestamp() });
+      await updateGuest(dataset.guestId, {
+        rsvpStatus: "pending",
+        updatedAt: serverTimestamp(),
+      });
       return;
     case "mark-declined":
-      await updateGuest(dataset.guestId, { rsvpStatus: "declined", updatedAt: serverTimestamp() });
+      await updateGuest(dataset.guestId, {
+        rsvpStatus: "declined",
+        updatedAt: serverTimestamp(),
+      });
       return;
     case "copy-guest-invite": {
-      const guest = state.guests.find((item) => item.id === dataset.id || item.id === dataset.guestId);
-      if (guest && await ensurePublicGuestMirror(guest)) {
+      const guest = state.guests.find(
+        (item) => item.id === dataset.id || item.id === dataset.guestId,
+      );
+      if (guest && (await ensurePublicGuestMirror(guest))) {
         await copyText(buildInviteLink(guest.guestToken));
         showToast("Invitation link copied and ready to open.", "success");
       }
@@ -3005,14 +3506,26 @@ async function handleAction(action, dataset, event = null) {
       const guest = state.guests.find((item) => item.id === dataset.guestId);
       const url = buildWhatsAppReminderLink(guest);
       if (!url) {
-        showToast("This guest does not have a valid phone number yet.", "error");
+        showToast(
+          "This guest does not have a valid phone number yet.",
+          "error",
+        );
         return;
       }
       if (state.mode === "live") {
-        await updateDoc(doc(state.services.db, "weddings", state.weddingId, "guests", guest.id), {
-          reminderSentAt: serverTimestamp(),
-          updatedAt: serverTimestamp(),
-        });
+        await updateDoc(
+          doc(
+            state.services.db,
+            "weddings",
+            state.weddingId,
+            "guests",
+            guest.id,
+          ),
+          {
+            reminderSentAt: serverTimestamp(),
+            updatedAt: serverTimestamp(),
+          },
+        );
       } else {
         guest.reminderSentAt = new Date().toLocaleString();
         persistDemoDashboardState();
@@ -3041,7 +3554,9 @@ async function handleAction(action, dataset, event = null) {
       closeGuestMenu({ restoreFocus: false });
       {
         const guest = state.guests.find((item) => item.id === dataset.guestId);
-        const trigger = document.getElementById(`guest-menu-trigger-${dataset.guestId}`);
+        const trigger = document.getElementById(
+          `guest-menu-trigger-${dataset.guestId}`,
+        );
         if (guest && trigger) {
           renderGuestActionMenu(guest, trigger);
         }
@@ -3091,7 +3606,11 @@ async function handleAction(action, dataset, event = null) {
       await confirmDeleteTable(dataset.id);
       return;
     case "assign-seat":
-      await assignGuestToChair(dataset.tableId, dataset.chairId, dataset.guestId);
+      await assignGuestToChair(
+        dataset.tableId,
+        dataset.chairId,
+        dataset.guestId,
+      );
       return;
     case "clear-seat": {
       const [tableId, chairId] = String(dataset.id || "").split("::");
@@ -3104,7 +3623,11 @@ async function handleAction(action, dataset, event = null) {
       if (state.seatingMode === "layout") {
         state.seatingMode = "assignment";
       }
-      handleAssignmentChairClick(dataset.tableId, dataset.chairId, event?.target);
+      handleAssignmentChairClick(
+        dataset.tableId,
+        dataset.chairId,
+        event?.target,
+      );
       return;
     case "choose-assignment-guest":
       chooseGuestForAssignment(dataset.guestId);
@@ -3130,7 +3653,9 @@ async function handleAction(action, dataset, event = null) {
       await unassignParty(dataset.guestId || dataset.id);
       return;
     case "confirm-unassign-party":
-      await confirmPartyUnassign(dataset.guestId || state.pendingPartyUnassignId);
+      await confirmPartyUnassign(
+        dataset.guestId || state.pendingPartyUnassignId,
+      );
       return;
     case "cancel-unassign-party":
       state.pendingPartyUnassignId = "";
@@ -3143,18 +3668,35 @@ async function handleAction(action, dataset, event = null) {
 }
 
 function calculateDashboardStats(guests, tables) {
-  const totalSeats = tables.reduce((sum, table) => sum + Number(table.seatCount || table.capacity || 0), 0);
+  const totalSeats = tables.reduce(
+    (sum, table) => sum + Number(table.seatCount || table.capacity || 0),
+    0,
+  );
   const assignedSeats = countAssignedSeats(tables);
-  const seatedGuests = guests.filter((guest) => getGuestAssignedSeats(guest.id, tables).length > 0).length;
-  const withoutSeat = guests.filter((guest) => guest.rsvpStatus === "confirmed" && getGuestRemainingSeats(guest, tables) > 0).length;
+  const seatedGuests = guests.filter(
+    (guest) => getGuestAssignedSeats(guest.id, tables).length > 0,
+  ).length;
+  const withoutSeat = guests.filter(
+    (guest) =>
+      guest.rsvpStatus === "confirmed" &&
+      getGuestRemainingSeats(guest, tables) > 0,
+  ).length;
   // A guest record may represent a group. Count each incomplete record once
   // here, rather than incorrectly presenting every unseated party member as a
   // separate “guest”.
-  const unassignedGuestParties = guests.filter((guest) => getGuestRemainingSeats(guest, tables) > 0).length;
+  const unassignedGuestParties = guests.filter(
+    (guest) => getGuestRemainingSeats(guest, tables) > 0,
+  ).length;
   const total = guests.length;
-  const confirmed = guests.filter((guest) => guest.rsvpStatus === "confirmed").length;
-  const pending = guests.filter((guest) => guest.rsvpStatus === "pending").length;
-  const declined = guests.filter((guest) => guest.rsvpStatus === "declined").length;
+  const confirmed = guests.filter(
+    (guest) => guest.rsvpStatus === "confirmed",
+  ).length;
+  const pending = guests.filter(
+    (guest) => guest.rsvpStatus === "pending",
+  ).length;
+  const declined = guests.filter(
+    (guest) => guest.rsvpStatus === "declined",
+  ).length;
   const checkedIn = guests.filter((guest) => guest.checkedIn).length;
   return {
     total,
@@ -3178,11 +3720,26 @@ function calculateDashboardStats(guests, tables) {
 }
 
 function calculateAttention(guests, tables) {
-  const confirmedWithoutTables = guests.filter((guest) => guest.rsvpStatus === "confirmed" && getGuestRemainingSeats(guest) > 0).length;
-  const pendingGuests = guests.filter((guest) => guest.rsvpStatus === "pending").length;
-  const incompleteInfo = guests.filter((guest) => !guest.phone || !guest.fullName).length;
-  const overCapacity = tables.filter((table) => getTableAssignments(table.id).length > Number(table.seatCount || table.capacity || 0)).length;
-  const conflicts = guests.filter((guest) => guest.rsvpStatus === "declined" && getGuestAssignedSeats(guest.id).length > 0).length;
+  const confirmedWithoutTables = guests.filter(
+    (guest) =>
+      guest.rsvpStatus === "confirmed" && getGuestRemainingSeats(guest) > 0,
+  ).length;
+  const pendingGuests = guests.filter(
+    (guest) => guest.rsvpStatus === "pending",
+  ).length;
+  const incompleteInfo = guests.filter(
+    (guest) => !guest.phone || !guest.fullName,
+  ).length;
+  const overCapacity = tables.filter(
+    (table) =>
+      getTableAssignments(table.id).length >
+      Number(table.seatCount || table.capacity || 0),
+  ).length;
+  const conflicts = guests.filter(
+    (guest) =>
+      guest.rsvpStatus === "declined" &&
+      getGuestAssignedSeats(guest.id).length > 0,
+  ).length;
 
   return [
     {
@@ -3195,11 +3752,13 @@ function calculateAttention(guests, tables) {
     },
     {
       title: `${overCapacity} table${overCapacity === 1 ? "" : "s"} over capacity`,
-      description: "Check manual edits or seat conflicts that exceed the available chairs.",
+      description:
+        "Check manual edits or seat conflicts that exceed the available chairs.",
     },
     {
       title: `${incompleteInfo} guest profile${incompleteInfo === 1 ? "" : "s"} incomplete`,
-      description: "Phone or profile details are missing and may block reminders or coordination.",
+      description:
+        "Phone or profile details are missing and may block reminders or coordination.",
     },
     {
       title: `${conflicts} declined guest${conflicts === 1 ? "" : "s"} still seated`,
@@ -3244,9 +3803,7 @@ function deriveRecentActivity(guests) {
       });
     }
   });
-  return items
-    .sort((a, b) => b.sortKey - a.sortKey)
-    .slice(0, 6);
+  return items.sort((a, b) => b.sortKey - a.sortKey).slice(0, 6);
 }
 
 function calculateSideStats(guests, tables = state.tables) {
@@ -3278,13 +3835,23 @@ function calculateSideStats(guests, tables = state.tables) {
 }
 
 function emptySideBucket() {
-  return { guestCount: 0, partyTotal: 0, confirmed: 0, confirmedSeats: 0, pending: 0, declined: 0, seated: 0 };
+  return {
+    guestCount: 0,
+    partyTotal: 0,
+    confirmed: 0,
+    confirmedSeats: 0,
+    pending: 0,
+    declined: 0,
+    seated: 0,
+  };
 }
 
 function calculateSideDistribution(guests) {
   const bride = guests.filter((guest) => guest.side === "bride").length;
   const groom = guests.filter((guest) => guest.side === "groom").length;
-  const other = guests.filter((guest) => !["bride", "groom"].includes(guest.side)).length;
+  const other = guests.filter(
+    (guest) => !["bride", "groom"].includes(guest.side),
+  ).length;
   const total = Math.max(guests.length, 1);
   return {
     bride,
@@ -3301,20 +3868,36 @@ function getFilteredGuests() {
   const sorted = [...state.guests].filter((guest) => {
     const matchesSearch =
       !search ||
-      [guest.fullName, guest.fullNameAr, guest.phone].some((value) => String(value || "").toLowerCase().includes(search));
+      [guest.fullName, guest.fullNameAr, guest.phone].some((value) =>
+        String(value || "")
+          .toLowerCase()
+          .includes(search),
+      );
     if (!matchesSearch) {
       return false;
     }
-    if (state.guestFilters.rsvp !== "all" && guest.rsvpStatus !== state.guestFilters.rsvp) {
+    if (
+      state.guestFilters.rsvp !== "all" &&
+      guest.rsvpStatus !== state.guestFilters.rsvp
+    ) {
       return false;
     }
-    if (state.guestFilters.side !== "all" && guest.side !== state.guestFilters.side) {
+    if (
+      state.guestFilters.side !== "all" &&
+      guest.side !== state.guestFilters.side
+    ) {
       return false;
     }
     return true;
   });
 
-  sorted.sort((a, b) => String(a.fullName || "").localeCompare(String(b.fullName || ""), undefined, { sensitivity: "base" }));
+  sorted.sort((a, b) =>
+    String(a.fullName || "").localeCompare(
+      String(b.fullName || ""),
+      undefined,
+      { sensitivity: "base" },
+    ),
+  );
 
   return sorted;
 }
@@ -3352,7 +3935,9 @@ function normalizeAssignment(assignment, tableId, chair) {
   if (!guestId) {
     return null;
   }
-  const partyMemberIndex = Number.isInteger(Number(assignment?.partyMemberIndex))
+  const partyMemberIndex = Number.isInteger(
+    Number(assignment?.partyMemberIndex),
+  )
     ? Number(assignment.partyMemberIndex)
     : partyIndexFromKey(assignment?.personKey);
   return {
@@ -3376,21 +3961,27 @@ function getAllAssignments(tables = state.tables) {
     (table.chairs || [])
       .map((chair) => {
         const assignment = getChairAssignment(table.id, chair);
-        return assignment ? { ...assignment, chairId: chair.id, tableName: table.name, chair } : null;
+        return assignment
+          ? { ...assignment, chairId: chair.id, tableName: table.name, chair }
+          : null;
       })
-      .filter(Boolean)
+      .filter(Boolean),
   );
 }
 
 function getTableAssignments(tableId) {
-  return getAllAssignments().filter((assignment) => assignment.tableId === tableId);
+  return getAllAssignments().filter(
+    (assignment) => assignment.tableId === tableId,
+  );
 }
 
 function getGuestAssignedSeats(guestId, tables = state.tables) {
   if (!guestId) {
     return [];
   }
-  return getAllAssignments(tables).filter((assignment) => assignment.guestId === guestId);
+  return getAllAssignments(tables).filter(
+    (assignment) => assignment.guestId === guestId,
+  );
 }
 
 function countAssignedSeats(tables = state.tables) {
@@ -3398,13 +3989,18 @@ function countAssignedSeats(tables = state.tables) {
 }
 
 function getGuestRemainingSeats(guest, tables = state.tables) {
-  return Math.max(0, getPartySize(guest) - getGuestAssignedSeats(guest.id, tables).length);
+  return Math.max(
+    0,
+    getPartySize(guest) - getGuestAssignedSeats(guest.id, tables).length,
+  );
 }
 
 function uniqueGuestsFromAssignments(assignments) {
   const seen = new Set();
   return assignments
-    .map((assignment) => state.guests.find((guest) => guest.id === assignment.guestId))
+    .map((assignment) =>
+      state.guests.find((guest) => guest.id === assignment.guestId),
+    )
     .filter((guest) => {
       if (!guest || seen.has(guest.id)) {
         return false;
@@ -3424,25 +4020,44 @@ function partyMemberLabel(guest, partyMemberIndex) {
 // This gives the transaction a consistent snapshot without passing a Query to
 // transaction.get(), which otherwise fails before our validation can run.
 async function getLiveTableRefs() {
-  const snapshot = await getDocs(collection(state.services.db, "weddings", state.weddingId, "tables"));
+  const snapshot = await getDocs(
+    collection(state.services.db, "weddings", state.weddingId, "tables"),
+  );
   return snapshot.docs.map((tableSnapshot) => tableSnapshot.ref);
 }
 
 async function getLiveTablesInTransaction(transaction, tableRefs) {
-  const tableSnapshots = await Promise.all(tableRefs.map((tableRef) => transaction.get(tableRef)));
+  const tableSnapshots = await Promise.all(
+    tableRefs.map((tableRef) => transaction.get(tableRef)),
+  );
   return hydrateTables(
     tableSnapshots
       .filter((tableSnapshot) => tableSnapshot.exists())
-      .map((tableSnapshot) => ({ ...tableSnapshot.data(), id: tableSnapshot.id }))
+      .map((tableSnapshot) => ({
+        ...tableSnapshot.data(),
+        id: tableSnapshot.id,
+      })),
   );
 }
 
 async function getPublicGuestMirrorInTransaction(transaction, guest) {
   if (!guest?.guestToken) return null;
-  return transaction.get(doc(state.services.db, "weddings", state.weddingId, "publicGuests", guest.guestToken));
+  return transaction.get(
+    doc(
+      state.services.db,
+      "weddings",
+      state.weddingId,
+      "publicGuests",
+      guest.guestToken,
+    ),
+  );
 }
 
-function updatePublicGuestSeatingMirrorInTransaction(transaction, mirrorSnapshot, guest) {
+function updatePublicGuestSeatingMirrorInTransaction(
+  transaction,
+  mirrorSnapshot,
+  guest,
+) {
   if (mirrorSnapshot?.exists()) {
     transaction.update(mirrorSnapshot.ref, buildGuestSeatingPatch(guest));
   }
@@ -3453,22 +4068,34 @@ function updatePublicGuestSeatingMirrorInTransaction(transaction, mirrorSnapshot
 // the main guest or an additional member; there are no separate guest records
 // to guess from display names.
 function resolvePartyForGuestId(guestId, tables = state.tables) {
-  const guest = state.guests.find((item) => String(item.id) === String(guestId));
+  const guest = state.guests.find(
+    (item) => String(item.id) === String(guestId),
+  );
   if (!guest) return null;
-  const assignments = getGuestAssignedSeats(guest.id, tables)
-    .sort((a, b) => Number(a.partyMemberIndex) - Number(b.partyMemberIndex));
+  const assignments = getGuestAssignedSeats(guest.id, tables).sort(
+    (a, b) => Number(a.partyMemberIndex) - Number(b.partyMemberIndex),
+  );
   return {
     partyGuestId: guest.id,
     guest,
     partySize: getPartySize(guest),
     assignments,
-    affectedTables: [...new Set(assignments.map((assignment) => assignment.tableName || assignment.tableId).filter(Boolean))],
+    affectedTables: [
+      ...new Set(
+        assignments
+          .map((assignment) => assignment.tableName || assignment.tableId)
+          .filter(Boolean),
+      ),
+    ],
   };
 }
 
 function partyAssignmentSignature(party) {
   return (party?.assignments || [])
-    .map((assignment) => `${assignment.tableId}::${assignment.chairId}::${assignment.personKey}`)
+    .map(
+      (assignment) =>
+        `${assignment.tableId}::${assignment.chairId}::${assignment.personKey}`,
+    )
     .sort()
     .join("|");
 }
@@ -3506,7 +4133,10 @@ function toggleAllVisibleGuests(checked) {
 }
 
 function allVisibleGuestsSelected(guests) {
-  return Boolean(guests.length) && guests.every((guest) => state.selectedGuestIds.includes(guest.id));
+  return (
+    Boolean(guests.length) &&
+    guests.every((guest) => state.selectedGuestIds.includes(guest.id))
+  );
 }
 
 async function updateBulkRsvp(status) {
@@ -3522,7 +4152,13 @@ async function updateBulkRsvp(status) {
 
   if (state.mode === "demo") {
     state.guests = state.guests.map((guest) =>
-      ids.includes(guest.id) ? { ...guest, rsvpStatus: status, updatedAt: new Date().toLocaleString() } : guest
+      ids.includes(guest.id)
+        ? {
+            ...guest,
+            rsvpStatus: status,
+            updatedAt: new Date().toLocaleString(),
+          }
+        : guest,
     );
     persistDemoDashboardState();
     renderAll();
@@ -3535,16 +4171,31 @@ async function updateBulkRsvp(status) {
     for (let index = 0; index < ids.length; index += chunkSize) {
       const batch = writeBatch(state.services.db);
       ids.slice(index, index + chunkSize).forEach((guestId) => {
-        batch.update(doc(state.services.db, "weddings", state.weddingId, "guests", guestId), {
-          rsvpStatus: status,
-          updatedAt: serverTimestamp(),
-        });
+        batch.update(
+          doc(
+            state.services.db,
+            "weddings",
+            state.weddingId,
+            "guests",
+            guestId,
+          ),
+          {
+            rsvpStatus: status,
+            updatedAt: serverTimestamp(),
+          },
+        );
         const guest = state.guests.find((item) => item.id === guestId);
         if (guest?.guestToken) {
           batch.set(
-            doc(state.services.db, "weddings", state.weddingId, "publicGuests", guest.guestToken),
+            doc(
+              state.services.db,
+              "weddings",
+              state.weddingId,
+              "publicGuests",
+              guest.guestToken,
+            ),
             { rsvpStatus: status, updatedAt: serverTimestamp() },
-            { merge: true }
+            { merge: true },
           );
         }
       });
@@ -3571,7 +4222,9 @@ async function openGuestModal(guest = null) {
   elements.guestForm.fullName.value = guest?.fullName || "";
   elements.guestForm.phone.value = guest?.phone || "";
   elements.guestForm.side.value = guest?.side || "bride";
-  elements.guestForm.additionalGuests.value = String(normalizeAdditionalGuests(guest?.additionalGuests));
+  elements.guestForm.additionalGuests.value = String(
+    normalizeAdditionalGuests(guest?.additionalGuests),
+  );
   document.body.classList.add("is-modal-open");
   elements.guestModal.showModal();
   requestAnimationFrame(() => elements.guestForm.fullName.focus());
@@ -3584,25 +4237,35 @@ async function saveGuest(event) {
     return;
   }
   const guestId = state.selectedGuestId;
-  const existingGuest = guestId ? state.guests.find((item) => item.id === guestId) : null;
+  const existingGuest = guestId
+    ? state.guests.find((item) => item.id === guestId)
+    : null;
   const token = existingGuest?.guestToken || generateGuestToken();
   const fullName = elements.guestForm.fullName.value.trim();
   if (!fullName) {
-    elements.guestForm.fullName.setCustomValidity("Enter the guest's full name.");
+    elements.guestForm.fullName.setCustomValidity(
+      "Enter the guest's full name.",
+    );
     elements.guestForm.reportValidity();
     return;
   }
   elements.guestForm.fullName.setCustomValidity("");
-  const additionalGuests = parseAdditionalGuests(elements.guestForm.additionalGuests.value);
+  const additionalGuests = parseAdditionalGuests(
+    elements.guestForm.additionalGuests.value,
+  );
   if (additionalGuests === null) {
-    elements.guestForm.additionalGuests.setCustomValidity("Enter a whole number of 0 or more.");
+    elements.guestForm.additionalGuests.setCustomValidity(
+      "Enter a whole number of 0 or more.",
+    );
     elements.guestForm.reportValidity();
     return;
   }
   elements.guestForm.additionalGuests.setCustomValidity("");
   const assignedSeats = guestId ? getGuestAssignedSeats(guestId).length : 0;
   if (assignedSeats > 1 + additionalGuests) {
-    elements.guestForm.additionalGuests.setCustomValidity(`This guest already has ${assignedSeats} assigned chairs. Unassign or move seats before reducing the party size.`);
+    elements.guestForm.additionalGuests.setCustomValidity(
+      `This guest already has ${assignedSeats} assigned chairs. Unassign or move seats before reducing the party size.`,
+    );
     elements.guestForm.reportValidity();
     return;
   }
@@ -3633,9 +4296,14 @@ async function saveGuest(event) {
   };
 
   if (state.mode === "demo") {
-    const demoPayload = materializeDemoPayload(guestId ? ownedPayload : createPayload, existingGuest);
+    const demoPayload = materializeDemoPayload(
+      guestId ? ownedPayload : createPayload,
+      existingGuest,
+    );
     if (guestId) {
-      state.guests = state.guests.map((guest) => (guest.id === guestId ? { ...guest, ...demoPayload } : guest));
+      state.guests = state.guests.map((guest) =>
+        guest.id === guestId ? { ...guest, ...demoPayload } : guest,
+      );
     } else {
       state.guests = [
         ...state.guests,
@@ -3657,13 +4325,24 @@ async function saveGuest(event) {
 
   try {
     if (guestId) {
-      await updateDoc(doc(state.services.db, "weddings", state.weddingId, "guests", guestId), ownedPayload);
-      await syncPublicGuest(guestId, { ...existingGuest, ...ownedPayload }, ["fullName", "phone", "side", "additionalGuests"]);
+      await updateDoc(
+        doc(state.services.db, "weddings", state.weddingId, "guests", guestId),
+        ownedPayload,
+      );
+      await syncPublicGuest(guestId, { ...existingGuest, ...ownedPayload }, [
+        "fullName",
+        "phone",
+        "side",
+        "additionalGuests",
+      ]);
     } else {
-      const guestRef = await addDoc(collection(state.services.db, "weddings", state.weddingId, "guests"), {
-        ...createPayload,
-        createdAt: serverTimestamp(),
-      });
+      const guestRef = await addDoc(
+        collection(state.services.db, "weddings", state.weddingId, "guests"),
+        {
+          ...createPayload,
+          createdAt: serverTimestamp(),
+        },
+      );
       await syncPublicGuest(guestRef.id, createPayload);
     }
     state.dirtyGuestForm = false;
@@ -3685,7 +4364,9 @@ function buildPublicGuestPayload(guestId, guest) {
     side: normalizeGuestSide(guest.side),
     additionalGuests: normalizeAdditionalGuests(guest.additionalGuests),
     rsvpStatus: guest.rsvpStatus || "pending",
-    seatingAssignments: Array.isArray(guest.seatingAssignments) ? guest.seatingAssignments : [],
+    seatingAssignments: Array.isArray(guest.seatingAssignments)
+      ? guest.seatingAssignments
+      : [],
     tableId: guest.tableId || "",
     tableName: guest.tableName || "",
     seatNumber: guest.seatNumber || "",
@@ -3716,21 +4397,33 @@ async function reconcilePublicGuestMirrors(guests) {
       const batch = writeBatch(state.services.db);
       eligibleGuests.slice(offset, offset + 400).forEach((guest) => {
         batch.set(
-          doc(state.services.db, "weddings", state.weddingId, "publicGuests", guest.guestToken),
-          buildPublicGuestPayload(guest.id, guest)
+          doc(
+            state.services.db,
+            "weddings",
+            state.weddingId,
+            "publicGuests",
+            guest.guestToken,
+          ),
+          buildPublicGuestPayload(guest.id, guest),
         );
       });
       await batch.commit();
     }
-    console.info("[Dashboard Firestore diagnostics] public mirrors reconciled", {
-      weddingId: state.weddingId,
-      mirroredGuestCount: eligibleGuests.length,
-      skippedWithoutToken: guests.length - eligibleGuests.length,
-    });
+    console.info(
+      "[Dashboard Firestore diagnostics] public mirrors reconciled",
+      {
+        weddingId: state.weddingId,
+        mirroredGuestCount: eligibleGuests.length,
+        skippedWithoutToken: guests.length - eligibleGuests.length,
+      },
+    );
   } catch (error) {
     state.publicMirrorsReconciled = false;
     console.error("Public guest mirror reconciliation failed.", error);
-    showToast("Guest data is live, but invitation records could not be synchronized.", "error");
+    showToast(
+      "Guest data is live, but invitation records could not be synchronized.",
+      "error",
+    );
   }
 }
 
@@ -3742,7 +4435,13 @@ async function syncPublicGuest(guestId, guest, fields = null) {
     return;
   }
   try {
-    const mirrorRef = doc(state.services.db, "weddings", state.weddingId, "publicGuests", guest.guestToken);
+    const mirrorRef = doc(
+      state.services.db,
+      "weddings",
+      state.weddingId,
+      "publicGuests",
+      guest.guestToken,
+    );
     if (!fields) {
       await setDoc(mirrorRef, buildPublicGuestPayload(guestId, guest));
       return;
@@ -3757,7 +4456,10 @@ async function syncPublicGuest(guestId, guest, fields = null) {
     await setDoc(mirrorRef, patch, { merge: true });
   } catch (error) {
     console.error("Public invitation mirror update failed.", error);
-    showToast("Saved, but the guest's public invitation page could not be refreshed.", "error");
+    showToast(
+      "Saved, but the guest's public invitation page could not be refreshed.",
+      "error",
+    );
   }
 }
 
@@ -3766,7 +4468,15 @@ async function removePublicGuest(guestToken) {
     return;
   }
   try {
-    await deleteDoc(doc(state.services.db, "weddings", state.weddingId, "publicGuests", guestToken));
+    await deleteDoc(
+      doc(
+        state.services.db,
+        "weddings",
+        state.weddingId,
+        "publicGuests",
+        guestToken,
+      ),
+    );
   } catch (error) {
     console.error("Public invitation mirror delete failed.", error);
   }
@@ -3866,7 +4576,10 @@ async function saveBulkGuests(event) {
     elements.bulkAddModal.close();
     persistDemoDashboardState();
     renderAll();
-    showToast(`${payloads.length} guest${payloads.length === 1 ? "" : "s"} added.`, "success");
+    showToast(
+      `${payloads.length} guest${payloads.length === 1 ? "" : "s"} added.`,
+      "success",
+    );
     return;
   }
 
@@ -3877,11 +4590,19 @@ async function saveBulkGuests(event) {
       const chunk = payloads.slice(index, index + chunkSize);
       const batch = writeBatch(state.services.db);
       chunk.forEach((payload) => {
-        const guestRef = doc(collection(state.services.db, "weddings", state.weddingId, "guests"));
+        const guestRef = doc(
+          collection(state.services.db, "weddings", state.weddingId, "guests"),
+        );
         batch.set(guestRef, { ...payload, createdAt: serverTimestamp() });
         batch.set(
-          doc(state.services.db, "weddings", state.weddingId, "publicGuests", payload.guestToken),
-          buildPublicGuestPayload(guestRef.id, payload)
+          doc(
+            state.services.db,
+            "weddings",
+            state.weddingId,
+            "publicGuests",
+            payload.guestToken,
+          ),
+          buildPublicGuestPayload(guestRef.id, payload),
         );
       });
       await batch.commit();
@@ -3889,16 +4610,26 @@ async function saveBulkGuests(event) {
     }
     elements.bulkAddForm.reset();
     elements.bulkAddModal.close();
-    showToast(`${payloads.length} guest${payloads.length === 1 ? "" : "s"} added.`, "success");
+    showToast(
+      `${payloads.length} guest${payloads.length === 1 ? "" : "s"} added.`,
+      "success",
+    );
   } catch (error) {
     console.error(error);
     if (committed > 0) {
       const remaining = entries.slice(committed);
       elements.bulkAddForm.entries.value = remaining
-        .map((entry) => [entry.fullName, entry.phone, entry.additionalGuests || ""].filter(Boolean).join(", "))
+        .map((entry) =>
+          [entry.fullName, entry.phone, entry.additionalGuests || ""]
+            .filter(Boolean)
+            .join(", "),
+        )
         .join("\n");
       updateBulkAddPreview();
-      showToast(`Added ${committed} guests before an error occurred. The remaining lines are still in the box — press Add again to retry them.`, "error");
+      showToast(
+        `Added ${committed} guests before an error occurred. The remaining lines are still in the box — press Add again to retry them.`,
+        "error",
+      );
     } else {
       showToast("We could not add these guests.", "error");
     }
@@ -3910,7 +4641,9 @@ async function confirmDeleteGuest(guestId) {
   if (!guest) {
     return;
   }
-  const confirmed = window.confirm(`Delete ${guest.fullName}? This cannot be undone.`);
+  const confirmed = window.confirm(
+    `Delete ${guest.fullName}? This cannot be undone.`,
+  );
   if (!confirmed) {
     return;
   }
@@ -3921,7 +4654,9 @@ async function updateGuest(guestId, payload) {
   if (state.mode === "demo") {
     const existingGuest = state.guests.find((guest) => guest.id === guestId);
     const demoPayload = materializeDemoPayload(payload, existingGuest);
-    state.guests = state.guests.map((guest) => (guest.id === guestId ? { ...guest, ...demoPayload } : guest));
+    state.guests = state.guests.map((guest) =>
+      guest.id === guestId ? { ...guest, ...demoPayload } : guest,
+    );
     persistDemoDashboardState();
     renderAll();
     showToast("Guest updated.", "success");
@@ -3933,10 +4668,17 @@ async function updateGuest(guestId, payload) {
   }
 
   try {
-    await updateDoc(doc(state.services.db, "weddings", state.weddingId, "guests", guestId), payload);
+    await updateDoc(
+      doc(state.services.db, "weddings", state.weddingId, "guests", guestId),
+      payload,
+    );
     const existingGuest = state.guests.find((guest) => guest.id === guestId);
     if (existingGuest) {
-      await syncPublicGuest(guestId, { ...existingGuest, ...payload }, Object.keys(payload));
+      await syncPublicGuest(
+        guestId,
+        { ...existingGuest, ...payload },
+        Object.keys(payload),
+      );
     }
     await syncTablesAndGuests();
     showToast("Guest updated.", "success");
@@ -3959,7 +4701,9 @@ async function deleteGuest(guestId) {
     state.tables = hydrateTables(nextTables, nextGuests);
     state.guests = syncGuestSeatingSummaries(nextGuests, state.tables);
     if (demoSeedGuests.some((seedGuest) => seedGuest.id === guestId)) {
-      state.deletedSeedGuestIds = [...new Set([...(state.deletedSeedGuestIds || []), guestId])];
+      state.deletedSeedGuestIds = [
+        ...new Set([...(state.deletedSeedGuestIds || []), guestId]),
+      ];
     }
     persistDemoDashboardState();
     renderAll();
@@ -3973,15 +4717,34 @@ async function deleteGuest(guestId) {
     const nextTables = clearGuestFromTables(state.tables, guestId);
     const nextGuests = state.guests.filter((guest) => guest.id !== guestId);
     nextTables.forEach((table) => {
-      batch.update(doc(state.services.db, "weddings", state.weddingId, "tables", table.id), {
-        chairs: table.chairs,
-        guestIds: [...new Set(table.chairs.map((chair) => getChairAssignment(table.id, chair)?.guestId).filter(Boolean))],
-        updatedAt: serverTimestamp(),
-      });
+      batch.update(
+        doc(state.services.db, "weddings", state.weddingId, "tables", table.id),
+        {
+          chairs: table.chairs,
+          guestIds: [
+            ...new Set(
+              table.chairs
+                .map((chair) => getChairAssignment(table.id, chair)?.guestId)
+                .filter(Boolean),
+            ),
+          ],
+          updatedAt: serverTimestamp(),
+        },
+      );
     });
-    batch.delete(doc(state.services.db, "weddings", state.weddingId, "guests", guestId));
+    batch.delete(
+      doc(state.services.db, "weddings", state.weddingId, "guests", guestId),
+    );
     if (removedGuest?.guestToken) {
-      batch.delete(doc(state.services.db, "weddings", state.weddingId, "publicGuests", removedGuest.guestToken));
+      batch.delete(
+        doc(
+          state.services.db,
+          "weddings",
+          state.weddingId,
+          "publicGuests",
+          removedGuest.guestToken,
+        ),
+      );
     }
     await batch.commit();
     state.tables = hydrateTables(nextTables, nextGuests);
@@ -4013,11 +4776,16 @@ function openTableModal(table = null) {
   elements.tableForm.shape.value = table?.shape || "round";
   elements.tableForm.seatCount.value = table?.seatCount || table?.capacity || 8;
   elements.tableForm.floorZone.value = table?.floorZone || "";
-  elements.tableForm.tableColor.value = table?.tableColor || plannerPalette.tableColor;
-  elements.tableForm.borderColor.value = table?.borderColor || plannerPalette.borderColor;
-  elements.tableForm.chairColor.value = table?.chairColor || plannerPalette.chairColor;
-  elements.tableForm.width.value = table?.width || defaultWidthForShape(table?.shape);
-  elements.tableForm.height.value = table?.height || defaultHeightForShape(table?.shape);
+  elements.tableForm.tableColor.value =
+    table?.tableColor || plannerPalette.tableColor;
+  elements.tableForm.borderColor.value =
+    table?.borderColor || plannerPalette.borderColor;
+  elements.tableForm.chairColor.value =
+    table?.chairColor || plannerPalette.chairColor;
+  elements.tableForm.width.value =
+    table?.width || defaultWidthForShape(table?.shape);
+  elements.tableForm.height.value =
+    table?.height || defaultHeightForShape(table?.shape);
   document.body.classList.add("is-modal-open");
   elements.tableModal.showModal();
 }
@@ -4028,18 +4796,30 @@ function openTableModal(table = null) {
 async function ensurePublicGuestMirror(guest) {
   if (state.mode !== "live" || !guest?.guestToken) return true;
   if (!can("canEditGuests")) {
-    showToast("This invitation link needs an owner to prepare its secure guest record.", "error");
+    showToast(
+      "This invitation link needs an owner to prepare its secure guest record.",
+      "error",
+    );
     return false;
   }
   try {
     await setDoc(
-      doc(state.services.db, "weddings", state.weddingId, "publicGuests", guest.guestToken),
-      buildPublicGuestPayload(guest.id, guest)
+      doc(
+        state.services.db,
+        "weddings",
+        state.weddingId,
+        "publicGuests",
+        guest.guestToken,
+      ),
+      buildPublicGuestPayload(guest.id, guest),
     );
     return true;
   } catch (error) {
     console.error("Public invitation mirror repair failed.", error);
-    showToast("The invitation could not be prepared. Please try again.", "error");
+    showToast(
+      "The invitation could not be prepared. Please try again.",
+      "error",
+    );
     return false;
   }
 }
@@ -4051,7 +4831,9 @@ async function saveTable(event) {
     return;
   }
 
-  const existingTable = state.tables.find((table) => table.id === state.selectedTableId);
+  const existingTable = state.tables.find(
+    (table) => table.id === state.selectedTableId,
+  );
   const payload = createPlannerTable({
     id: state.selectedTableId || createId("table"),
     name: elements.tableForm.name.value.trim(),
@@ -4069,22 +4851,34 @@ async function saveTable(event) {
     y: Number(existingTable?.y ?? 20),
     chairs: existingTable?.chairs || [],
   });
-  const occupiedSeats = state.selectedTableId ? getTableAssignments(state.selectedTableId).length : 0;
+  const occupiedSeats = state.selectedTableId
+    ? getTableAssignments(state.selectedTableId).length
+    : 0;
   if (payload.seatCount < occupiedSeats || payload.capacity < occupiedSeats) {
-    showToast(`This table has ${occupiedSeats} occupied chairs. Unassign guests before reducing capacity.`, "error");
+    showToast(
+      `This table has ${occupiedSeats} occupied chairs. Unassign guests before reducing capacity.`,
+      "error",
+    );
     return;
   }
   const removedAssignedSeat = state.selectedTableId
-    ? getTableAssignments(state.selectedTableId).some((assignment) => Number(assignment.seatNumber) > payload.seatCount)
+    ? getTableAssignments(state.selectedTableId).some(
+        (assignment) => Number(assignment.seatNumber) > payload.seatCount,
+      )
     : false;
   if (removedAssignedSeat) {
-    showToast("This seat count would remove an assigned chair. Unassign or move that party first.", "error");
+    showToast(
+      "This seat count would remove an assigned chair. Unassign or move that party first.",
+      "error",
+    );
     return;
   }
 
   if (state.mode === "demo") {
     if (state.selectedTableId) {
-      state.tables = state.tables.map((table) => (table.id === state.selectedTableId ? payload : table));
+      state.tables = state.tables.map((table) =>
+        table.id === state.selectedTableId ? payload : table,
+      );
     } else {
       state.tables = [...state.tables, payload];
     }
@@ -4105,22 +4899,69 @@ async function saveTable(event) {
       let nextTables = [];
       let nextGuests = [];
       await runTransaction(state.services.db, async (transaction) => {
-        const tableRef = doc(state.services.db, "weddings", state.weddingId, "tables", state.selectedTableId);
+        const tableRef = doc(
+          state.services.db,
+          "weddings",
+          state.weddingId,
+          "tables",
+          state.selectedTableId,
+        );
         const liveSnapshot = await transaction.get(tableRef);
-        if (!liveSnapshot.exists()) throw new Error("This table no longer exists. The seating plan has been refreshed.");
-        const liveTable = hydrateTables([{ ...liveSnapshot.data(), id: liveSnapshot.id }])[0];
-        const livePayload = createPlannerTable({ ...payload, x: liveTable.x, y: liveTable.y, chairs: liveTable.chairs });
+        if (!liveSnapshot.exists())
+          throw new Error(
+            "This table no longer exists. The seating plan has been refreshed.",
+          );
+        const liveTable = hydrateTables([
+          { ...liveSnapshot.data(), id: liveSnapshot.id },
+        ])[0];
+        const livePayload = createPlannerTable({
+          ...payload,
+          x: liveTable.x,
+          y: liveTable.y,
+          chairs: liveTable.chairs,
+        });
         const liveAssignments = getAllAssignments([liveTable]);
-        if (livePayload.seatCount < liveAssignments.length || liveAssignments.some((assignment) => Number(assignment.seatNumber) > livePayload.seatCount)) {
-          throw new Error("This table changed and now has occupied chairs that prevent the requested capacity.");
+        if (
+          livePayload.seatCount < liveAssignments.length ||
+          liveAssignments.some(
+            (assignment) =>
+              Number(assignment.seatNumber) > livePayload.seatCount,
+          )
+        ) {
+          throw new Error(
+            "This table changed and now has occupied chairs that prevent the requested capacity.",
+          );
         }
-        affectedGuestIds = [...new Set(liveAssignments.map((assignment) => assignment.guestId).filter(Boolean))];
-        nextTables = hydrateTables(state.tables.map((table) => (table.id === state.selectedTableId ? livePayload : table)));
+        affectedGuestIds = [
+          ...new Set(
+            liveAssignments
+              .map((assignment) => assignment.guestId)
+              .filter(Boolean),
+          ),
+        ];
+        nextTables = hydrateTables(
+          state.tables.map((table) =>
+            table.id === state.selectedTableId ? livePayload : table,
+          ),
+        );
         nextGuests = syncGuestSeatingSummaries(state.guests, nextTables);
-        transaction.update(tableRef, { ...livePayload, updatedAt: serverTimestamp() });
+        transaction.update(tableRef, {
+          ...livePayload,
+          updatedAt: serverTimestamp(),
+        });
         affectedGuestIds.forEach((guestId) => {
           const nextGuest = nextGuests.find((guest) => guest.id === guestId);
-          if (nextGuest) transaction.update(doc(state.services.db, "weddings", state.weddingId, "guests", guestId), buildGuestSeatingPatch(nextGuest));
+          if (nextGuest)
+            transaction.update(
+              doc(
+                state.services.db,
+                "weddings",
+                state.weddingId,
+                "guests",
+                guestId,
+              ),
+              buildGuestSeatingPatch(nextGuest),
+            );
         });
       });
       state.tables = nextTables;
@@ -4128,11 +4969,18 @@ async function saveTable(event) {
       for (const guestId of affectedGuestIds) {
         const nextGuest = nextGuests.find((guest) => guest.id === guestId);
         if (nextGuest) {
-          await syncPublicGuest(nextGuest.id, nextGuest, ["seatingAssignments", "tableId", "tableName", "seatNumber"]);
+          await syncPublicGuest(nextGuest.id, nextGuest, [
+            "seatingAssignments",
+            "tableId",
+            "tableName",
+            "seatNumber",
+          ]);
         }
       }
     } else {
-      const tableRef = doc(collection(state.services.db, "weddings", state.weddingId, "tables"));
+      const tableRef = doc(
+        collection(state.services.db, "weddings", state.weddingId, "tables"),
+      );
       await setDoc(tableRef, {
         ...payload,
         id: tableRef.id,
@@ -4180,7 +5028,9 @@ async function duplicateTable(table) {
   }
 
   try {
-    const tableRef = doc(collection(state.services.db, "weddings", state.weddingId, "tables"));
+    const tableRef = doc(
+      collection(state.services.db, "weddings", state.weddingId, "tables"),
+    );
     await setDoc(tableRef, {
       ...duplicated,
       id: tableRef.id,
@@ -4239,9 +5089,11 @@ function renderTableDeleteModal() {
       <button class="da3wa-button da3wa-button--danger" type="button" id="tableDeleteConfirmButton" ${state.activeModalOperation ? "disabled" : ""}>${state.activeModalOperation === "delete-table" ? "Deleting..." : "Delete table"}</button>
     </div>
   `;
-  elements.tableDeleteContent.querySelector("#tableDeleteConfirmButton")?.addEventListener("click", () => {
-    void deleteSelectedTableFromModal();
-  });
+  elements.tableDeleteContent
+    .querySelector("#tableDeleteConfirmButton")
+    ?.addEventListener("click", () => {
+      void deleteSelectedTableFromModal();
+    });
 }
 
 async function deleteSelectedTableFromModal() {
@@ -4282,27 +5134,84 @@ async function deleteTable(tableId) {
     let affectedGuestIds = [];
     let nextGuests = [];
     await runTransaction(state.services.db, async (transaction) => {
-      const liveTableSnapshot = await transaction.get(doc(state.services.db, "weddings", state.weddingId, "tables", tableId));
-      if (!liveTableSnapshot.exists()) throw new Error("This table was changed by another editor. The seating plan has been refreshed.");
-      const liveTable = hydrateTables([{ ...liveTableSnapshot.data(), id: liveTableSnapshot.id }])[0];
-      affectedGuestIds = [...new Set(getAllAssignments([liveTable]).map((assignment) => assignment.guestId).filter(Boolean))];
-      const guestSnapshots = await Promise.all(affectedGuestIds.map((guestId) => transaction.get(doc(state.services.db, "weddings", state.weddingId, "guests", guestId))));
-      const liveGuests = guestSnapshots.filter((snapshot) => snapshot.exists()).map((snapshot) => ({ ...snapshot.data(), id: snapshot.id, ref: snapshot.ref }));
-      const publicMirrorSnapshots = await Promise.all(liveGuests.map((guest) => getPublicGuestMirrorInTransaction(transaction, guest)));
+      const liveTableSnapshot = await transaction.get(
+        doc(state.services.db, "weddings", state.weddingId, "tables", tableId),
+      );
+      if (!liveTableSnapshot.exists())
+        throw new Error(
+          "This table was changed by another editor. The seating plan has been refreshed.",
+        );
+      const liveTable = hydrateTables([
+        { ...liveTableSnapshot.data(), id: liveTableSnapshot.id },
+      ])[0];
+      affectedGuestIds = [
+        ...new Set(
+          getAllAssignments([liveTable])
+            .map((assignment) => assignment.guestId)
+            .filter(Boolean),
+        ),
+      ];
+      const guestSnapshots = await Promise.all(
+        affectedGuestIds.map((guestId) =>
+          transaction.get(
+            doc(
+              state.services.db,
+              "weddings",
+              state.weddingId,
+              "guests",
+              guestId,
+            ),
+          ),
+        ),
+      );
+      const liveGuests = guestSnapshots
+        .filter((snapshot) => snapshot.exists())
+        .map((snapshot) => ({
+          ...snapshot.data(),
+          id: snapshot.id,
+          ref: snapshot.ref,
+        }));
+      const publicMirrorSnapshots = await Promise.all(
+        liveGuests.map((guest) =>
+          getPublicGuestMirrorInTransaction(transaction, guest),
+        ),
+      );
       nextGuests = liveGuests.map(({ ref, ...guest }) => {
-        const assignments = (guest.seatingAssignments || []).filter((assignment) => assignment.tableId !== tableId);
-        const primary = assignments.find((assignment) => Number(assignment.partyMemberIndex) === 0) || assignments[0];
-        const nextGuest = { ...guest, seatingAssignments: assignments, tableId: primary?.tableId || "", tableName: primary?.tableName || "", seatNumber: primary ? String(primary.seatNumber) : "" };
+        const assignments = (guest.seatingAssignments || []).filter(
+          (assignment) => assignment.tableId !== tableId,
+        );
+        const primary =
+          assignments.find(
+            (assignment) => Number(assignment.partyMemberIndex) === 0,
+          ) || assignments[0];
+        const nextGuest = {
+          ...guest,
+          seatingAssignments: assignments,
+          tableId: primary?.tableId || "",
+          tableName: primary?.tableName || "",
+          seatNumber: primary ? String(primary.seatNumber) : "",
+        };
         return nextGuest;
       });
       nextGuests.forEach((nextGuest, index) => {
-        transaction.update(liveGuests[index].ref, buildGuestSeatingPatch(nextGuest));
-        updatePublicGuestSeatingMirrorInTransaction(transaction, publicMirrorSnapshots[index], nextGuest);
+        transaction.update(
+          liveGuests[index].ref,
+          buildGuestSeatingPatch(nextGuest),
+        );
+        updatePublicGuestSeatingMirrorInTransaction(
+          transaction,
+          publicMirrorSnapshots[index],
+          nextGuest,
+        );
       });
       transaction.delete(liveTableSnapshot.ref);
     });
-    const nextTables = hydrateTables(state.tables.filter((item) => item.id !== tableId));
-    state.guests = state.guests.map((guest) => nextGuests.find((item) => item.id === guest.id) || guest);
+    const nextTables = hydrateTables(
+      state.tables.filter((item) => item.id !== tableId),
+    );
+    state.guests = state.guests.map(
+      (guest) => nextGuests.find((item) => item.id === guest.id) || guest,
+    );
     state.tables = nextTables;
     state.selectedTableId = state.tables[0]?.id || "";
     state.selectedSeatId = "";
@@ -4409,17 +5318,32 @@ function handlePlannerPointerMove(event) {
   const rect = canvas.getBoundingClientRect();
   const dx = ((event.clientX - state.dragState.startX) / rect.width) * 100;
   const dy = ((event.clientY - state.dragState.startY) / rect.height) * 100;
-  state.dragState.moved = state.dragState.moved || Math.abs(event.clientX - state.dragState.startX) > 3 || Math.abs(event.clientY - state.dragState.startY) > 3;
+  state.dragState.moved =
+    state.dragState.moved ||
+    Math.abs(event.clientX - state.dragState.startX) > 3 ||
+    Math.abs(event.clientY - state.dragState.startY) > 3;
   const isHallObject = state.dragState.type === "hall-object";
-  const nextX = clamp(state.dragState.originalX + dx, isHallObject ? 5 : 8, isHallObject ? 95 : 92);
-  const nextY = clamp(state.dragState.originalY + dy, isHallObject ? 5 : 12, isHallObject ? 95 : 88);
+  const nextX = clamp(
+    state.dragState.originalX + dx,
+    isHallObject ? 5 : 8,
+    isHallObject ? 95 : 92,
+  );
+  const nextY = clamp(
+    state.dragState.originalY + dy,
+    isHallObject ? 5 : 12,
+    isHallObject ? 95 : 88,
+  );
   if (isHallObject) {
     state.hallObjects = state.hallObjects.map((item) =>
-      item.id === state.dragState.objectId ? { ...item, x: nextX, y: nextY } : item
+      item.id === state.dragState.objectId
+        ? { ...item, x: nextX, y: nextY }
+        : item,
     );
   } else {
     state.tables = state.tables.map((table) =>
-      table.id === state.dragState.tableId ? { ...table, x: nextX, y: nextY } : table
+      table.id === state.dragState.tableId
+        ? { ...table, x: nextX, y: nextY }
+        : table,
     );
   }
   renderActiveView();
@@ -4430,7 +5354,8 @@ async function handlePlannerPointerUp() {
     return;
   }
 
-  const { type, tableId, objectId, moved, originalX, originalY } = state.dragState;
+  const { type, tableId, objectId, moved, originalX, originalY } =
+    state.dragState;
   state.dragState = null;
 
   if (type === "hall-object") {
@@ -4438,12 +5363,18 @@ async function handlePlannerPointerUp() {
     if (!hallObject) {
       return;
     }
-    if (!moved || (Math.abs(Number(hallObject.x || 0) - originalX) < 0.01 && Math.abs(Number(hallObject.y || 0) - originalY) < 0.01)) {
+    if (
+      !moved ||
+      (Math.abs(Number(hallObject.x || 0) - originalX) < 0.01 &&
+        Math.abs(Number(hallObject.y || 0) - originalY) < 0.01)
+    ) {
       renderActiveView();
       return;
     }
     if (!can("canEditSeating")) {
-      state.hallObjects = state.hallObjects.map((item) => (item.id === objectId ? { ...item, x: originalX, y: originalY } : item));
+      state.hallObjects = state.hallObjects.map((item) =>
+        item.id === objectId ? { ...item, x: originalX, y: originalY } : item,
+      );
       renderActiveView();
       showToast("Your role does not allow layout edits.", "error");
       return;
@@ -4472,7 +5403,11 @@ async function handlePlannerPointerUp() {
     return;
   }
 
-  if (!moved || (Math.abs(Number(table.x || 0) - originalX) < 0.01 && Math.abs(Number(table.y || 0) - originalY) < 0.01)) {
+  if (
+    !moved ||
+    (Math.abs(Number(table.x || 0) - originalX) < 0.01 &&
+      Math.abs(Number(table.y || 0) - originalY) < 0.01)
+  ) {
     renderActiveView();
     return;
   }
@@ -4483,7 +5418,9 @@ async function handlePlannerPointerUp() {
   }
 
   if (!can("canEditSeating")) {
-    state.tables = state.tables.map((item) => (item.id === tableId ? { ...item, x: originalX, y: originalY } : item));
+    state.tables = state.tables.map((item) =>
+      item.id === tableId ? { ...item, x: originalX, y: originalY } : item,
+    );
     renderActiveView();
     showToast("Your role does not allow table layout edits.", "error");
     return;
@@ -4491,11 +5428,14 @@ async function handlePlannerPointerUp() {
 
   setSaveState("saving");
   try {
-    await updateDoc(doc(state.services.db, "weddings", state.weddingId, "tables", tableId), {
-      x: table.x,
-      y: table.y,
-      updatedAt: serverTimestamp(),
-    });
+    await updateDoc(
+      doc(state.services.db, "weddings", state.weddingId, "tables", tableId),
+      {
+        x: table.x,
+        y: table.y,
+        updatedAt: serverTimestamp(),
+      },
+    );
     setSaveState("saved");
   } catch (error) {
     console.error(error);
@@ -4519,7 +5459,11 @@ function restoreModalFocus() {
   state.returnFocusSelector = "";
 }
 
-function openCenteredModal(modal, renderFn, focusSelector = "button, input, select, textarea, [tabindex]:not([tabindex='-1'])") {
+function openCenteredModal(
+  modal,
+  renderFn,
+  focusSelector = "button, input, select, textarea, [tabindex]:not([tabindex='-1'])",
+) {
   renderFn?.();
   document.body.classList.add("is-modal-open");
   if (!modal.open) {
@@ -4546,7 +5490,9 @@ function handleAssignmentChairClick(tableId, chairId, trigger) {
   }
   if (assignment?.guestId) {
     state.activePartyGuestId = assignment.guestId;
-    openCenteredModal(elements.chairDetailsModal, () => renderChairDetailsModal(assignment.guestId));
+    openCenteredModal(elements.chairDetailsModal, () =>
+      renderChairDetailsModal(assignment.guestId),
+    );
     renderActiveView();
     return;
   }
@@ -4559,7 +5505,11 @@ function handleAssignmentChairClick(tableId, chairId, trigger) {
     selectedChairs: [{ tableId, chairId }],
     existingAssignments: [],
   };
-  openCenteredModal(elements.assignmentModal, renderAssignmentModal, "[data-seat-search]");
+  openCenteredModal(
+    elements.assignmentModal,
+    renderAssignmentModal,
+    "[data-seat-search]",
+  );
   renderActiveView();
 }
 
@@ -4568,13 +5518,21 @@ function renderAssignmentModal() {
     return;
   }
   const session = state.assignmentSession;
-  const guest = session.guestId ? state.guests.find((item) => item.id === session.guestId) : null;
-  const candidates = getSeatCandidates(session.guestId).filter((item) => getGuestRemainingSeats(item) > 0 || item.id === session.guestId);
+  const guest = session.guestId
+    ? state.guests.find((item) => item.id === session.guestId)
+    : null;
+  const candidates = getSeatCandidates(session.guestId).filter(
+    (item) => getGuestRemainingSeats(item) > 0 || item.id === session.guestId,
+  );
   const filtered = candidates.filter((item) => {
     if (!state.guestAssignmentSearch) {
       return true;
     }
-    return [item.fullName, item.phone].some((value) => String(value || "").toLowerCase().includes(state.guestAssignmentSearch));
+    return [item.fullName, item.phone].some((value) =>
+      String(value || "")
+        .toLowerCase()
+        .includes(state.guestAssignmentSearch),
+    );
   });
   const selectedCount = session.selectedChairs.length;
   elements.assignmentContent.innerHTML = `
@@ -4586,14 +5544,17 @@ function renderAssignmentModal() {
       <button class="da3wa-icon-button" type="button" data-action="cancel-assignment" aria-label="Close assignment modal">x</button>
     </div>
     <div class="da3wa-sheet__body">
-      ${guest ? `
+      ${
+        guest
+          ? `
         <div class="assignment-progress">
           <strong>${selectedCount} of ${session.requiredSeats} chairs selected</strong>
           <span>${escapeHtml(getSelectedChairSummary(session.selectedChairs))}</span>
         </div>
         ${state.modalError ? `<div class="planner-warning-list"><span class="warning-chip">${escapeHtml(state.modalError)}</span></div>` : ""}
         <p class="planner-note">Use the canvas behind this modal to add or remove empty chairs. You can save a partial party assignment and finish the remaining seats later.</p>
-      ` : `
+      `
+          : `
         <label class="planner-drawer__search">
           <span>Search by guest name or phone</span>
           <input class="da3wa-input" type="search" value="${escapeAttribute(state.guestAssignmentSearch)}" data-seat-search />
@@ -4601,7 +5562,8 @@ function renderAssignmentModal() {
         <div class="assignment-guest-list">
           ${filtered.length ? filtered.map(renderAssignmentGuestOption).join("") : `<div class="da3wa-empty">${candidates.length ? "No matching guests need seats." : "All guests are assigned"}</div>`}
         </div>
-      `}
+      `
+      }
     </div>
     <div class="da3wa-sheet__footer">
       <button class="da3wa-button da3wa-button--secondary" type="button" data-action="cancel-assignment">Cancel</button>
@@ -4632,7 +5594,10 @@ function chooseGuestForAssignment(guestId) {
     return;
   }
   const existingAssignments = getGuestAssignedSeats(guest.id);
-  const remainingSeats = Math.max(0, getPartySize(guest) - existingAssignments.length);
+  const remainingSeats = Math.max(
+    0,
+    getPartySize(guest) - existingAssignments.length,
+  );
   if (!remainingSeats) {
     showToast("This party is already fully assigned.", "info");
     return;
@@ -4656,7 +5621,9 @@ function toggleTemporaryChair(tableId, chairId) {
   if (!table || !chair) {
     return;
   }
-  const existingIndex = session.selectedChairs.findIndex((item) => item.tableId === tableId && item.chairId === chairId);
+  const existingIndex = session.selectedChairs.findIndex(
+    (item) => item.tableId === tableId && item.chairId === chairId,
+  );
   if (existingIndex >= 0) {
     session.selectedChairs.splice(existingIndex, 1);
     state.modalError = "";
@@ -4668,13 +5635,18 @@ function toggleTemporaryChair(tableId, chairId) {
     return;
   }
   if (session.selectedChairs.length >= session.requiredSeats) {
-    showToast("This party already has the required number of chairs selected.", "error");
+    showToast(
+      "This party already has the required number of chairs selected.",
+      "error",
+    );
     return;
   }
   if (session.selectedChairs.some((item) => item.tableId !== tableId)) {
     // Already split; no extra confirmation needed.
   } else if (session.startingTableId !== tableId) {
-    const confirmed = window.confirm("This will split the party across tables. Continue?");
+    const confirmed = window.confirm(
+      "This will split the party across tables. Continue?",
+    );
     if (!confirmed) {
       return;
     }
@@ -4685,7 +5657,11 @@ function toggleTemporaryChair(tableId, chairId) {
 }
 
 function isChairTemporarilySelected(tableId, chairId) {
-  return Boolean(state.assignmentSession?.selectedChairs.some((item) => item.tableId === tableId && item.chairId === chairId));
+  return Boolean(
+    state.assignmentSession?.selectedChairs.some(
+      (item) => item.tableId === tableId && item.chairId === chairId,
+    ),
+  );
 }
 
 function getSelectedChairSummary(chairs) {
@@ -4715,7 +5691,11 @@ async function completeAssignmentSession() {
   state.activeModalOperation = "assignment";
   renderAssignmentWorkflow();
   try {
-    await savePartyAssignment(guest, session.selectedChairs, session.mode === "move");
+    await savePartyAssignment(
+      guest,
+      session.selectedChairs,
+      session.mode === "move",
+    );
     state.activeModalOperation = "";
     cancelAssignmentSession({ keepModal: true });
     elements.assignmentModal?.close();
@@ -4749,7 +5729,12 @@ function renderAssignmentWorkflow() {
 
 async function savePartyAssignment(guest, selectedChairs, movingParty = false) {
   if (state.mode === "demo") {
-    const nextTables = applyPartyAssignmentToTables(state.tables, guest, selectedChairs, movingParty);
+    const nextTables = applyPartyAssignmentToTables(
+      state.tables,
+      guest,
+      selectedChairs,
+      movingParty,
+    );
     const nextGuests = syncGuestSeatingSummaries(state.guests, nextTables);
     state.tables = hydrateTables(nextTables, nextGuests);
     state.guests = nextGuests;
@@ -4762,24 +5747,48 @@ async function savePartyAssignment(guest, selectedChairs, movingParty = false) {
   let savedGuests = null;
   const tableRefs = await getLiveTableRefs();
   await runTransaction(state.services.db, async (transaction) => {
-    const guestSnapshot = await transaction.get(doc(state.services.db, "weddings", state.weddingId, "guests", guest.id));
+    const guestSnapshot = await transaction.get(
+      doc(state.services.db, "weddings", state.weddingId, "guests", guest.id),
+    );
     if (!guestSnapshot.exists()) {
-      throw new Error("This guest no longer exists. The seating plan has been refreshed.");
+      throw new Error(
+        "This guest no longer exists. The seating plan has been refreshed.",
+      );
     }
-    const liveGuest = { ...guest, ...guestSnapshot.data(), id: guestSnapshot.id };
+    const liveGuest = {
+      ...guest,
+      ...guestSnapshot.data(),
+      id: guestSnapshot.id,
+    };
     const liveTables = await getLiveTablesInTransaction(transaction, tableRefs);
-    const liveMirrorSnapshot = await getPublicGuestMirrorInTransaction(transaction, liveGuest);
-    const selectedKeys = new Set(selectedChairs.map((item) => buildSeatKey(item.tableId, item.chairId)));
+    const liveMirrorSnapshot = await getPublicGuestMirrorInTransaction(
+      transaction,
+      liveGuest,
+    );
+    const selectedKeys = new Set(
+      selectedChairs.map((item) => buildSeatKey(item.tableId, item.chairId)),
+    );
     if (selectedKeys.size !== selectedChairs.length) {
       throw new Error("The same chair cannot be selected twice.");
     }
-    const currentPersonIndexes = new Set(getGuestAssignedSeats(liveGuest.id, liveTables).map((assignment) => Number(assignment.partyMemberIndex)));
-    const availablePartySeats = Math.max(0, getPartySize(liveGuest) - currentPersonIndexes.size);
+    const currentPersonIndexes = new Set(
+      getGuestAssignedSeats(liveGuest.id, liveTables).map((assignment) =>
+        Number(assignment.partyMemberIndex),
+      ),
+    );
+    const availablePartySeats = Math.max(
+      0,
+      getPartySize(liveGuest) - currentPersonIndexes.size,
+    );
     if (movingParty && selectedChairs.length !== getPartySize(liveGuest)) {
-      throw new Error("Select one destination chair for every person in this party.");
+      throw new Error(
+        "Select one destination chair for every person in this party.",
+      );
     }
     if (!movingParty && selectedChairs.length > availablePartySeats) {
-      throw new Error("This party no longer has enough unassigned members for the selected chairs.");
+      throw new Error(
+        "This party no longer has enough unassigned members for the selected chairs.",
+      );
     }
     for (const item of selectedChairs) {
       const table = liveTables.find((row) => row.id === item.tableId);
@@ -4789,24 +5798,55 @@ async function savePartyAssignment(guest, selectedChairs, movingParty = false) {
       }
       const assignment = getChairAssignment(table.id, chair);
       if (assignment && assignment.guestId !== liveGuest.id) {
-        throw new Error(`${table.name} chair ${chair.seatNumber} was assigned in another session.`);
+        throw new Error(
+          `${table.name} chair ${chair.seatNumber} was assigned in another session.`,
+        );
       }
     }
-    const nextTables = applyPartyAssignmentToTables(liveTables, liveGuest, selectedChairs, movingParty);
-    const liveGuests = state.guests.map((item) => (item.id === liveGuest.id ? liveGuest : item));
+    const nextTables = applyPartyAssignmentToTables(
+      liveTables,
+      liveGuest,
+      selectedChairs,
+      movingParty,
+    );
+    const liveGuests = state.guests.map((item) =>
+      item.id === liveGuest.id ? liveGuest : item,
+    );
     const nextGuests = syncGuestSeatingSummaries(liveGuests, nextTables);
     savedTables = hydrateTables(nextTables, nextGuests);
     savedGuests = nextGuests;
     nextTables.forEach((table) => {
-      transaction.update(doc(state.services.db, "weddings", state.weddingId, "tables", table.id), {
-        chairs: table.chairs,
-        guestIds: [...new Set(table.chairs.map((chair) => getChairAssignment(table.id, chair)?.guestId).filter(Boolean))],
-        updatedAt: serverTimestamp(),
-      });
+      transaction.update(
+        doc(state.services.db, "weddings", state.weddingId, "tables", table.id),
+        {
+          chairs: table.chairs,
+          guestIds: [
+            ...new Set(
+              table.chairs
+                .map((chair) => getChairAssignment(table.id, chair)?.guestId)
+                .filter(Boolean),
+            ),
+          ],
+          updatedAt: serverTimestamp(),
+        },
+      );
     });
     const nextGuest = nextGuests.find((item) => item.id === liveGuest.id);
-    transaction.update(doc(state.services.db, "weddings", state.weddingId, "guests", liveGuest.id), buildGuestSeatingPatch(nextGuest));
-    updatePublicGuestSeatingMirrorInTransaction(transaction, liveMirrorSnapshot, nextGuest);
+    transaction.update(
+      doc(
+        state.services.db,
+        "weddings",
+        state.weddingId,
+        "guests",
+        liveGuest.id,
+      ),
+      buildGuestSeatingPatch(nextGuest),
+    );
+    updatePublicGuestSeatingMirrorInTransaction(
+      transaction,
+      liveMirrorSnapshot,
+      nextGuest,
+    );
   });
   if (savedTables && savedGuests) {
     state.tables = savedTables;
@@ -4814,18 +5854,38 @@ async function savePartyAssignment(guest, selectedChairs, movingParty = false) {
   }
 }
 
-function applyPartyAssignmentToTables(tables, guest, selectedChairs, movingParty = false) {
-  const selectedKeys = new Set(selectedChairs.map((item) => buildSeatKey(item.tableId, item.chairId)));
-  const existing = getGuestAssignedSeats(guest.id, tables).sort((a, b) => a.partyMemberIndex - b.partyMemberIndex);
-  const occupiedPartyIndexes = new Set(existing.map((assignment) => Number(assignment.partyMemberIndex)));
-  const availablePartyIndexes = Array.from({ length: getPartySize(guest) }, (_, index) => index).filter((index) => movingParty || !occupiedPartyIndexes.has(index));
+function applyPartyAssignmentToTables(
+  tables,
+  guest,
+  selectedChairs,
+  movingParty = false,
+) {
+  const selectedKeys = new Set(
+    selectedChairs.map((item) => buildSeatKey(item.tableId, item.chairId)),
+  );
+  const existing = getGuestAssignedSeats(guest.id, tables).sort(
+    (a, b) => a.partyMemberIndex - b.partyMemberIndex,
+  );
+  const occupiedPartyIndexes = new Set(
+    existing.map((assignment) => Number(assignment.partyMemberIndex)),
+  );
+  const availablePartyIndexes = Array.from(
+    { length: getPartySize(guest) },
+    (_, index) => index,
+  ).filter((index) => movingParty || !occupiedPartyIndexes.has(index));
   return tables.map((table) => ({
     ...table,
     chairs: table.chairs.map((chair) => {
       const key = buildSeatKey(table.id, chair.id);
-      const selectedIndex = selectedChairs.findIndex((item) => buildSeatKey(item.tableId, item.chairId) === key);
+      const selectedIndex = selectedChairs.findIndex(
+        (item) => buildSeatKey(item.tableId, item.chairId) === key,
+      );
       const currentAssignment = getChairAssignment(table.id, chair);
-      if ((movingParty || selectedKeys.has(key)) && currentAssignment?.guestId === guest.id && selectedIndex < 0) {
+      if (
+        (movingParty || selectedKeys.has(key)) &&
+        currentAssignment?.guestId === guest.id &&
+        selectedIndex < 0
+      ) {
         return { ...chair, guestId: "", assignment: null, status: "available" };
       }
       if (selectedIndex >= 0) {
@@ -4852,7 +5912,10 @@ function applyPartyAssignmentToTables(tables, guest, selectedChairs, movingParty
 }
 
 function syncGuestSeatingSummaries(guests, tables) {
-  return guests.map((guest) => ({ ...guest, ...buildGuestSeatingPatchFromTables(guest, tables, false) }));
+  return guests.map((guest) => ({
+    ...guest,
+    ...buildGuestSeatingPatchFromTables(guest, tables, false),
+  }));
 }
 
 function buildGuestSeatingPatch(guest) {
@@ -4865,28 +5928,40 @@ function buildGuestSeatingPatch(guest) {
   };
 }
 
-function buildGuestSeatingPatchFromTables(guest, tables, includeTimestamp = true) {
+function buildGuestSeatingPatchFromTables(
+  guest,
+  tables,
+  includeTimestamp = true,
+) {
   const seenPersonKeys = new Set();
   const assignments = getGuestAssignedSeats(guest.id, tables)
     .sort((a, b) => a.partyMemberIndex - b.partyMemberIndex)
     .filter((assignment) => {
-      const key = assignment.personKey || personKeyForIndex(assignment.partyMemberIndex);
+      const key =
+        assignment.personKey || personKeyForIndex(assignment.partyMemberIndex);
       if (seenPersonKeys.has(key)) {
         return false;
       }
       seenPersonKeys.add(key);
       return true;
     });
-  const primary = assignments.find((assignment) => assignment.partyMemberIndex === 0) || assignments[0];
+  const primary =
+    assignments.find((assignment) => assignment.partyMemberIndex === 0) ||
+    assignments[0];
   const patch = {
     seatingAssignments: assignments.map((assignment) => ({
       tableId: assignment.tableId,
-      tableName: assignment.tableName || tables.find((table) => table.id === assignment.tableId)?.name || "",
+      tableName:
+        assignment.tableName ||
+        tables.find((table) => table.id === assignment.tableId)?.name ||
+        "",
       seatNumber: Number(assignment.seatNumber),
       guestId: assignment.guestId,
       partyMemberIndex: Number(assignment.partyMemberIndex),
-      personKey: assignment.personKey || personKeyForIndex(assignment.partyMemberIndex),
-      label: assignment.label || partyLabelForIndex(assignment.partyMemberIndex),
+      personKey:
+        assignment.personKey || personKeyForIndex(assignment.partyMemberIndex),
+      label:
+        assignment.label || partyLabelForIndex(assignment.partyMemberIndex),
       isMainGuest: assignment.partyMemberIndex === 0,
     })),
     tableId: primary?.tableId || "",
@@ -4904,7 +5979,9 @@ function renderChairDetailsModal(guestId) {
   if (!elements.chairDetailsContent || !guest) {
     return;
   }
-  const assignments = getGuestAssignedSeats(guestId).sort((a, b) => a.partyMemberIndex - b.partyMemberIndex);
+  const assignments = getGuestAssignedSeats(guestId).sort(
+    (a, b) => a.partyMemberIndex - b.partyMemberIndex,
+  );
   elements.chairDetailsContent.innerHTML = `
     <div class="da3wa-sheet__header">
       <div>
@@ -4919,13 +5996,17 @@ function renderChairDetailsModal(guestId) {
         <span>${assignments.length} of ${getPartySize(guest)} seats assigned</span>
       </div>
       <div class="chair-detail-list">
-        ${assignments.map((assignment) => `
+        ${assignments
+          .map(
+            (assignment) => `
           <div class="chair-detail-row">
             <strong>${escapeHtml(partyMemberLabel(guest, assignment.partyMemberIndex))}</strong>
             <span>${escapeHtml(assignment.tableName || assignment.tableId)} - Chair ${escapeHtml(String(assignment.seatNumber))}${assignment.partyMemberIndex === 0 ? " - Main guest chair" : ""}</span>
             <button class="guest-quick-button" type="button" data-action="unassign-seat" data-table-id="${escapeAttribute(assignment.tableId)}" data-chair-id="${escapeAttribute(assignment.chairId)}" ${state.activeModalOperation ? 'disabled aria-disabled="true"' : ""}>Unassign this seat</button>
           </div>
-        `).join("")}
+        `,
+          )
+          .join("")}
       </div>
       ${state.modalError ? `<div class="planner-warning-list"><span class="warning-chip">${escapeHtml(state.modalError)}</span></div>` : ""}
     </div>
@@ -4945,8 +6026,16 @@ function renderMovePartyModal(guestId) {
     return;
   }
   const partySize = getPartySize(guest);
-  const currentAssignments = getGuestAssignedSeats(guestId).sort((a, b) => a.partyMemberIndex - b.partyMemberIndex);
-  const currentTables = [...new Set(currentAssignments.map((assignment) => assignment.tableName || assignment.tableId).filter(Boolean))];
+  const currentAssignments = getGuestAssignedSeats(guestId).sort(
+    (a, b) => a.partyMemberIndex - b.partyMemberIndex,
+  );
+  const currentTables = [
+    ...new Set(
+      currentAssignments
+        .map((assignment) => assignment.tableName || assignment.tableId)
+        .filter(Boolean),
+    ),
+  ];
   const tablesWithoutParty = clearGuestFromTables(state.tables, guestId);
   elements.chairDetailsContent.innerHTML = `
     <div class="da3wa-sheet__header">
@@ -4964,17 +6053,20 @@ function renderMovePartyModal(guestId) {
       <p class="planner-note">Choose one destination table with enough available chairs. The move keeps the party together and only saves after every chair is confirmed available.</p>
       ${state.modalError ? `<div class="planner-warning-list"><span class="warning-chip">${escapeHtml(state.modalError)}</span></div>` : ""}
       <div class="chair-detail-list">
-        ${tablesWithoutParty.map((table) => {
-          const available = getAvailableChairs(table).length;
-          const disabled = available < partySize || Boolean(state.activeModalOperation);
-          return `
+        ${tablesWithoutParty
+          .map((table) => {
+            const available = getAvailableChairs(table).length;
+            const disabled =
+              available < partySize || Boolean(state.activeModalOperation);
+            return `
             <button class="assignment-guest-option ${disabled ? "is-disabled" : ""}" type="button" data-action="move-party-destination" data-guest-id="${escapeAttribute(guest.id)}" data-table-id="${escapeAttribute(table.id)}" ${disabled ? 'disabled aria-disabled="true"' : ""}>
               <strong>${escapeHtml(table.name || "Table")}</strong>
               <span>${available} available chair${available === 1 ? "" : "s"} - needs ${partySize}</span>
               <small>${available < partySize ? "Not enough free chairs for this party" : "Ready to move the full party here"}</small>
             </button>
           `;
-        }).join("")}
+          })
+          .join("")}
       </div>
     </div>
     <div class="da3wa-sheet__footer">
@@ -5030,20 +6122,29 @@ function renderPartyUnassignConfirmation(party) {
     </div>
     <div class="da3wa-sheet__footer">
       <button class="da3wa-button da3wa-button--secondary" type="button" data-action="cancel-unassign-party" data-guest-id="${escapeAttribute(party.partyGuestId)}" ${state.activeModalOperation ? "disabled" : ""}>Cancel</button>
-      <button class="da3wa-button da3wa-button--danger" type="button" data-action="confirm-unassign-party" data-guest-id="${escapeAttribute(party.partyGuestId)}" ${state.activeModalOperation ? "disabled aria-disabled=\"true\"" : ""}>${state.activeModalOperation ? "Unassigning..." : "Unassign entire party"}</button>
+      <button class="da3wa-button da3wa-button--danger" type="button" data-action="confirm-unassign-party" data-guest-id="${escapeAttribute(party.partyGuestId)}" ${state.activeModalOperation ? 'disabled aria-disabled="true"' : ""}>${state.activeModalOperation ? "Unassigning..." : "Unassign entire party"}</button>
     </div>
   `;
 }
 
 async function confirmPartyUnassign(guestId) {
-  if (state.activeModalOperation || !guestId || String(state.pendingPartyUnassignId) !== String(guestId) || !can("canEditSeating")) return;
+  if (
+    state.activeModalOperation ||
+    !guestId ||
+    String(state.pendingPartyUnassignId) !== String(guestId) ||
+    !can("canEditSeating")
+  )
+    return;
   const party = resolvePartyForGuestId(guestId);
   if (!party) return;
   state.activeModalOperation = "unassign";
   state.modalError = "";
   renderPartyUnassignConfirmation(party);
   try {
-    await clearPartyAssignments(party.partyGuestId, state.pendingPartyUnassignSignature);
+    await clearPartyAssignments(
+      party.partyGuestId,
+      state.pendingPartyUnassignSignature,
+    );
     state.activeModalOperation = "";
     state.activePartyGuestId = "";
     state.pendingPartyUnassignId = "";
@@ -5053,9 +6154,12 @@ async function confirmPartyUnassign(guestId) {
   } catch (error) {
     console.error(error);
     state.activeModalOperation = "";
-    state.modalError = error.message || "The party could not be unassigned. The seating plan has been refreshed.";
+    state.modalError =
+      error.message ||
+      "The party could not be unassigned. The seating plan has been refreshed.";
     const refreshedParty = resolvePartyForGuestId(guestId) || party;
-    state.pendingPartyUnassignSignature = partyAssignmentSignature(refreshedParty);
+    state.pendingPartyUnassignSignature =
+      partyAssignmentSignature(refreshedParty);
     renderPartyUnassignConfirmation(refreshedParty);
   }
 }
@@ -5076,25 +6180,65 @@ async function clearPartyAssignments(guestId, expectedSignature = "") {
   await runTransaction(state.services.db, async (transaction) => {
     const liveTables = await getLiveTablesInTransaction(transaction, tableRefs);
     const liveParty = resolvePartyForGuestId(guestId, liveTables);
-    if (!liveParty) throw new Error("This party no longer exists. The seating plan has been refreshed.");
-    if (expectedSignature && partyAssignmentSignature(liveParty) !== expectedSignature) {
-      throw new Error("This party changed on another device. Review the refreshed seating plan and confirm again.");
+    if (!liveParty)
+      throw new Error(
+        "This party no longer exists. The seating plan has been refreshed.",
+      );
+    if (
+      expectedSignature &&
+      partyAssignmentSignature(liveParty) !== expectedSignature
+    ) {
+      throw new Error(
+        "This party changed on another device. Review the refreshed seating plan and confirm again.",
+      );
     }
     nextTables = clearGuestFromTables(liveTables, guestId);
-    const guestSnapshot = await transaction.get(doc(state.services.db, "weddings", state.weddingId, "guests", guestId));
-    if (!guestSnapshot.exists()) throw new Error("This party no longer exists. The seating plan has been refreshed.");
+    const guestSnapshot = await transaction.get(
+      doc(state.services.db, "weddings", state.weddingId, "guests", guestId),
+    );
+    if (!guestSnapshot.exists())
+      throw new Error(
+        "This party no longer exists. The seating plan has been refreshed.",
+      );
     const liveGuest = { ...guestSnapshot.data(), id: guestSnapshot.id };
-    const liveMirrorSnapshot = await getPublicGuestMirrorInTransaction(transaction, liveGuest);
-    nextGuests = state.guests.map((guest) => guest.id === guestId ? { ...guest, ...liveGuest, ...buildGuestSeatingPatchFromTables(liveGuest, nextTables, false) } : guest);
+    const liveMirrorSnapshot = await getPublicGuestMirrorInTransaction(
+      transaction,
+      liveGuest,
+    );
+    nextGuests = state.guests.map((guest) =>
+      guest.id === guestId
+        ? {
+            ...guest,
+            ...liveGuest,
+            ...buildGuestSeatingPatchFromTables(liveGuest, nextTables, false),
+          }
+        : guest,
+    );
     nextTables.forEach((table) => {
-      transaction.update(doc(state.services.db, "weddings", state.weddingId, "tables", table.id), {
-        chairs: table.chairs,
-        guestIds: [...new Set(table.chairs.map((chair) => getChairAssignment(table.id, chair)?.guestId).filter(Boolean))],
-        updatedAt: serverTimestamp(),
-      });
+      transaction.update(
+        doc(state.services.db, "weddings", state.weddingId, "tables", table.id),
+        {
+          chairs: table.chairs,
+          guestIds: [
+            ...new Set(
+              table.chairs
+                .map((chair) => getChairAssignment(table.id, chair)?.guestId)
+                .filter(Boolean),
+            ),
+          ],
+          updatedAt: serverTimestamp(),
+        },
+      );
     });
-    transaction.update(guestSnapshot.ref, buildGuestSeatingPatch(nextGuests.find((guest) => guest.id === guestId)));
-    updatePublicGuestSeatingMirrorInTransaction(transaction, liveMirrorSnapshot, nextGuests.find((guest) => guest.id === guestId));
+    transaction.update(
+      guestSnapshot.ref,
+      buildGuestSeatingPatch(nextGuests.find((guest) => guest.id === guestId)),
+    );
+    updatePublicGuestSeatingMirrorInTransaction(
+      transaction,
+      liveMirrorSnapshot,
+      nextGuests.find((guest) => guest.id === guestId),
+    );
   });
   state.tables = hydrateTables(nextTables, nextGuests);
   state.guests = nextGuests;
@@ -5107,14 +6251,21 @@ async function confirmUnassignSeat(tableId, chairId) {
     return;
   }
   const seat = getSeatByIds(tableId, chairId);
-  const assignment = seat?.chair ? getChairAssignment(tableId, seat.chair) : null;
-  const guest = assignment?.guestId ? state.guests.find((item) => item.id === assignment.guestId) : null;
+  const assignment = seat?.chair
+    ? getChairAssignment(tableId, seat.chair)
+    : null;
+  const guest = assignment?.guestId
+    ? state.guests.find((item) => item.id === assignment.guestId)
+    : null;
   if (!seat || !assignment || !guest) {
     showToast("That chair is already empty.", "info");
     return;
   }
-  const personLabel = assignment.label || partyMemberLabel(guest, assignment.partyMemberIndex);
-  const confirmed = window.confirm(`Unassign ${personLabel} from ${seat.table.name} chair ${seat.chair.seatNumber}?`);
+  const personLabel =
+    assignment.label || partyMemberLabel(guest, assignment.partyMemberIndex);
+  const confirmed = window.confirm(
+    `Unassign ${personLabel} from ${seat.table.name} chair ${seat.chair.seatNumber}?`,
+  );
   if (!confirmed) {
     return;
   }
@@ -5135,7 +6286,9 @@ async function confirmUnassignSeat(tableId, chairId) {
 
 async function unassignSingleSeat(tableId, chairId) {
   const localSeat = getSeatByIds(tableId, chairId);
-  const localAssignment = localSeat?.chair ? getChairAssignment(tableId, localSeat.chair) : null;
+  const localAssignment = localSeat?.chair
+    ? getChairAssignment(tableId, localSeat.chair)
+    : null;
   const guestId = localAssignment?.guestId || "";
   if (!guestId) {
     return;
@@ -5158,7 +6311,9 @@ async function unassignSingleSeat(tableId, chairId) {
   await runTransaction(state.services.db, async (transaction) => {
     const liveTables = await getLiveTablesInTransaction(transaction, tableRefs);
     const liveSeat = getSeatByIds(tableId, chairId, liveTables);
-    const liveAssignment = liveSeat?.chair ? getChairAssignment(tableId, liveSeat.chair) : null;
+    const liveAssignment = liveSeat?.chair
+      ? getChairAssignment(tableId, liveSeat.chair)
+      : null;
     if (!liveSeat) {
       throw new Error("The selected chair no longer exists.");
     }
@@ -5166,25 +6321,50 @@ async function unassignSingleSeat(tableId, chairId) {
       throw new Error("The selected chair has changed. Refresh and try again.");
     }
     const nextTables = clearSeatFromTables(liveTables, tableId, chairId);
-    const guestSnapshot = await transaction.get(doc(state.services.db, "weddings", state.weddingId, "guests", guestId));
+    const guestSnapshot = await transaction.get(
+      doc(state.services.db, "weddings", state.weddingId, "guests", guestId),
+    );
     if (!guestSnapshot.exists()) {
-      throw new Error("The guest no longer exists. The seating plan has been refreshed.");
+      throw new Error(
+        "The guest no longer exists. The seating plan has been refreshed.",
+      );
     }
     const liveGuest = { ...guestSnapshot.data(), id: guestSnapshot.id };
-    const liveMirrorSnapshot = await getPublicGuestMirrorInTransaction(transaction, liveGuest);
-    const liveGuests = state.guests.map((guest) => (guest.id === liveGuest.id ? { ...guest, ...liveGuest } : guest));
+    const liveMirrorSnapshot = await getPublicGuestMirrorInTransaction(
+      transaction,
+      liveGuest,
+    );
+    const liveGuests = state.guests.map((guest) =>
+      guest.id === liveGuest.id ? { ...guest, ...liveGuest } : guest,
+    );
     const nextGuests = syncGuestSeatingSummaries(liveGuests, nextTables);
     savedTables = hydrateTables(nextTables, nextGuests);
     savedGuests = nextGuests;
     const nextTable = nextTables.find((table) => table.id === tableId);
-    transaction.update(doc(state.services.db, "weddings", state.weddingId, "tables", tableId), {
-      chairs: nextTable.chairs,
-      guestIds: [...new Set(nextTable.chairs.map((chair) => getChairAssignment(tableId, chair)?.guestId).filter(Boolean))],
-      updatedAt: serverTimestamp(),
-    });
+    transaction.update(
+      doc(state.services.db, "weddings", state.weddingId, "tables", tableId),
+      {
+        chairs: nextTable.chairs,
+        guestIds: [
+          ...new Set(
+            nextTable.chairs
+              .map((chair) => getChairAssignment(tableId, chair)?.guestId)
+              .filter(Boolean),
+          ),
+        ],
+        updatedAt: serverTimestamp(),
+      },
+    );
     const nextGuest = nextGuests.find((guest) => guest.id === guestId);
-    transaction.update(doc(state.services.db, "weddings", state.weddingId, "guests", guestId), buildGuestSeatingPatch(nextGuest));
-    updatePublicGuestSeatingMirrorInTransaction(transaction, liveMirrorSnapshot, nextGuest);
+    transaction.update(
+      doc(state.services.db, "weddings", state.weddingId, "guests", guestId),
+      buildGuestSeatingPatch(nextGuest),
+    );
+    updatePublicGuestSeatingMirrorInTransaction(
+      transaction,
+      liveMirrorSnapshot,
+      nextGuest,
+    );
   });
   if (savedTables && savedGuests) {
     state.tables = savedTables;
@@ -5220,7 +6400,9 @@ function clearSeatFromTables(tables, tableId, chairId) {
 }
 
 function getAvailableChairs(table) {
-  return (table?.chairs || []).filter((chair) => !getChairAssignment(table.id, chair));
+  return (table?.chairs || []).filter(
+    (chair) => !getChairAssignment(table.id, chair),
+  );
 }
 
 function getSeatByIds(tableId, chairId, tables = state.tables) {
@@ -5239,9 +6421,21 @@ async function confirmMovePartyToTable(guestId, tableId) {
     return;
   }
   const partySize = getPartySize(guest);
-  const currentTables = [...new Set(getGuestAssignedSeats(guestId).map((assignment) => assignment.tableName || assignment.tableId).filter(Boolean))];
-  const available = getAvailableChairs(clearGuestFromTables(state.tables, guestId).find((table) => table.id === tableId)).length;
-  const confirmed = window.confirm(`Move party of ${partySize} from ${currentTables.join(", ") || "unassigned"} to ${destination.name}? ${available} chair${available === 1 ? "" : "s"} available.`);
+  const currentTables = [
+    ...new Set(
+      getGuestAssignedSeats(guestId)
+        .map((assignment) => assignment.tableName || assignment.tableId)
+        .filter(Boolean),
+    ),
+  ];
+  const available = getAvailableChairs(
+    clearGuestFromTables(state.tables, guestId).find(
+      (table) => table.id === tableId,
+    ),
+  ).length;
+  const confirmed = window.confirm(
+    `Move party of ${partySize} from ${currentTables.join(", ") || "unassigned"} to ${destination.name}? ${available} chair${available === 1 ? "" : "s"} available.`,
+  );
   if (!confirmed) {
     return;
   }
@@ -5268,16 +6462,27 @@ async function movePartyToTable(guestId, destinationTableId) {
   const buildMovedTables = (tables, partyGuest) => {
     const partySize = getPartySize(partyGuest);
     const clearedTables = clearGuestFromTables(tables, guestId);
-    const destination = clearedTables.find((table) => table.id === destinationTableId);
+    const destination = clearedTables.find(
+      (table) => table.id === destinationTableId,
+    );
     if (!destination) {
       throw new Error("Destination table no longer exists.");
     }
     const availableChairs = getAvailableChairs(destination);
     if (availableChairs.length < partySize) {
-      throw new Error(`${destination.name} only has ${availableChairs.length} available chair${availableChairs.length === 1 ? "" : "s"} for a party of ${partySize}.`);
+      throw new Error(
+        `${destination.name} only has ${availableChairs.length} available chair${availableChairs.length === 1 ? "" : "s"} for a party of ${partySize}.`,
+      );
     }
-    const selectedChairs = availableChairs.slice(0, partySize).map((chair) => ({ tableId: destination.id, chairId: chair.id }));
-    return applyPartyAssignmentToTables(clearedTables, partyGuest, selectedChairs, true);
+    const selectedChairs = availableChairs
+      .slice(0, partySize)
+      .map((chair) => ({ tableId: destination.id, chairId: chair.id }));
+    return applyPartyAssignmentToTables(
+      clearedTables,
+      partyGuest,
+      selectedChairs,
+      true,
+    );
   };
 
   if (state.mode === "demo") {
@@ -5296,34 +6501,77 @@ async function movePartyToTable(guestId, destinationTableId) {
   let savedGuests = null;
   const tableRefs = await getLiveTableRefs();
   await runTransaction(state.services.db, async (transaction) => {
-    const guestSnapshot = await transaction.get(doc(state.services.db, "weddings", state.weddingId, "guests", guestId));
+    const guestSnapshot = await transaction.get(
+      doc(state.services.db, "weddings", state.weddingId, "guests", guestId),
+    );
     if (!guestSnapshot.exists()) {
-      throw new Error("This party no longer exists. The seating plan has been refreshed.");
+      throw new Error(
+        "This party no longer exists. The seating plan has been refreshed.",
+      );
     }
-    const liveGuest = { ...guest, ...guestSnapshot.data(), id: guestSnapshot.id };
+    const liveGuest = {
+      ...guest,
+      ...guestSnapshot.data(),
+      id: guestSnapshot.id,
+    };
     const liveTables = await getLiveTablesInTransaction(transaction, tableRefs);
-    const liveMirrorSnapshot = await getPublicGuestMirrorInTransaction(transaction, liveGuest);
+    const liveMirrorSnapshot = await getPublicGuestMirrorInTransaction(
+      transaction,
+      liveGuest,
+    );
     const nextTables = buildMovedTables(liveTables, liveGuest);
-    const liveGuests = state.guests.map((item) => (item.id === liveGuest.id ? liveGuest : item));
+    const liveGuests = state.guests.map((item) =>
+      item.id === liveGuest.id ? liveGuest : item,
+    );
     const nextGuests = syncGuestSeatingSummaries(liveGuests, nextTables);
     savedTables = hydrateTables(nextTables, nextGuests);
     savedGuests = nextGuests;
     const affectedTableIds = new Set([
       destinationTableId,
-      ...getGuestAssignedSeats(liveGuest.id, liveTables).map((assignment) => assignment.tableId),
+      ...getGuestAssignedSeats(liveGuest.id, liveTables).map(
+        (assignment) => assignment.tableId,
+      ),
     ]);
     nextTables
       .filter((table) => affectedTableIds.has(table.id))
       .forEach((table) => {
-        transaction.update(doc(state.services.db, "weddings", state.weddingId, "tables", table.id), {
-          chairs: table.chairs,
-          guestIds: [...new Set(table.chairs.map((chair) => getChairAssignment(table.id, chair)?.guestId).filter(Boolean))],
-          updatedAt: serverTimestamp(),
-        });
+        transaction.update(
+          doc(
+            state.services.db,
+            "weddings",
+            state.weddingId,
+            "tables",
+            table.id,
+          ),
+          {
+            chairs: table.chairs,
+            guestIds: [
+              ...new Set(
+                table.chairs
+                  .map((chair) => getChairAssignment(table.id, chair)?.guestId)
+                  .filter(Boolean),
+              ),
+            ],
+            updatedAt: serverTimestamp(),
+          },
+        );
       });
     const nextGuest = nextGuests.find((item) => item.id === liveGuest.id);
-    transaction.update(doc(state.services.db, "weddings", state.weddingId, "guests", liveGuest.id), buildGuestSeatingPatch(nextGuest));
-    updatePublicGuestSeatingMirrorInTransaction(transaction, liveMirrorSnapshot, nextGuest);
+    transaction.update(
+      doc(
+        state.services.db,
+        "weddings",
+        state.weddingId,
+        "guests",
+        liveGuest.id,
+      ),
+      buildGuestSeatingPatch(nextGuest),
+    );
+    updatePublicGuestSeatingMirrorInTransaction(
+      transaction,
+      liveMirrorSnapshot,
+      nextGuest,
+    );
   });
   if (savedTables && savedGuests) {
     state.tables = savedTables;
@@ -5342,9 +6590,14 @@ async function assignGuestToChair(tableId, chairId, guestId) {
 
   const table = state.tables.find((item) => item.id === tableId);
   const targetChair = table?.chairs.find((chair) => chair.id === chairId);
-  const guest = guestId ? state.guests.find((item) => item.id === guestId) : null;
+  const guest = guestId
+    ? state.guests.find((item) => item.id === guestId)
+    : null;
   if (!table || !targetChair || !guest) {
-    showToast("That guest or chair is no longer available. The seating plan has been refreshed.", "error");
+    showToast(
+      "That guest or chair is no longer available. The seating plan has been refreshed.",
+      "error",
+    );
     return;
   }
 
@@ -5355,7 +6608,10 @@ async function assignGuestToChair(tableId, chairId, guestId) {
   }
 
   if (targetAssignment?.guestId) {
-    showToast("This chair is assigned to another guest. Clear it before assigning someone else.", "error");
+    showToast(
+      "This chair is assigned to another guest. Clear it before assigning someone else.",
+      "error",
+    );
     return;
   }
 
@@ -5365,10 +6621,16 @@ async function assignGuestToChair(tableId, chairId, guestId) {
   }
 
   if (guest?.rsvpStatus === "declined") {
-    showToast("Declined guest assignment noted. Review before finalizing the floor plan.", "info");
+    showToast(
+      "Declined guest assignment noted. Review before finalizing the floor plan.",
+      "info",
+    );
   }
   if (guest?.rsvpStatus === "pending") {
-    showToast("Pending RSVP guest seated. Consider confirming attendance.", "info");
+    showToast(
+      "Pending RSVP guest seated. Consider confirming attendance.",
+      "info",
+    );
   }
 
   state.activeModalOperation = "assign-seat";
@@ -5387,7 +6649,11 @@ async function assignGuestToChair(tableId, chairId, guestId) {
     state.activeModalOperation = "";
     setSaveState("saved");
     renderAll();
-    showToast(error.message || "This chair was assigned by another editor. The seating plan has been refreshed.", "error");
+    showToast(
+      error.message ||
+        "This chair was assigned by another editor. The seating plan has been refreshed.",
+      "error",
+    );
   }
 }
 
@@ -5405,11 +6671,20 @@ async function syncTablesAndGuests() {
   const nextTables = hydrateTables(state.tables.map((table) => ({ ...table })));
   const batch = writeBatch(state.services.db);
   nextTables.forEach((table) => {
-    batch.update(doc(state.services.db, "weddings", state.weddingId, "tables", table.id), {
-      chairs: table.chairs,
-      guestIds: [...new Set(table.chairs.map((chair) => getChairAssignment(table.id, chair)?.guestId).filter(Boolean))],
-      updatedAt: serverTimestamp(),
-    });
+    batch.update(
+      doc(state.services.db, "weddings", state.weddingId, "tables", table.id),
+      {
+        chairs: table.chairs,
+        guestIds: [
+          ...new Set(
+            table.chairs
+              .map((chair) => getChairAssignment(table.id, chair)?.guestId)
+              .filter(Boolean),
+          ),
+        ],
+        updatedAt: serverTimestamp(),
+      },
+    );
   });
   await batch.commit();
 }
@@ -5428,13 +6703,17 @@ async function handleExport(type) {
       case "notCheckedIn":
         return state.guests.filter((guest) => !guest.checkedIn);
       case "tables":
-        return [...state.guests].sort((a, b) => String(a.tableName || "").localeCompare(String(b.tableName || "")));
+        return [...state.guests].sort((a, b) =>
+          String(a.tableName || "").localeCompare(String(b.tableName || "")),
+        );
       case "bride":
         return state.guests.filter((guest) => guest.side === "bride");
       case "groom":
         return state.guests.filter((guest) => guest.side === "groom");
       case "selected":
-        return state.guests.filter((guest) => state.selectedGuestIds.includes(guest.id));
+        return state.guests.filter((guest) =>
+          state.selectedGuestIds.includes(guest.id),
+        );
       case "all":
       default:
         return state.guests;
@@ -5447,7 +6726,7 @@ async function handleExport(type) {
       checkedInAt: formatTimestamp(guest.checkedInAt),
     })),
     `guests-${type || "all"}`,
-    { includeSeating: type === "tables" }
+    { includeSeating: type === "tables" },
   );
   showToast(`Guest export completed as ${format.toUpperCase()}.`, "success");
 }
@@ -5456,17 +6735,26 @@ function hydrateTables(tables, guests = state.guests) {
   return tables.map((table) => {
     const next = createPlannerTable(table);
     next.chairs = next.chairs.map((chair) => {
-      const storedChair = (table.chairs || []).find((item) => item.id === chair.id || Number(item.seatNumber) === Number(chair.seatNumber));
-      const hasExplicitStoredState = Boolean(storedChair && (
-        Object.prototype.hasOwnProperty.call(storedChair, "assignment") ||
-        Object.prototype.hasOwnProperty.call(storedChair, "guestId") ||
-        Object.prototype.hasOwnProperty.call(storedChair, "status")
-      ));
+      const storedChair = (table.chairs || []).find(
+        (item) =>
+          item.id === chair.id ||
+          Number(item.seatNumber) === Number(chair.seatNumber),
+      );
+      const hasExplicitStoredState = Boolean(
+        storedChair &&
+          (Object.prototype.hasOwnProperty.call(storedChair, "assignment") ||
+            Object.prototype.hasOwnProperty.call(storedChair, "guestId") ||
+            Object.prototype.hasOwnProperty.call(storedChair, "status")),
+      );
       // Tables are the authoritative chair source. Guest assignment mirrors
       // are used only for pre-chair legacy table documents; otherwise a stale
       // guest listener can incorrectly put a just-cleared person back in a chair.
-      const matchingGuestAssignment = hasExplicitStoredState ? null : findGuestAssignmentForChair(next, chair, guests);
-      const assignment = normalizeAssignment(chair.assignment, next.id, chair) || matchingGuestAssignment;
+      const matchingGuestAssignment = hasExplicitStoredState
+        ? null
+        : findGuestAssignmentForChair(next, chair, guests);
+      const assignment =
+        normalizeAssignment(chair.assignment, next.id, chair) ||
+        matchingGuestAssignment;
       return {
         ...chair,
         guestId: assignment?.guestId || "",
@@ -5480,14 +6768,30 @@ function hydrateTables(tables, guests = state.guests) {
 
 function findGuestAssignmentForChair(table, chair, guests = state.guests) {
   for (const guest of guests) {
-    const structuredAssignments = Array.isArray(guest.seatingAssignments) ? guest.seatingAssignments : [];
+    const structuredAssignments = Array.isArray(guest.seatingAssignments)
+      ? guest.seatingAssignments
+      : [];
     const match = structuredAssignments.find(
-      (assignment) => assignment.tableId === table.id && String(assignment.seatNumber || "") === String(chair.seatNumber)
+      (assignment) =>
+        assignment.tableId === table.id &&
+        String(assignment.seatNumber || "") === String(chair.seatNumber),
     );
     if (match) {
-      return normalizeAssignment({ ...match, guestId: guest.id, tableName: match.tableName || table.name }, table.id, chair);
+      return normalizeAssignment(
+        {
+          ...match,
+          guestId: guest.id,
+          tableName: match.tableName || table.name,
+        },
+        table.id,
+        chair,
+      );
     }
-    if (!structuredAssignments.length && guest.tableId === table.id && String(guest.seatNumber || "") === String(chair.seatNumber)) {
+    if (
+      !structuredAssignments.length &&
+      guest.tableId === table.id &&
+      String(guest.seatNumber || "") === String(chair.seatNumber)
+    ) {
       return normalizeAssignment(
         {
           tableId: table.id,
@@ -5500,7 +6804,7 @@ function findGuestAssignmentForChair(table, chair, guests = state.guests) {
           isMainGuest: true,
         },
         table.id,
-        chair
+        chair,
       );
     }
   }
@@ -5512,7 +6816,14 @@ function createPlannerTable(table) {
   const seatCount = Number(table.seatCount || table.capacity || 8);
   const width = Number(table.width || defaultWidthForShape(table.shape));
   const height = Number(table.height || defaultHeightForShape(table.shape));
-  const chairs = generateChairs(table.shape || "round", seatCount, width, height, table.chairs || [], tableId);
+  const chairs = generateChairs(
+    table.shape || "round",
+    seatCount,
+    width,
+    height,
+    table.chairs || [],
+    tableId,
+  );
 
   return {
     id: tableId,
@@ -5536,11 +6847,21 @@ function createPlannerTable(table) {
   };
 }
 
-function generateChairs(shape, seatCount, width, height, previousChairs, tableId = "table") {
+function generateChairs(
+  shape,
+  seatCount,
+  width,
+  height,
+  previousChairs,
+  tableId = "table",
+) {
   const existing = Array.isArray(previousChairs) ? previousChairs : [];
   const positions = buildChairPositions(shape, seatCount, width, height);
   return positions.map((position, index) => {
-    const previous = existing[index] || existing.find((chair) => Number(chair.seatNumber) === index + 1) || {};
+    const previous =
+      existing[index] ||
+      existing.find((chair) => Number(chair.seatNumber) === index + 1) ||
+      {};
     return {
       // Legacy table documents did not store chair IDs.  IDs must be stable
       // across every hydration so the chair selected in the UI is the same
@@ -5616,12 +6937,18 @@ function getTableGuests(tableId) {
 }
 
 function getSelectedTable() {
-  return state.tables.find((item) => item.id === state.selectedTableId) || state.tables[0] || null;
+  return (
+    state.tables.find((item) => item.id === state.selectedTableId) ||
+    state.tables[0] ||
+    null
+  );
 }
 
 function findGuestSeat(guestId) {
   const assignment = getGuestAssignedSeats(guestId)[0];
-  return assignment ? { tableId: assignment.tableId, chairId: assignment.chairId } : null;
+  return assignment
+    ? { tableId: assignment.tableId, chairId: assignment.chairId }
+    : null;
 }
 
 function getSelectedSeat() {
@@ -5632,7 +6959,9 @@ function getSelectedSeat() {
   const table = state.tables.find((item) => item.id === tableId);
   const chair = table?.chairs.find((item) => item.id === chairId);
   const assignment = chair ? getChairAssignment(table.id, chair) : null;
-  const guest = assignment?.guestId ? state.guests.find((item) => item.id === assignment.guestId) : null;
+  const guest = assignment?.guestId
+    ? state.guests.find((item) => item.id === assignment.guestId)
+    : null;
   if (!table || !chair) {
     return null;
   }
@@ -5643,10 +6972,16 @@ function getAssignableGuests() {
   return state.guests
     .filter((guest) => getGuestRemainingSeats(guest) > 0)
     .filter((guest) => {
-      if (state.libraryFilters.rsvp === "pending" && guest.rsvpStatus !== "pending") {
+      if (
+        state.libraryFilters.rsvp === "pending" &&
+        guest.rsvpStatus !== "pending"
+      ) {
         return false;
       }
-      if (state.libraryFilters.side !== "all" && guest.side !== state.libraryFilters.side) {
+      if (
+        state.libraryFilters.side !== "all" &&
+        guest.side !== state.libraryFilters.side
+      ) {
         return false;
       }
       if (state.libraryFilters.vipOnly && !/vip/i.test(guest.notes || "")) {
@@ -5659,13 +6994,25 @@ function getAssignableGuests() {
 
 function getSeatCandidates(currentGuestId) {
   return [...state.guests]
-    .filter((guest) => getGuestRemainingSeats(guest) > 0 || guest.id === currentGuestId)
+    .filter(
+      (guest) =>
+        getGuestRemainingSeats(guest) > 0 || guest.id === currentGuestId,
+    )
     .filter((guest) => {
       if (!state.guestAssignmentSearch) {
         return true;
       }
-      return [guest.fullName, guest.fullNameAr, guest.phone, guest.side, guest.rsvpStatus]
-        .some((value) => String(value || "").toLowerCase().includes(state.guestAssignmentSearch));
+      return [
+        guest.fullName,
+        guest.fullNameAr,
+        guest.phone,
+        guest.side,
+        guest.rsvpStatus,
+      ].some((value) =>
+        String(value || "")
+          .toLowerCase()
+          .includes(state.guestAssignmentSearch),
+      );
     })
     .sort((a, b) => {
       const priority = guestPriorityScore(a) - guestPriorityScore(b);
@@ -5727,12 +7074,22 @@ function resolveChairColor(status, table) {
 function createHallObjects() {
   return [
     { id: "stage-default", type: "stage", label: "Stage", x: 50, y: 8 },
-    { id: "entrance-default", type: "entrance", label: "Entrance", x: 50, y: 90 },
+    {
+      id: "entrance-default",
+      type: "entrance",
+      label: "Entrance",
+      x: 50,
+      y: 90,
+    },
   ];
 }
 
 function hydrateHallObjects(savedObjects) {
-  const savedById = new Map(Array.isArray(savedObjects) ? savedObjects.map((item) => [item.id, item]) : []);
+  const savedById = new Map(
+    Array.isArray(savedObjects)
+      ? savedObjects.map((item) => [item.id, item])
+      : [],
+  );
   return createHallObjects().map((item) => ({
     ...item,
     ...(savedById.get(item.id) || {}),
@@ -5747,11 +7104,19 @@ function redirectToLogin(message = "session-required") {
 
 async function resolveAccessibleWeddingId(user) {
   const rememberedWeddingId = localStorage.getItem(lastWeddingStorageKey);
-  if (rememberedWeddingId && (await canViewWedding(user, rememberedWeddingId))) {
+  if (
+    rememberedWeddingId &&
+    (await canViewWedding(user, rememberedWeddingId))
+  ) {
     return rememberedWeddingId;
   }
 
-  const snapshot = await getDocs(query(collection(state.services.db, "weddings"), where("status", "==", "active")));
+  const snapshot = await getDocs(
+    query(
+      collection(state.services.db, "weddings"),
+      where("status", "==", "active"),
+    ),
+  );
   for (const weddingDoc of snapshot.docs) {
     if (await canViewWedding(user, weddingDoc.id)) {
       rememberWeddingId(weddingDoc.id);
@@ -5762,7 +7127,9 @@ async function resolveAccessibleWeddingId(user) {
 }
 
 async function canViewWedding(user, weddingId) {
-  const permissionDoc = await getDoc(doc(state.services.db, "weddings", weddingId, "dashboardUsers", user.uid));
+  const permissionDoc = await getDoc(
+    doc(state.services.db, "weddings", weddingId, "dashboardUsers", user.uid),
+  );
   return permissionDoc.exists() && permissionDoc.data().canViewDashboard;
 }
 
@@ -5950,7 +7317,9 @@ function cleanPhone(phone) {
 
 // Maps Arabic-Indic (٠-٩) and Extended Arabic-Indic (۰-۹) digits to ASCII.
 function normalizeDigits(value) {
-  return String(value ?? "").replace(/[٠-٩۰-۹]/g, (digit) => String(digit.charCodeAt(0) & 0xf));
+  return String(value ?? "").replace(/[٠-٩۰-۹]/g, (digit) =>
+    String(digit.charCodeAt(0) & 0xf),
+  );
 }
 
 // wa.me links require country-code-prefixed numbers with no leading zero.
@@ -5975,11 +7344,17 @@ function normalizeWhatsAppPhone(phone) {
 }
 
 function buildInviteLink(guestToken) {
-  return new URL(`index.html?wedding=${encodeURIComponent(state.weddingId)}&guest=${encodeURIComponent(guestToken)}`, window.location.href).toString();
+  return new URL(
+    `index.html?wedding=${encodeURIComponent(state.weddingId)}&guest=${encodeURIComponent(guestToken)}`,
+    window.location.href,
+  ).toString();
 }
 
 function buildCheckinLink(guestToken) {
-  return new URL(`checkin.html?wedding=${encodeURIComponent(state.weddingId)}&guest=${encodeURIComponent(guestToken)}`, window.location.href).toString();
+  return new URL(
+    `checkin.html?wedding=${encodeURIComponent(state.weddingId)}&guest=${encodeURIComponent(guestToken)}`,
+    window.location.href,
+  ).toString();
 }
 
 // Sender lists mirror the Guest Directory's side field exactly. This prevents
@@ -5992,25 +7367,50 @@ function senderSideMatches(guest, side) {
 }
 
 function getSenderGuests(side = "all") {
-  return state.guests.filter((guest) => normalizeWhatsAppPhone(guest.phone) && guest.guestToken && senderSideMatches(guest, side));
+  return state.guests.filter(
+    (guest) =>
+      normalizeWhatsAppPhone(guest.phone) &&
+      guest.guestToken &&
+      senderSideMatches(guest, side),
+  );
 }
 
 function getGuestSeatReadiness(guest) {
   const assignments = getGuestAssignedSeats(guest.id)
     .map((assignment) => ({
       ...assignment,
-      personKey: assignment.personKey || personKeyForIndex(assignment.partyMemberIndex),
-      label: assignment.label || partyLabelForIndex(assignment.partyMemberIndex),
+      personKey:
+        assignment.personKey || personKeyForIndex(assignment.partyMemberIndex),
+      label:
+        assignment.label || partyLabelForIndex(assignment.partyMemberIndex),
     }))
-    .filter((assignment) => assignment.tableId && assignment.chairId && Number(assignment.seatNumber) > 0)
-    .sort((a, b) => partyIndexFromKey(a.personKey) - partyIndexFromKey(b.personKey));
-  const requiredPeople = Array.from({ length: getPartySize(guest) }, (_, index) => ({
-    personKey: personKeyForIndex(index),
-    label: partyLabelForIndex(index),
-  }));
-  const requiredKeys = new Set(requiredPeople.map((person) => person.personKey));
-  const assignedKeys = new Set(assignments.filter((assignment) => requiredKeys.has(assignment.personKey)).map((assignment) => assignment.personKey));
-  const missing = requiredPeople.filter((person) => !assignedKeys.has(person.personKey));
+    .filter(
+      (assignment) =>
+        assignment.tableId &&
+        assignment.chairId &&
+        Number(assignment.seatNumber) > 0,
+    )
+    .sort(
+      (a, b) => partyIndexFromKey(a.personKey) - partyIndexFromKey(b.personKey),
+    );
+  const requiredPeople = Array.from(
+    { length: getPartySize(guest) },
+    (_, index) => ({
+      personKey: personKeyForIndex(index),
+      label: partyLabelForIndex(index),
+    }),
+  );
+  const requiredKeys = new Set(
+    requiredPeople.map((person) => person.personKey),
+  );
+  const assignedKeys = new Set(
+    assignments
+      .filter((assignment) => requiredKeys.has(assignment.personKey))
+      .map((assignment) => assignment.personKey),
+  );
+  const missing = requiredPeople.filter(
+    (person) => !assignedKeys.has(person.personKey),
+  );
   return {
     assignments,
     missing,
@@ -6048,12 +7448,16 @@ function renderMissingSeatsModal(blocked, side = "all") {
     <div class="da3wa-sheet__body">
       <p class="planner-note">Every person in an invitation needs an assigned chair before sending. You can still open the sender now if you want to send invitations before seating is complete.</p>
       <div class="planner-warning-list">
-        ${blocked.map(({ guest, readiness }) => `
+        ${blocked
+          .map(
+            ({ guest, readiness }) => `
           <div class="chair-detail-row">
             <strong>${escapeHtml(guest.fullName || "Guest")}</strong>
             <span>Missing: ${readiness.missing.map((item) => escapeHtml(item.label)).join(", ")}</span>
           </div>
-        `).join("")}
+        `,
+          )
+          .join("")}
       </div>
     </div>
     <div class="da3wa-sheet__footer">
@@ -6065,14 +7469,13 @@ function renderMissingSeatsModal(blocked, side = "all") {
 }
 
 function buildSenderLink(side = "all") {
-  const guests = getSenderGuests(side)
-    .map((guest) => ({
-      n: guest.fullName || "",
-      a: guest.fullNameAr || "",
-      p: normalizeWhatsAppPhone(guest.phone),
-      s: guest.side || "",
-      t: guest.guestToken || "",
-    }));
+  const guests = getSenderGuests(side).map((guest) => ({
+    n: guest.fullName || "",
+    a: guest.fullNameAr || "",
+    p: normalizeWhatsAppPhone(guest.phone),
+    s: guest.side || "",
+    t: guest.guestToken || "",
+  }));
   const payload = {
     v: 1,
     w: state.weddingId,
@@ -6080,7 +7483,10 @@ function buildSenderLink(side = "all") {
     side,
     g: guests,
   };
-  return new URL(`send.html#data=${encodeSenderPayload(payload)}`, window.location.href).toString();
+  return new URL(
+    `send.html#data=${encodeSenderPayload(payload)}`,
+    window.location.href,
+  ).toString();
 }
 
 function buildSideViewLink(side) {
@@ -6091,7 +7497,10 @@ function buildSideViewLink(side) {
     linkParams.set("wedding", state.weddingId);
   }
   linkParams.set("side", side);
-  return new URL(`side.html?${linkParams.toString()}`, window.location.href).toString();
+  return new URL(
+    `side.html?${linkParams.toString()}`,
+    window.location.href,
+  ).toString();
 }
 
 function encodeSenderPayload(payload) {
@@ -6100,13 +7509,18 @@ function encodeSenderPayload(payload) {
   bytes.forEach((byte) => {
     binary += String.fromCharCode(byte);
   });
-  return btoa(binary).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
+  return btoa(binary)
+    .replace(/\+/g, "-")
+    .replace(/\//g, "_")
+    .replace(/=+$/, "");
 }
 
 function generateGuestToken() {
   const bytes = new Uint8Array(12);
   crypto.getRandomValues(bytes);
-  return Array.from(bytes, (byte) => byte.toString(16).padStart(2, "0")).join("");
+  return Array.from(bytes, (byte) => byte.toString(16).padStart(2, "0")).join(
+    "",
+  );
 }
 
 function demoNow() {

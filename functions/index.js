@@ -39,19 +39,33 @@ function requireRole(role) {
   if (!ROLES.has(role)) throw new HttpsError("invalid-argument", "Invalid seating editor role.");
 }
 
-async function requireOwner(auth, weddingId) {
+async function requireSeatingAccessManager(auth, weddingId) {
+  if (!auth) throw new HttpsError("unauthenticated", "Sign in is required.");
+  if (!weddingId || typeof weddingId !== "string") throw new HttpsError("invalid-argument", "Invalid wedding.");
+  const [wedding, dashboardUser] = await Promise.all([
+    db.doc(`weddings/${weddingId}`).get(),
+    db.doc(`weddings/${weddingId}/dashboardUsers/${auth.uid}`).get(),
+  ]);
+  const isOwner = wedding.exists && wedding.data().ownerUserId === auth.uid;
+  const isDashboardAdmin = dashboardUser.exists && dashboardUser.data().canManageUsers === true;
+  if (!isOwner && !isDashboardAdmin) {
+    throw new HttpsError("permission-denied", "Only the wedding owner or a dashboard administrator can manage seating editor access.");
+  }
+}
+
+async function requireWeddingOwner(auth, weddingId) {
   if (!auth) throw new HttpsError("unauthenticated", "Sign in is required.");
   if (!weddingId || typeof weddingId !== "string") throw new HttpsError("invalid-argument", "Invalid wedding.");
   const wedding = await db.doc(`weddings/${weddingId}`).get();
   if (!wedding.exists || wedding.data().ownerUserId !== auth.uid) {
-    throw new HttpsError("permission-denied", "Only the wedding owner can manage seating editor access.");
+    throw new HttpsError("permission-denied", "Only the wedding owner can perform this migration.");
   }
 }
 
 exports.manageSeatingEditorAccess = onCall({ secrets: [seatingLinkEncryptionKey] }, async (request) => {
   const { weddingId, role, action } = request.data || {};
   requireRole(role);
-  await requireOwner(request.auth, weddingId);
+  await requireSeatingAccessManager(request.auth, weddingId);
   if (!["generate", "regenerate", "revoke", "reveal"].includes(action)) {
     throw new HttpsError("invalid-argument", "Invalid access action.");
   }
@@ -147,7 +161,7 @@ function sideMatches(guest, side) {
 // rewrite guests outside its normal dashboard permissions.
 exports.normalizeSeatingGuestSides = onCall(async (request) => {
   const weddingId = request.data?.weddingId;
-  await requireOwner(request.auth, weddingId);
+  await requireWeddingOwner(request.auth, weddingId);
   const guests = await db.collection(`weddings/${weddingId}/guests`).get();
   let normalized = 0;
   let batch = db.batch();

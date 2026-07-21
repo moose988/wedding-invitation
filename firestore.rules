@@ -27,9 +27,14 @@ service cloud.firestore {
         dashboardUser(weddingId).data.canEditGuests == true;
     }
 
+    function isSeatingManager(weddingId) {
+      return isSeatingEditor(weddingId) &&
+        request.auth.token.seatingRole in ["bride", "groom"];
+    }
+
     function canEditSeating(weddingId) {
       return (isDashboardMember(weddingId) &&
-        dashboardUser(weddingId).data.canEditSeating == true) || isSeatingEditor(weddingId);
+        dashboardUser(weddingId).data.canEditSeating == true) || isSeatingManager(weddingId);
     }
 
     // Editor links are exchanged by Cloud Functions for custom Firebase Auth
@@ -59,9 +64,11 @@ service cloud.firestore {
     }
 
     function editorMayReadGuest(guest) {
-      return request.auth.token.seatingRole == "family"
-        ? normalizedGuestSide(guest) == "family"
-        : (normalizedGuestSide(guest) == request.auth.token.seatingRole || normalizedGuestSide(guest) == "both");
+      // Bride and Groom managers work from one shared floor plan, so both
+      // need the complete guest roster. Family links keep their existing
+      // limited view and never receive write authority.
+      return request.auth.token.seatingRole in ["bride", "groom"]
+        || (request.auth.token.seatingRole == "family" && normalizedGuestSide(guest) == "family");
     }
 
     function editorMayUpdatePublicGuest(weddingId, publicGuest) {
@@ -117,7 +124,7 @@ service cloud.firestore {
       // other wedding settings.
       allow update: if (isDashboardMember(weddingId) &&
           request.auth.uid == resource.data.ownerUserId)
-        || (canEditSeating(weddingId)
+        || ((isDashboardMember(weddingId) && dashboardUser(weddingId).data.canEditSeating == true)
           && request.resource.data.diff(resource.data).affectedKeys().hasOnly(["hallObjects", "updatedAt"]));
 
       allow delete: if isDashboardMember(weddingId) &&
@@ -129,14 +136,23 @@ service cloud.firestore {
       }
 
       match /seatingAccess/{role} {
-        allow read: if isDashboardMember(weddingId) &&
-          request.auth.uid == get(/databases/$(database)/documents/weddings/$(weddingId)).data.ownerUserId;
+        allow read: if (isDashboardMember(weddingId) &&
+          request.auth.uid == get(/databases/$(database)/documents/weddings/$(weddingId)).data.ownerUserId)
+          || canManageUsers(weddingId);
         allow write: if false;
       }
 
       match /tables/{tableId} {
         allow read: if canReadSeating(weddingId) || isPublicWedding(weddingId);
-        allow create, update, delete: if canEditSeating(weddingId);
+        allow create, delete: if isDashboardMember(weddingId) &&
+          dashboardUser(weddingId).data.canEditSeating == true;
+        // Secure link managers can only change occupancy; table geometry,
+        // names, capacity, and chair positions stay dashboard-only.
+        allow update: if (isDashboardMember(weddingId) &&
+            dashboardUser(weddingId).data.canEditSeating == true)
+          || (isSeatingManager(weddingId) &&
+            request.resource.data.diff(resource.data).affectedKeys()
+              .hasOnly(["chairs", "guestIds", "updatedAt"]));
       }
 
       match /guests/{guestId} {

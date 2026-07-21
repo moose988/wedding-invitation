@@ -5,6 +5,7 @@ import {
   getDocs,
   initFirebase,
   isFirebaseConfigured,
+  onSnapshot,
   serverTimestamp,
   updateDoc,
 } from "./firebase-config.js";
@@ -81,9 +82,11 @@ const introLabels = ["Open Invitation", "افتح الدعوة"];
 const rsvpStorageKey = "premium-invitation-demo-rsvp";
 const introAnimationDuration = 1450;
 const reducedMotionIntroDuration = 180;
+const invitationParams = new URLSearchParams(window.location.search);
+const explicitDemoMode = invitationParams.get("demo") === "1";
 
 const state = {
-  mode: "demo",
+  mode: explicitDemoMode ? "demo" : "unavailable",
   weddingId: "",
   guestToken: "",
   wedding: structuredClone(demoWedding),
@@ -93,6 +96,7 @@ const state = {
   assignedTable: null,
   seatPlanTransform: { scale: 1, x: 0, y: 0 },
   seatPlanGesture: null,
+  seatPlanHasFitted: false,
   firebaseReady: false,
   invitationOpening: false,
   labelIndex: 0,
@@ -101,6 +105,9 @@ const state = {
   musicAvailable: true,
   isRsvpEditing: false,
   lastMobileScrollY: 0,
+  unsubWedding: null,
+  unsubGuest: null,
+  unsubTables: null,
 };
 
 const icons = {
@@ -148,21 +155,57 @@ async function boot() {
     elements.weddingAudio.load();
   }
 
+  if (!explicitDemoMode && (!weddingId || !guestToken)) {
+    renderInvitationAccessError("This invitation link is incomplete. Please use the personal link shared by the couple.");
+    return;
+  }
+
   if (weddingId && guestToken && isFirebaseConfigured()) {
     try {
       await initFirebase();
       state.firebaseReady = true;
       state.mode = "firebase";
       await loadFirebaseInvitation(weddingId, guestToken);
+      startFirebaseInvitationListeners(weddingId, guestToken);
     } catch (error) {
       console.error(error);
-      state.mode = "demo";
-      showToast("Firebase invitation mode is unavailable. The demo invitation is still ready.", "error");
+      state.mode = "unavailable";
+      renderInvitationAccessError("We could not open this invitation. Please check the link and try again.");
+      return;
     }
+  } else if (!explicitDemoMode) {
+    renderInvitationAccessError("This invitation service is not configured. Please ask the couple for a new link.");
+    return;
   }
 
   populateInvitation();
   setupCountdown();
+}
+
+function renderInvitationAccessError(message) {
+  document.body.classList.remove("intro-active");
+  document.body.innerHTML = `<main style="min-height:100vh;display:grid;place-items:center;padding:24px;background:#f6f1e8;color:#2f312d;font-family:Georgia,serif"><section style="max-width:520px;text-align:center;background:#fffdf8;border:1px solid #dccfb8;border-radius:20px;padding:32px"><h1>Invitation unavailable</h1><p>${escapeHtml(message)}</p></section></main>`;
+}
+
+function startFirebaseInvitationListeners(weddingId, guestToken) {
+  state.unsubWedding?.(); state.unsubGuest?.(); state.unsubTables?.();
+  const db = initFirebase().db;
+  const refresh = async () => {
+    try {
+      await loadFirebaseInvitation(weddingId, guestToken);
+      populateInvitation();
+    } catch (error) {
+      console.error(error);
+      if (/guest not found|wedding not found/i.test(error.message || "")) {
+        renderInvitationAccessError("This invitation is no longer available. Please ask the couple for a new link.");
+      } else {
+        showToast("Live seating update could not be loaded. Refresh to retry.", "error");
+      }
+    }
+  };
+  state.unsubWedding = onSnapshot(doc(db, "weddings", weddingId), (snapshot) => snapshot.exists() ? refresh() : renderInvitationAccessError("This wedding is no longer available."), () => showToast("Wedding data is unavailable.", "error"));
+  state.unsubGuest = onSnapshot(doc(db, "weddings", weddingId, "publicGuests", guestToken), (snapshot) => snapshot.exists() ? refresh() : renderInvitationAccessError("This invitation is no longer available. Please ask the couple for a new link."), () => showToast("Invitation access is unavailable.", "error"));
+  state.unsubTables = onSnapshot(collection(db, "weddings", weddingId, "tables"), refresh, () => showToast("Live seating update is unavailable.", "error"));
 }
 
 function getUrlParams() {
@@ -220,7 +263,7 @@ async function loadTables(weddingId) {
 }
 
 function normaliseWedding(wedding) {
-  return {
+  const normalised = {
     ...structuredClone(demoWedding),
     ...wedding,
     media: {
@@ -229,6 +272,34 @@ function normaliseWedding(wedding) {
     },
     palette: Array.isArray(wedding.palette) && wedding.palette.length ? wedding.palette : demoWedding.palette,
   };
+
+  // Some older records were created through a form that converted Arabic
+  // characters to literal question marks. Keep the invitation readable while
+  // those records are being migrated in Firestore.
+  return repairCorruptedArabicText(normalised);
+}
+
+function repairCorruptedArabicText(wedding) {
+  const isCorrupted = (value) => typeof value === "string" && value.includes("?");
+  const laylaAndZaid = {
+    brideNameAr: "\u0644\u064a\u0644\u0649",
+    groomNameAr: "\u0632\u0627\u064a\u062f",
+    subtitleAr: "\u0628\u0643\u0644 \u0627\u0644\u062d\u0628 \u0646\u062f\u0639\u0648\u0643\u0645 \u0644\u0645\u0634\u0627\u0631\u0643\u062a\u0646\u0627 \u0641\u0631\u062d\u0629 \u0627\u0644\u0639\u0645\u0631.",
+    invitationMessageAr: "\u0641\u064a \u0645\u0633\u0627\u0621 \u064a\u0641\u064a\u0636 \u062d\u0628\u0627\u064b \u0648\u0637\u0645\u0623\u0646\u064a\u0646\u0629\u060c \u0646\u062a\u0634\u0631\u0641 \u0628\u062d\u0636\u0648\u0631\u0643\u0645 \u0644\u062a\u0634\u0647\u062f\u0648\u0627 \u0645\u0639\u0646\u0627 \u0628\u062f\u0627\u064a\u0629 \u0641\u0635\u0644 \u062c\u062f\u064a\u062f \u0645\u0646 \u0627\u0644\u0639\u0645\u0631.",
+    timeAr: "\u0627\u0644\u0633\u0627\u0639\u0629 \u0668:\u0660\u0660 \u0645\u0633\u0627\u0621\u064b",
+    venueAr: "\u0642\u0627\u0639\u0629 \u0627\u0644\u0644\u0624\u0644\u0624\u0629\u060c \u062f\u0628\u064a",
+    locationAr: "\u062f\u0628\u064a\u060c \u0627\u0644\u0625\u0645\u0627\u0631\u0627\u062a \u0627\u0644\u0639\u0631\u0628\u064a\u0629 \u0627\u0644\u0645\u062a\u062d\u062f\u0629",
+    dressCodeAr: "\u0627\u0644\u0632\u064a \u0627\u0644\u0631\u0633\u0645\u064a \u0628\u0623\u0644\u0648\u0627\u0646 \u0627\u0644\u0634\u0627\u0645\u0628\u0627\u0646\u064a\u0627 \u0648\u0627\u0644\u0645\u0648\u0643\u0627 \u0648\u0627\u0644\u0632\u0645\u0631\u062f\u064a \u0648\u0627\u0644\u062f\u0631\u062c\u0627\u062a \u0627\u0644\u0647\u0627\u062f\u0626\u0629.",
+    closingAr: "\u062d\u0636\u0648\u0631\u0643\u0645 \u064a\u0632\u064a\u062f \u0641\u0631\u062d\u062a\u0646\u0627.",
+  };
+
+  if (`${wedding.brideName} & ${wedding.groomName}` !== "Layla & Zaid") {
+    return wedding;
+  }
+
+  return Object.fromEntries(
+    Object.entries(wedding).map(([key, value]) => [key, isCorrupted(value) ? (laylaAndZaid[key] || value) : value])
+  );
 }
 
 function populateInvitation() {
@@ -399,7 +470,17 @@ function renderFirebaseRsvp(mount) {
     pending: "Please confirm your attendance.",
   };
   const guest = state.guest;
-  const attending = guest.rsvpStatus === "confirmed";
+  if (guest.rsvpStatus === "confirmed") {
+    mount.innerHTML = `
+      <div class="rsvp-summary rsvp-summary--confirmed" role="status" aria-live="polite">
+        <span class="rsvp-confirmation-mark" aria-hidden="true">✓</span>
+        <p class="rsvp-summary__eyebrow">RSVP Confirmed</p>
+        <h3>Your attendance is confirmed</h3>
+        <p>Thank you, ${escapeHtml(guest.fullName || "guest")}. We look forward to celebrating with you.</p>
+      </div>
+    `;
+    return;
+  }
   mount.innerHTML = `
     <form class="firebase-rsvp-panel rsvp-form" id="firebaseRsvpForm">
       <p class="firebase-rsvp-status">${statusCopy[guest.rsvpStatus] || statusCopy.pending}</p>
@@ -409,7 +490,7 @@ function renderFirebaseRsvp(mount) {
           <h3>Are you attending?</h3>
           <div class="rsvp-choice" role="radiogroup" aria-label="Attendance">
             <label class="rsvp-answer">
-              <input type="radio" name="status" value="confirmed" ${attending ? "checked" : ""} required />
+              <input type="radio" name="status" value="confirmed" ${guest.rsvpStatus === "confirmed" ? "checked" : ""} required />
               <span>Yes</span>
             </label>
             <label class="rsvp-answer">
@@ -417,14 +498,6 @@ function renderFirebaseRsvp(mount) {
               <span>No</span>
             </label>
           </div>
-        </section>
-        <section class="rsvp-phase" data-rsvp-step="2" ${attending ? "" : "hidden"}>
-          <p class="rsvp-phase__number">02</p>
-          <h3>How many additional guests are coming?</h3>
-          <label class="rsvp-input-line rsvp-input-line--compact">
-            <span class="sr-only">Additional guests</span>
-            <input name="additionalGuests" type="number" min="0" max="10" inputmode="numeric" placeholder="0" value="${escapeAttribute(String(normalizeAdditionalGuests(guest.additionalGuests)))}" />
-          </label>
         </section>
       </div>
       <button class="luxury-button luxury-button--primary rsvp-form__submit" type="submit">
@@ -469,14 +542,6 @@ function renderDemoRsvp(mount) {
             </label>
           </div>
         </section>
-        <section class="rsvp-phase" data-rsvp-step="2" ${saved?.status === "Yes" ? "" : "hidden"}>
-          <p class="rsvp-phase__number">02</p>
-          <h3>How many additional guests are coming?</h3>
-          <label class="rsvp-input-line rsvp-input-line--compact">
-            <span class="sr-only">Additional guests</span>
-            <input name="additionalGuests" type="number" min="0" max="10" inputmode="numeric" placeholder="0" value="${escapeAttribute(saved?.additionalGuests || saved?.guests || "0")}" />
-          </label>
-        </section>
       </div>
       <button class="luxury-button luxury-button--primary rsvp-form__submit" type="submit" ${saved?.status ? "" : "hidden"}>
         ${icons.reply}<span>Send RSVP</span>
@@ -497,30 +562,41 @@ function renderSeatSection() {
 
   elements.seatingSection.hidden = false;
   const assignments = getInvitationSeatAssignments(state.guest);
-  const assignedTable = state.tables.find((table) => table.id === assignments[0]?.tableId) || state.assignedTable;
-  const hasSeat = assignments.length > 0;
-  const seatNumbers = assignments.map((assignment) => assignment.seatNumber).filter(Boolean).join(", ");
+  const partyMembers = getInvitationPartyMembers(state.guest, assignments);
 
-  document.getElementById("seatDetailsMount").innerHTML = hasSeat
-    ? `
+  document.getElementById("seatDetailsMount").innerHTML = `
       <div class="seat-details-grid">
-        <article class="seat-detail-card"><span>Guest Name</span><strong>${escapeHtml(state.guest.fullName || "Guest")}</strong></article>
-        <article class="seat-detail-card"><span>Table Name</span><strong>${escapeHtml(assignments[0]?.tableName || assignedTable?.name || "Pending")}</strong></article>
-        <article class="seat-detail-card"><span>Seat Numbers</span><strong>${escapeHtml(seatNumbers || "Pending")}</strong></article>
-        <article class="seat-detail-card"><span>People</span><strong>${escapeHtml(String(getPartySize(state.guest)))}</strong></article>
-        <article class="seat-detail-card"><span>Event Date</span><strong>${escapeHtml(formatDate(state.wedding.date))}</strong></article>
-        <article class="seat-detail-card"><span>Event Time</span><strong>${escapeHtml(state.wedding.time || "")}</strong></article>
-        <article class="seat-detail-card"><span>Venue</span><strong>${escapeHtml(state.wedding.venue || "")}</strong></article>
+        <article class="seat-detail-card"><span>Primary guest</span><strong>${escapeHtml(state.guest.fullName || "Guest")}</strong></article>
+        <article class="seat-detail-card"><span>Party size</span><strong>${escapeHtml(String(getPartySize(state.guest)))}</strong></article>
       </div>
-      <div class="guest-seat-list">
-        ${assignments.map((assignment) => `
-          <span>${escapeHtml(assignment.label)} - ${escapeHtml(assignment.tableName || "Table")} seat ${escapeHtml(String(assignment.seatNumber))}</span>
-        `).join("")}
+      <div class="guest-seat-list guest-seat-list--party" aria-label="Your party seating assignments">
+        ${partyMembers.map(renderInvitationPartyMember).join("")}
       </div>
-    `
-    : '<p class="seat-empty-copy">Your seating details will be shared soon.</p>';
+    `;
 
   renderSeatingMap(state.tables, assignments);
+}
+
+function getInvitationPartyMembers(guest, assignments) {
+  const byKey = new Map(assignments.map((assignment) => [assignment.personKey, assignment]));
+  return Array.from({ length: getPartySize(guest) }, (_, index) => {
+    const personKey = personKeyForIndex(index);
+    return {
+      index,
+      label: index === 0 ? (guest.fullName || "Primary guest") : `Companion ${index}`,
+      assignment: byKey.get(personKey) || null,
+    };
+  });
+}
+
+function renderInvitationPartyMember(member) {
+  const assignment = member.assignment;
+  return `
+    <article class="guest-seat-party-member ${assignment ? "is-assigned" : "is-unassigned"}">
+      <strong>${escapeHtml(member.label)}</strong>
+      <span>${assignment ? `${escapeHtml(assignment.tableName || "Table")} · Chair ${escapeHtml(String(assignment.seatNumber))}` : "Seat not assigned yet"}</span>
+    </article>
+  `;
 }
 
 function renderSeatingMap(tables, assignments = []) {
@@ -534,10 +610,12 @@ function renderSeatingMap(tables, assignments = []) {
     return;
   }
 
+  state.seatPlanHasFitted = false;
   const assignedTableIds = new Set(assignments.map((assignment) => assignment.tableId));
   const assignedSeatKeys = new Set(assignments.map((assignment) => `${assignment.tableId}::${assignment.seatNumber}`));
   map.innerHTML = `
     <div class="seat-plan-toolbar" aria-label="Seating plan controls">
+      <button type="button" data-seat-plan-control="my-seats" ${assignments.length ? "" : "disabled"}>My seats</button>
       <button type="button" data-seat-plan-control="zoom-out">-</button>
       <button type="button" data-seat-plan-control="fit">Fit</button>
       <button type="button" data-seat-plan-control="zoom-in">+</button>
@@ -570,6 +648,7 @@ function renderSeatingMap(tables, assignments = []) {
     </div>
   `;
   bindSeatPlanInteractions();
+  requestAnimationFrame(() => fitInvitationSeatingPlan(false));
 }
 
 function getPartySize(guest) {
@@ -609,6 +688,8 @@ function getInvitationSeatAssignments(guest) {
       const personKey = assignment.personKey || personKeyForIndex(Number.isInteger(Number(assignment.partyMemberIndex)) ? Number(assignment.partyMemberIndex) : index);
       const partyIndex = partyIndexFromKey(personKey);
       const table = state.tables.find((item) => item.id === assignment.tableId);
+      const chair = table?.chairs?.find((item) => String(item.seatNumber) === String(assignment.seatNumber));
+      if (!table || !chair) return null;
       return {
         tableId: assignment.tableId || "",
         tableName: assignment.tableName || table?.name || "",
@@ -617,7 +698,7 @@ function getInvitationSeatAssignments(guest) {
         label: assignment.label || partyLabelForIndex(partyIndex),
       };
     })
-    .filter((assignment) => assignment.tableId && assignment.seatNumber)
+    .filter(Boolean)
     .sort((a, b) => partyIndexFromKey(a.personKey) - partyIndexFromKey(b.personKey));
 }
 
@@ -706,10 +787,8 @@ function bindSeatPlanInteractions() {
     const control = event.target.closest("[data-seat-plan-control]")?.dataset.seatPlanControl;
     if (control === "zoom-in") zoomBy(0.15);
     if (control === "zoom-out") zoomBy(-0.15);
-    if (control === "fit") {
-      state.seatPlanTransform = { scale: 1, x: 0, y: 0 };
-      applyTransform();
-    }
+    if (control === "fit") fitInvitationSeatingPlan();
+    if (control === "my-seats") centerInvitationSeats();
   });
   viewport.addEventListener("wheel", (event) => {
     event.preventDefault();
@@ -758,6 +837,38 @@ function bindSeatPlanInteractions() {
   });
 }
 
+function fitInvitationSeatingPlan(reset = true) {
+  const viewport = document.getElementById("seatPlanViewport");
+  if (!viewport || (!reset && state.seatPlanHasFitted)) return;
+  const canvasWidth = 1100;
+  const canvasHeight = 720;
+  const padding = 18;
+  const scale = clamp(Math.min((viewport.clientWidth - padding * 2) / canvasWidth, (viewport.clientHeight - padding * 2) / canvasHeight), 0.28, 1);
+  state.seatPlanTransform = {
+    scale,
+    x: Math.round((viewport.clientWidth - canvasWidth * scale) / 2),
+    y: Math.round((viewport.clientHeight - canvasHeight * scale) / 2),
+  };
+  state.seatPlanHasFitted = true;
+  const canvas = document.getElementById("seatPlanCanvas");
+  if (canvas) canvas.style.transform = `translate(${state.seatPlanTransform.x}px, ${state.seatPlanTransform.y}px) scale(${scale})`;
+}
+
+function centerInvitationSeats() {
+  const viewport = document.getElementById("seatPlanViewport");
+  const canvas = document.getElementById("seatPlanCanvas");
+  const assignment = getInvitationSeatAssignments(state.guest)[0];
+  const table = state.tables.find((item) => item.id === assignment?.tableId);
+  if (!viewport || !canvas || !table) return;
+  const scale = clamp(Math.max(state.seatPlanTransform.scale, 0.62), 0.45, 1.25);
+  state.seatPlanTransform = {
+    scale,
+    x: Math.round(viewport.clientWidth / 2 - (Number(table.x || 50) / 100) * 1100 * scale),
+    y: Math.round(viewport.clientHeight / 2 - (Number(table.y || 50) / 100) * 720 * scale),
+  };
+  canvas.style.transform = `translate(${state.seatPlanTransform.x}px, ${state.seatPlanTransform.y}px) scale(${scale})`;
+}
+
 function createHallObjects() {
   return [
     { id: "stage-default", type: "stage", label: "Stage", x: 50, y: 8 },
@@ -795,8 +906,6 @@ async function renderGuestQrPass() {
       <div class="qr-pass__code" id="guestQrCode"></div>
       <div class="qr-pass__copy">
         <p>Present this QR code at the entrance.</p>
-        <a class="location-button" href="${escapeAttribute(checkinUrl)}" target="_blank" rel="noopener noreferrer">Open Check-In Link</a>
-        <p class="qr-pass__fallback">${escapeHtml(checkinUrl)}</p>
       </div>
     </div>
   `;
@@ -982,7 +1091,7 @@ function handleDemoRsvpSubmit(event) {
 
   const response = {
     status: statusValue,
-    additionalGuests: String(form.elements.additionalGuests.value || "0").trim(),
+    additionalGuests: "0",
     savedAt: new Date().toISOString(),
   };
 
@@ -995,8 +1104,7 @@ async function handleFirebaseRsvpSubmit(event) {
   event.preventDefault();
   const form = event.currentTarget;
   const statusValue = form.elements.status.value;
-  const additionalGuests = statusValue === "confirmed" ? form.elements.additionalGuests.value : 0;
-  await updateRsvp(statusValue, additionalGuests);
+  await updateRsvp(statusValue, 0);
 }
 
 function setupRsvpPhases(form) {
@@ -1005,42 +1113,10 @@ function setupRsvpPhases(form) {
   }
 
   const statusInputs = form.querySelectorAll('input[name="status"]');
-  const additionalGuestsInput = form.elements.additionalGuests;
-  const additionalGuestsStep = form.querySelector('[data-rsvp-step="2"]');
   const submitButton = form.querySelector(".rsvp-form__submit");
 
-  const revealStep = (step, focusTarget) => {
-    const section = form.querySelector(`[data-rsvp-step="${step}"]`);
-    if (!section || !section.hidden) {
-      return;
-    }
-    section.hidden = false;
-    window.requestAnimationFrame(() => {
-      section.classList.add("is-visible");
-      focusTarget?.focus();
-    });
-  };
-
-  const hideStep = (section) => {
-    if (!section) {
-      return;
-    }
-    section.hidden = true;
-    section.classList.remove("is-visible");
-  };
-
   const updateFlow = (statusValue) => {
-    const isAttending = statusValue === "Yes" || statusValue === "confirmed";
-    if (isAttending) {
-      additionalGuestsInput.required = true;
-      revealStep("2", additionalGuestsInput);
-      submitButton.hidden = false;
-      return;
-    }
-    additionalGuestsInput.required = false;
-    additionalGuestsInput.value = "0";
-    hideStep(additionalGuestsStep);
-    submitButton.hidden = !(statusValue === "No" || statusValue === "declined");
+    submitButton.hidden = !(statusValue === "Yes" || statusValue === "No" || statusValue === "confirmed" || statusValue === "declined");
   };
 
   statusInputs.forEach((input) => input.addEventListener("change", () => updateFlow(input.value)));

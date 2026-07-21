@@ -43,13 +43,30 @@ service cloud.firestore {
       return isSignedIn()
         && request.auth.token.seatingEditor == true
         && request.auth.token.seatingWeddingId == weddingId
-        && request.auth.token.seatingRole in ["bride", "groom"]
+        && request.auth.token.seatingRole in ["bride", "groom", "family"]
         && seatingAccess(weddingId, request.auth.token.seatingRole).data.status == "active"
         && seatingAccess(weddingId, request.auth.token.seatingRole).data.version == request.auth.token.seatingAccessVersion;
     }
 
     function canReadSeating(weddingId) {
       return canViewDashboard(weddingId) || isSeatingEditor(weddingId);
+    }
+
+    function normalizedGuestSide(guest) {
+      return guest.side in ["bride", "Bride", "bride side", "Bride Side"] ? "bride" :
+        (guest.side in ["groom", "Groom", "groom side", "Groom Side"] ? "groom" :
+        (guest.side in ["both", "Both", "both sides", "Both Sides", "shared", "Shared"] ? "both" : "family"));
+    }
+
+    function editorMayReadGuest(guest) {
+      return request.auth.token.seatingRole == "family"
+        ? normalizedGuestSide(guest) == "family"
+        : (normalizedGuestSide(guest) == request.auth.token.seatingRole || normalizedGuestSide(guest) == "both");
+    }
+
+    function editorMayUpdatePublicGuest(weddingId, publicGuest) {
+      return !isSeatingEditor(weddingId) || (publicGuest.guestId is string
+        && editorMayReadGuest(get(/databases/$(database)/documents/weddings/$(weddingId)/guests/$(publicGuest.guestId)).data));
     }
 
     function canCheckIn(weddingId) {
@@ -78,7 +95,7 @@ service cloud.firestore {
     }
 
     function isGuestSeatingUpdate(weddingId) {
-      return canEditSeating(weddingId)
+      return canEditSeating(weddingId) && editorMayReadGuest(resource.data)
         && request.resource.data.diff(resource.data).affectedKeys().hasOnly([
           "tableId",
           "tableName",
@@ -94,8 +111,14 @@ service cloud.firestore {
       allow create: if isSignedIn() &&
         request.auth.uid == request.resource.data.ownerUserId;
 
-      allow update: if isDashboardMember(weddingId) &&
-        request.auth.uid == resource.data.ownerUserId;
+      // Table positions are stored in their own table documents, but the
+      // stage/entrance markers live on the wedding document. Let seating
+      // editors update only that layout field, without granting access to any
+      // other wedding settings.
+      allow update: if (isDashboardMember(weddingId) &&
+          request.auth.uid == resource.data.ownerUserId)
+        || (canEditSeating(weddingId)
+          && request.resource.data.diff(resource.data).affectedKeys().hasOnly(["hallObjects", "updatedAt"]));
 
       allow delete: if isDashboardMember(weddingId) &&
         request.auth.uid == resource.data.ownerUserId;
@@ -117,10 +140,12 @@ service cloud.firestore {
       }
 
       match /guests/{guestId} {
-        allow read: if canReadSeating(weddingId);
+        // Editor links may read only the guest documents for their authorized
+        // side. Collection queries must include the matching side values.
+        allow get: if canViewDashboard(weddingId) || (isSeatingEditor(weddingId) && editorMayReadGuest(resource.data));
+        allow list: if canViewDashboard(weddingId) || (isSeatingEditor(weddingId) && editorMayReadGuest(resource.data));
         allow create, delete: if canEditGuests(weddingId);
         allow update: if canEditGuests(weddingId) || canCheckIn(weddingId) || isGuestRsvpUpdate(weddingId) || isGuestSeatingUpdate(weddingId);
-        allow list: if false;
       }
 
       // Aggregated side-level stats (counts + seated roster, no phones or
@@ -143,7 +168,7 @@ service cloud.firestore {
         allow update: if canEditGuests(weddingId)
           || (canCheckIn(weddingId)
             && request.resource.data.diff(resource.data).changedKeys().hasOnly(["checkedIn", "checkedInAt", "updatedAt"]))
-          || (canEditSeating(weddingId)
+          || (canEditSeating(weddingId) && editorMayUpdatePublicGuest(weddingId, resource.data)
             && request.resource.data.diff(resource.data).changedKeys().hasOnly(["seatingAssignments", "tableId", "tableName", "seatNumber", "updatedAt"]))
           || (isPublicWedding(weddingId)
             && request.resource.data.diff(resource.data).changedKeys().hasOnly(["rsvpStatus", "additionalGuests", "updatedAt"])

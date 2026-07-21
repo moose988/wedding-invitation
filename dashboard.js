@@ -816,7 +816,7 @@ const state = {
   unsubGuests: null,
   unsubTables: null,
   unsubSeatingAccess: null,
-  seatingAccess: { bride: null, groom: null },
+  seatingAccess: { bride: null, groom: null, family: null },
 };
 
 const elements = {
@@ -1146,7 +1146,7 @@ async function bootstrapSeatingEditor() {
     }
     const token = await user.getIdTokenResult(true);
     const claims = token.claims;
-    if (!claims.seatingEditor || !["bride", "groom"].includes(claims.seatingRole) || !claims.seatingWeddingId) {
+    if (!claims.seatingEditor || !["bride", "groom", "family"].includes(claims.seatingRole) || !claims.seatingWeddingId) {
       throw new Error("This access link has expired or been revoked.");
     }
     state.currentUser = user;
@@ -1254,7 +1254,9 @@ function loadDemoDashboard(message = "Preview mode is on. Firebase setup can be 
   state.guests = demoSourceGuests.map((guest) => ({
     ...guest,
     additionalGuests: normalizeAdditionalGuests(guest.additionalGuests),
-    inviteLink: guest.inviteLink || buildInviteLink(guest.guestToken),
+    // Rebuild public URLs from the current host. Saved links can contain an
+    // old development address that is no longer running.
+    inviteLink: buildInviteLink(guest.guestToken),
     qrCodeValue: guest.qrCodeValue || buildCheckinLink(guest.guestToken),
   }));
   state.loadingGuests = false;
@@ -1324,6 +1326,15 @@ async function bootstrapDashboard() {
   const weddingDoc = await getDoc(doc(state.services.db, "weddings", state.weddingId));
   state.wedding = weddingDoc.exists() ? weddingDoc.data() : null;
   state.hallObjects = hydrateHallObjects(state.wedding?.hallObjects);
+  if (isWeddingOwner()) {
+    try {
+      const normalizeSides = httpsCallable(state.services.functions, "normalizeSeatingGuestSides");
+      await normalizeSides({ weddingId: state.weddingId });
+    } catch (error) {
+      console.error("Guest-side normalization failed.", error);
+      showToast("Guest sides could not be normalized. Seating access may be limited until this is resolved.", "error");
+    }
+  }
   showDashboard();
   renderAll();
   startListeners();
@@ -1337,13 +1348,13 @@ function isWeddingOwner() {
 function startSeatingAccessListener() {
   state.unsubSeatingAccess?.();
   if (!isWeddingOwner()) {
-    state.seatingAccess = { bride: null, groom: null };
+    state.seatingAccess = { bride: null, groom: null, family: null };
     return;
   }
   state.unsubSeatingAccess = onSnapshot(collection(state.services.db, "weddings", state.weddingId, "seatingAccess"), (snapshot) => {
-    const next = { bride: null, groom: null };
+    const next = { bride: null, groom: null, family: null };
     snapshot.docs.forEach((item) => {
-      if (item.id === "bride" || item.id === "groom") next[item.id] = { id: item.id, ...item.data() };
+      if (["bride", "groom", "family"].includes(item.id)) next[item.id] = { id: item.id, ...item.data() };
     });
     state.seatingAccess = next;
     if (state.activeView === "share") renderActiveView();
@@ -1357,10 +1368,13 @@ function startListeners() {
   state.loadingTables = true;
   renderActiveView();
 
+  const guestSource = state.editorMode
+    ? query(collection(state.services.db, "weddings", state.weddingId, "guests"), where("side", "in", editorGuestSideValues(state.editorRole)))
+    : collection(state.services.db, "weddings", state.weddingId, "guests");
   state.unsubGuests = onSnapshot(
-    collection(state.services.db, "weddings", state.weddingId, "guests"),
+    guestSource,
     (snapshot) => {
-      state.guests = snapshot.docs.map((docSnapshot) => ({ ...docSnapshot.data(), id: docSnapshot.id }));
+      state.guests = snapshot.docs.map((docSnapshot) => ({ ...docSnapshot.data(), id: docSnapshot.id, side: normalizeGuestSide(docSnapshot.data().side) }));
       state.firestoreGuestCount = snapshot.size;
       state.firestoreGuestIds = snapshot.docs.map((docSnapshot) => docSnapshot.id);
       console.info("[Dashboard Firestore diagnostics]", {
@@ -1405,13 +1419,27 @@ function handleSeatingListenerError(error) {
   showToast("Live seating updates could not be loaded. Please refresh.", "error");
 }
 
-// Which guests belong on a side-status page. "Both sides" guests show on
-// the groom AND bride pages; anything else lands on the family page.
+// Side-status pages mirror the Guest Directory's side field exactly so their
+// counts always match the corresponding guest category.
 function sideViewMatches(guest, side) {
-  if (side === "groom" || side === "bride") {
-    return guest.side === side || guest.side === "both";
-  }
-  return !["groom", "bride", "both"].includes(guest.side);
+  return normalizeGuestSide(guest.side) === side;
+}
+
+function normalizeGuestSide(value) {
+  const side = String(value || "").trim().toLowerCase().replace(/[ _-]+/g, " ");
+  if (["bride", "bride side", "brides side"].includes(side)) return "bride";
+  if (["groom", "groom side", "grooms side"].includes(side)) return "groom";
+  if (["both", "both sides", "shared"].includes(side)) return "both";
+  return "family";
+}
+
+function editorGuestSideValues(role) {
+  const aliases = {
+    bride: ["bride", "Bride", "bride side", "Bride Side", "brides side"],
+    groom: ["groom", "Groom", "groom side", "Groom Side", "grooms side"],
+    family: ["family", "Family", "family side", "Family Side"],
+  };
+  return role === "family" ? aliases.family : [...aliases[role], "both", "Both", "both sides", "Both Sides", "shared", "Shared"];
 }
 
 function buildPublicStatsPayload() {
@@ -1496,7 +1524,7 @@ function renderChrome() {
   elements.dashboardSidebar.hidden = state.editorMode;
   elements.signOutButton.textContent = state.editorMode ? "End session" : "Sign out";
   elements.pageEyebrow.textContent = state.editorMode ? "Secure shared workspace" : (isSeatingView ? "" : meta.eyebrow);
-  elements.pageTitle.textContent = state.editorMode ? `${state.editorRole === "bride" ? "Bride" : "Groom"} — Seating Editor` : (isSeatingView ? "" : meta.title);
+  elements.pageTitle.textContent = state.editorMode ? `${state.editorRole[0].toUpperCase()}${state.editorRole.slice(1)} — Seating Editor` : (isSeatingView ? "" : meta.title);
   elements.pageDescription.textContent = state.editorMode ? "Changes are synchronized live with the wedding dashboard." : (isSeatingView ? "" : meta.description);
   elements.liveIndicator.innerHTML = state.mode === "demo"
     ? "Preview mode"
@@ -1628,7 +1656,7 @@ function renderOverviewPage() {
           <h3>Assignment readiness</h3>
           <div class="progress-stack">
             ${progressRow("Assigned guests", stats.seatedGuests, stats.total, "sage")}
-            ${progressRow("Unassigned guests", stats.unassignedGuests, stats.total, "amber")}
+            ${progressRow("Guest parties needing seats", stats.unassignedGuests, stats.total, "amber")}
             ${progressRow("Seats remaining", stats.remainingSeats, Math.max(stats.totalSeats, 1), "rose")}
           </div>
         </article>
@@ -1816,7 +1844,7 @@ function renderSeatingPage() {
   const selectedSeat = getSelectedSeat();
   const seatingStats = calculateDashboardStats(state.guests, state.tables);
   const sideStats = calculateSideStats(state.guests, state.tables);
-  const saveStateLabel = state.saveState === "saving" ? "Saving layout..." : "Saved";
+  const isSaving = state.saveState === "saving";
   const assignmentStatusPanel = state.assignmentSession ? renderAssignmentPanelHint() : renderAssignmentStatusPanel(selectedSeat);
 
   elements.pageContent.innerHTML = `
@@ -1838,10 +1866,13 @@ function renderSeatingPage() {
             <div class="planner-zoom-stats" aria-label="Planner status">
               <span class="pill">${state.tables.length} tables</span>
               <span class="pill">${seatingStats.totalSeats} seats</span>
-              <span class="pill">${seatingStats.unassignedGuests} unassigned guests</span>
-              <span class="pill pill--groom">Groom seated ${sideStats.groom.seated}/${sideStats.groom.confirmed}</span>
-              <span class="pill pill--bride">Bride seated ${sideStats.bride.seated}/${sideStats.bride.confirmed}</span>
-              <span class="pill">${saveStateLabel}</span>
+              <span class="pill">${seatingStats.total} guests</span>
+              <span class="pill">${seatingStats.unassignedGuests} guest parties need seats</span>
+              <span class="pill pill--groom">Groom fully seated ${sideStats.groom.seated}/${sideStats.groom.confirmed}</span>
+              <span class="pill pill--bride">Bride fully seated ${sideStats.bride.seated}/${sideStats.bride.confirmed}</span>
+              <button class="planner-save-status ${isSaving ? "is-saving" : "is-saved"}" type="button" disabled aria-live="polite" aria-label="${isSaving ? "Saving seating changes" : "All seating changes saved"}">
+                <span aria-hidden="true">${isSaving ? "↻" : "✓"}</span>${isSaving ? "Saving…" : "Saved"}
+              </button>
             </div>
           </div>
           ${actionButton("Add table", "open-add-table", !can("canEditSeating"), "primary")}
@@ -1856,7 +1887,7 @@ function renderSeatingPage() {
               <h3 class="planner-panel__title">${state.seatingMode === "layout" ? "Ballroom layout builder" : "Seat assignment workspace"}</h3>
             </div>
             <div class="guest-toolbar__summary">
-              <span class="pill">${state.seatingMode === "layout" ? "Drag tables to reposition" : "Select chairs to assign guests"}</span>
+              <span class="pill">${state.seatingMode === "layout" ? "Drag tables to reposition" : "Select chairs to assign guests · drag tables to reposition"}</span>
             </div>
           </div>
           <div class="planner-canvas" id="plannerCanvas">
@@ -1956,7 +1987,7 @@ function renderSharePage() {
   const hostessLink = new URL(`checkin.html?wedding=${encodeURIComponent(state.weddingId)}`, base).toString();
   const invitationBase = new URL(`index.html?wedding=${encodeURIComponent(state.weddingId)}&guest={guestToken}`, base).toString();
   const previewGuest = state.guests[0];
-  const previewInvitation = previewGuest?.inviteLink || buildInviteLink(previewGuest?.guestToken || "{guestToken}");
+  const previewInvitation = buildInviteLink(previewGuest?.guestToken || "{guestToken}");
 
   const cards = [
     {
@@ -2040,7 +2071,7 @@ function renderSideViewCard() {
       <div class="sender-options">
         ${sideOption("Groom side", "groom", "أهل العريس")}
         ${sideOption("Bride side", "bride", "أهل العروس")}
-        ${sideOption("Family & shared", "family", "العائلة")}
+        ${sideOption("Family side", "family", "العائلة")}
       </div>
     </article>
   `;
@@ -2068,7 +2099,7 @@ function renderSenderCard() {
     <article class="share-card share-card--sender">
       <p class="da3wa-eyebrow">WhatsApp sender</p>
       <h3>Send invitations from the couple's own phones</h3>
-      <p>Each link opens a ready-made sending page listing the guests with a one-tap WhatsApp button per guest. Send the groom's link to the groom and the bride's link to the bride — every invitation goes out from their own number. Guests marked "Both sides" appear in both lists.</p>
+      <p>Each link opens a ready-made sending page listing the guests with a one-tap WhatsApp button per guest. Every list now matches the corresponding guest-side count exactly, so each guest appears in one side list only.</p>
       <div class="sender-options">
         ${senderOption("Groom side", "groom")}
         ${senderOption("Bride side", "bride")}
@@ -2174,7 +2205,7 @@ function quickAction(title, description, action, disabled = false) {
 }
 
 function renderGuestRow(guest) {
-  const inviteLink = guest.inviteLink || buildInviteLink(guest.guestToken);
+  const inviteLink = buildInviteLink(guest.guestToken);
   const qrLink = guest.qrCodeValue || buildCheckinLink(guest.guestToken);
   const isSelected = state.selectedGuestIds.includes(guest.id);
   const menuOpen = state.activeGuestMenu?.guestId === guest.id;
@@ -2253,10 +2284,10 @@ function renderSeatingAccessCard() {
   };
   return `
     <article class="share-card share-card--sender">
-      <p class="da3wa-eyebrow">Bride & Groom Seating Access</p>
-      <h3>Two secure seating-editor links</h3>
-      <p>Only the wedding owner can create, copy, regenerate, or revoke these links. They open the shared Seating Planner only; they never change guest invitation or view-only links.</p>
-      <div class="sender-options">${card("bride", "Bride")}${card("groom", "Groom")}</div>
+      <p class="da3wa-eyebrow">Wedding Seating Access</p>
+      <h3>Secure side-specific seating-editor links</h3>
+      <p>Only the wedding owner can create, copy, regenerate, or revoke these links. Each link can edit only its authorized guests and saves to the shared Firestore plan.</p>
+      <div class="sender-options">${card("bride", "Bride")}${card("groom", "Groom")}${card("family", "Family")}</div>
     </article>`;
 }
 
@@ -2265,7 +2296,7 @@ function seatingEditorLink(token) {
 }
 
 async function manageSeatingAccess(role, action) {
-  if (!isWeddingOwner() || !["bride", "groom"].includes(role)) {
+  if (!isWeddingOwner() || !["bride", "groom", "family"].includes(role)) {
     showToast("Only the wedding owner can manage seating editor access.", "error");
     return;
   }
@@ -2280,12 +2311,12 @@ async function manageSeatingAccess(role, action) {
         showToast("Secure editor link opened.", "success");
       } else {
         await copyText(link);
-        showToast(action === "reveal" ? "Secure editor link copied." : `${role === "bride" ? "Bride" : "Groom"} editor link created and copied.`, "success");
+        showToast(action === "reveal" ? "Secure editor link copied." : `${role[0].toUpperCase()}${role.slice(1)} editor link created and copied.`, "success");
       }
       state.seatingAccess[role] = { ...(state.seatingAccess[role] || {}), role, status: "active", regeneratedAt: new Date() };
     } else {
       state.seatingAccess[role] = { ...(state.seatingAccess[role] || {}), status: "revoked", link: "" };
-      showToast(`${role === "bride" ? "Bride" : "Groom"} editor access revoked.`, "success");
+      showToast(`${role[0].toUpperCase()}${role.slice(1)} editor access revoked.`, "success");
     }
     renderActiveView();
   } catch (error) {
@@ -2410,12 +2441,9 @@ function renderEntranceIcon() {
 function renderTableInspector(table) {
   const assignments = getTableAssignments(table.id);
   const capacity = Number(table.seatCount || table.capacity || 0);
-  const sideCounts = { groom: 0, bride: 0, other: 0 };
-  assignments.forEach((assignment) => {
-    const guest = state.guests.find((item) => item.id === assignment.guestId);
-    const key = guest && ["groom", "bride"].includes(guest.side) ? guest.side : "other";
-    sideCounts[key] += 1;
-  });
+  const assignedGuests = assignments
+    .map((assignment) => ({ assignment, guest: state.guests.find((item) => item.id === assignment.guestId) }))
+    .sort((left, right) => Number(left.assignment.seatNumber || 0) - Number(right.assignment.seatNumber || 0));
   return `
     <div class="planner-table-summary">
       <div>
@@ -2429,12 +2457,30 @@ function renderTableInspector(table) {
     </div>
     <div class="guest-toolbar__summary">
       ${actionButton("Edit", "edit-table", !can("canEditSeating"), "secondary", table.id)}
-      ${actionButton("Delete", "delete-table", !can("canEditSeating"), "ghost", table.id)}
+      ${actionButton("Duplicate", "duplicate-table", !can("canEditSeating"), "secondary", table.id)}
+      ${actionButton("Delete", "delete-table", !can("canEditSeating"), "danger", table.id)}
     </div>
-    <div class="guest-toolbar__summary planner-side-summary">
-      <span class="pill pill--groom">Groom ${sideCounts.groom}</span>
-      <span class="pill pill--bride">Bride ${sideCounts.bride}</span>
-      ${sideCounts.other ? `<span class="pill">Shared ${sideCounts.other}</span>` : ""}
+    <div class="planner-assigned-guests">
+      <div class="planner-panel__header">
+        <div>
+          <p class="da3wa-eyebrow">Assigned guests</p>
+          <h3 class="planner-panel__title">${assignedGuests.length} of ${capacity} seats filled</h3>
+        </div>
+      </div>
+      <div class="planner-guest-list">
+        ${
+          assignedGuests.length
+            ? assignedGuests
+                .map(({ assignment, guest }) => `
+                  <div class="planner-guest-pill">
+                    <strong>${escapeHtml(guest?.fullName || "Guest")}</strong>
+                    <small>Seat ${escapeHtml(String(assignment.seatNumber || "—"))} · ${escapeHtml(assignment.label || "Guest")}</small>
+                  </div>
+                `)
+                .join("")
+            : '<div class="da3wa-empty">No guests have been assigned to this table yet.</div>'
+        }
+      </div>
     </div>
   `;
 }
@@ -2790,6 +2836,16 @@ async function handleAction(action, dataset, event = null) {
       }
       return;
     }
+    case "open-sender-anyway": {
+      const senderLink = buildSenderLink(dataset.id || "all");
+      elements.missingSeatsModal?.close();
+      const senderWindow = window.open(senderLink, "_blank", "noopener");
+      if (!senderWindow) {
+        await copyText(senderLink);
+        showToast("Popup blocked — the sender link was copied instead.", "info");
+      }
+      return;
+    }
     case "copy-sender":
       if (!ensureSenderSeatsReady(dataset.id || "all")) {
         return;
@@ -2843,7 +2899,7 @@ async function handleAction(action, dataset, event = null) {
     case "open-invitation-preview": {
       const guest = state.guests[0];
       if (guest && !(await ensurePublicGuestMirror(guest))) return;
-      const url = guest?.inviteLink || buildInviteLink(guest?.guestToken || "{guestToken}");
+      const url = buildInviteLink(guest?.guestToken || "{guestToken}");
       window.open(url, "_blank", "noopener");
       return;
     }
@@ -2876,7 +2932,7 @@ async function handleAction(action, dataset, event = null) {
     case "copy-preview": {
       const guest = state.guests[0];
       if (guest && !(await ensurePublicGuestMirror(guest))) return;
-      await copyText(guest?.inviteLink || buildInviteLink(guest?.guestToken || "{guestToken}"));
+      await copyText(buildInviteLink(guest?.guestToken || "{guestToken}"));
       return;
     }
     case "export-all":
@@ -2933,7 +2989,7 @@ async function handleAction(action, dataset, event = null) {
     case "copy-guest-invite": {
       const guest = state.guests.find((item) => item.id === dataset.id || item.id === dataset.guestId);
       if (guest && await ensurePublicGuestMirror(guest)) {
-        await copyText(guest.inviteLink || buildInviteLink(guest.guestToken));
+        await copyText(buildInviteLink(guest.guestToken));
         showToast("Invitation link copied and ready to open.", "success");
       }
       return;
@@ -3089,9 +3145,12 @@ async function handleAction(action, dataset, event = null) {
 function calculateDashboardStats(guests, tables) {
   const totalSeats = tables.reduce((sum, table) => sum + Number(table.seatCount || table.capacity || 0), 0);
   const assignedSeats = countAssignedSeats(tables);
-  const seatedGuests = guests.filter((guest) => getGuestAssignedSeats(guest.id).length > 0).length;
-  const withoutSeat = guests.filter((guest) => guest.rsvpStatus === "confirmed" && getGuestRemainingSeats(guest) > 0).length;
-  const unassignedPeople = guests.reduce((sum, guest) => sum + getGuestRemainingSeats(guest), 0);
+  const seatedGuests = guests.filter((guest) => getGuestAssignedSeats(guest.id, tables).length > 0).length;
+  const withoutSeat = guests.filter((guest) => guest.rsvpStatus === "confirmed" && getGuestRemainingSeats(guest, tables) > 0).length;
+  // A guest record may represent a group. Count each incomplete record once
+  // here, rather than incorrectly presenting every unseated party member as a
+  // separate “guest”.
+  const unassignedGuestParties = guests.filter((guest) => getGuestRemainingSeats(guest, tables) > 0).length;
   const total = guests.length;
   const confirmed = guests.filter((guest) => guest.rsvpStatus === "confirmed").length;
   const pending = guests.filter((guest) => guest.rsvpStatus === "pending").length;
@@ -3107,7 +3166,7 @@ function calculateDashboardStats(guests, tables) {
     totalSeats,
     seatedGuests,
     assignedSeats,
-    unassignedGuests: unassignedPeople,
+    unassignedGuests: unassignedGuestParties,
     remainingSeats: Math.max(0, totalSeats - assignedSeats),
     withoutSeat,
     confirmedPct: percentage(confirmed, total),
@@ -3205,7 +3264,7 @@ function calculateSideStats(guests, tables = state.tables) {
     if (guest.rsvpStatus === "confirmed") {
       bucket.confirmed += 1;
       bucket.confirmedSeats += partySize;
-      if (getGuestAssignedSeats(guest.id, tables).length > 0) {
+      if (getGuestRemainingSeats(guest, tables) === 0) {
         bucket.seated += 1;
       }
     } else if (guest.rsvpStatus === "declined") {
@@ -3338,8 +3397,8 @@ function countAssignedSeats(tables = state.tables) {
   return getAllAssignments(tables).length;
 }
 
-function getGuestRemainingSeats(guest) {
-  return Math.max(0, getPartySize(guest) - getGuestAssignedSeats(guest.id).length);
+function getGuestRemainingSeats(guest, tables = state.tables) {
+  return Math.max(0, getPartySize(guest) - getGuestAssignedSeats(guest.id, tables).length);
 }
 
 function uniqueGuestsFromAssignments(assignments) {
@@ -3552,7 +3611,7 @@ async function saveGuest(event) {
   const ownedPayload = {
     fullName,
     phone: elements.guestForm.phone.value.trim(),
-    side: elements.guestForm.side.value,
+    side: normalizeGuestSide(elements.guestForm.side.value),
     additionalGuests,
     updatedAt: serverTimestamp(),
   };
@@ -3623,6 +3682,7 @@ function buildPublicGuestPayload(guestId, guest) {
     guestToken: guest.guestToken || "",
     fullName: guest.fullName || "",
     fullNameAr: guest.fullNameAr || "",
+    side: normalizeGuestSide(guest.side),
     additionalGuests: normalizeAdditionalGuests(guest.additionalGuests),
     rsvpStatus: guest.rsvpStatus || "pending",
     seatingAssignments: Array.isArray(guest.seatingAssignments) ? guest.seatingAssignments : [],
@@ -3636,6 +3696,7 @@ function buildPublicGuestPayload(guestId, guest) {
 const publicGuestMirrorKeys = [
   "fullName",
   "fullNameAr",
+  "side",
   "additionalGuests",
   "rsvpStatus",
   "seatingAssignments",
@@ -3768,7 +3829,7 @@ async function saveBulkGuests(event) {
     showToast("Add at least one guest line first.", "error");
     return;
   }
-  const side = elements.bulkAddForm.side.value;
+  const side = normalizeGuestSide(elements.bulkAddForm.side.value);
   const payloads = entries.map((entry) => {
     const token = generateGuestToken();
     return {
@@ -4286,13 +4347,16 @@ function loadSeatingTestGuests() {
 }
 
 function handlePlannerPointerDown(event) {
-  if (state.seatingMode !== "layout") {
-    return;
-  }
   const tableNode = event.target.closest("[data-table-drag-id]");
   const objectNode = event.target.closest("[data-hall-object-id]");
   const seatNode = event.target.closest("[data-action='select-seat']");
   if ((!tableNode && !objectNode) || seatNode) {
+    return;
+  }
+
+  // Tables can be repositioned while assigning seats. Hall objects stay in
+  // layout mode so assignment interactions remain focused on the chairs.
+  if (state.seatingMode !== "layout" && !tableNode) {
     return;
   }
 
@@ -5876,7 +5940,7 @@ function buildWhatsAppReminderLink(guest) {
     return "";
   }
   const couple = `${state.wedding?.brideName || "Bride"} & ${state.wedding?.groomName || "Groom"}`;
-  const message = `Hello ${guest.fullName || "Guest"}, this is a kind reminder to confirm your attendance for the wedding of ${couple}.\nPlease open your personal invitation here:\n${guest.inviteLink || buildInviteLink(guest.guestToken)}`;
+  const message = `Hello ${guest.fullName || "Guest"}, this is a kind reminder to confirm your attendance for the wedding of ${couple}.\nPlease open your personal invitation here:\n${buildInviteLink(guest.guestToken)}`;
   return `https://wa.me/${phone}?text=${encodeURIComponent(message)}`;
 }
 
@@ -5918,16 +5982,13 @@ function buildCheckinLink(guestToken) {
   return new URL(`checkin.html?wedding=${encodeURIComponent(state.weddingId)}&guest=${encodeURIComponent(guestToken)}`, window.location.href).toString();
 }
 
-// "Both sides" guests belong to the groom AND bride sender lists; "family"
-// guests get their own list so nobody silently falls through the cracks.
+// Sender lists mirror the Guest Directory's side field exactly. This prevents
+// shared guests from inflating the Groom or Bride invitation counts.
 function senderSideMatches(guest, side) {
   if (side === "all") {
     return true;
   }
-  if (guest.side === side) {
-    return true;
-  }
-  return guest.side === "both" && (side === "groom" || side === "bride");
+  return normalizeGuestSide(guest.side) === side;
 }
 
 function getSenderGuests(side = "all") {
@@ -5966,12 +6027,12 @@ function ensureSenderSeatsReady(side = "all") {
   if (!blocked.length) {
     return true;
   }
-  renderMissingSeatsModal(blocked);
+  renderMissingSeatsModal(blocked, side);
   openCenteredModal(elements.missingSeatsModal);
   return false;
 }
 
-function renderMissingSeatsModal(blocked) {
+function renderMissingSeatsModal(blocked, side = "all") {
   if (!elements.missingSeatsContent) {
     return;
   }
@@ -5985,7 +6046,7 @@ function renderMissingSeatsModal(blocked) {
       <button class="da3wa-icon-button" type="button" data-close-modal="missingSeatsModal" aria-label="Close missing seats warning">x</button>
     </div>
     <div class="da3wa-sheet__body">
-      <p class="planner-note">Every person in an invitation needs an assigned chair before the sender link can be opened or copied.</p>
+      <p class="planner-note">Every person in an invitation needs an assigned chair before sending. You can still open the sender now if you want to send invitations before seating is complete.</p>
       <div class="planner-warning-list">
         ${blocked.map(({ guest, readiness }) => `
           <div class="chair-detail-row">
@@ -5997,6 +6058,7 @@ function renderMissingSeatsModal(blocked) {
     </div>
     <div class="da3wa-sheet__footer">
       <button class="da3wa-button da3wa-button--secondary" type="button" data-close-modal="missingSeatsModal">Cancel</button>
+      <button class="da3wa-button da3wa-button--secondary" type="button" data-action="open-sender-anyway" data-id="${escapeAttribute(side)}">Open send anyway</button>
       <button class="da3wa-button da3wa-button--primary" type="button" data-action="open-seating-for-guest" data-guest-id="${escapeAttribute(firstGuest?.id || "")}">Open seating planner</button>
     </div>
   `;

@@ -4,6 +4,8 @@ const params = new URLSearchParams(window.location.search);
 const side = ["groom", "bride", "family"].includes(params.get("side")) ? params.get("side") : "groom";
 const isDemo = params.get("demo") === "1" || params.get("wedding") === "luxury-wedding-demo";
 const weddingId = params.get("wedding") || "";
+let stopLiveStats = null;
+let stopLiveTables = null;
 
 const SIDE_META = {
   groom: { en: "Groom side", ar: "أهل العريس", accent: "#1f5a4d", accentSoft: "#dbe9e4" },
@@ -29,6 +31,7 @@ async function init() {
       return;
     }
     render(data);
+    if (!isDemo) startLiveListeners();
   } catch (error) {
     console.error(error);
     renderEmpty("We could not load this page", "Please check your connection and try again, or ask your wedding planner for a fresh link.");
@@ -101,11 +104,39 @@ async function loadLiveData() {
   };
 }
 
+async function startLiveListeners() {
+  if (!weddingId) return;
+  const { initFirebase, isFirebaseConfigured, doc, onSnapshot } = await import("./firebase-config.js");
+  if (!isFirebaseConfigured()) return;
+  const db = initFirebase().db;
+  const redraw = async () => {
+    try {
+      const data = await loadLiveData();
+      if (data) render(data);
+    } catch (error) {
+      console.error(error);
+      renderEmpty("Live update unavailable", "Your saved seating plan is still available. Refresh to retry the connection.");
+    }
+  };
+  stopLiveStats?.(); stopLiveTables?.();
+  stopLiveStats = onSnapshot(doc(db, "weddings", weddingId, "publicStats", "summary"), redraw, () => renderEmpty("Live update unavailable", "Please refresh and try again."));
+  stopLiveTables = onSnapshot(doc(db, "weddings", weddingId), () => redraw());
+}
+
 function sideViewMatches(guest, viewSide) {
+  const guestSide = normalizeSide(guest.side);
   if (viewSide === "groom" || viewSide === "bride") {
-    return guest.side === viewSide || guest.side === "both";
+    return guestSide === viewSide || guestSide === "both";
   }
-  return !["groom", "bride", "both"].includes(guest.side);
+  return guestSide === "family";
+}
+
+function normalizeSide(value) {
+  const side = String(value || "").trim().toLowerCase().replace(/[ _-]+/g, " ");
+  if (["bride", "bride side", "brides side"].includes(side)) return "bride";
+  if (["groom", "groom side", "grooms side"].includes(side)) return "groom";
+  if (["both", "both sides", "shared"].includes(side)) return "both";
+  return "family";
 }
 
 function partySize(guest) {

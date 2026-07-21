@@ -3,11 +3,12 @@ const { initializeApp } = require("firebase-admin/app");
 const { getAuth } = require("firebase-admin/auth");
 const { getFirestore, FieldValue } = require("firebase-admin/firestore");
 const { HttpsError, onCall } = require("firebase-functions/v2/https");
+const { onDocumentWritten } = require("firebase-functions/v2/firestore");
 const { defineSecret } = require("firebase-functions/params");
 
 initializeApp();
 const db = getFirestore();
-const ROLES = new Set(["bride", "groom"]);
+const ROLES = new Set(["bride", "groom", "family"]);
 const seatingLinkEncryptionKey = defineSecret("SEATING_LINK_ENCRYPTION_KEY");
 
 function tokenHash(token) {
@@ -121,4 +122,86 @@ exports.exchangeSeatingEditorLink = onCall(async (request) => {
     seatingAccessVersion: version,
   });
   return { customToken };
+});
+
+function normalizeSide(value) {
+  const side = String(value || "").trim().toLowerCase().replace(/[ _-]+/g, " ");
+  if (["bride", "bride side", "brides side"].includes(side)) return "bride";
+  if (["groom", "groom side", "grooms side"].includes(side)) return "groom";
+  if (["both", "both sides", "shared"].includes(side)) return "both";
+  return "family";
+}
+
+function partySize(guest) {
+  const extra = Number(guest.additionalGuests);
+  return 1 + (Number.isInteger(extra) && extra > 0 ? extra : 0);
+}
+
+function sideMatches(guest, side) {
+  const guestSide = normalizeSide(guest.side);
+  return side === "family" ? guestSide === "family" : guestSide === side || guestSide === "both";
+}
+
+// Owner-only, idempotent migration for legacy values such as "Bride Side".
+// It is intentionally server-side so the client never receives authority to
+// rewrite guests outside its normal dashboard permissions.
+exports.normalizeSeatingGuestSides = onCall(async (request) => {
+  const weddingId = request.data?.weddingId;
+  await requireOwner(request.auth, weddingId);
+  const guests = await db.collection(`weddings/${weddingId}/guests`).get();
+  let normalized = 0;
+  let batch = db.batch();
+  let writes = 0;
+  for (const snapshot of guests.docs) {
+    const side = normalizeSide(snapshot.data().side);
+    if (snapshot.data().side === side) continue;
+    batch.update(snapshot.ref, { side, updatedAt: FieldValue.serverTimestamp() });
+    normalized += 1;
+    writes += 1;
+    if (writes === 400) {
+      await batch.commit();
+      batch = db.batch();
+      writes = 0;
+    }
+  }
+  if (writes) await batch.commit();
+  return { normalized };
+});
+
+// Public side pages deliberately expose only this aggregate. Keeping it server
+// generated means editor links cannot write arbitrary public documents.
+exports.refreshPublicSeatingStats = onDocumentWritten("weddings/{weddingId}/{collectionId}/{documentId}", async (event) => {
+  if (!["guests", "tables"].includes(event.params.collectionId)) return;
+  const weddingId = event.params.weddingId;
+  const [wedding, guests, tables] = await Promise.all([
+    db.doc(`weddings/${weddingId}`).get(),
+    db.collection(`weddings/${weddingId}/guests`).get(),
+    db.collection(`weddings/${weddingId}/tables`).get(),
+  ]);
+  if (!wedding.exists) return;
+  const tableRows = tables.docs.map((snapshot) => ({ id: snapshot.id, ...snapshot.data() }));
+  const assignmentsByGuest = new Map();
+  tableRows.forEach((table) => (table.chairs || []).forEach((chair) => {
+    const assignment = chair.assignment || (chair.guestId ? { guestId: chair.guestId, seatNumber: chair.seatNumber } : null);
+    if (!assignment?.guestId) return;
+    const list = assignmentsByGuest.get(assignment.guestId) || [];
+    list.push({ t: assignment.tableName || table.name || "Table", n: Number(assignment.seatNumber || chair.seatNumber || 0) });
+    assignmentsByGuest.set(assignment.guestId, list);
+  }));
+  const allGuests = guests.docs.map((snapshot) => ({ id: snapshot.id, ...snapshot.data(), side: normalizeSide(snapshot.data().side) }));
+  const sides = {}, roster = {};
+  ["bride", "groom", "family"].forEach((side) => {
+    const members = allGuests.filter((guest) => sideMatches(guest, side));
+    const confirmed = members.filter((guest) => guest.rsvpStatus === "confirmed");
+    sides[side] = {
+      invited: members.length, seats: members.reduce((sum, guest) => sum + partySize(guest), 0),
+      confirmed: confirmed.length, confirmedSeats: confirmed.reduce((sum, guest) => sum + partySize(guest), 0),
+      pending: members.filter((guest) => !["confirmed", "declined"].includes(guest.rsvpStatus)).length,
+      declined: members.filter((guest) => guest.rsvpStatus === "declined").length,
+      seated: members.filter((guest) => (assignmentsByGuest.get(guest.id) || []).length).length,
+      invitesSent: members.filter((guest) => guest.inviteSentAt || guest.reminderSentAt).length,
+    };
+    roster[side] = members.map((guest) => ({ id: guest.id, n: guest.fullName || "", a: guest.fullNameAr || "", r: ["confirmed", "declined"].includes(guest.rsvpStatus) ? guest.rsvpStatus : "pending", p: partySize(guest), seats: assignmentsByGuest.get(guest.id) || [] }));
+  });
+  await db.doc(`weddings/${weddingId}/publicStats/summary`).set({ coupleName: wedding.data().coupleName || "", sides, roster, updatedAt: FieldValue.serverTimestamp() });
 });

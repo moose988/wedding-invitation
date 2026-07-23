@@ -102,7 +102,10 @@ service cloud.firestore {
     }
 
     function isGuestSeatingUpdate(weddingId) {
-      return canEditSeating(weddingId) && editorMayReadGuest(resource.data)
+      // Dashboard seating accounts can update every guest's seat assignment.
+      // The side filter applies only to the legacy custom-token editor links.
+      return canEditSeating(weddingId) &&
+        (!isSeatingEditor(weddingId) || editorMayReadGuest(resource.data))
         && request.resource.data.diff(resource.data).affectedKeys().hasOnly([
           "tableId",
           "tableName",
@@ -173,7 +176,10 @@ service cloud.firestore {
       }
 
       match /publicGuests/{guestToken} {
-        allow get: if isPublicWedding(weddingId);
+        // Seating transactions read the matching public mirror before they
+        // update it. Permit the seat-only dashboard accounts to do that even
+        // while an invitation is not publicly active.
+        allow get: if isPublicWedding(weddingId) || canEditSeating(weddingId);
         allow list: if false;
         // Dashboard members maintain this token-keyed mirror of guest-facing
         // fields so invitation/check-in pages can load guests without list access.

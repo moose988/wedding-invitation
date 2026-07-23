@@ -311,6 +311,35 @@ a {
   align-items: stretch;
 }
 
+/* Account-based seating editors retain only the one navigation destination
+   they are allowed to use, plus their signed-in identity and sign-out. */
+.da3wa-sidebar.is-seating-only .da3wa-nav-group__label,
+.da3wa-sidebar.is-seating-only [data-nav-view]:not([data-nav-view="seating"]) {
+  display: none;
+}
+
+.da3wa-signed-in-user {
+  display: grid;
+  gap: 3px;
+  padding: 12px 14px;
+  border-radius: 14px;
+  background: var(--da3wa-stone);
+  color: var(--da3wa-text-muted);
+  font-size: 11px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.da3wa-signed-in-user strong {
+  overflow: hidden;
+  color: var(--da3wa-text);
+  font-size: 13px;
+  letter-spacing: normal;
+  text-overflow: ellipsis;
+  text-transform: none;
+  white-space: nowrap;
+}
+
 .da3wa-role-chip {
   padding: 14px;
   border-radius: 14px;

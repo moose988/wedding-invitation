@@ -23,7 +23,9 @@ import {
 import { exportGuests } from "./export.js";
 
 const params = new URLSearchParams(window.location.search);
-const seatingEditorMode = params.get("seatingEditor") === "1";
+const secureSeatingEditorMode = params.get("seatingEditor") === "1";
+const accountSeatingEditorMode = params.get("seatingOnly") === "1";
+const seatingEditorMode = secureSeatingEditorMode || accountSeatingEditorMode;
 const lastWeddingStorageKey = "da3wa:lastDashboardWeddingId";
 const demoDashboardStorageKey = "da3wa:demoDashboardState:v4";
 const guestDirectoryPageSize = 6;
@@ -767,6 +769,7 @@ const demoSeedGuests = [...demoGuests, ...seatingTestGuests];
 const state = {
   weddingId: params.get("wedding") || "",
   editorMode: seatingEditorMode,
+  secureEditorMode: secureSeatingEditorMode,
   editorLinkToken: params.get("token") || "",
   editorRole: "",
   // A real Firestore wedding may legitimately use a demo-looking ID. Keep
@@ -836,6 +839,7 @@ const elements = {
   pageContent: document.getElementById("pageContent"),
   navToggleButton: document.getElementById("navToggleButton"),
   signOutButton: document.getElementById("signOutButton"),
+  signedInUserName: document.getElementById("signedInUserName"),
   guestModal: document.getElementById("guestModal"),
   guestForm: document.getElementById("guestForm"),
   guestModalTitle: document.getElementById("guestModalTitle"),
@@ -876,7 +880,7 @@ async function init() {
 
   state.services = initFirebase();
 
-  if (state.editorMode) {
+  if (state.secureEditorMode) {
     await bootstrapSeatingEditor();
     return;
   }
@@ -1442,6 +1446,20 @@ async function bootstrapDashboard() {
   }
 
   state.permissions = permissionDoc.data();
+  // Seat-only accounts are always routed into the simplified editor, even
+  // when they open the regular dashboard address directly.
+  if (state.permissions.seatingOnly === true) {
+    state.editorMode = true;
+    state.secureEditorMode = false;
+  }
+  if (state.editorMode) {
+    if (!state.permissions.canEditSeating) {
+      redirectToLogin("access-denied");
+      return;
+    }
+    state.editorRole = "account";
+    state.activeView = "seating";
+  }
   rememberWeddingId(state.weddingId);
   const weddingDoc = await getDoc(
     doc(state.services.db, "weddings", state.weddingId),
@@ -1507,7 +1525,7 @@ function startListeners() {
   state.loadingTables = true;
   renderActiveView();
 
-  const guestSource = state.editorMode
+  const guestSource = state.secureEditorMode
     ? query(
         collection(state.services.db, "weddings", state.weddingId, "guests"),
         where("side", "in", editorGuestSideValues(state.editorRole)),
@@ -1719,17 +1737,26 @@ function renderChrome() {
   const isSeatingView = state.activeView === "seating";
   document.body.classList.toggle("is-seating-view", isSeatingView);
   document.body.classList.toggle("is-seating-editor", state.editorMode);
-  elements.dashboardSidebar.hidden = state.editorMode;
+  elements.dashboardSidebar.hidden = state.secureEditorMode;
+  elements.dashboardSidebar.classList.toggle(
+    "is-seating-only",
+    state.editorMode && !state.secureEditorMode,
+  );
   elements.signOutButton.textContent = state.editorMode
     ? "End session"
     : "Sign out";
+  if (elements.signedInUserName) {
+    elements.signedInUserName.textContent = signedInUserName();
+  }
   elements.pageEyebrow.textContent = state.editorMode
     ? "Secure shared workspace"
     : isSeatingView
       ? ""
       : meta.eyebrow;
   elements.pageTitle.textContent = state.editorMode
-    ? `${state.editorRole[0].toUpperCase()}${state.editorRole.slice(1)} — Seating Editor`
+    ? state.editorRole === "account"
+      ? "Seating Editor"
+      : `${state.editorRole[0].toUpperCase()}${state.editorRole.slice(1)} — Seating Editor`
     : isSeatingView
       ? ""
       : meta.title;
@@ -2332,8 +2359,8 @@ function renderSideViewCard() {
           <span>${count} guest${count === 1 ? "" : "s"} on this page · ${side === "family" ? "read-only status" : "editable seating manager"}</span>
         </div>
         <div class="sender-option__actions">
-          ${actionButton(side === "family" ? "Open" : "Open manager", "open-side-view", !count, "secondary", side)}
-          ${actionButton(side === "family" ? "Copy link" : "Copy manager link", "copy-side-view", !count, "primary", side)}
+          ${actionButton("Open", "open-side-view", !count, "secondary", side)}
+          ${actionButton("Copy link", "copy-side-view", !count, "primary", side)}
         </div>
       </div>
     `;
@@ -2583,6 +2610,20 @@ function renderGuestCard(guest) {
 
 function renderSeatingAccessCard() {
   if (!canManageSeatingAccess()) return "";
+  const loginLink = seatingAccountLoginLink();
+  return `
+    <article class="share-card share-card--sender">
+      <p class="da3wa-eyebrow">Wedding Seating Access</p>
+      <h3>Bride &amp; Groom seating sign-in</h3>
+      <p>Share this same link with the Bride and Groom. After they sign in with their own account, they are taken directly to the mobile-friendly Seating Editor.</p>
+      <code>${escapeHtml(loginLink)}</code>
+      <div class="sender-option__actions">
+        ${actionButton("Copy sign-in link", "copy-seating-login", false, "primary")}
+        <a class="da3wa-button da3wa-button--secondary" href="${escapeAttribute(loginLink)}" target="_blank" rel="noopener">Open sign-in</a>
+      </div>
+    </article>`;
+  /* Legacy Cloud Function link controls are retained below temporarily, but
+     are unreachable while account-based seating access is in use. */
   const card = (role, label) => {
     const access = state.seatingAccess[role];
     const status =
@@ -2616,6 +2657,10 @@ function renderSeatingAccessCard() {
       <p>Only the wedding owner can create, copy, regenerate, or revoke these links. Bride and Groom links can manage every guest's chair in the shared plan; Family links are strictly read-only.</p>
       <div class="sender-options">${card("bride", "Bride")}${card("groom", "Groom")}${card("family", "Family")}</div>
     </article>`;
+}
+
+function seatingAccountLoginLink() {
+  return new URL("dashboard-login.html?seatingOnly=1", window.location.href).toString();
 }
 
 function seatingEditorLink(token) {
@@ -3289,10 +3334,6 @@ async function handleAction(action, dataset, event = null) {
       await copyText(buildSenderLink(dataset.id || "all"));
       return;
     case "open-side-view": {
-      if (["bride", "groom"].includes(dataset.id)) {
-        await openOrCreateSideManagerLink(dataset.id, true);
-        return;
-      }
       const sideViewLink = buildSideViewLink(dataset.id || "groom");
       const sideViewWindow = window.open(sideViewLink, "_blank", "noopener");
       if (!sideViewWindow) {
@@ -3305,10 +3346,6 @@ async function handleAction(action, dataset, event = null) {
       return;
     }
     case "copy-side-view":
-      if (["bride", "groom"].includes(dataset.id)) {
-        await openOrCreateSideManagerLink(dataset.id, false);
-        return;
-      }
       await copyText(buildSideViewLink(dataset.id || "groom"));
       return;
     case "open-add-table":
@@ -3393,6 +3430,9 @@ async function handleAction(action, dataset, event = null) {
           window.location.href,
         ).toString(),
       );
+      return;
+    case "copy-seating-login":
+      await copyText(seatingAccountLoginLink());
       return;
     case "generate-seating-access":
       await manageSeatingAccess(dataset.id, "generate");
@@ -6214,7 +6254,14 @@ async function clearPartyAssignments(guestId, expectedSignature = "") {
           }
         : guest,
     );
-    nextTables.forEach((table) => {
+    // A full-party clear affects only the tables with one of its assigned
+    // chairs. Avoid rewriting untouched tables in this atomic transaction.
+    const affectedTableIds = new Set(
+      liveParty.assignments.map((assignment) => assignment.tableId),
+    );
+    nextTables
+      .filter((table) => affectedTableIds.has(table.id))
+      .forEach((table) => {
       transaction.update(
         doc(state.services.db, "weddings", state.weddingId, "tables", table.id),
         {
@@ -6229,7 +6276,7 @@ async function clearPartyAssignments(guestId, expectedSignature = "") {
           updatedAt: serverTimestamp(),
         },
       );
-    });
+      });
     transaction.update(
       guestSnapshot.ref,
       buildGuestSeatingPatch(nextGuests.find((guest) => guest.id === guestId)),
@@ -7145,6 +7192,9 @@ function buildLoginUrl(message) {
   if (state.mode === "demo") {
     nextParams.set("demo", "1");
   }
+  if (state.editorMode && !state.secureEditorMode) {
+    nextParams.set("seatingOnly", "1");
+  }
   if (message) {
     nextParams.set("message", message);
   }
@@ -7211,6 +7261,14 @@ function prettifyShape(shape) {
 
 function can(permission) {
   return Boolean(state.permissions?.[permission]);
+}
+
+function signedInUserName() {
+  const profileName = state.permissions?.displayName || state.permissions?.name;
+  if (profileName) return profileName;
+  if (state.currentUser?.displayName) return state.currentUser.displayName;
+  const email = state.currentUser?.email || "";
+  return email || "Signed-in user";
 }
 
 function setSaveState(value) {

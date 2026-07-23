@@ -13,6 +13,7 @@ import {
 
 const params = new URLSearchParams(window.location.search);
 const lastWeddingStorageKey = "da3wa:lastDashboardWeddingId";
+const seatingOnlyMode = params.get("seatingOnly") === "1";
 
 const elements = {
   loginForm: document.getElementById("loginForm"),
@@ -25,6 +26,15 @@ let isRedirecting = false;
 init();
 
 function init() {
+  if (seatingOnlyMode) {
+    document.title = "DA3WA Seating Editor";
+    document.querySelector(".da3wa-auth__panel .da3wa-eyebrow").textContent = "Seating Access";
+    document.querySelector(".da3wa-auth__panel h1").textContent = "Wedding Seating Editor";
+    document.querySelector(".da3wa-auth__panel p:not(.da3wa-eyebrow):not(.da3wa-auth__status)").textContent =
+      "Sign in to view and update the seating plan.";
+    elements.loginForm.querySelector("button[type=submit]").textContent = "Open seating editor";
+  }
+
   if (!isFirebaseConfigured()) {
     elements.authStatus.textContent = "Firebase is not configured yet. Dashboard access is unavailable.";
     return;
@@ -136,6 +146,9 @@ function buildDashboardUrl(weddingId) {
 
   if (weddingId) {
     nextParams.set("wedding", weddingId);
+  }
+  if (seatingOnlyMode) {
+    nextParams.set("seatingOnly", "1");
   }
 
   const query = nextParams.toString();

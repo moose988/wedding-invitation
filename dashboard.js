@@ -5743,9 +5743,17 @@ async function completeAssignmentSession() {
     renderAll();
     showToast("Party assignment saved.", "success");
   } catch (error) {
-    console.error(error);
+    const diagnosticError = reportSeatingOperationFailure(
+      {
+        operation: session.mode === "move" ? "move" : "assign",
+        stage: "transaction commit",
+        tableIds: session.selectedChairs.map((chair) => chair.tableId),
+        guestId: guest.id,
+      },
+      error,
+    );
     state.activeModalOperation = "";
-    state.modalError = error.message || "Assignment failed.";
+    state.modalError = diagnosticError.message;
     renderAssignmentWorkflow();
   }
 }
@@ -5981,6 +5989,33 @@ function buildGuestSeatingPatch(guest) {
   };
 }
 
+// Firestore returns one error for a rejected transaction, even when a
+// transaction contains several reads and writes. Keep the browser-console
+// diagnostic explicit enough to identify the operation and its document
+// scope, while never logging the invitation token used as a publicGuest id.
+function reportSeatingOperationFailure({ operation, stage, tableIds = [], guestId = "" }, error) {
+  const weddingPath = `weddings/${state.weddingId || "{missing-wedding-id}"}`;
+  const paths = [
+    ...[...new Set(tableIds.filter(Boolean))].map(
+      (tableId) => `${weddingPath}/tables/${tableId}`,
+    ),
+    ...(guestId ? [`${weddingPath}/guests/${guestId}`] : []),
+    ...(guestId ? [`${weddingPath}/publicGuests/{invitation-token-for-${guestId}}`] : []),
+  ];
+  const diagnostic = {
+    operation,
+    stage,
+    weddingId: state.weddingId || "",
+    paths,
+    firebaseCode: error?.code || "unknown",
+  };
+  console.error("Seating Firestore operation failed.", diagnostic, error);
+  const code = diagnostic.firebaseCode === "unknown" ? "" : ` (${diagnostic.firebaseCode})`;
+  return new Error(
+    `Seating ${operation} failed during ${stage}${code}. Check the browser console for the affected document paths.`,
+  );
+}
+
 function buildGuestSeatingPatchFromTables(
   guest,
   tables,
@@ -6205,10 +6240,18 @@ async function confirmPartyUnassign(guestId) {
     elements.chairDetailsModal?.close();
     showToast("The entire party has been unassigned.", "success");
   } catch (error) {
-    console.error(error);
+    const diagnosticError = reportSeatingOperationFailure(
+      {
+        operation: "unassign-party",
+        stage: "transaction commit",
+        tableIds: party.assignments.map((assignment) => assignment.tableId),
+        guestId,
+      },
+      error,
+    );
     state.activeModalOperation = "";
     state.modalError =
-      error.message ||
+      diagnosticError.message ||
       "The party could not be unassigned. The seating plan has been refreshed.";
     const refreshedParty = resolvePartyForGuestId(guestId) || party;
     state.pendingPartyUnassignSignature =
@@ -6337,9 +6380,17 @@ async function confirmUnassignSeat(tableId, chairId) {
     elements.chairDetailsModal?.close();
     showToast("Seat unassigned.", "success");
   } catch (error) {
-    console.error(error);
+    const diagnosticError = reportSeatingOperationFailure(
+      {
+        operation: "unassign-seat",
+        stage: "transaction commit",
+        tableIds: [tableId],
+        guestId: guest.id,
+      },
+      error,
+    );
     state.activeModalOperation = "";
-    state.modalError = error.message || "Seat unassign failed.";
+    state.modalError = diagnosticError.message;
     renderChairDetailsModal(guest.id);
   }
 }
@@ -6507,9 +6558,20 @@ async function confirmMovePartyToTable(guestId, tableId) {
     elements.chairDetailsModal?.close();
     showToast("Party moved.", "success");
   } catch (error) {
-    console.error(error);
+    const diagnosticError = reportSeatingOperationFailure(
+      {
+        operation: "move-party",
+        stage: "transaction commit",
+        tableIds: [
+          tableId,
+          ...getGuestAssignedSeats(guestId).map((assignment) => assignment.tableId),
+        ],
+        guestId,
+      },
+      error,
+    );
     state.activeModalOperation = "";
-    state.modalError = error.message || "Move party failed.";
+    state.modalError = diagnosticError.message;
     renderMovePartyModal(guestId);
   }
 }
@@ -6705,12 +6767,20 @@ async function assignGuestToChair(tableId, chairId, guestId) {
     renderAll();
     showToast("Guest assigned to seat.", "success");
   } catch (error) {
-    console.error(error);
+    const diagnosticError = reportSeatingOperationFailure(
+      {
+        operation: "assign-seat",
+        stage: "transaction commit",
+        tableIds: [tableId],
+        guestId: guest.id,
+      },
+      error,
+    );
     state.activeModalOperation = "";
     setSaveState("saved");
     renderAll();
     showToast(
-      error.message ||
+      diagnosticError.message ||
         "This chair was assigned by another editor. The seating plan has been refreshed.",
       "error",
     );

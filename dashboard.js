@@ -5855,22 +5855,35 @@ async function savePartyAssignment(guest, selectedChairs, movingParty = false) {
     const nextGuests = syncGuestSeatingSummaries(liveGuests, nextTables);
     savedTables = hydrateTables(nextTables, nextGuests);
     savedGuests = nextGuests;
-    nextTables.forEach((table) => {
-      transaction.update(
-        doc(state.services.db, "weddings", state.weddingId, "tables", table.id),
-        {
-          chairs: table.chairs,
-          guestIds: [
-            ...new Set(
-              table.chairs
-                .map((chair) => getChairAssignment(table.id, chair)?.guestId)
-                .filter(Boolean),
-            ),
-          ],
-          updatedAt: serverTimestamp(),
-        },
-      );
-    });
+    // Only write the tables whose chairs were actually changed. Updating the
+    // whole floor plan makes a simple seating action needlessly large and can
+    // exceed the Firestore rule-evaluation budget for seating-only accounts.
+    const changedTableIds = new Set(
+      selectedChairs.map((item) => item.tableId),
+    );
+    if (movingParty) {
+      getGuestAssignedSeats(liveGuest.id, liveTables).forEach((assignment) => {
+        changedTableIds.add(assignment.tableId);
+      });
+    }
+    nextTables
+      .filter((table) => changedTableIds.has(table.id))
+      .forEach((table) => {
+        transaction.update(
+          doc(state.services.db, "weddings", state.weddingId, "tables", table.id),
+          {
+            chairs: table.chairs,
+            guestIds: [
+              ...new Set(
+                table.chairs
+                  .map((chair) => getChairAssignment(table.id, chair)?.guestId)
+                  .filter(Boolean),
+              ),
+            ],
+            updatedAt: serverTimestamp(),
+          },
+        );
+      });
     const nextGuest = nextGuests.find((item) => item.id === liveGuest.id);
     transaction.update(
       doc(

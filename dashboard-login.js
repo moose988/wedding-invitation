@@ -14,6 +14,9 @@ import {
 const params = new URLSearchParams(window.location.search);
 const lastWeddingStorageKey = "da3wa:lastDashboardWeddingId";
 const seatingOnlyMode = params.get("seatingOnly") === "1";
+const requestedSeatingSide = ["bride", "groom"].includes(params.get("side"))
+  ? params.get("side")
+  : "";
 
 const elements = {
   loginForm: document.getElementById("loginForm"),
@@ -149,6 +152,9 @@ function buildDashboardUrl(weddingId) {
   }
   if (seatingOnlyMode) {
     nextParams.set("seatingOnly", "1");
+  }
+  if (requestedSeatingSide) {
+    nextParams.set("side", requestedSeatingSide);
   }
 
   const query = nextParams.toString();

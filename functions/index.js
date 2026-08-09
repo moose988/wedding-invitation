@@ -62,6 +62,28 @@ async function requireWeddingOwner(auth, weddingId) {
   }
 }
 
+// Safe migration/admin helper for account-based seating managers.  A caller
+// cannot create a privileged account through this endpoint: the account must
+// already be a dashboard member with the three required seating flags.
+exports.setSeatingOnlyAccountSide = onCall(async (request) => {
+  const { weddingId, userId, allowedSide } = request.data || {};
+  if (!["bride", "groom"].includes(allowedSide)) {
+    throw new HttpsError("invalid-argument", "allowedSide must be bride or groom.");
+  }
+  await requireSeatingAccessManager(request.auth, weddingId);
+  if (!userId || typeof userId !== "string") {
+    throw new HttpsError("invalid-argument", "Invalid dashboard user.");
+  }
+  const accountRef = db.doc(`weddings/${weddingId}/dashboardUsers/${userId}`);
+  const account = await accountRef.get();
+  if (!account.exists || account.data().canViewDashboard !== true ||
+      account.data().canEditSeating !== true || account.data().seatingOnly !== true) {
+    throw new HttpsError("failed-precondition", "The account must already be a seating-only dashboard editor.");
+  }
+  await accountRef.update({ allowedSide, updatedAt: FieldValue.serverTimestamp() });
+  return { userId, allowedSide };
+});
+
 exports.manageSeatingEditorAccess = onCall({ secrets: [seatingLinkEncryptionKey] }, async (request) => {
   const { weddingId, role, action } = request.data || {};
   requireRole(role);

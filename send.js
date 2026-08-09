@@ -1,3 +1,9 @@
+import {
+  buildSenderWhatsAppMessage,
+  decodeSenderPayload,
+  senderGuestPresentation,
+} from "./sender-codec.mjs";
+
 const shell = document.getElementById("senderShell");
 
 const payload = decodePayload();
@@ -13,15 +19,7 @@ function decodePayload() {
     return null;
   }
   try {
-    const base64 = data.replace(/-/g, "+").replace(/_/g, "/");
-    const padded = base64 + "=".repeat((4 - (base64.length % 4)) % 4);
-    const binary = atob(padded);
-    const bytes = Uint8Array.from(binary, (char) => char.charCodeAt(0));
-    const parsed = JSON.parse(new TextDecoder().decode(bytes));
-    if (!parsed || !Array.isArray(parsed.g)) {
-      return null;
-    }
-    return parsed;
+    return decodeSenderPayload(data);
   } catch (error) {
     console.error("Could not read the sender payload.", error);
     return null;
@@ -62,15 +60,8 @@ function buildInviteLink(guest) {
 }
 
 function buildWhatsAppLink(guest) {
-  const couple = payload.c || "our wedding";
-  const arabicName = guest.a || guest.n;
   const inviteLink = buildInviteLink(guest);
-  const message = [
-    `دعوة زفاف ${couple} 💍`,
-    `مرحباً ${arabicName}! يسعدنا ويشرفنا دعوتكم لحضور حفل زفافنا. كل التفاصيل وتأكيد الحضور في الرابط:`,
-    `Hello ${guest.n}! We would be honored to have you at our wedding. All the details and RSVP are here:`,
-    inviteLink,
-  ].join("\n\n");
+  const message = buildSenderWhatsAppMessage(payload, guest, inviteLink);
   return `https://wa.me/${guest.p}?text=${encodeURIComponent(message)}`;
 }
 
@@ -140,11 +131,11 @@ function render() {
       ${guests
         .map((guest, index) => {
           const isSent = Boolean(sentMap[guestKey(guest)]);
+          const names = senderGuestPresentation(guest);
           return `
             <article class="sender-row ${isSent ? "is-sent" : ""}">
               <div class="sender-row__info">
-                <span class="sender-row__name">${escapeHtml(guest.n)}</span>
-                ${guest.a ? `<span class="sender-row__name-ar" dir="rtl">${escapeHtml(guest.a)}</span>` : ""}
+                <span class="sender-row__name">${escapeHtml(names.displayName)}</span>
                 <span class="sender-row__meta">
                   <span class="sender-chip ${sideChipClass(guest.s)}">${escapeHtml(sideLabel(guest.s))}</span>
                   <span dir="ltr">${escapeHtml(formatPhone(guest.p))}</span>

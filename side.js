@@ -6,9 +6,11 @@ import {
   getDocs,
   httpsCallable,
   onSnapshot,
+  query,
   runTransaction,
   serverTimestamp,
   signInWithCustomToken,
+  where,
 } from "./firebase-config.js";
 
 const shell = document.querySelector("#sideShell");
@@ -104,7 +106,7 @@ function subscribe() {
   if (state.editable)
     state.unsubs.push(
       onSnapshot(
-        collection(db, root, "guests"),
+        query(collection(db, root, "guests"), where("side", "==", state.role)),
         (snap) => {
           state.guests = snap.docs.map((d) => ({ ...d.data(), id: d.id }));
           render();

@@ -90,6 +90,10 @@
                 <input class="da3wa-input" name="fullName" required />
               </label>
               <label>
+                <span>Arabic name (optional)</span>
+                <input class="da3wa-input" name="fullNameAr" dir="rtl" lang="ar" />
+              </label>
+              <label>
                 <span>Phone</span>
                 <input class="da3wa-input" name="phone" type="tel" inputmode="tel" autocomplete="tel" />
               </label>
@@ -136,7 +140,8 @@
             <div class="da3wa-form-grid">
               <label class="is-full">
                 <span>One guest per line — “Name, phone” (phone and extra seats optional: “Name, phone, 2”)</span>
-                <textarea class="da3wa-input bulk-add-textarea" name="entries" rows="8" placeholder="Noor Ahmed, 0501234567&#10;Omar Saleh, +971 50 765 4321, 2&#10;Huda Mansour"></textarea>
+                <textarea class="da3wa-input bulk-add-textarea" name="entries" rows="8" placeholder="Noor Ahmed, نور أحمد, 0501234567&#10;Omar Saleh, +971 50 765 4321, 2&#10;Huda Mansour"></textarea>
+                <small>Use: Name, phone, seats — or Name, Arabic name, phone, seats.</small>
               </label>
               <label>
                 <span>Assign everyone to side</span>

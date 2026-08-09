@@ -21,10 +21,16 @@ import {
   writeBatch,
 } from "./firebase-config.js";
 import { exportGuests } from "./export.js";
+import { createSenderPayload, encodeSenderPayload } from "./sender-codec.mjs";
 
 const params = new URLSearchParams(window.location.search);
 const secureSeatingEditorMode = params.get("seatingEditor") === "1";
 const accountSeatingEditorMode = params.get("seatingOnly") === "1";
+const requestedSeatingSide = ["bride", "groom", "family"].includes(
+  params.get("side"),
+)
+  ? params.get("side")
+  : "";
 const seatingEditorMode = secureSeatingEditorMode || accountSeatingEditorMode;
 const lastWeddingStorageKey = "da3wa:lastDashboardWeddingId";
 const demoDashboardStorageKey = "da3wa:demoDashboardState:v4";
@@ -1453,11 +1459,18 @@ async function bootstrapDashboard() {
     state.secureEditorMode = false;
   }
   if (state.editorMode) {
-    if (!state.permissions.canEditSeating) {
+    const allowedSide = normalizeGuestSide(state.permissions.allowedSide);
+    if (
+      !state.permissions.canEditSeating ||
+      !["bride", "groom"].includes(allowedSide) ||
+      (requestedSeatingSide && requestedSeatingSide !== allowedSide)
+    ) {
       redirectToLogin("access-denied");
       return;
     }
-    state.editorRole = "account";
+    // `allowedSide` is a permission, not a URL preference.  The URL may only
+    // repeat it; Firestore applies the same restriction for every write.
+    state.editorRole = allowedSide;
     state.activeView = "seating";
   }
   rememberWeddingId(state.weddingId);
@@ -1525,7 +1538,7 @@ function startListeners() {
   state.loadingTables = true;
   renderActiveView();
 
-  const guestSource = state.secureEditorMode
+  const guestSource = state.editorMode
     ? query(
         collection(state.services.db, "weddings", state.weddingId, "guests"),
         where("side", "in", editorGuestSideValues(state.editorRole)),
@@ -1754,9 +1767,7 @@ function renderChrome() {
       ? ""
       : meta.eyebrow;
   elements.pageTitle.textContent = state.editorMode
-    ? state.editorRole === "account"
-      ? "Seating Editor"
-      : `${state.editorRole[0].toUpperCase()}${state.editorRole.slice(1)} — Seating Editor`
+    ? `${state.editorRole[0].toUpperCase()}${state.editorRole.slice(1)} — Seating Editor`
     : isSeatingView
       ? ""
       : meta.title;
@@ -2149,7 +2160,7 @@ function renderSeatingPage() {
               </button>
             </div>
           </div>
-          ${actionButton("Add table", "open-add-table", !can("canEditSeating"), "primary")}
+          ${actionButton("Add table", "open-add-table", !canManageSeatingLayout(), "primary")}
         </div>
       </article>
 
@@ -2369,7 +2380,7 @@ function renderSideViewCard() {
     <article class="share-card share-card--sender">
       <p class="da3wa-eyebrow">Side status pages</p>
       <h3>A simple page for each family — no dashboard needed</h3>
-      <p>Each link opens a read-only page showing just that side's numbers and seating plan: who is coming, who declined, invitations sent, and where everyone sits. Share it with the groom's or bride's family so they can follow along without seeing the full dashboard.</p>
+      <p>Groom and Bride links open an authenticated, side-scoped seating manager. Family stays a read-only status page showing only its numbers and seating plan. Side managers never receive the full dashboard.</p>
       <div class="sender-options">
         ${sideOption("Groom side", "groom", "أهل العريس")}
         ${sideOption("Bride side", "bride", "أهل العروس")}
@@ -2898,9 +2909,9 @@ function renderTableInspector(table) {
       </div>
     </div>
     <div class="guest-toolbar__summary">
-      ${actionButton("Edit", "edit-table", !can("canEditSeating"), "secondary", table.id)}
-      ${actionButton("Duplicate", "duplicate-table", !can("canEditSeating"), "secondary", table.id)}
-      ${actionButton("Delete", "delete-table", !can("canEditSeating"), "danger", table.id)}
+      ${actionButton("Edit", "edit-table", !canManageSeatingLayout(), "secondary", table.id)}
+      ${actionButton("Duplicate", "duplicate-table", !canManageSeatingLayout(), "secondary", table.id)}
+      ${actionButton("Delete", "delete-table", !canManageSeatingLayout(), "danger", table.id)}
     </div>
     <div class="planner-assigned-guests">
       <div class="planner-panel__header">
@@ -4260,6 +4271,7 @@ async function openGuestModal(guest = null) {
   elements.guestDeleteButton.hidden = !guest;
   elements.guestForm.reset();
   elements.guestForm.fullName.value = guest?.fullName || "";
+  elements.guestForm.fullNameAr.value = guest?.fullNameAr || "";
   elements.guestForm.phone.value = guest?.phone || "";
   elements.guestForm.side.value = guest?.side || "bride";
   elements.guestForm.additionalGuests.value = String(
@@ -4313,6 +4325,7 @@ async function saveGuest(event) {
 
   const ownedPayload = {
     fullName,
+    fullNameAr: elements.guestForm.fullNameAr.value.trim(),
     phone: elements.guestForm.phone.value.trim(),
     side: normalizeGuestSide(elements.guestForm.side.value),
     additionalGuests,
@@ -4320,7 +4333,6 @@ async function saveGuest(event) {
   };
   const createPayload = {
     ...ownedPayload,
-    fullNameAr: "",
     rsvpStatus: "pending",
     guestToken: token,
     inviteLink: buildInviteLink(token),
@@ -4547,10 +4559,13 @@ function parseBulkEntries(raw) {
     .filter(Boolean)
     .map((line) => {
       const parts = line.split(/[,،\t]/).map((part) => part.trim());
-      const additionalGuests = parseAdditionalGuests(parts[2] || "0");
+      const hasArabicName = parts.length >= 3 && !cleanPhone(parts[1]);
+      const phoneIndex = hasArabicName ? 2 : 1;
+      const additionalGuests = parseAdditionalGuests(parts[phoneIndex + 1] || "0");
       return {
         fullName: parts[0] || "",
-        phone: cleanPhone(parts[1] || ""),
+        fullNameAr: hasArabicName ? parts[1] || "" : "",
+        phone: cleanPhone(parts[phoneIndex] || ""),
         additionalGuests: additionalGuests === null ? 0 : additionalGuests,
       };
     })
@@ -4584,7 +4599,7 @@ async function saveBulkGuests(event) {
     const token = generateGuestToken();
     return {
       fullName: entry.fullName,
-      fullNameAr: "",
+      fullNameAr: entry.fullNameAr,
       phone: entry.phone,
       side,
       additionalGuests: entry.additionalGuests,
@@ -4660,7 +4675,12 @@ async function saveBulkGuests(event) {
       const remaining = entries.slice(committed);
       elements.bulkAddForm.entries.value = remaining
         .map((entry) =>
-          [entry.fullName, entry.phone, entry.additionalGuests || ""]
+          [
+            entry.fullName,
+            entry.fullNameAr,
+            entry.phone,
+            entry.additionalGuests || "",
+          ]
             .filter(Boolean)
             .join(", "),
         )
@@ -4799,7 +4819,7 @@ async function deleteGuest(guestId) {
 }
 
 function openTableModal(table = null) {
-  if (!can("canEditSeating")) {
+  if (!canManageSeatingLayout()) {
     showToast("Your role does not allow seating edits.", "error");
     return;
   }
@@ -4866,7 +4886,7 @@ async function ensurePublicGuestMirror(guest) {
 
 async function saveTable(event) {
   event.preventDefault();
-  if (!can("canEditSeating")) {
+  if (!canManageSeatingLayout()) {
     showToast("Your role does not allow seating edits.", "error");
     return;
   }
@@ -5038,7 +5058,7 @@ async function saveTable(event) {
 }
 
 async function duplicateTable(table) {
-  if (!can("canEditSeating")) {
+  if (!canManageSeatingLayout()) {
     showToast("Your role does not allow seating edits.", "error");
     return;
   }
@@ -5089,7 +5109,7 @@ async function confirmDeleteTable(tableId) {
 }
 
 function openTableDeleteModal(tableId) {
-  if (!can("canEditSeating")) {
+  if (!canManageSeatingLayout()) {
     showToast("Your role does not allow seating edits.", "error");
     return;
   }
@@ -5144,7 +5164,7 @@ async function deleteSelectedTableFromModal() {
 }
 
 async function deleteTable(tableId) {
-  if (!can("canEditSeating")) {
+  if (!canManageSeatingLayout()) {
     showToast("Your role does not allow seating edits.", "error");
     return;
   }
@@ -5411,7 +5431,7 @@ async function handlePlannerPointerUp() {
       renderActiveView();
       return;
     }
-    if (!can("canEditSeating")) {
+    if (!canManageSeatingLayout()) {
       state.hallObjects = state.hallObjects.map((item) =>
         item.id === objectId ? { ...item, x: originalX, y: originalY } : item,
       );
@@ -5457,7 +5477,7 @@ async function handlePlannerPointerUp() {
     return;
   }
 
-  if (!can("canEditSeating")) {
+  if (!canManageSeatingLayout()) {
     state.tables = state.tables.map((item) =>
       item.id === tableId ? { ...item, x: originalX, y: originalY } : item,
     );
@@ -7346,6 +7366,10 @@ function can(permission) {
   return Boolean(state.permissions?.[permission]);
 }
 
+function canManageSeatingLayout() {
+  return can("canEditSeating") && !state.editorMode;
+}
+
 function signedInUserName() {
   const profileName = state.permissions?.displayName || state.permissions?.name;
   if (profileName) return profileName;
@@ -7610,20 +7634,15 @@ function renderMissingSeatsModal(blocked, side = "all") {
 }
 
 function buildSenderLink(side = "all") {
-  const guests = getSenderGuests(side).map((guest) => ({
-    n: guest.fullName || "",
-    a: guest.fullNameAr || "",
-    p: normalizeWhatsAppPhone(guest.phone),
-    s: guest.side || "",
-    t: guest.guestToken || "",
-  }));
-  const payload = {
-    v: 1,
-    w: state.weddingId,
-    c: state.wedding?.coupleName || "",
+  const payload = createSenderPayload({
+    weddingId: state.weddingId,
+    coupleName: state.wedding?.coupleName,
     side,
-    g: guests,
-  };
+    guests: getSenderGuests(side).map((guest) => ({
+      ...guest,
+      phone: normalizeWhatsAppPhone(guest.phone),
+    })),
+  });
   return new URL(
     `send.html#data=${encodeSenderPayload(payload)}`,
     window.location.href,
@@ -7631,6 +7650,21 @@ function buildSenderLink(side = "all") {
 }
 
 function buildSideViewLink(side) {
+  // Bride and Groom pages are authenticated, side-scoped seating workspaces.
+  // Family remains a public read-only status page.  No readonly query flag is
+  // used for the managers, and the dashboard repeats the wedding + side
+  // context after sign-in.
+  if (["bride", "groom"].includes(side) && state.mode !== "demo") {
+    const managerParams = new URLSearchParams({
+      wedding: state.weddingId,
+      seatingOnly: "1",
+      side,
+    });
+    return new URL(
+      `dashboard-login.html?${managerParams.toString()}`,
+      window.location.href,
+    ).toString();
+  }
   const linkParams = new URLSearchParams();
   if (state.mode === "demo") {
     linkParams.set("demo", "1");
@@ -7642,18 +7676,6 @@ function buildSideViewLink(side) {
     `side.html?${linkParams.toString()}`,
     window.location.href,
   ).toString();
-}
-
-function encodeSenderPayload(payload) {
-  const bytes = new TextEncoder().encode(JSON.stringify(payload));
-  let binary = "";
-  bytes.forEach((byte) => {
-    binary += String.fromCharCode(byte);
-  });
-  return btoa(binary)
-    .replace(/\+/g, "-")
-    .replace(/\//g, "_")
-    .replace(/=+$/, "");
 }
 
 function generateGuestToken() {

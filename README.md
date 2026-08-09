@@ -143,11 +143,14 @@ weddings/{weddingId}/dashboardUsers/{userId}
   - `canViewDashboard`
   - `canEditGuests`
   - `canEditSeating`
+  - `seatingOnly` (set to `true` for the restricted seating workspace)
+  - `allowedSide` (`"bride"` or `"groom"`, required whenever `seatingOnly` is true)
   - `canCheckIn`
   - `canExport`
   - `canManageUsers`
 
 The dashboard verifies both Firebase Auth and the matching `dashboardUsers/{userId}` document.
+For a side manager, share the matching Groom or Bride link from **Side status pages**. It opens the authenticated seating sign-in route with the wedding and side preserved; copied public Family links remain read-only.
 
 ## 8. Check-in flow
 

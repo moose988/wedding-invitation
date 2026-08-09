@@ -37,6 +37,24 @@ service cloud.firestore {
         dashboardUser(weddingId).data.canEditSeating == true) || isSeatingManager(weddingId);
     }
 
+    // Seating-only dashboard accounts are deliberately tied to one side.  The
+    // client uses this value to filter the editor, but this check is here so a
+    // changed URL or a hand-written Firestore request cannot escape that side.
+    // Full dashboard seating users are not side-scoped.
+    function isSeatingOnlyDashboardAccount(weddingId) {
+      return isDashboardMember(weddingId)
+        && dashboardUser(weddingId).data.canEditSeating == true
+        && dashboardUser(weddingId).data.seatingOnly == true;
+    }
+
+    function seatingAccountMayUpdateGuest(weddingId, guest) {
+      // A missing or invalid allowedSide is intentionally deny-by-default,
+      // which makes adding the field to old seating-only accounts safe.
+      return !isSeatingOnlyDashboardAccount(weddingId)
+        || (dashboardUser(weddingId).data.allowedSide in ["bride", "groom"]
+          && normalizedGuestSide(guest) == dashboardUser(weddingId).data.allowedSide);
+    }
+
     // Editor links are exchanged by Cloud Functions for custom Firebase Auth
     // tokens. The live access record is checked on every Firestore request,
     // which makes revoke/regenerate effective for already-open sessions too.
@@ -64,11 +82,9 @@ service cloud.firestore {
     }
 
     function editorMayReadGuest(guest) {
-      // Bride and Groom managers work from one shared floor plan, so both
-      // need the complete guest roster. Family links keep their existing
-      // limited view and never receive write authority.
-      return request.auth.token.seatingRole in ["bride", "groom"]
-        || (request.auth.token.seatingRole == "family" && normalizedGuestSide(guest) == "family");
+      // Legacy token links follow the same strict side boundary as account
+      // managers. Family links remain read-only.
+      return normalizedGuestSide(guest) == request.auth.token.seatingRole;
     }
 
     function editorMayUpdatePublicGuest(weddingId, publicGuest) {
@@ -103,8 +119,10 @@ service cloud.firestore {
 
     function isGuestSeatingUpdate(weddingId) {
       // Dashboard seating accounts can update every guest's seat assignment.
-      // The side filter applies only to the legacy custom-token editor links.
+      // Seating-only accounts additionally remain within their server-side
+      // allowedSide; full dashboard editors retain normal seating access.
       return canEditSeating(weddingId) &&
+        seatingAccountMayUpdateGuest(weddingId, resource.data) &&
         (!isSeatingEditor(weddingId) || editorMayReadGuest(resource.data))
         && request.resource.data.diff(resource.data).affectedKeys().hasOnly([
           "tableId",
@@ -148,11 +166,16 @@ service cloud.firestore {
       match /tables/{tableId} {
         allow read: if canReadSeating(weddingId) || isPublicWedding(weddingId);
         allow create, delete: if isDashboardMember(weddingId) &&
-          dashboardUser(weddingId).data.canEditSeating == true;
+          dashboardUser(weddingId).data.canEditSeating == true &&
+          !isSeatingOnlyDashboardAccount(weddingId);
         // Secure link managers can only change occupancy; table geometry,
         // names, capacity, and chair positions stay dashboard-only.
         allow update: if (isDashboardMember(weddingId) &&
-            dashboardUser(weddingId).data.canEditSeating == true)
+            dashboardUser(weddingId).data.canEditSeating == true &&
+            !isSeatingOnlyDashboardAccount(weddingId))
+          || (isSeatingOnlyDashboardAccount(weddingId) &&
+            request.resource.data.diff(resource.data).affectedKeys()
+              .hasOnly(["chairs", "guestIds", "updatedAt"]))
           || (isSeatingManager(weddingId) &&
             request.resource.data.diff(resource.data).affectedKeys()
               .hasOnly(["chairs", "guestIds", "updatedAt"]));

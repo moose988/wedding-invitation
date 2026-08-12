@@ -1212,16 +1212,62 @@ body.is-seating-view .da3wa-page {
   display: grid;
   justify-items: start;
   gap: 8px;
-  width: max-content;
+  width: min(100%, 900px);
   max-width: 100%;
 }
 
 .planner-zoom-stats {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(108px, 1fr));
+  gap: 8px;
+  width: 100%;
+  max-width: 100%;
+}
+
+.planner-stat-card,
+.planner-save-status {
+  display: grid;
+  gap: 2px;
+  min-height: 58px;
+  padding: 9px 11px;
+  border: 1px solid var(--da3wa-border);
+  border-radius: 12px;
+  background: var(--da3wa-surface-muted);
+}
+
+.planner-stat-card strong {
+  color: var(--da3wa-text);
+  font-size: 1.05rem;
+  line-height: 1.05;
+}
+
+.planner-stat-card span,
+.planner-save-status span {
+  color: var(--da3wa-text-soft);
+  font-size: 0.72rem;
+  font-weight: 700;
+  line-height: 1.2;
+}
+
+.planner-stat-card--groom {
+  background: var(--da3wa-primary-soft);
+  border-color: rgba(36, 85, 74, 0.24);
+}
+
+.planner-stat-card--groom strong { color: var(--da3wa-primary-strong); }
+
+.planner-stat-card--bride {
+  background: var(--da3wa-gold-soft);
+  border-color: rgba(156, 116, 54, 0.24);
+}
+
+.planner-stat-card--bride strong { color: #7c5d2b; }
+
+.planner-toolbar__buttons {
   display: flex;
   flex-wrap: wrap;
-  justify-content: start;
   gap: 8px;
-  max-width: 100%;
+  width: 100%;
 }
 
 .planner-toggle {
@@ -2323,18 +2369,15 @@ body.is-seating-view .da3wa-page {
 }
 
 .planner-save-status {
-  display: inline-flex;
-  align-items: center;
-  gap: 7px;
-  min-height: 32px;
-  padding: 6px 12px;
-  border: 1px solid transparent;
-  border-radius: 999px;
+  width: 100%;
+  align-content: center;
+  text-align: left;
   font: inherit;
-  font-size: 0.82rem;
   font-weight: 700;
   cursor: default;
 }
+
+.planner-save-status strong { font-size: 1.05rem; line-height: 1; }
 
 .planner-save-status:disabled {
   opacity: 1;
@@ -2352,7 +2395,7 @@ body.is-seating-view .da3wa-page {
   border-color: #ead19b;
 }
 
-.planner-save-status.is-saving span {
+.planner-save-status.is-saving strong {
   animation: planner-save-spin 0.9s linear infinite;
 }
 

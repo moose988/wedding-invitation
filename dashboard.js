@@ -52,8 +52,7 @@ const pageMeta = {
   guests: {
     eyebrow: "Guest management",
     title: "Guest Directory",
-    description:
-      "Search, sort, filter, and update every invitee from a single operational directory.",
+    description: "",
   },
   seating: {
     eyebrow: "Seat planning workspace",
@@ -1197,10 +1196,13 @@ function handleDocumentInput(event) {
 
   const search = event.target.closest("[data-guest-search]");
   if (search) {
+    const selectionStart = search.selectionStart;
+    const selectionEnd = search.selectionEnd;
     state.guestFilters.search = search.value.trim();
     state.guestPageIndex = 0;
     closeGuestMenu({ restoreFocus: false });
     renderActiveView();
+    restoreGuestSearchFocus(selectionStart, selectionEnd);
     return;
   }
 
@@ -1812,6 +1814,7 @@ function renderChrome() {
     : isSeatingView
       ? ""
       : meta.description;
+  elements.pageDescription.hidden = !elements.pageDescription.textContent;
   elements.liveIndicator.innerHTML =
     state.mode === "demo"
       ? "Preview mode"
@@ -2188,19 +2191,21 @@ function renderSeatingPage() {
               <span class="pill">${Math.round(state.plannerZoom * 100)}%</span>
             </div>
             <div class="planner-zoom-stats" aria-label="Planner status">
-              <span class="pill">${state.tables.length} tables</span>
-              <span class="pill">${seatingStats.totalSeats} seats</span>
-              <span class="pill">${seatingStats.total} guests</span>
-              <span class="pill">${seatingStats.unassignedGuests} guest parties need seats</span>
-              <span class="pill pill--groom">Groom fully seated ${sideStats.groom.seated}/${sideStats.groom.confirmed}</span>
-              <span class="pill pill--bride">Bride fully seated ${sideStats.bride.seated}/${sideStats.bride.confirmed}</span>
+              ${renderPlannerStatCard(state.tables.length, "Tables")}
+              ${renderPlannerStatCard(seatingStats.totalSeats, "Seats")}
+              ${renderPlannerStatCard(seatingStats.total, "Guests")}
+              ${renderPlannerStatCard(seatingStats.unassignedGuests, "Guest parties needing seats")}
+              ${renderPlannerStatCard(`${sideStats.groom.seated}/${sideStats.groom.confirmed}`, "Groom fully seated", "groom")}
+              ${renderPlannerStatCard(`${sideStats.bride.seated}/${sideStats.bride.confirmed}`, "Bride fully seated", "bride")}
               <button class="planner-save-status ${isSaving ? "is-saving" : "is-saved"}" type="button" disabled aria-live="polite" aria-label="${isSaving ? "Saving seating changes" : "All seating changes saved"}">
                 <span aria-hidden="true">${isSaving ? "↻" : "✓"}</span>${isSaving ? "Saving…" : "Saved"}
               </button>
             </div>
+            <div class="planner-toolbar__buttons">
+              ${actionButton("Add table", "open-add-table", !canManageSeatingLayout(), "primary")}
+              ${actionButton("Add dance floor", "open-add-dance-floor", !canManageSeatingLayout(), "primary")}
+            </div>
           </div>
-          ${actionButton("Add table", "open-add-table", !canManageSeatingLayout(), "primary")}
-          ${actionButton("Add dance floor", "open-add-dance-floor", !canManageSeatingLayout(), "primary")}
         </div>
       </article>
 
@@ -2259,6 +2264,10 @@ function renderSeatingPage() {
     ?.addEventListener("pointerdown", handlePlannerPointerDown, {
       once: false,
     });
+}
+
+function renderPlannerStatCard(value, label, tone = "") {
+  return `<div class="planner-stat-card${tone ? ` planner-stat-card--${tone}` : ""}"><strong>${escapeHtml(String(value))}</strong><span>${escapeHtml(label)}</span></div>`;
 }
 
 function renderCheckinPage() {
@@ -3720,10 +3729,10 @@ async function handleAction(action, dataset, event = null) {
       renderActiveView();
       return;
     case "planner-zoom-in":
-      setPlannerZoom(state.plannerZoom + 0.1);
+      setPlannerZoom(state.plannerZoom + 0.05);
       return;
     case "planner-zoom-out":
-      setPlannerZoom(state.plannerZoom - 0.1);
+      setPlannerZoom(state.plannerZoom - 0.05);
       return;
     case "load-test-guests":
       loadSeatingTestGuests();
@@ -7406,6 +7415,20 @@ async function persistHallObjects(errorMessage = "Venue layout could not be save
     showToast(errorMessage, "error");
     return false;
   }
+}
+
+function restoreGuestSearchFocus(selectionStart, selectionEnd) {
+  requestAnimationFrame(() => {
+    if (state.activeView !== "guests") return;
+    const search = elements.pageContent.querySelector("[data-guest-search]");
+    if (!search) return;
+    search.focus({ preventScroll: true });
+    const length = search.value.length;
+    search.setSelectionRange?.(
+      Math.min(selectionStart ?? length, length),
+      Math.min(selectionEnd ?? length, length),
+    );
+  });
 }
 
 function syncDanceFloorDimensions() {

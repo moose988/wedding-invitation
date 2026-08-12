@@ -56,6 +56,23 @@ test("dashboard listeners are replaced and stale callbacks are ignored", async (
   assert.match(dashboard, /window\.addEventListener\("pagehide", disposeDashboardListeners/);
 });
 
+test("dashboard navigation and seating toolbar keep the requested operational order", async () => {
+  const [dashboard, html] = await Promise.all([read("dashboard.js"), read("dashboard.html")]);
+
+  const navigation = ["overview", "guests", "seating", "share", "exports", "checkin"];
+  const navigationPositions = navigation.map((view) => html.indexOf(`data-nav-view="${view}"`));
+  assert.ok(navigationPositions.every((position) => position >= 0));
+  assert.deepEqual([...navigationPositions].sort((a, b) => a - b), navigationPositions);
+  assert.match(dashboard, /description: "",/);
+  assert.match(dashboard, /elements\.pageDescription\.hidden = !elements\.pageDescription\.textContent/);
+  assert.match(dashboard, /restoreGuestSearchFocus\(selectionStart, selectionEnd\)/);
+  assert.match(dashboard, /search\.focus\(\{ preventScroll: true \}\)/);
+  assert.match(dashboard, /setPlannerZoom\(state\.plannerZoom \+ 0\.05\)/);
+  assert.match(dashboard, /setPlannerZoom\(state\.plannerZoom - 0\.05\)/);
+  assert.match(dashboard, /renderPlannerStatCard\(state\.tables\.length, "Tables"\)/);
+  assert.match(dashboard, /<div class="planner-toolbar__buttons">\s*\$\{actionButton\("Add table"/s);
+});
+
 test("wedding list resolves access entries against source documents and replaces by ID", async () => {
   const weddings = await read("weddings.js");
 

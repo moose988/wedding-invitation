@@ -21,7 +21,7 @@ import {
   writeBatch,
 } from "./firebase-config.js";
 import { exportGuests } from "./export.js";
-import { createSenderPayload, encodeSenderPayload } from "./sender-codec.mjs";
+import { createSenderPayload, encodeSenderPayload } from "./sender-codec.mjs?v=20260812-1";
 
 const params = new URLSearchParams(window.location.search);
 const secureSeatingEditorMode = params.get("seatingEditor") === "1";

@@ -6,7 +6,7 @@ import {
   decodeSenderPayload,
   encodeSenderPayload,
   senderGuestPresentation,
-} from "../sender-codec.mjs";
+} from "../sender-codec.js";
 
 function roundTripGuest(guest) {
   const payload = createSenderPayload({

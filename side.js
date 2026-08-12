@@ -33,11 +33,15 @@ let state = {
   mapInitialized: false,
   action: null,
   unsubs: [],
+  initialized: false,
 };
 
 init();
 
 async function init() {
+  if (state.initialized) return;
+  state.initialized = true;
+  window.addEventListener("pagehide", disposeListeners, { once: true });
   try {
     if (demo) {
       loadDemo();
@@ -87,7 +91,7 @@ function subscribe() {
     onSnapshot(
       doc(db, root),
       (snap) => {
-        state.wedding = snap.exists() ? snap.data() : null;
+        state.wedding = snap.exists() ? { ...snap.data(), id: snap.id } : null;
         render();
       },
       fail,
@@ -125,6 +129,10 @@ function subscribe() {
         fail,
       ),
     );
+}
+function disposeListeners() {
+  state.unsubs.forEach((stop) => stop());
+  state.unsubs = [];
 }
 function fail(error) {
   console.error(error);

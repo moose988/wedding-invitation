@@ -5,9 +5,14 @@
 // Firebase Hosting site as well as local previews.
 export const weddingDesignRegistry = {
   "luxury-wedding-demo": {
-    designId: "example-custom-wedding",
-    route: "./invitations/wedding-designs/example-custom-wedding/index.html",
-    name: "Example Custom Wedding Invitation",
+    designId: "layla-zaid",
+    route: "./invitations/wedding-designs/layla-zaid/index.html",
+    name: "Layla & Zaid Invitation",
+  },
+  "M1S1aBL9134GSAozWh6G": {
+    designId: "ali-salma",
+    route: "./invitations/wedding-designs/ali-salma/index.html",
+    name: "Ali & Salma Invitation",
   },
 };
 

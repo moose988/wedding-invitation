@@ -8,9 +8,16 @@ guest links continue to point to `index.html`; the lightweight router checks
 and forwards only mapped wedding IDs to their dedicated design. Unmapped
 weddings keep the current root invitation as the fallback.
 
+### Current design map
+
+| Wedding | Firestore ID | Design folder |
+| --- | --- | --- |
+| Layla & Zaid | `luxury-wedding-demo` | `invitations/wedding-designs/layla-zaid/` |
+| Ali & Salma | `M1S1aBL9134GSAozWh6G` | `invitations/wedding-designs/ali-salma/` |
+
 To add a wedding-specific design:
 
-1. Copy `invitations/wedding-designs/example-custom-wedding/` to a new folder.
+1. Copy `invitations/wedding-designs/layla-zaid/` to a clearly named new folder.
 2. Build the visual markup and CSS only in that folder.
 3. Reuse `invitations/shared/invitation-data.js` for Firebase wedding/guest
    data, live updates, RSVP writes, and check-in QR URLs.

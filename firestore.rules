@@ -44,7 +44,10 @@ service cloud.firestore {
     function isSeatingOnlyDashboardAccount(weddingId) {
       return isDashboardMember(weddingId)
         && dashboardUser(weddingId).data.canEditSeating == true
-        && dashboardUser(weddingId).data.seatingOnly == true;
+        // Older full-dashboard permission documents do not have this field.
+        // Missing must mean false; direct property access makes the rule
+        // evaluation error and incorrectly denies legitimate layout writes.
+        && dashboardUser(weddingId).data.get("seatingOnly", false) == true;
     }
 
     function seatingAccountMayUpdateGuest(weddingId, guest) {

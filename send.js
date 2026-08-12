@@ -2,7 +2,7 @@ import {
   buildSenderWhatsAppMessage,
   decodeSenderPayload,
   senderGuestPresentation,
-} from "./sender-codec.mjs";
+} from "./sender-codec.js";
 
 const shell = document.getElementById("senderShell");
 

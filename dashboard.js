@@ -21,7 +21,7 @@ import {
   writeBatch,
 } from "./firebase-config.js";
 import { exportGuests } from "./export.js";
-import { createSenderPayload, encodeSenderPayload } from "./sender-codec.mjs?v=20260812-1";
+import { createSenderPayload, encodeSenderPayload } from "./sender-codec.js";
 
 const params = new URLSearchParams(window.location.search);
 const secureSeatingEditorMode = params.get("seatingEditor") === "1";
@@ -747,9 +747,8 @@ const state = {
   secureEditorMode: secureSeatingEditorMode,
   editorLinkToken: params.get("token") || "",
   editorRole: "",
-  // A real Firestore wedding may legitimately use a demo-looking ID. Keep
-  // local preview data opt-in only, otherwise the dashboard must read the
-  // exact guests and tables stored in Firestore.
+  // Demo data is opt-in only. A wedding ID that happens to contain "demo"
+  // is still a real Firestore document and must use live synchronization.
   mode: params.get("demo") === "1" ? "demo" : "live",
   services: null,
   currentUser: null,
@@ -802,6 +801,9 @@ const state = {
   unsubGuests: null,
   unsubTables: null,
   unsubSeatingAccess: null,
+  unsubAuth: null,
+  initialized: false,
+  listenerGeneration: 0,
   seatingAccess: { bride: null, groom: null, family: null },
 };
 
@@ -846,7 +848,12 @@ const elements = {
 init();
 
 async function init() {
+  if (state.initialized) {
+    return;
+  }
+  state.initialized = true;
   bindEvents();
+  window.addEventListener("pagehide", disposeDashboardListeners, { once: true });
 
   if (state.mode === "demo") {
     loadDemoDashboard();
@@ -865,7 +872,8 @@ async function init() {
     return;
   }
 
-  onAuthStateChanged(state.services.auth, async (user) => {
+  state.unsubAuth?.();
+  state.unsubAuth = onAuthStateChanged(state.services.auth, async (user) => {
     state.currentUser = user;
     if (!user) {
       const message = state.authRedirectMessage || "session-required";
@@ -1371,7 +1379,9 @@ function loadDemoDashboard(
     qrCodeValue: guest.qrCodeValue || buildCheckinLink(guest.guestToken),
   }));
   state.loadingGuests = false;
-  state.tables = hydrateTables(savedDemoState?.tables || demoTables);
+  state.tables = hydrateTables(
+    uniqueRowsById(savedDemoState?.tables || demoTables, "demo table"),
+  );
   state.guests = syncGuestSeatingSummaries(state.guests, state.tables);
   state.hallObjects = hydrateHallObjects(savedDemoState?.hallObjects);
   state.loadingTables = false;
@@ -1382,7 +1392,8 @@ function loadDemoDashboard(
 }
 
 function mergeDemoSeedGuests(savedGuests) {
-  const savedById = new Map(savedGuests.map((guest) => [guest.id, guest]));
+  const uniqueSavedGuests = uniqueRowsById(savedGuests, "demo guest");
+  const savedById = new Map(uniqueSavedGuests.map((guest) => [guest.id, guest]));
   const deletedSeedIds = new Set(state.deletedSeedGuestIds || []);
   const merged = demoSeedGuests
     .filter((seedGuest) => !deletedSeedIds.has(seedGuest.id))
@@ -1390,10 +1401,23 @@ function mergeDemoSeedGuests(savedGuests) {
       ...seedGuest,
       ...(savedById.get(seedGuest.id) || {}),
     }));
-  const customGuests = savedGuests.filter(
+  const customGuests = uniqueSavedGuests.filter(
     (guest) => !demoSeedGuests.some((seedGuest) => seedGuest.id === guest.id),
   );
-  return [...merged, ...customGuests];
+  return uniqueRowsById([...merged, ...customGuests], "demo guest");
+}
+
+function uniqueRowsById(rows, label = "document") {
+  const byId = new Map();
+  (Array.isArray(rows) ? rows : []).forEach((row) => {
+    const id = String(row?.id || "").trim();
+    if (!id) {
+      console.warn(`Ignoring ${label} without a document ID.`, row);
+      return;
+    }
+    byId.set(id, { ...row, id });
+  });
+  return [...byId.values()];
 }
 
 function readDemoDashboardState() {
@@ -1468,7 +1492,9 @@ async function bootstrapDashboard() {
   const weddingDoc = await getDoc(
     doc(state.services.db, "weddings", state.weddingId),
   );
-  state.wedding = weddingDoc.exists() ? weddingDoc.data() : null;
+  state.wedding = weddingDoc.exists()
+    ? { ...weddingDoc.data(), id: weddingDoc.id }
+    : null;
   state.hallObjects = hydrateHallObjects(state.wedding?.hallObjects);
   if (isWeddingOwner()) {
     try {
@@ -1504,6 +1530,7 @@ function canManageSeatingAccess() {
 
 function startSeatingAccessListener() {
   state.unsubSeatingAccess?.();
+  state.unsubSeatingAccess = null;
   if (!canManageSeatingAccess()) {
     state.seatingAccess = { bride: null, groom: null, family: null };
     return;
@@ -1525,6 +1552,9 @@ function startSeatingAccessListener() {
 function startListeners() {
   state.unsubGuests?.();
   state.unsubTables?.();
+  state.unsubGuests = null;
+  state.unsubTables = null;
+  const generation = ++state.listenerGeneration;
   state.loadingGuests = true;
   state.loadingTables = true;
   renderActiveView();
@@ -1538,11 +1568,12 @@ function startListeners() {
   state.unsubGuests = onSnapshot(
     guestSource,
     (snapshot) => {
-      state.guests = snapshot.docs.map((docSnapshot) => ({
+      if (generation !== state.listenerGeneration) return;
+      state.guests = uniqueRowsById(snapshot.docs.map((docSnapshot) => ({
         ...docSnapshot.data(),
         id: docSnapshot.id,
         side: normalizeGuestSide(docSnapshot.data().side),
-      }));
+      })), "Firestore guest");
       state.firestoreGuestCount = snapshot.size;
       state.firestoreGuestIds = snapshot.docs.map(
         (docSnapshot) => docSnapshot.id,
@@ -1568,11 +1599,12 @@ function startListeners() {
   state.unsubTables = onSnapshot(
     collection(state.services.db, "weddings", state.weddingId, "tables"),
     (snapshot) => {
+      if (generation !== state.listenerGeneration) return;
       state.tables = hydrateTables(
-        snapshot.docs.map((docSnapshot) => ({
+        uniqueRowsById(snapshot.docs.map((docSnapshot) => ({
           ...docSnapshot.data(),
           id: docSnapshot.id,
-        })),
+        })), "Firestore table"),
       );
       state.selectedTableId =
         state.selectedTableId || state.tables[0]?.id || "";
@@ -1584,11 +1616,25 @@ function startListeners() {
   );
 }
 
+function disposeDashboardListeners() {
+  state.listenerGeneration += 1;
+  state.unsubGuests?.();
+  state.unsubTables?.();
+  state.unsubSeatingAccess?.();
+  state.unsubAuth?.();
+  state.unsubGuests = null;
+  state.unsubTables = null;
+  state.unsubSeatingAccess = null;
+  state.unsubAuth = null;
+}
+
 function handleSeatingListenerError(error) {
   console.error(error);
   if (state.editorMode && error?.code === "permission-denied") {
     state.unsubGuests?.();
     state.unsubTables?.();
+    state.unsubGuests = null;
+    state.unsubTables = null;
     showEditorAccessError();
     return;
   }
@@ -1887,7 +1933,7 @@ function renderOverviewPage() {
       </article>
 
       <section class="overview-kpis">
-        ${renderKpiCard("Total invited", stats.total, `${stats.confirmedPct}% confirmed`, "Live guest count")}
+        ${renderKpiCard("Primary guest documents", stats.total, `${stats.accompanyingGuests} accompanying guests`, `${stats.totalPeople} people total`)}
         ${renderKpiCard("Confirmed", stats.confirmed, `${stats.confirmedPct}% of total`, "RSVP accepted")}
         ${renderKpiCard("Pending", stats.pending, `${stats.pendingPct}% awaiting response`, "Needs follow-up")}
         ${renderKpiCard("Declined", stats.declined, `${stats.declinedPct}% declined`, "Unavailable")}
@@ -2012,6 +2058,8 @@ function renderGuestPage() {
   }
 
   const guests = getFilteredGuests();
+  const directoryCounts = calculateGuestDirectoryCounts(state.guests);
+  const filteredCounts = calculateGuestDirectoryCounts(guests);
   const totalGuestPages = Math.max(
     1,
     Math.ceil(guests.length / guestDirectoryPageSize),
@@ -2047,7 +2095,7 @@ function renderGuestPage() {
               ["both", "Both sides"],
             ])}
           </div>
-          <span class="pill">${guests.length} result${guests.length === 1 ? "" : "s"}</span>
+          <span class="pill">${filteredCounts.primary} primary result${filteredCounts.primary === 1 ? "" : "s"}</span>
         </div>
       </article>
 
@@ -3778,6 +3826,7 @@ async function handleAction(action, dataset, event = null) {
 }
 
 function calculateDashboardStats(guests, tables) {
+  const directoryCounts = calculateGuestDirectoryCounts(guests);
   const totalSeats = tables.reduce(
     (sum, table) => sum + Number(table.seatCount || table.capacity || 0),
     0,
@@ -3810,6 +3859,8 @@ function calculateDashboardStats(guests, tables) {
   const checkedIn = guests.filter((guest) => guest.checkedIn).length;
   return {
     total,
+    accompanyingGuests: directoryCounts.accompanying,
+    totalPeople: directoryCounts.people,
     confirmed,
     pending,
     declined,
@@ -7280,6 +7331,15 @@ function createHallObjects() {
       y: 90,
     },
   ];
+}
+
+function calculateGuestDirectoryCounts(guests) {
+  const primary = guests.length;
+  const accompanying = guests.reduce(
+    (sum, guest) => sum + normalizeAdditionalGuests(guest.additionalGuests),
+    0,
+  );
+  return { primary, accompanying, people: primary + accompanying };
 }
 
 function hydrateHallObjects(savedObjects) {

@@ -94,8 +94,23 @@ async function handleLogin(event) {
 }
 
 async function redirectAfterLogin(user) {
-  // Seating-only accounts remain event-specific. Normal planners always land
-  // in the workspace, where they can select or create a wedding.
+  // Preserve an explicitly requested wedding across preview-domain sign-in.
+  // Each Firebase Hosting preview is a separate browser origin, so a user may
+  // need to authenticate again even when another preview channel is signed in.
+  const requestedWeddingId = params.get("wedding");
+  if (requestedWeddingId) {
+    if (await canViewWedding(user, requestedWeddingId)) {
+      rememberWeddingId(requestedWeddingId);
+      redirectToDashboard(requestedWeddingId);
+      return;
+    }
+    elements.authStatus.textContent =
+      "This account does not have dashboard access for that wedding.";
+    return;
+  }
+
+  // Seating-only accounts remain event-specific. Normal planners without an
+  // explicit wedding land in the workspace.
   if (seatingOnlyMode) {
     const weddingId = await resolveAccessibleWeddingId(user);
     if (!weddingId) {

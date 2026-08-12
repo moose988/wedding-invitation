@@ -53,6 +53,9 @@ const state = {
   wedding: null,
   guests: [],
   guest: null,
+  unsubGuests: null,
+  unsubAuth: null,
+  initialized: false,
 };
 
 const elements = {
@@ -72,7 +75,10 @@ const elements = {
 init();
 
 async function init() {
+  if (state.initialized) return;
+  state.initialized = true;
   bindEvents();
+  window.addEventListener("pagehide", disposeListeners, { once: true });
 
   if (state.mode === "demo") {
     loadDemoCheckin();
@@ -91,7 +97,9 @@ async function init() {
 
   state.services = initFirebase();
   const weddingDoc = await getDoc(doc(state.services.db, "weddings", state.weddingId));
-  state.wedding = weddingDoc.exists() ? weddingDoc.data() : null;
+  state.wedding = weddingDoc.exists()
+    ? { ...weddingDoc.data(), id: weddingDoc.id }
+    : null;
   elements.weddingTitle.textContent = state.wedding?.coupleName || "Check-In Console";
 
   if (state.guestToken) {
@@ -99,7 +107,8 @@ async function init() {
     renderGuestCard();
   }
 
-  onAuthStateChanged(state.services.auth, async (user) => {
+  state.unsubAuth?.();
+  state.unsubAuth = onAuthStateChanged(state.services.auth, async (user) => {
     state.currentUser = user;
     if (!user) {
       elements.authGate.hidden = false;
@@ -189,8 +198,9 @@ async function loadGuestByToken(guestToken) {
 }
 
 function startGuestListener() {
-  onSnapshot(collection(state.services.db, "weddings", state.weddingId, "guests"), (snapshot) => {
-    state.guests = snapshot.docs.map((docSnapshot) => ({ id: docSnapshot.id, ...docSnapshot.data() }));
+  state.unsubGuests?.();
+  state.unsubGuests = onSnapshot(collection(state.services.db, "weddings", state.weddingId, "guests"), (snapshot) => {
+    state.guests = snapshot.docs.map((docSnapshot) => ({ ...docSnapshot.data(), id: docSnapshot.id }));
     const checkedInCount = state.guests.filter((guest) => guest.checkedIn).length;
     elements.counter.textContent = `Checked in ${checkedInCount} of ${state.guests.length} guests`;
 
@@ -203,6 +213,13 @@ function startGuestListener() {
 
     renderManualSearchResults();
   });
+}
+
+function disposeListeners() {
+  state.unsubGuests?.();
+  state.unsubAuth?.();
+  state.unsubGuests = null;
+  state.unsubAuth = null;
 }
 
 function renderGuestCard() {

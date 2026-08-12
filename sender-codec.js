@@ -67,7 +67,7 @@ export function buildSenderWhatsAppMessage(payload, guest, inviteLink) {
   const names = senderGuestPresentation(guest);
   const couple = payload?.c || "our wedding";
   return [
-    `Wedding invitation — ${couple}`,
+    `Wedding invitation â€” ${couple}`,
     `Hello ${names.displayName}! We would be honored to have you at our wedding. All the details and RSVP are here:`,
     inviteLink,
   ].join("\n\n");

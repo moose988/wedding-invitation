@@ -204,6 +204,39 @@ exports.normalizeSeatingGuestSides = onCall(async (request) => {
   return { normalized };
 });
 
+// Permanent deletion is deliberately server-side so nested Firestore
+// collections cannot be orphaned. The UI requires the exact confirmation
+// phrase before it calls this owner-only endpoint.
+exports.deleteWedding = onCall(async (request) => {
+  const { weddingId, confirmation } = request.data || {};
+  if (!request.auth) throw new HttpsError("unauthenticated", "Sign in is required.");
+  if (!weddingId || confirmation !== `DELETE ${weddingId}`) {
+    throw new HttpsError("invalid-argument", "Confirmation does not match this wedding.");
+  }
+  const weddingRef = db.doc(`weddings/${weddingId}`);
+  const wedding = await weddingRef.get();
+  if (!wedding.exists || wedding.data().ownerUserId !== request.auth.uid) {
+    throw new HttpsError("permission-denied", "Only the wedding owner can permanently delete it.");
+  }
+  // Remove every collaborator's private workspace index first. Otherwise a
+  // deleted wedding could remain as a stale card in another planner's view.
+  const members = await weddingRef.collection("dashboardUsers").get();
+  let batch = db.batch();
+  let writes = 0;
+  for (const member of members.docs) {
+    batch.delete(db.doc(`users/${member.id}/weddingAccess/${weddingId}`));
+    writes += 1;
+    if (writes === 400) {
+      await batch.commit();
+      batch = db.batch();
+      writes = 0;
+    }
+  }
+  if (writes) await batch.commit();
+  await db.recursiveDelete(weddingRef);
+  return { deleted: true };
+});
+
 // Public side pages deliberately expose only this aggregate. Keeping it server
 // generated means editor links cannot write arbitrary public documents.
 exports.refreshPublicSeatingStats = onDocumentWritten("weddings/{weddingId}/{collectionId}/{documentId}", async (event) => {
@@ -237,7 +270,7 @@ exports.refreshPublicSeatingStats = onDocumentWritten("weddings/{weddingId}/{col
       seated: members.filter((guest) => (assignmentsByGuest.get(guest.id) || []).length).length,
       invitesSent: members.filter((guest) => guest.inviteSentAt || guest.reminderSentAt).length,
     };
-    roster[side] = members.map((guest) => ({ id: guest.id, n: guest.fullName || "", a: guest.fullNameAr || "", r: ["confirmed", "declined"].includes(guest.rsvpStatus) ? guest.rsvpStatus : "pending", p: partySize(guest), seats: assignmentsByGuest.get(guest.id) || [] }));
+    roster[side] = members.map((guest) => ({ id: guest.id, n: guest.fullName || "", r: ["confirmed", "declined"].includes(guest.rsvpStatus) ? guest.rsvpStatus : "pending", p: partySize(guest), seats: assignmentsByGuest.get(guest.id) || [] }));
   });
   await db.doc(`weddings/${weddingId}/publicStats/summary`).set({ coupleName: wedding.data().coupleName || "", sides, roster, updatedAt: FieldValue.serverTimestamp() });
 });

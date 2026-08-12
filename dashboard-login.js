@@ -51,13 +51,7 @@ function init() {
       return;
     }
 
-    const weddingId = await resolveAccessibleWeddingId(user);
-    if (!weddingId) {
-      elements.authStatus.textContent = "No dashboard access was found for this account.";
-      return;
-    }
-
-    redirectToDashboard(weddingId);
+    redirectAfterLogin(user);
   });
 
   const statusMessage = params.get("message");
@@ -92,16 +86,28 @@ async function handleLogin(event) {
   try {
     const credential = await signInWithEmailAndPassword(services.auth, email, password);
     elements.authStatus.textContent = "Redirecting to dashboard...";
-    const weddingId = await resolveAccessibleWeddingId(credential.user);
-    if (!weddingId) {
-      elements.authStatus.textContent = "No dashboard access was found for this account.";
-      return;
-    }
-    redirectToDashboard(weddingId);
+    redirectAfterLogin(credential.user);
   } catch (error) {
     console.error(error);
     elements.authStatus.textContent = "Sign-in failed. Please check your email and password.";
   }
+}
+
+async function redirectAfterLogin(user) {
+  // Seating-only accounts remain event-specific. Normal planners always land
+  // in the workspace, where they can select or create a wedding.
+  if (seatingOnlyMode) {
+    const weddingId = await resolveAccessibleWeddingId(user);
+    if (!weddingId) {
+      elements.authStatus.textContent = "No seating access was found for this account.";
+      return;
+    }
+    redirectToDashboard(weddingId);
+    return;
+  }
+
+  isRedirecting = true;
+  window.location.replace("./weddings.html");
 }
 
 async function resolveAccessibleWeddingId(user) {

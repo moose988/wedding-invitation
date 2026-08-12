@@ -60,7 +60,6 @@ export function senderGuestPresentation(guest) {
     : String(guest.n).trim();
   return {
     displayName: englishName || "Guest",
-    arabicName: "",
   };
 }
 

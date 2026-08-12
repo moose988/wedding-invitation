@@ -13,39 +13,42 @@ function roundTripGuest(guest) {
     weddingId: "wedding-test",
     coupleName: "Layla & Zaid",
     side: "all",
-    guests: [{ fullName: guest.n, fullNameAr: guest.a, phone: guest.p, side: guest.s, guestToken: guest.t }],
+    guests: [
+      {
+        fullName: guest.n,
+        phone: guest.p,
+        side: guest.s,
+        guestToken: guest.t,
+        legacyName: guest.legacyName,
+      },
+    ],
   });
   const link = `send.html#data=${encodeSenderPayload(payload)}`;
   const encoded = new URL(`https://example.test/${link}`).hash.slice(6);
   return { payload: decodeSenderPayload(encoded), link };
 }
 
-test("sender workflow keeps English, emoji, and special characters without Arabic sender text", () => {
+test("sender workflow keeps names and excludes unsupported guest fields", () => {
   const guests = [
-    { n: "Amal Kareem", a: "أمل كريم", p: "971500000001", s: "bride", t: "arabic" },
-    { n: "Mona Al-Hassan", a: "منى Al-Hassan", p: "971500000002", s: "groom", t: "mixed" },
-    { n: "Rana 🎉", a: "رانا 🎉", p: "971500000003", s: "family", t: "emoji" },
-    { n: "D'Angelo & Co.", a: "دانجيلو وشركاه", p: "971500000004", s: "both", t: "special" },
+    { n: "Amal Kareem", p: "971500000001", s: "bride", t: "one", legacyName: "ignored" },
+    { n: "Mona Al-Hassan", p: "971500000002", s: "groom", t: "two", legacyName: "ignored" },
+    { n: "Rana 🎉", p: "971500000003", s: "family", t: "three", legacyName: "ignored" },
+    { n: "D'Angelo & Co.", p: "971500000004", s: "both", t: "four", legacyName: "ignored" },
   ];
+
   guests.forEach((guest) => {
     const { payload } = roundTripGuest(guest);
-    assert.equal(payload.g[0].a, undefined);
+    assert.equal(payload.g[0].legacyName, undefined);
     assert.equal(payload.g[0].n, guest.n);
-    const presentation = senderGuestPresentation(payload.g[0]);
-    assert.equal(presentation.displayName, guest.n);
-    assert.equal(presentation.arabicName, "");
-    const message = buildSenderWhatsAppMessage(payload, payload.g[0], "https://example.test/invite");
-    assert.match(message, new RegExp(guest.n.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"), "u"));
+    assert.equal(senderGuestPresentation(payload.g[0]).displayName, guest.n);
+    const message = buildSenderWhatsAppMessage(
+      payload,
+      payload.g[0],
+      "https://example.test/invite",
+    );
+    assert.match(
+      message,
+      new RegExp(guest.n.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"), "u"),
+    );
   });
-});
-
-test("legacy sender payloads with irreversibly corrupted Arabic hide only that line", () => {
-  const guest = { n: "Khaled Omar", a: "???? ???", p: "971504444444", s: "groom", t: "legacy" };
-  const { payload } = roundTripGuest(guest);
-  const presentation = senderGuestPresentation(payload.g[0]);
-  assert.equal(presentation.displayName, "Khaled Omar");
-  assert.equal(presentation.arabicName, "");
-  const message = buildSenderWhatsAppMessage(payload, payload.g[0], "https://example.test/invite");
-  assert.doesNotMatch(message, /\?{2,}/u);
-  assert.match(message, /Khaled Omar/u);
 });

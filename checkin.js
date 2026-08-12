@@ -20,7 +20,6 @@ const demoGuests = [
   {
     id: "guest-1",
     fullName: "Noor Ahmed",
-    fullNameAr: "نور أحمد",
     phone: "971500000001",
     side: "bride",
     rsvpStatus: "confirmed",
@@ -33,7 +32,6 @@ const demoGuests = [
   {
     id: "guest-2",
     fullName: "Omar Hassan",
-    fullNameAr: "عمر حسن",
     phone: "971500000002",
     side: "groom",
     rsvpStatus: "pending",
@@ -220,7 +218,6 @@ function renderGuestCard() {
         <h2>${escapeHtml(state.guest.fullName || "Guest")}</h2>
         <span class="status-pill status-pill--${escapeAttribute(state.guest.rsvpStatus || "pending")}">${escapeHtml(state.guest.rsvpStatus || "pending")}</span>
       </div>
-      <p class="rtl-copy" dir="rtl">${escapeHtml(state.guest.fullNameAr || "")}</p>
       <div class="dashboard-guest-card__meta">
         <span>Phone: ${escapeHtml(state.guest.phone || "Not set")}</span>
         <span>Side: ${escapeHtml(state.guest.side || "other")}</span>
@@ -251,7 +248,7 @@ function renderManualSearchResults() {
 
   const search = (elements.manualSearchInput.value || "").trim().toLowerCase();
   const matches = state.guests.filter((guest) => {
-    return !search || [guest.fullName, guest.fullNameAr, guest.phone].some((value) => String(value || "").toLowerCase().includes(search));
+    return !search || [guest.fullName, guest.phone].some((value) => String(value || "").toLowerCase().includes(search));
   });
 
   elements.manualSearchResults.innerHTML = matches

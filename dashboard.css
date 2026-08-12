@@ -31,7 +31,6 @@
   --da3wa-content: 1440px;
   --da3wa-font-ui: "Manrope", system-ui, sans-serif;
   --da3wa-font-display: "Fraunces", Georgia, serif;
-  --da3wa-font-ar: "Noto Naskh Arabic", serif;
 }
 
 *,
@@ -197,7 +196,6 @@ a {
   align-content: start;
 }
 
-.da3wa-sidebar__brand,
 .da3wa-sidebar__footer,
 .da3wa-topbar,
 .overview-hero__meta,
@@ -218,44 +216,13 @@ a {
 .planner-library__guests,
 .checkin-grid,
 .share-grid,
-.export-grid,
 .links-grid {
   display: flex;
   gap: 12px;
 }
 
-.da3wa-sidebar__brand {
-  align-items: center;
-}
-
-.da3wa-sidebar__mark {
-  width: 44px;
-  height: 44px;
-  display: grid;
-  place-items: center;
-  border-radius: 14px;
-  background: linear-gradient(135deg, var(--da3wa-primary), #2f7868);
-  color: #fff;
-  font-weight: 800;
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.2);
-}
-
-.da3wa-sidebar__brand p,
 .da3wa-role-chip p {
   margin: 0;
-}
-
-.da3wa-sidebar__brand p {
-  color: var(--da3wa-text-muted);
-  font-size: 12px;
-  letter-spacing: 0.14em;
-  text-transform: uppercase;
-}
-
-.da3wa-sidebar__brand strong {
-  display: block;
-  margin-top: 4px;
-  font-size: 18px;
 }
 
 .da3wa-sidebar__nav {
@@ -309,6 +276,11 @@ a {
   margin-top: auto;
   flex-direction: column;
   align-items: stretch;
+}
+
+.da3wa-nav-link--anchor {
+  display: block;
+  text-decoration: none;
 }
 
 /* Account-based seating editors retain only the one navigation destination
@@ -642,9 +614,42 @@ body.is-seating-view .da3wa-page {
 .overview-support,
 .checkin-grid,
 .share-grid,
-.export-grid,
 .links-grid {
   flex-wrap: wrap;
+}
+
+.export-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+  align-items: stretch;
+}
+
+.export-card {
+  display: flex;
+  flex-direction: column;
+}
+
+.export-card__footer {
+  margin-top: auto;
+}
+
+@media (min-width: 1001px) {
+  .export-grid {
+    grid-template-columns: repeat(12, minmax(0, 1fr));
+  }
+
+  .export-card--quarter {
+    grid-column: span 3;
+  }
+
+  .export-card--third {
+    grid-column: span 4;
+  }
+
+  .export-card--half {
+    grid-column: span 6;
+  }
 }
 
 .analytics-card,
@@ -818,7 +823,7 @@ body.is-seating-view .da3wa-page {
 .planner-toolbar__actions {
   align-items: flex-start;
   justify-content: flex-start;
-  flex-direction: column;
+  flex-direction: row;
 }
 
 .guest-toolbar {
@@ -969,12 +974,6 @@ body.is-seating-view .da3wa-page {
   border: 1px solid rgba(184, 145, 86, 0.22);
   color: var(--da3wa-text);
   font-weight: 800;
-}
-
-.guest-primary .rtl-copy,
-.guest-card .rtl-copy,
-.seat-assignment__guest .rtl-copy {
-  font-family: var(--da3wa-font-ar);
 }
 
 .guest-meta-stack,
@@ -1433,6 +1432,27 @@ body.is-seating-view .da3wa-page {
   background: #b89156;
 }
 
+.hall-object--dance-floor {
+  z-index: 2;
+  display: grid;
+  place-items: center;
+  padding: 14px;
+  border: 3px solid var(--dance-border);
+  border-radius: 18px;
+  color: #fffdf8;
+  background: repeating-conic-gradient(from 45deg, rgba(255, 255, 255, .12) 0 25%, transparent 0 50%) 50% / 28px 28px, radial-gradient(circle at 30% 25%, rgba(255, 255, 255, .24), transparent 36%), var(--dance-fill);
+  box-shadow: inset 0 0 0 2px rgba(255, 255, 255, .18), 0 16px 28px rgba(44, 35, 24, .22);
+  transform: translate(-50%, -50%) rotate(var(--dance-rotation));
+  cursor: grab;
+  text-align: center;
+  text-shadow: 0 1px 2px rgba(0, 0, 0, .3);
+}
+
+.hall-object--dance-floor.is-round { border-radius: 50%; }
+.hall-object--dance-floor.is-selected { z-index: 4; outline: 3px solid rgba(31, 90, 77, .5); outline-offset: 5px; }
+.hall-object--dance-floor:focus-visible,
+.hall-object:focus-visible { outline: 3px solid var(--da3wa-primary); outline-offset: 4px; }
+
 .planner-table {
   position: absolute;
   z-index: 3;
@@ -1802,7 +1822,6 @@ body.is-seating-view .da3wa-page {
 .checkin-card,
 .share-card,
 .export-card {
-  flex: 1 1 280px;
   min-width: 0;
   padding: 22px;
 }
@@ -2185,7 +2204,6 @@ body.is-seating-view .da3wa-page {
   .overview-support,
   .quick-actions__grid,
   .share-grid,
-  .export-grid,
   .checkin-grid,
   .links-grid {
     flex-direction: column;
@@ -2197,9 +2215,12 @@ body.is-seating-view .da3wa-page {
   .activity-card,
   .quick-actions,
   .share-card,
-  .export-card,
   .checkin-card {
     flex-basis: auto;
+  }
+
+  .export-grid {
+    grid-template-columns: 1fr;
   }
 
   .planner-canvas {

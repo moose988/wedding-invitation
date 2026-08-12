@@ -1,5 +1,25 @@
 # Wedding Invitation Platform Firebase MVP
 
+## Custom coded invitation designs
+
+Public invitation designs are code-owned—not dashboard-configured. Existing
+guest links continue to point to `index.html`; the lightweight router checks
+[`invitations/wedding-designs/registry.js`](./invitations/wedding-designs/registry.js)
+and forwards only mapped wedding IDs to their dedicated design. Unmapped
+weddings keep the current root invitation as the fallback.
+
+To add a wedding-specific design:
+
+1. Copy `invitations/wedding-designs/example-custom-wedding/` to a new folder.
+2. Build the visual markup and CSS only in that folder.
+3. Reuse `invitations/shared/invitation-data.js` for Firebase wedding/guest
+   data, live updates, RSVP writes, and check-in QR URLs.
+4. Add the real Firestore wedding ID and route to the registry.
+
+The dashboard, guest documents, public guest mirror, RSVP rules, QR/check-in,
+seating, exports, and sender links remain shared. Do not duplicate them inside
+individual invitation designs.
+
 This project is a luxury bilingual Arabic/English wedding invitation experience with a Firebase-powered multi-client MVP layered on top of the existing invitation flow.
 
 ## Included pages
@@ -77,7 +97,6 @@ weddings/{weddingId}/seatingAccess/{bride|groom}
 ```json
 {
   "fullName": "Noor Ahmed",
-  "fullNameAr": "نور أحمد",
   "phone": "971500000000",
   "side": "bride",
   "rsvpStatus": "pending",

@@ -153,7 +153,14 @@ service cloud.firestore {
 
       match /dashboardUsers/{userId} {
         allow read: if isDashboardMember(weddingId);
-        allow create, update, delete: if canManageUsers(weddingId);
+        // Bootstrap the owner record only as part of creating that owner's
+        // wedding. Later membership changes remain owner/admin controlled.
+        allow create: if canManageUsers(weddingId) || (isSignedIn()
+          && userId == request.auth.uid
+          && getAfter(/databases/$(database)/documents/weddings/$(weddingId)).data.ownerUserId == request.auth.uid
+          && request.resource.data.canViewDashboard == true
+          && request.resource.data.canManageUsers == true);
+        allow update, delete: if canManageUsers(weddingId);
       }
 
       match /seatingAccess/{role} {
@@ -223,6 +230,16 @@ service cloud.firestore {
             && request.resource.data.additionalGuests <= 10
             && request.resource.data.updatedAt == request.time);
       }
+    }
+
+    // A private, user-owned index for the Wedding Workspace. It intentionally
+    // duplicates only card metadata; no guest data or invitation tokens live here.
+    match /users/{userId}/weddingAccess/{weddingId} {
+      allow read: if isSignedIn() && request.auth.uid == userId;
+      allow create: if isSignedIn() && request.auth.uid == userId &&
+        (isDashboardMember(weddingId) ||
+          getAfter(/databases/$(database)/documents/weddings/$(weddingId)).data.ownerUserId == userId);
+      allow update, delete: if isSignedIn() && request.auth.uid == userId;
     }
   }
 }

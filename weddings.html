@@ -1,0 +1,55 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>My Weddings · DA3WA</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,500;9..144,600&family=Manrope:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
+    <link rel="stylesheet" href="./styles.css" />
+    <link rel="stylesheet" href="./weddings.css" />
+  </head>
+  <body class="weddings-body">
+    <main class="weddings-shell" id="workspace" hidden>
+      <header class="workspace-header">
+        <a class="workspace-brand" href="./weddings.html" aria-label="DA3WA, all weddings">DA3WA</a>
+        <div class="workspace-account"><span id="userEmail"></span><button class="text-button" id="signOutButton" type="button">Sign out</button></div>
+      </header>
+      <section class="workspace-hero">
+        <div><p class="workspace-kicker">Planner workspace</p><h1>My Weddings</h1><p>Every celebration, beautifully organized in one private workspace.</p></div>
+        <button class="primary-button" id="createWeddingButton" type="button">Create wedding</button>
+      </section>
+      <section class="workspace-controls" aria-label="Wedding controls">
+        <label class="search-field"><span class="sr-only">Search weddings</span><input id="searchInput" type="search" placeholder="Search couple or venue" /></label>
+        <label class="sort-field">Sort <select id="sortSelect"><option value="event">Event date</option><option value="updated">Recently updated</option><option value="created">Recently created</option></select></label>
+      </section>
+      <nav class="filter-row" aria-label="Filter weddings" id="filterRow">
+        <button class="filter-button is-active" data-filter="all" type="button">All</button><button class="filter-button" data-filter="draft" type="button">Draft</button><button class="filter-button" data-filter="upcoming" type="button">Upcoming</button><button class="filter-button" data-filter="active" type="button">Active</button><button class="filter-button" data-filter="completed" type="button">Completed</button><button class="filter-button" data-filter="archived" type="button">Archived</button>
+      </nav>
+      <p class="workspace-status" id="workspaceStatus" role="status">Loading your weddings…</p>
+      <section class="wedding-grid" id="weddingGrid" aria-live="polite"></section>
+      <section class="empty-state" id="emptyState" hidden><h2>Your wedding workspace is ready.</h2><p>Create your first wedding to start managing guests, invitations, seating, and check-in.</p><button class="primary-button" type="button" data-create-wedding>Create your first wedding</button></section>
+    </main>
+    <section class="workspace-loading" id="loadingState" aria-live="polite">Loading workspace…</section>
+
+    <dialog class="workspace-dialog" id="weddingDialog">
+      <form class="workspace-modal" id="weddingForm">
+        <header><div><p class="workspace-kicker" id="formKicker">New wedding</p><h2 id="formTitle">Create a wedding</h2></div><button class="icon-close" type="button" data-close="weddingDialog" aria-label="Close">×</button></header>
+        <div class="workspace-modal__body form-grid">
+          <label>Bride name<input name="brideName" required autocomplete="given-name" /></label><label>Groom name<input name="groomName" required autocomplete="given-name" /></label>
+          <label>Event date<input name="eventDate" type="date" required /></label><label>Event time<input name="eventTime" type="time" required /></label>
+          <label class="full">Venue<input name="venueEn" required /></label>
+          <label>Location<input name="location" /></label><label>Maps URL<input name="mapsUrl" type="url" placeholder="https://…" /></label>
+          <label>WhatsApp country code<input name="whatsAppCountryCode" inputmode="numeric" placeholder="971" /></label><label>Invitation language<select name="invitationLanguage"><option value="en">English</option><option value="ar">Arabic</option><option value="both">English & Arabic</option></select></label>
+          <label>Status<select name="status"><option value="draft">Draft</option><option value="upcoming">Upcoming</option><option value="active">Active</option><option value="completed">Completed</option></select></label>
+          <label class="full">Planner notes<textarea name="plannerNotes" rows="3"></textarea></label>
+          <p class="form-error full" id="formError" role="alert"></p>
+        </div>
+        <footer><button class="secondary-button" type="button" data-close="weddingDialog">Cancel</button><button class="primary-button" id="saveWeddingButton" type="submit">Create wedding</button></footer>
+      </form>
+    </dialog>
+    <dialog class="workspace-dialog" id="deleteDialog"><form class="workspace-modal workspace-modal--small" id="deleteForm"><header><div><p class="workspace-kicker">Permanent action</p><h2>Delete wedding?</h2></div><button class="icon-close" type="button" data-close="deleteDialog" aria-label="Close">×</button></header><div class="workspace-modal__body"><p>This permanently removes the wedding and all of its guests, invitations, seating, and check-in data. Type <strong id="deletePhrase"></strong> to continue.</p><label>Confirmation<input id="deleteConfirmation" autocomplete="off" /></label><p class="form-error" id="deleteError" role="alert"></p></div><footer><button class="secondary-button" type="button" data-close="deleteDialog">Cancel</button><button class="danger-button" type="submit">Delete permanently</button></footer></form></dialog>
+    <script type="module" src="./weddings.js"></script>
+  </body>
+</html>

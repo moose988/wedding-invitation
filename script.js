@@ -58,7 +58,6 @@ const demoWedding = {
 
 const demoGuest = {
   fullName: "Our Cherished Guest",
-  fullNameAr: "ضيفنا العزيز",
   phone: "",
   side: "both",
   rsvpStatus: "pending",
@@ -353,7 +352,7 @@ function renderGuestCard() {
 
   elements.guestSpotlightSection.hidden = false;
   setText("guestGreetingTitle", `Dear ${state.guest.fullName || "Guest"}`);
-  setText("guestGreetingArabic", `يسعدنا حضوركم يا ${state.guest.fullNameAr || state.guest.fullName || "ضيفنا العزيز"}`);
+  setText("guestGreetingArabic", "يسعدنا حضوركم");
   setText("guestGreetingEnglish", "Your personal invitation is ready below with RSVP, seating, and entrance access.");
 }
 

@@ -136,7 +136,6 @@ const demoGuests = [
   {
     id: "guest-1",
     fullName: "Noor Ahmed",
-    fullNameAr: "نور أحمد",
     phone: "971500000001",
     side: "bride",
     additionalGuests: 2,
@@ -156,7 +155,6 @@ const demoGuests = [
   {
     id: "guest-2",
     fullName: "Omar Hassan",
-    fullNameAr: "عمر حسن",
     phone: "971500000002",
     side: "groom",
     additionalGuests: 1,
@@ -176,7 +174,6 @@ const demoGuests = [
   {
     id: "guest-3",
     fullName: "Layla Saeed",
-    fullNameAr: "ليلى سعيد",
     phone: "971500000003",
     side: "bride",
     additionalGuests: 0,
@@ -196,7 +193,6 @@ const demoGuests = [
   {
     id: "guest-4",
     fullName: "Khaled Mansoor",
-    fullNameAr: "خالد منصور",
     phone: "971500000004",
     side: "groom",
     additionalGuests: 3,
@@ -216,7 +212,6 @@ const demoGuests = [
   {
     id: "guest-5",
     fullName: "Mira Rahman",
-    fullNameAr: "ميرا رحمن",
     phone: "971500000005",
     side: "family",
     additionalGuests: 1,
@@ -236,7 +231,6 @@ const demoGuests = [
   {
     id: "guest-6",
     fullName: "Aisha Nasser",
-    fullNameAr: "",
     phone: "971500000006",
     side: "bride",
     additionalGuests: 0,
@@ -256,7 +250,6 @@ const demoGuests = [
   {
     id: "guest-7",
     fullName: "Hamad Ali",
-    fullNameAr: "",
     phone: "971500000007",
     side: "groom",
     additionalGuests: 4,
@@ -276,7 +269,6 @@ const demoGuests = [
   {
     id: "guest-8",
     fullName: "Mariam Saleh",
-    fullNameAr: "",
     phone: "971500000008",
     side: "family",
     additionalGuests: 2,
@@ -296,7 +288,6 @@ const demoGuests = [
   {
     id: "guest-9",
     fullName: "Yousef Khalifa",
-    fullNameAr: "",
     phone: "971500000009",
     side: "groom",
     additionalGuests: 1,
@@ -316,7 +307,6 @@ const demoGuests = [
   {
     id: "guest-10",
     fullName: "Leila Omar",
-    fullNameAr: "",
     phone: "971500000010",
     side: "bride",
     additionalGuests: 5,
@@ -336,7 +326,6 @@ const demoGuests = [
   {
     id: "guest-11",
     fullName: "Faris Mansoor",
-    fullNameAr: "",
     phone: "971500000011",
     side: "family",
     additionalGuests: 3,
@@ -356,7 +345,6 @@ const demoGuests = [
   {
     id: "guest-12",
     fullName: "Noura Saeed",
-    fullNameAr: "",
     phone: "971500000012",
     side: "bride",
     additionalGuests: 1,
@@ -376,7 +364,6 @@ const demoGuests = [
   {
     id: "guest-13",
     fullName: "Rashed Adel",
-    fullNameAr: "",
     phone: "971500000013",
     side: "groom",
     additionalGuests: 2,
@@ -396,7 +383,6 @@ const demoGuests = [
   {
     id: "guest-14",
     fullName: "Salma Ibrahim",
-    fullNameAr: "",
     phone: "971500000014",
     side: "family",
     additionalGuests: 0,
@@ -416,7 +402,6 @@ const demoGuests = [
   {
     id: "guest-15",
     fullName: "Kareem Noor",
-    fullNameAr: "",
     phone: "971500000015",
     side: "both",
     additionalGuests: 6,
@@ -436,7 +421,6 @@ const demoGuests = [
   {
     id: "guest-16",
     fullName: "Dana Fouad",
-    fullNameAr: "",
     phone: "971500000016",
     side: "bride",
     additionalGuests: 2,
@@ -456,7 +440,6 @@ const demoGuests = [
   {
     id: "guest-17",
     fullName: "Omar Zayed",
-    fullNameAr: "",
     phone: "971500000017",
     side: "groom",
     additionalGuests: 1,
@@ -476,7 +459,6 @@ const demoGuests = [
   {
     id: "guest-18",
     fullName: "Hessa Al Maktoum",
-    fullNameAr: "",
     phone: "971500000018",
     side: "family",
     additionalGuests: 3,
@@ -496,7 +478,6 @@ const demoGuests = [
   {
     id: "guest-19",
     fullName: "Sultan Al Qasimi",
-    fullNameAr: "",
     phone: "971500000019",
     side: "groom",
     additionalGuests: 0,
@@ -516,7 +497,6 @@ const demoGuests = [
   {
     id: "guest-20",
     fullName: "Reem Abdullah",
-    fullNameAr: "",
     phone: "971500000020",
     side: "bride",
     additionalGuests: 1,
@@ -536,7 +516,6 @@ const demoGuests = [
   {
     id: "guest-21",
     fullName: "Mansoor Habib",
-    fullNameAr: "",
     phone: "971500000021",
     side: "family",
     additionalGuests: 4,
@@ -556,7 +535,6 @@ const demoGuests = [
   {
     id: "guest-22",
     fullName: "Fatima Salem",
-    fullNameAr: "",
     phone: "971500000022",
     side: "bride",
     additionalGuests: 0,
@@ -576,7 +554,6 @@ const demoGuests = [
   {
     id: "guest-23",
     fullName: "Adel Younis",
-    fullNameAr: "",
     phone: "971500000023",
     side: "groom",
     additionalGuests: 2,
@@ -596,7 +573,6 @@ const demoGuests = [
   {
     id: "guest-24",
     fullName: "Rana Mahdi",
-    fullNameAr: "",
     phone: "971500000024",
     side: "both",
     additionalGuests: 1,
@@ -616,7 +592,6 @@ const demoGuests = [
   {
     id: "guest-25",
     fullName: "Tariq Nabil",
-    fullNameAr: "",
     phone: "971500000025",
     side: "groom",
     additionalGuests: 5,
@@ -636,7 +611,6 @@ const demoGuests = [
   {
     id: "guest-26",
     fullName: "Amal Kareem",
-    fullNameAr: "",
     phone: "971500000026",
     side: "bride",
     additionalGuests: 2,
@@ -656,7 +630,6 @@ const demoGuests = [
   {
     id: "guest-27",
     fullName: "Majid Farah",
-    fullNameAr: "",
     phone: "971500000027",
     side: "family",
     additionalGuests: 0,
@@ -676,7 +649,6 @@ const demoGuests = [
   {
     id: "guest-28",
     fullName: "Lina Jamal",
-    fullNameAr: "",
     phone: "971500000028",
     side: "bride",
     additionalGuests: 1,
@@ -696,7 +668,6 @@ const demoGuests = [
   {
     id: "guest-29",
     fullName: "Bilal Hamdan",
-    fullNameAr: "",
     phone: "971500000029",
     side: "groom",
     additionalGuests: 3,
@@ -716,7 +687,6 @@ const demoGuests = [
   {
     id: "guest-30",
     fullName: "Samar Hadi",
-    fullNameAr: "",
     phone: "971500000030",
     side: "family",
     additionalGuests: 2,
@@ -751,7 +721,6 @@ const seatingTestGuests = [
 ].map(([id, fullName, phone, side, additionalGuests]) => ({
   id,
   fullName,
-  fullNameAr: "",
   phone,
   side,
   additionalGuests,
@@ -789,6 +758,7 @@ const state = {
   guests: [],
   tables: [],
   hallObjects: createHallObjects(),
+  selectedHallObjectId: "",
   selectedGuestId: "",
   selectedGuestIds: [],
   activeView: "overview",
@@ -828,6 +798,7 @@ const state = {
   saveState: "saved",
   dirtyGuestForm: false,
   dirtyTableForm: false,
+  dirtyDanceFloorForm: false,
   unsubGuests: null,
   unsubTables: null,
   unsubSeatingAccess: null,
@@ -860,6 +831,9 @@ const elements = {
   tableDeleteModal: document.getElementById("tableDeleteModal"),
   tableDeleteContent: document.getElementById("tableDeleteContent"),
   tableDeleteConfirmButton: document.getElementById("tableDeleteConfirmButton"),
+  danceFloorModal: document.getElementById("danceFloorModal"),
+  danceFloorForm: document.getElementById("danceFloorForm"),
+  danceFloorModalTitle: document.getElementById("danceFloorModalTitle"),
   assignmentModal: document.getElementById("assignmentModal"),
   assignmentContent: document.getElementById("assignmentContent"),
   chairDetailsModal: document.getElementById("chairDetailsModal"),
@@ -900,6 +874,10 @@ async function init() {
       return;
     }
     if (!state.weddingId) {
+      if (!state.editorMode) {
+        window.location.replace("./weddings.html");
+        return;
+      }
       state.weddingId = await resolveAccessibleWeddingId(user);
       if (!state.weddingId) {
         redirectToLogin("access-denied");
@@ -928,6 +906,7 @@ function bindEvents() {
   });
   elements.guestForm?.addEventListener("submit", saveGuest);
   elements.tableForm?.addEventListener("submit", saveTable);
+  elements.danceFloorForm?.addEventListener("submit", saveDanceFloor);
   elements.bulkAddForm?.addEventListener("submit", saveBulkGuests);
   elements.bulkAddForm?.entries?.addEventListener(
     "input",
@@ -967,6 +946,13 @@ function bindEvents() {
   elements.tableForm?.addEventListener("input", () => {
     state.dirtyTableForm = true;
   });
+  elements.danceFloorForm?.addEventListener("input", () => {
+    state.dirtyDanceFloorForm = true;
+  });
+  elements.danceFloorForm?.shape?.addEventListener("change", syncDanceFloorDimensions);
+  elements.danceFloorForm?.width?.addEventListener("input", () => {
+    if (elements.danceFloorForm.shape.value === "round") syncDanceFloorDimensions();
+  });
 
   document.addEventListener("click", handleDocumentClick);
   document.addEventListener("input", handleDocumentInput);
@@ -975,6 +961,7 @@ function bindEvents() {
   elements.guestModal?.addEventListener("click", handleDialogBackdropClick);
   elements.bulkAddModal?.addEventListener("click", handleDialogBackdropClick);
   elements.tableModal?.addEventListener("click", handleDialogBackdropClick);
+  elements.danceFloorModal?.addEventListener("click", handleDialogBackdropClick);
   elements.tableDeleteModal?.addEventListener(
     "click",
     handleDialogBackdropClick,
@@ -1028,6 +1015,10 @@ function bindEvents() {
   elements.tableModal?.addEventListener("close", () => {
     document.body.classList.remove("is-modal-open");
     state.dirtyTableForm = false;
+  });
+  elements.danceFloorModal?.addEventListener("close", () => {
+    document.body.classList.remove("is-modal-open");
+    state.dirtyDanceFloorForm = false;
   });
   [
     elements.tableDeleteModal,
@@ -1674,7 +1665,6 @@ function buildPublicStatsPayload() {
     roster[side] = guests.map((guest) => ({
       id: guest.id,
       n: guest.fullName || "",
-      a: guest.fullNameAr || "",
       r: ["confirmed", "declined"].includes(guest.rsvpStatus)
         ? guest.rsvpStatus
         : "pending",
@@ -2124,6 +2114,7 @@ function renderSeatingPage() {
   }
 
   const selectedTable = getSelectedTable();
+  const selectedHallObject = getSelectedHallObject();
   const selectedSeat = getSelectedSeat();
   const seatingStats = calculateDashboardStats(state.guests, state.tables);
   const sideStats = calculateSideStats(state.guests, state.tables);
@@ -2161,6 +2152,7 @@ function renderSeatingPage() {
             </div>
           </div>
           ${actionButton("Add table", "open-add-table", !canManageSeatingLayout(), "primary")}
+          ${actionButton("Add dance floor", "open-add-dance-floor", !canManageSeatingLayout(), "primary")}
         </div>
       </article>
 
@@ -2186,7 +2178,9 @@ function renderSeatingPage() {
         <div class="planner-panel__stack">
           <article class="planner-panel">
             ${
-              selectedTable
+              selectedHallObject
+                ? renderHallObjectInspector(selectedHallObject)
+                : selectedTable
                 ? renderTableInspector(selectedTable)
                 : `<div class="da3wa-empty">Select a table on the canvas to inspect its dimensions, occupancy, and actions.</div>`
             }
@@ -2198,7 +2192,7 @@ function renderSeatingPage() {
                   <div class="planner-panel__header">
                     <div>
                       <p class="da3wa-eyebrow">Planner library</p>
-                      <h3 class="planner-panel__title">Tables</h3>
+                      <h3 class="planner-panel__title">Venue layout</h3>
                     </div>
                   </div>
                   ${renderLayoutLibrary()}
@@ -2433,54 +2427,63 @@ function renderExportsPage() {
       "Guest directory with contact, party size, invitation, RSVP, and attendance data.",
       "XLSX / CSV",
       "export-all",
+      "quarter",
     ),
     exportCard(
       "Confirmed",
       "Guests with accepted RSVP status.",
       "XLSX / CSV",
       "export-confirmed",
+      "quarter",
     ),
     exportCard(
       "Pending",
       "Guests still awaiting a response.",
       "XLSX / CSV",
       "export-pending",
+      "quarter",
     ),
     exportCard(
       "Declined",
       "Guests who cannot attend.",
       "XLSX / CSV",
       "export-declined",
-    ),
-    exportCard(
-      "Checked in",
-      "Guests who have arrived at the venue.",
-      "XLSX / CSV",
-      "export-checkedIn",
-    ),
-    exportCard(
-      "Not checked in",
-      "Guests still expected onsite.",
-      "XLSX / CSV",
-      "export-notCheckedIn",
+      "quarter",
     ),
     exportCard(
       "Table assignments",
       "Roster sorted by table and seat placement.",
       "XLSX / CSV",
       "export-tables",
+      "third",
     ),
     exportCard(
       "Bride side",
       "Filtered list of bride-side guests.",
       "XLSX / CSV",
       "export-bride",
+      "third",
     ),
     exportCard(
       "Groom side",
       "Filtered list of groom-side guests.",
       "XLSX / CSV",
       "export-groom",
+      "third",
+    ),
+    exportCard(
+      "Checked in",
+      "Guests who have arrived at the venue.",
+      "XLSX / CSV",
+      "export-checkedIn",
+      "half",
+    ),
+    exportCard(
+      "Not checked in",
+      "Guests still expected onsite.",
+      "XLSX / CSV",
+      "export-notCheckedIn",
+      "half",
     ),
   ];
 
@@ -2854,16 +2857,51 @@ function renderPlannerChair(table, chair) {
   `;
 }
 function renderHallObject(item) {
+  if (item.type === "dance-floor") {
+    const isSelected = item.id === state.selectedHallObjectId;
+    return `
+      <button
+        class="hall-object hall-object--dance-floor ${item.shape === "round" ? "is-round" : "is-rectangle"} ${isSelected ? "is-selected" : ""}"
+        type="button"
+        style="left:${item.x}%; top:${item.y}%; width:${item.width}px; height:${item.height}px; --dance-fill:${escapeAttribute(item.fillColor)}; --dance-border:${escapeAttribute(item.borderColor)}; --dance-rotation:${Number(item.rotation || 0)}deg;"
+        aria-label="${escapeAttribute(`${item.label}, dance floor${item.locked ? ", locked" : ""}`)}"
+        title="${escapeAttribute(item.label)}"
+        data-hall-object-id="${escapeAttribute(item.id)}"
+        data-action="select-hall-object"
+      ><span>${escapeHtml(item.label)}</span></button>
+    `;
+  }
   const icon = item.type === "stage" ? renderStageIcon() : renderEntranceIcon();
   return `
-    <div
+    <button
       class="hall-object hall-object--${escapeAttribute(item.type)}"
+      type="button"
       style="left:${item.x}%; top:${item.y}%;"
-      title="Drag ${escapeAttribute(item.label)}"
+      title="${escapeAttribute(item.label)}"
+      aria-label="${escapeAttribute(item.label)}"
       data-hall-object-id="${escapeAttribute(item.id)}"
+      data-action="select-hall-object"
     >
       ${icon}
       <span>${escapeHtml(item.label)}</span>
+    </button>
+  `;
+}
+
+function renderHallObjectInspector(item) {
+  const isDanceFloor = item.type === "dance-floor";
+  return `
+    <div class="planner-table-summary">
+      <div><span>${isDanceFloor ? "Dance floor" : "Venue object"}</span><strong>${escapeHtml(item.label)}</strong></div>
+      <div><span>Zone</span><strong>${escapeHtml(item.floorZone || "Not set")}</strong></div>
+    </div>
+    <p class="planner-note">${isDanceFloor ? `${escapeHtml(prettifyShape(item.shape))} · ${item.width} × ${item.height}px · ${item.rotation || 0}°` : "Default venue marker"}${item.locked ? " · Locked" : ""}</p>
+    ${item.notes ? `<p class="planner-note">${escapeHtml(item.notes)}</p>` : ""}
+    <div class="guest-toolbar__summary">
+      ${isDanceFloor ? actionButton("Edit", "edit-dance-floor", !canManageSeatingLayout(), "secondary", item.id) : ""}
+      ${isDanceFloor ? actionButton("Duplicate", "duplicate-dance-floor", !canManageSeatingLayout(), "secondary", item.id) : ""}
+      ${actionButton(item.locked ? "Unlock position" : "Lock position", "toggle-hall-object-lock", !canManageSeatingLayout(), "secondary", item.id)}
+      ${isDanceFloor ? actionButton("Delete", "delete-dance-floor", !canManageSeatingLayout(), "danger", item.id) : ""}
     </div>
   `;
 }
@@ -2955,16 +2993,16 @@ function renderLayoutLibrary() {
   const objects = state.hallObjects
     .map(
       (item) => `
-        <div class="planner-object-item">
+        <button class="planner-table-list__button ${item.id === state.selectedHallObjectId ? "is-selected" : ""}" type="button" data-action="select-hall-object" data-hall-object-id="${escapeAttribute(item.id)}">
           <strong>${escapeHtml(item.label)}</strong>
-          <small>${escapeHtml(prettifyShape(item.type))} marker · local demo object</small>
-        </div>
+          <small>${escapeHtml(item.type === "dance-floor" ? `${prettifyShape(item.shape)} dance floor` : `${prettifyShape(item.type)} marker`)}</small>
+        </button>
       `,
     )
     .join("");
 
   return `
-    <div class="planner-table-list">${tables || '<div class="da3wa-empty">No tables yet.</div>'}</div>
+    <div class="planner-table-list">${tables || '<div class="da3wa-empty">No tables yet.</div>'}${objects}</div>
   `;
 }
 
@@ -3097,7 +3135,7 @@ function renderSeatAssignment(selectedSeat) {
     </div>
 
     <div class="seat-assignment__controls">
-      <input class="da3wa-input" type="search" placeholder="Search guest, Arabic name, side, RSVP, or phone" value="${escapeAttribute(state.guestAssignmentSearch)}" data-seat-search />
+      <input class="da3wa-input" type="search" placeholder="Search guest, side, RSVP, or phone" value="${escapeAttribute(state.guestAssignmentSearch)}" data-seat-search />
       ${
         selectedSeat.guest
           ? actionButton(
@@ -3155,9 +3193,9 @@ function plannerStat(label, value) {
   `;
 }
 
-function exportCard(title, description, format, action) {
+function exportCard(title, description, format, action, layout) {
   return `
-    <article class="export-card">
+    <article class="export-card export-card--${escapeHtml(layout)}">
       <p class="da3wa-eyebrow">Export package</p>
       <h3>${escapeHtml(title)}</h3>
       <p>${escapeHtml(description)}</p>
@@ -3361,6 +3399,9 @@ async function handleAction(action, dataset, event = null) {
       return;
     case "open-add-table":
       openTableModal();
+      return;
+    case "open-add-dance-floor":
+      openDanceFloorModal();
       return;
     case "refresh-dashboard":
       if (state.mode === "live") {
@@ -3641,7 +3682,25 @@ async function handleAction(action, dataset, event = null) {
       return;
     case "select-table":
       state.selectedTableId = dataset.tableId;
+      state.selectedHallObjectId = "";
       renderActiveView();
+      return;
+    case "select-hall-object":
+      state.selectedHallObjectId = dataset.hallObjectId;
+      state.selectedTableId = "";
+      renderActiveView();
+      return;
+    case "edit-dance-floor":
+      openDanceFloorModal(getSelectedHallObject());
+      return;
+    case "duplicate-dance-floor":
+      await duplicateDanceFloor(dataset.id);
+      return;
+    case "delete-dance-floor":
+      await deleteDanceFloor(dataset.id);
+      return;
+    case "toggle-hall-object-lock":
+      await toggleHallObjectLock(dataset.id);
       return;
     case "edit-table":
       openTableModal(getSelectedTable());
@@ -3919,7 +3978,7 @@ function getFilteredGuests() {
   const sorted = [...state.guests].filter((guest) => {
     const matchesSearch =
       !search ||
-      [guest.fullName, guest.fullNameAr, guest.phone].some((value) =>
+      [guest.fullName, guest.phone].some((value) =>
         String(value || "")
           .toLowerCase()
           .includes(search),
@@ -4271,7 +4330,6 @@ async function openGuestModal(guest = null) {
   elements.guestDeleteButton.hidden = !guest;
   elements.guestForm.reset();
   elements.guestForm.fullName.value = guest?.fullName || "";
-  elements.guestForm.fullNameAr.value = guest?.fullNameAr || "";
   elements.guestForm.phone.value = guest?.phone || "";
   elements.guestForm.side.value = guest?.side || "bride";
   elements.guestForm.additionalGuests.value = String(
@@ -4325,7 +4383,6 @@ async function saveGuest(event) {
 
   const ownedPayload = {
     fullName,
-    fullNameAr: elements.guestForm.fullNameAr.value.trim(),
     phone: elements.guestForm.phone.value.trim(),
     side: normalizeGuestSide(elements.guestForm.side.value),
     additionalGuests,
@@ -4412,7 +4469,6 @@ function buildPublicGuestPayload(guestId, guest) {
     guestId,
     guestToken: guest.guestToken || "",
     fullName: guest.fullName || "",
-    fullNameAr: guest.fullNameAr || "",
     side: normalizeGuestSide(guest.side),
     additionalGuests: normalizeAdditionalGuests(guest.additionalGuests),
     rsvpStatus: guest.rsvpStatus || "pending",
@@ -4428,7 +4484,6 @@ function buildPublicGuestPayload(guestId, guest) {
 
 const publicGuestMirrorKeys = [
   "fullName",
-  "fullNameAr",
   "side",
   "additionalGuests",
   "rsvpStatus",
@@ -4559,13 +4614,10 @@ function parseBulkEntries(raw) {
     .filter(Boolean)
     .map((line) => {
       const parts = line.split(/[,،\t]/).map((part) => part.trim());
-      const hasArabicName = parts.length >= 3 && !cleanPhone(parts[1]);
-      const phoneIndex = hasArabicName ? 2 : 1;
-      const additionalGuests = parseAdditionalGuests(parts[phoneIndex + 1] || "0");
+      const additionalGuests = parseAdditionalGuests(parts[2] || "0");
       return {
         fullName: parts[0] || "",
-        fullNameAr: hasArabicName ? parts[1] || "" : "",
-        phone: cleanPhone(parts[phoneIndex] || ""),
+        phone: cleanPhone(parts[1] || ""),
         additionalGuests: additionalGuests === null ? 0 : additionalGuests,
       };
     })
@@ -4599,7 +4651,6 @@ async function saveBulkGuests(event) {
     const token = generateGuestToken();
     return {
       fullName: entry.fullName,
-      fullNameAr: entry.fullNameAr,
       phone: entry.phone,
       side,
       additionalGuests: entry.additionalGuests,
@@ -4677,7 +4728,6 @@ async function saveBulkGuests(event) {
         .map((entry) =>
           [
             entry.fullName,
-            entry.fullNameAr,
             entry.phone,
             entry.additionalGuests || "",
           ]
@@ -5323,8 +5373,14 @@ function handlePlannerPointerDown(event) {
     return;
   }
 
-  // Tables can be repositioned while assigning seats. Hall objects stay in
-  // layout mode so assignment interactions remain focused on the chairs.
+  // Hall objects remain selectable in assignment mode, but can only move in
+  // layout mode so they never interfere with chair assignment.
+  if (state.seatingMode !== "layout" && objectNode) {
+    state.selectedHallObjectId = objectNode.dataset.hallObjectId;
+    state.selectedTableId = "";
+    renderActiveView();
+    return;
+  }
   if (state.seatingMode !== "layout" && !tableNode) {
     return;
   }
@@ -5333,6 +5389,12 @@ function handlePlannerPointerDown(event) {
     const objectId = objectNode.dataset.hallObjectId;
     const hallObject = state.hallObjects.find((item) => item.id === objectId);
     if (!hallObject) {
+      return;
+    }
+    state.selectedHallObjectId = objectId;
+    state.selectedTableId = "";
+    if (hallObject.locked || !canManageSeatingLayout()) {
+      renderActiveView();
       return;
     }
     state.dragState = {
@@ -5428,6 +5490,8 @@ async function handlePlannerPointerUp() {
       (Math.abs(Number(hallObject.x || 0) - originalX) < 0.01 &&
         Math.abs(Number(hallObject.y || 0) - originalY) < 0.01)
     ) {
+      state.selectedHallObjectId = objectId;
+      state.selectedTableId = "";
       renderActiveView();
       return;
     }
@@ -5439,22 +5503,7 @@ async function handlePlannerPointerUp() {
       showToast("Your role does not allow layout edits.", "error");
       return;
     }
-    if (state.mode === "demo") {
-      persistDemoDashboardState();
-      return;
-    }
-    setSaveState("saving");
-    try {
-      await updateDoc(doc(state.services.db, "weddings", state.weddingId), {
-        hallObjects: state.hallObjects,
-        updatedAt: serverTimestamp(),
-      });
-      setSaveState("saved");
-    } catch (error) {
-      console.error(error);
-      setSaveState("saved");
-      showToast("Stage or entrance position could not be saved.", "error");
-    }
+    await persistHallObjects("Venue object position could not be saved.");
     return;
   }
 
@@ -7154,7 +7203,6 @@ function getSeatCandidates(currentGuestId) {
       }
       return [
         guest.fullName,
-        guest.fullNameAr,
         guest.phone,
         guest.side,
         guest.rsvpStatus,
@@ -7235,15 +7283,153 @@ function createHallObjects() {
 }
 
 function hydrateHallObjects(savedObjects) {
-  const savedById = new Map(
-    Array.isArray(savedObjects)
-      ? savedObjects.map((item) => [item.id, item])
-      : [],
-  );
-  return createHallObjects().map((item) => ({
+  const saved = Array.isArray(savedObjects)
+    ? savedObjects.filter((item) => item && item.id && item.type)
+    : [];
+  const savedById = new Map(saved.map((item) => [item.id, item]));
+  const defaults = createHallObjects().map((item) => ({
     ...item,
     ...(savedById.get(item.id) || {}),
   }));
+  const customObjects = saved.filter(
+    (item) => !defaults.some((defaultItem) => defaultItem.id === item.id),
+  );
+  return [...defaults, ...customObjects].map(normalizeHallObject);
+}
+
+function normalizeHallObject(item) {
+  const base = {
+    id: item.id || createId("venue"),
+    type: item.type || "stage",
+    label: item.label || prettifyShape(item.type || "venue object"),
+    x: clamp(Number(item.x ?? 50), 5, 95),
+    y: clamp(Number(item.y ?? 50), 5, 95),
+    locked: Boolean(item.locked),
+  };
+  if (base.type !== "dance-floor") return { ...item, ...base };
+  const shape = item.shape === "rectangle" ? "rectangle" : "round";
+  const width = clamp(Number(item.width || 300), 120, 700);
+  return {
+    ...item,
+    ...base,
+    shape,
+    width,
+    height: shape === "round" ? width : clamp(Number(item.height || 220), 120, 700),
+    rotation: clamp(Number(item.rotation || 0), 0, 360),
+    floorZone: item.floorZone || "",
+    fillColor: item.fillColor || "#2F6F64",
+    borderColor: item.borderColor || "#D7B56D",
+    notes: item.notes || "",
+  };
+}
+
+function getSelectedHallObject() {
+  return state.hallObjects.find((item) => item.id === state.selectedHallObjectId) || null;
+}
+
+async function persistHallObjects(errorMessage = "Venue layout could not be saved.") {
+  if (state.mode === "demo") {
+    persistDemoDashboardState();
+    return true;
+  }
+  setSaveState("saving");
+  try {
+    await updateDoc(doc(state.services.db, "weddings", state.weddingId), {
+      hallObjects: state.hallObjects,
+      updatedAt: serverTimestamp(),
+    });
+    setSaveState("saved");
+    return true;
+  } catch (error) {
+    console.error(error);
+    setSaveState("saved");
+    showToast(errorMessage, "error");
+    return false;
+  }
+}
+
+function syncDanceFloorDimensions() {
+  const isRound = elements.danceFloorForm.shape.value === "round";
+  const heightField = elements.danceFloorForm.height;
+  const heightLabel = document.querySelector("[data-dance-floor-height]");
+  document.getElementById("danceFloorWidthLabel").textContent = isRound ? "Diameter" : "Width";
+  heightField.disabled = isRound;
+  heightLabel.hidden = isRound;
+  if (isRound) heightField.value = elements.danceFloorForm.width.value;
+}
+
+function openDanceFloorModal(item = null) {
+  if (!canManageSeatingLayout()) {
+    showToast("Your role does not allow seating edits.", "error");
+    return;
+  }
+  state.selectedHallObjectId = item?.id || "";
+  state.dirtyDanceFloorForm = false;
+  elements.danceFloorModalTitle.textContent = item ? "Edit Dance Floor" : "Add Dance Floor";
+  elements.danceFloorForm.reset();
+  elements.danceFloorForm.label.value = item?.label || "Dance Floor";
+  elements.danceFloorForm.shape.value = item?.shape || "round";
+  elements.danceFloorForm.width.value = item?.width || 300;
+  elements.danceFloorForm.height.value = item?.height || 300;
+  elements.danceFloorForm.rotation.value = item?.rotation || 0;
+  elements.danceFloorForm.floorZone.value = item?.floorZone || "";
+  elements.danceFloorForm.fillColor.value = item?.fillColor || "#2F6F64";
+  elements.danceFloorForm.borderColor.value = item?.borderColor || "#D7B56D";
+  elements.danceFloorForm.notes.value = item?.notes || "";
+  syncDanceFloorDimensions();
+  document.body.classList.add("is-modal-open");
+  elements.danceFloorModal.showModal();
+  requestAnimationFrame(() => elements.danceFloorForm.label.focus());
+}
+
+async function saveDanceFloor(event) {
+  event.preventDefault();
+  if (!canManageSeatingLayout()) return;
+  const form = elements.danceFloorForm;
+  const shape = form.shape.value === "rectangle" ? "rectangle" : "round";
+  const width = Number(form.width.value);
+  const height = shape === "round" ? width : Number(form.height.value);
+  const rotation = Number(form.rotation.value || 0);
+  if (![width, height].every((value) => value >= 120 && value <= 700) || rotation < 0 || rotation > 360) {
+    showToast("Use dimensions between 120 and 700 pixels and rotation from 0 to 360°.", "error");
+    return;
+  }
+  const existing = getSelectedHallObject();
+  const floor = normalizeHallObject({
+    id: existing?.id || createId("dance-floor"), type: "dance-floor", label: form.label.value.trim() || "Dance Floor", shape,
+    x: existing?.x ?? 50, y: existing?.y ?? 50, width, height, rotation,
+    floorZone: form.floorZone.value.trim(), fillColor: form.fillColor.value, borderColor: form.borderColor.value,
+    notes: form.notes.value.trim(), locked: existing?.locked || false,
+  });
+  state.hallObjects = existing ? state.hallObjects.map((item) => item.id === existing.id ? floor : item) : [...state.hallObjects, floor];
+  state.selectedHallObjectId = floor.id;
+  if (await persistHallObjects("Dance floor could not be saved.")) {
+    state.dirtyDanceFloorForm = false;
+    elements.danceFloorModal.close();
+    renderActiveView();
+    showToast("Dance floor saved.", "success");
+  }
+}
+
+async function duplicateDanceFloor(id) {
+  const item = state.hallObjects.find((object) => object.id === id && object.type === "dance-floor");
+  if (!item || !canManageSeatingLayout()) return;
+  const copy = normalizeHallObject({ ...item, id: createId("dance-floor"), label: `${item.label} copy`, x: clamp(item.x + 5, 5, 95), y: clamp(item.y + 5, 5, 95), locked: false });
+  state.hallObjects = [...state.hallObjects, copy]; state.selectedHallObjectId = copy.id;
+  if (await persistHallObjects("Dance floor could not be duplicated.")) renderActiveView();
+}
+
+async function deleteDanceFloor(id) {
+  const item = state.hallObjects.find((object) => object.id === id && object.type === "dance-floor");
+  if (!item || !canManageSeatingLayout() || !window.confirm(`Delete ${item.label}? This cannot be undone.`)) return;
+  state.hallObjects = state.hallObjects.filter((object) => object.id !== id); state.selectedHallObjectId = "";
+  if (await persistHallObjects("Dance floor could not be deleted.")) renderActiveView();
+}
+
+async function toggleHallObjectLock(id) {
+  if (!canManageSeatingLayout()) return;
+  state.hallObjects = state.hallObjects.map((item) => item.id === id ? { ...item, locked: !item.locked } : item);
+  if (await persistHallObjects("Venue object lock state could not be saved.")) renderActiveView();
 }
 
 function redirectToLogin(message = "session-required") {

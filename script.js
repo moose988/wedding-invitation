@@ -124,7 +124,7 @@ const state = {
   wedding: structuredClone(demoWedding),
   guest: null,
   tables: [...demoTables],
-  hallObjects: createHallObjects(),
+  hallObjects: hydrateHallObjects(),
   assignedTable: null,
   seatPlanTransform: { scale: 1, x: 0, y: 0 },
   seatPlanGesture: null,
@@ -846,8 +846,15 @@ function renderInvitationChair(table, chair, assignedSeatKeys) {
 }
 
 function renderInvitationHallObject(item) {
+  const isDanceFloor = item.type === "dance-floor";
+  const width = isDanceFloor ? clamp(Number(item.width) || 280, 120, 700) : 0;
+  const height = isDanceFloor ? clamp(Number(item.height) || width, 120, 700) : 0;
+  const rotation = isDanceFloor ? clamp(Number(item.rotation) || 0, 0, 360) : 0;
+  const danceFloorStyle = isDanceFloor
+    ? `width:${width}px;height:${height}px;--dance-floor-fill:${escapeAttribute(item.fillColor || "#2F6F64")};--dance-floor-border:${escapeAttribute(item.borderColor || "#D7B56D")};--dance-floor-rotation:${rotation}deg;`
+    : "";
   return `
-    <div class="seat-plan-object seat-plan-object--${escapeAttribute(item.type)}" style="left:${Number(item.x || 0)}%;top:${Number(item.y || 0)}%;">
+    <div class="seat-plan-object seat-plan-object--${escapeAttribute(item.type)}" style="left:${Number(item.x || 0)}%;top:${Number(item.y || 0)}%;${danceFloorStyle}">
       <span>${escapeHtml(item.label || item.type)}</span>
     </div>
   `;
@@ -860,8 +867,13 @@ function bindSeatPlanInteractions() {
   if (!viewport || !canvas) {
     return;
   }
+  let transformFrame = 0;
   const applyTransform = () => {
-    canvas.style.transform = `translate(${state.seatPlanTransform.x}px, ${state.seatPlanTransform.y}px) scale(${state.seatPlanTransform.scale})`;
+    if (transformFrame) return;
+    transformFrame = requestAnimationFrame(() => {
+      canvas.style.transform = `translate3d(${state.seatPlanTransform.x}px, ${state.seatPlanTransform.y}px, 0) scale(${state.seatPlanTransform.scale})`;
+      transformFrame = 0;
+    });
   };
   const zoomBy = (delta) => {
     state.seatPlanTransform.scale = clamp(state.seatPlanTransform.scale + delta, 0.55, 2.5);
@@ -875,6 +887,25 @@ function bindSeatPlanInteractions() {
     }
     return Math.hypot(points[0].clientX - points[1].clientX, points[0].clientY - points[1].clientY);
   };
+  const startGestureForActivePointers = () => {
+    const points = [...activePointers.entries()];
+    if (points.length >= 2) {
+      state.seatPlanGesture = { mode: "pinch", distance: pointerDistance(), scale: state.seatPlanTransform.scale };
+      return;
+    }
+    if (points.length === 1) {
+      const [pointerId, point] = points[0];
+      state.seatPlanGesture = {
+        pointerId,
+        startX: point.clientX,
+        startY: point.clientY,
+        x: state.seatPlanTransform.x,
+        y: state.seatPlanTransform.y,
+      };
+      return;
+    }
+    state.seatPlanGesture = null;
+  };
   toolbar?.addEventListener("click", (event) => {
     const control = event.target.closest("[data-seat-plan-control]")?.dataset.seatPlanControl;
     if (control === "zoom-in") zoomBy(0.15);
@@ -887,19 +918,14 @@ function bindSeatPlanInteractions() {
     zoomBy(event.deltaY < 0 ? 0.08 : -0.08);
   }, { passive: false });
   viewport.addEventListener("pointerdown", (event) => {
+    event.preventDefault();
     viewport.setPointerCapture?.(event.pointerId);
     activePointers.set(event.pointerId, { clientX: event.clientX, clientY: event.clientY });
-    state.seatPlanGesture = { pointerId: event.pointerId, startX: event.clientX, startY: event.clientY, x: state.seatPlanTransform.x, y: state.seatPlanTransform.y };
-    if (activePointers.size === 2) {
-      state.seatPlanGesture = {
-        mode: "pinch",
-        distance: pointerDistance(),
-        scale: state.seatPlanTransform.scale,
-      };
-    }
+    startGestureForActivePointers();
   });
   viewport.addEventListener("pointermove", (event) => {
     if (activePointers.has(event.pointerId)) {
+      event.preventDefault();
       activePointers.set(event.pointerId, { clientX: event.clientX, clientY: event.clientY });
     }
     const gesture = state.seatPlanGesture;
@@ -921,10 +947,10 @@ function bindSeatPlanInteractions() {
     state.seatPlanTransform.y = gesture.y + event.clientY - gesture.startY;
     applyTransform();
   });
-  ["pointerup", "pointercancel", "pointerleave"].forEach((eventName) => {
+  ["pointerup", "pointercancel", "lostpointercapture"].forEach((eventName) => {
     viewport.addEventListener(eventName, (event) => {
       activePointers.delete(event.pointerId);
-      state.seatPlanGesture = null;
+      startGestureForActivePointers();
     });
   });
 }
@@ -935,15 +961,50 @@ function fitInvitationSeatingPlan(reset = true) {
   const canvasWidth = 1100;
   const canvasHeight = 720;
   const padding = 18;
-  const scale = clamp(Math.min((viewport.clientWidth - padding * 2) / canvasWidth, (viewport.clientHeight - padding * 2) / canvasHeight), 0.28, 1);
+  const bounds = getInvitationPlanBounds(canvasWidth, canvasHeight);
+  const scale = clamp(
+    Math.min((viewport.clientWidth - padding * 2) / bounds.width, (viewport.clientHeight - padding * 2) / bounds.height),
+    0.38,
+    1.1,
+  );
   state.seatPlanTransform = {
     scale,
-    x: Math.round((viewport.clientWidth - canvasWidth * scale) / 2),
-    y: Math.round((viewport.clientHeight - canvasHeight * scale) / 2),
+    x: Math.round(viewport.clientWidth / 2 - ((bounds.minX + bounds.maxX) / 2) * scale),
+    y: Math.round(viewport.clientHeight / 2 - ((bounds.minY + bounds.maxY) / 2) * scale),
   };
   state.seatPlanHasFitted = true;
   const canvas = document.getElementById("seatPlanCanvas");
-  if (canvas) canvas.style.transform = `translate(${state.seatPlanTransform.x}px, ${state.seatPlanTransform.y}px) scale(${scale})`;
+  if (canvas) canvas.style.transform = `translate3d(${state.seatPlanTransform.x}px, ${state.seatPlanTransform.y}px, 0) scale(${scale})`;
+}
+
+function getInvitationPlanBounds(canvasWidth, canvasHeight) {
+  const boxes = [];
+  const addBox = (centerX, centerY, width, height) => {
+    boxes.push({ minX: centerX - width / 2, maxX: centerX + width / 2, minY: centerY - height / 2, maxY: centerY + height / 2 });
+  };
+  state.tables.forEach((table) => {
+    addBox(
+      (Number(table.x || 50) / 100) * canvasWidth,
+      (Number(table.y || 50) / 100) * canvasHeight,
+      Number(table.width || defaultWidthForShape(table.shape)),
+      Number(table.height || defaultHeightForShape(table.shape)),
+    );
+  });
+  state.hallObjects.forEach((item) => {
+    const isDanceFloor = item.type === "dance-floor";
+    addBox(
+      (Number(item.x || 50) / 100) * canvasWidth,
+      (Number(item.y || 50) / 100) * canvasHeight,
+      isDanceFloor ? clamp(Number(item.width) || 280, 120, 700) : 160,
+      isDanceFloor ? clamp(Number(item.height) || 280, 120, 700) : 54,
+    );
+  });
+  if (!boxes.length) return { minX: 0, maxX: canvasWidth, minY: 0, maxY: canvasHeight, width: canvasWidth, height: canvasHeight };
+  const minX = Math.max(0, Math.min(...boxes.map((box) => box.minX)) - 48);
+  const maxX = Math.min(canvasWidth, Math.max(...boxes.map((box) => box.maxX)) + 48);
+  const minY = Math.max(0, Math.min(...boxes.map((box) => box.minY)) - 48);
+  const maxY = Math.min(canvasHeight, Math.max(...boxes.map((box) => box.maxY)) + 48);
+  return { minX, maxX, minY, maxY, width: maxX - minX, height: maxY - minY };
 }
 
 function centerInvitationSeats() {
@@ -965,15 +1026,24 @@ function createHallObjects() {
   return [
     { id: "stage-default", type: "stage", label: "Stage", x: 50, y: 8 },
     { id: "entrance-default", type: "entrance", label: "Entrance", x: 50, y: 90 },
+    { id: "dance-floor-default", type: "dance-floor", label: "Dance Floor", x: 50, y: 48, width: 260, height: 260, shape: "round", fillColor: "#2F6F64", borderColor: "#D7B56D" },
   ];
 }
 
 function hydrateHallObjects(savedObjects) {
-  const savedById = new Map(Array.isArray(savedObjects) ? savedObjects.map((item) => [item.id, item]) : []);
-  return createHallObjects().map((item) => ({
+  const saved = Array.isArray(savedObjects) ? savedObjects : [];
+  const savedById = new Map(saved.map((item) => [item.id, item]));
+  const defaults = createHallObjects();
+  const defaultIds = new Set(defaults.map((item) => item.id));
+  const mergedDefaults = defaults.map((item) => ({
     ...item,
     ...(savedById.get(item.id) || {}),
   }));
+  const savedExtras = saved.filter((item) => item?.id && !defaultIds.has(item.id));
+  const hasSavedDanceFloor = saved.some((item) => item?.type === "dance-floor");
+  return hasSavedDanceFloor
+    ? [...mergedDefaults.filter((item) => item.type !== "dance-floor"), ...savedExtras]
+    : [...mergedDefaults, ...savedExtras];
 }
 
 function defaultWidthForShape(shape) {

@@ -1,1 +1,202 @@
-body { color: #29342d; background: #f4efe6; font: 16px/1.6 Manrope, sans-serif; }.custom-invitation { width: min(100% - 28px, 760px); margin: 0 auto; padding: 24px 0 72px; }.custom-hero { padding: 84px 28px 66px; text-align: center; color: #fffdf8; background: linear-gradient(140deg, #1e4f45, #315f50 65%, #9b7b49); border-radius: 0 0 42px 42px; }.eyebrow { margin: 0 0 10px; color: #b89156; font-size: 11px; font-weight: 700; letter-spacing: .18em; text-transform: uppercase; }.custom-hero .eyebrow { color: #f5d9a3; }.custom-hero h1, h2 { margin: 0; font-family: "Cormorant Garamond", Georgia, serif; }.custom-hero h1 { font-size: clamp(3rem, 11vw, 5.6rem); line-height: .9; }.subtitle { max-width: 420px; margin: 24px auto; }.date { display: inline-block; padding: 9px 13px; border: 1px solid rgba(255,255,255,.4); border-radius: 99px; font-size: 13px; }.custom-card { margin-top: 18px; padding: 30px; background: #fffdf8; border: 1px solid #ded2c0; border-radius: 24px; box-shadow: 0 14px 36px rgba(69,57,37,.08); }.custom-card h2 { font-size: 2rem; }.custom-card dl { display: grid; gap: 12px; margin: 24px 0; }.custom-card dl div { padding: 13px; background: #f7f2e8; border-radius: 12px; }.custom-card dt { color: #776952; font-size: 12px; font-weight: 700; text-transform: uppercase; }.custom-card dd { margin: 2px 0 0; font-weight: 700; }.map-link { color: #1e4f45; font-weight: 700; }.rsvp label { display: grid; gap: 7px; margin: 20px 0; font-weight: 700; }.rsvp input { max-width: 110px; padding: 10px; border: 1px solid #c7b89e; border-radius: 9px; }.rsvp-actions { display: flex; flex-wrap: wrap; gap: 10px; }.rsvp button { min-height: 44px; padding: 10px 14px; border: 1px solid #1e4f45; border-radius: 10px; color: #fff; background: #1e4f45; font-weight: 700; }.rsvp button.secondary { color: #1e4f45; background: #fffdf8; }.pass { text-align: center; }.pass #qrMount { display: grid; place-items: center; margin: 22px auto; }@media (max-width: 480px) { .custom-invitation { width: 100%; padding-top: 0; }.custom-hero { border-radius: 0 0 30px 30px; }.custom-card { margin-inline: 14px; padding: 24px; } }
+/* Compatibility entry point for tools that load this design stylesheet directly. */
+@import url("../../../styles.css");
+
+/* Typography is deliberately scoped to Layla & Zaid's public invitation. */
+body.layla-zaid-invitation {
+  font-family: "Lora", Georgia, serif;
+}
+
+body.layla-zaid-invitation .layla-language-toggle {
+  position: fixed;
+  top: max(16px, env(safe-area-inset-top));
+  right: max(16px, env(safe-area-inset-right));
+  z-index: 20;
+  min-height: 38px;
+  padding: 7px 13px;
+  border: 1px solid rgba(210, 184, 122, 0.72);
+  border-radius: 999px;
+  color: #fffaf2;
+  background: rgba(57, 48, 37, 0.76);
+  box-shadow: 0 8px 22px rgba(37, 28, 18, 0.22);
+  font-family: "Lora", Georgia, serif;
+  font-size: 0.82rem;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+body.layla-zaid-invitation [data-layla-language="ar"] {
+  display: none;
+}
+
+body.layla-zaid-invitation.layla-arabic [data-layla-language="en"] {
+  display: none;
+}
+
+body.layla-zaid-invitation.layla-arabic [data-layla-language="ar"] {
+  display: block;
+}
+
+body.layla-zaid-invitation.layla-arabic .site-content,
+body.layla-zaid-invitation.layla-arabic .sticky-actions {
+  direction: rtl;
+}
+
+body.layla-zaid-invitation.layla-arabic .detail-card,
+body.layla-zaid-invitation.layla-arabic .layla-seat-greeting {
+  text-align: right;
+}
+
+body.layla-zaid-invitation .rtl-copy,
+body.layla-zaid-invitation [lang="ar"] {
+  font-family: "Amiri", serif;
+  line-height: 1.85;
+}
+
+body.layla-zaid-invitation .hero-names__arabic {
+  font-family: "Aref Ruqaa", serif;
+  font-size: clamp(3rem, 7vw, 5.35rem);
+  font-weight: 400;
+  line-height: 1.3;
+  max-width: min(100%, 13ch);
+  overflow-wrap: anywhere;
+}
+
+body.layla-zaid-invitation .hero-names__english {
+  max-width: min(100%, 16ch);
+  margin: 0.1em auto 0;
+  font-family: "Great Vibes", cursive;
+  font-size: clamp(4rem, 11vw, 8rem);
+  font-weight: 400;
+  line-height: 1.15;
+  letter-spacing: 0;
+  text-transform: none;
+  overflow-wrap: anywhere;
+  text-wrap: balance;
+}
+
+body.layla-zaid-invitation .section-heading h2,
+body.layla-zaid-invitation .detail-card__title,
+body.layla-zaid-invitation .rsvp-phase h3,
+body.layla-zaid-invitation .rsvp-summary h3,
+body.layla-zaid-invitation .intro-card__title,
+body.layla-zaid-invitation .section-kicker,
+body.layla-zaid-invitation .countdown-card__value,
+body.layla-zaid-invitation .seat-detail-card strong,
+body.layla-zaid-invitation .guest-seat-party-member strong {
+  font-family: "Cormorant Garamond", Georgia, serif;
+}
+
+body.layla-zaid-invitation .section-heading h2,
+body.layla-zaid-invitation .rsvp-phase h3,
+body.layla-zaid-invitation .rsvp-summary h3 {
+  font-size: clamp(2rem, 4.4vw, 3rem);
+  font-weight: 500;
+  letter-spacing: 0.015em;
+  line-height: 1.08;
+}
+
+body.layla-zaid-invitation .section-kicker {
+  color: #706042;
+  font-size: 0.9rem;
+  font-weight: 700;
+  letter-spacing: 0.14em;
+  line-height: 1.35;
+  opacity: 1;
+}
+
+body.layla-zaid-invitation .hero-copy__english,
+body.layla-zaid-invitation .invitation-note__english,
+body.layla-zaid-invitation .detail-card__english,
+body.layla-zaid-invitation .closing-card__english,
+body.layla-zaid-invitation .guest-honoree-card__english,
+body.layla-zaid-invitation .seat-detail-card,
+body.layla-zaid-invitation .guest-seat-party-member,
+body.layla-zaid-invitation .qr-pass__copy,
+body.layla-zaid-invitation .rsvp-form,
+body.layla-zaid-invitation .rsvp-summary,
+body.layla-zaid-invitation .luxury-button,
+body.layla-zaid-invitation .detail-card__action,
+body.layla-zaid-invitation .seat-plan-toolbar button,
+body.layla-zaid-invitation input,
+body.layla-zaid-invitation button {
+  font-family: "Lora", Georgia, serif;
+}
+
+body.layla-zaid-invitation .hero-copy__english,
+body.layla-zaid-invitation .invitation-note__english,
+body.layla-zaid-invitation .detail-card__english,
+body.layla-zaid-invitation .closing-card__english {
+  font-size: clamp(1rem, 1.8vw, 1.18rem);
+  line-height: 1.75;
+}
+
+body.layla-zaid-invitation .hero-copy__arabic,
+body.layla-zaid-invitation .invitation-note__arabic,
+body.layla-zaid-invitation .detail-card__arabic,
+body.layla-zaid-invitation .closing-card__arabic,
+body.layla-zaid-invitation .guest-honoree-card__arabic {
+  font-family: "Amiri", serif;
+  line-height: 1.9;
+}
+
+body.layla-zaid-invitation .hero-copy__arabic,
+body.layla-zaid-invitation .invitation-note__arabic {
+  font-size: clamp(1.35rem, 2.8vw, 1.75rem);
+}
+
+body.layla-zaid-invitation .guest-honoree-card__english:empty {
+  display: none;
+}
+
+body.layla-zaid-invitation .seating-map-shell {
+  border: 2px solid rgba(126, 100, 58, 0.78);
+  outline: 1px solid rgba(210, 184, 122, 0.7);
+  outline-offset: 4px;
+  box-shadow:
+    inset 0 0 0 1px rgba(255, 253, 247, 0.72),
+    0 16px 34px rgba(102, 76, 41, 0.14);
+}
+
+body.layla-zaid-invitation .layla-seat-greeting {
+  margin: 0 0 12px;
+  text-align: left;
+}
+
+body.layla-zaid-invitation .layla-seat-greeting h3 {
+  margin: 0;
+  color: #4b5648;
+  font-family: "Cormorant Garamond", Georgia, serif;
+  font-size: clamp(1.7rem, 3.8vw, 2.25rem);
+  font-weight: 500;
+  line-height: 1.1;
+}
+
+body.layla-zaid-invitation .layla-seat-greeting__arabic {
+  margin: 6px 0 0;
+  color: #5f755f;
+  font-family: "Amiri", serif;
+  font-size: clamp(1.15rem, 2.6vw, 1.45rem);
+  line-height: 1.7;
+}
+
+body.layla-zaid-invitation .seating-map-shell {
+  margin-top: 12px;
+}
+
+@media (max-width: 430px) {
+  body.layla-zaid-invitation .hero-names__english {
+    max-width: 100%;
+    font-size: clamp(3.55rem, 18vw, 4.7rem);
+    line-height: 1.05;
+  }
+
+  body.layla-zaid-invitation .hero-names__arabic {
+    font-size: clamp(2.65rem, 13vw, 3.65rem);
+  }
+
+  body.layla-zaid-invitation .section-heading h2,
+  body.layla-zaid-invitation .rsvp-phase h3,
+  body.layla-zaid-invitation .rsvp-summary h3 {
+    font-size: clamp(1.85rem, 8vw, 2.25rem);
+  }
+}

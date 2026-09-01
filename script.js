@@ -83,6 +83,33 @@ const introAnimationDuration = 1450;
 const reducedMotionIntroDuration = 180;
 const invitationParams = new URLSearchParams(window.location.search);
 const explicitDemoMode = invitationParams.get("demo") === "1";
+const laylaLanguageStorageKey = "layla-zaid-invitation-language";
+const laylaCopy = {
+  heroKicker: { en: "A Celebration of Love", ar: "احتفال بالحب" },
+  countdownLabel: { en: "Countdown", ar: "العد التنازلي" },
+  countdownHeading: { en: "Until the Celebration Begins", ar: "حتى تبدأ الاحتفالية" },
+  invitationLabel: { en: "Invitation", ar: "الدعوة" },
+  invitationHeading: { en: "An Evening of Love and Grace", ar: "أمسية من الحب والرقي" },
+  detailsLabel: { en: "Details", ar: "التفاصيل" },
+  detailsHeading: { en: "The Evening at a Glance", ar: "لمحة عن الأمسية" },
+  seatLabel: { en: "Your Seat", ar: "مقعدك" },
+  rsvpLabel: { en: "RSVP", ar: "تأكيد الحضور" },
+  rsvpHeading: { en: "Kindly Reply", ar: "يرجى تأكيد الحضور" },
+  passLabel: { en: "Entrance Pass", ar: "بطاقة الدخول" },
+  passHeading: { en: "Your QR Access", ar: "رمز الدخول الخاص بك" },
+  dateTime: { en: "Date & Time", ar: "التاريخ والوقت" },
+  location: { en: "Location", ar: "الموقع" },
+  viewLocation: { en: "View Location", ar: "عرض الموقع" },
+  rsvp: { en: "RSVP", ar: "تأكيد الحضور" },
+  calendar: { en: "Add to Calendar", ar: "أضف إلى التقويم" },
+  attending: { en: "Are you attending?", ar: "هل ستتمكن من الحضور؟" },
+  yes: { en: "Yes", ar: "نعم" }, no: { en: "No", ar: "لا" },
+  sendRsvp: { en: "Send RSVP", ar: "إرسال التأكيد" },
+  qrInstructions: { en: "Present this QR code at the entrance.", ar: "يرجى إبراز رمز QR عند المدخل." },
+  dear: { en: "Dear", ar: "عزيزنا" },
+  mySeats: { en: "My seats", ar: "مقاعدي" }, fit: { en: "Fit", ar: "ملاءمة" },
+  yourTable: { en: "Your table", ar: "طاولتك" }, seatingEmpty: { en: "A seating map will appear here once the venue layout is published.", ar: "ستظهر خريطة المقاعد هنا عند نشر مخطط القاعة." },
+};
 
 const state = {
   mode: explicitDemoMode ? "demo" : "unavailable",
@@ -97,6 +124,7 @@ const state = {
   seatPlanGesture: null,
   seatPlanHasFitted: false,
   firebaseReady: false,
+  laylaLanguage: document.body?.classList.contains("layla-zaid-invitation") && localStorage.getItem(laylaLanguageStorageKey) === "ar" ? "ar" : "en",
   invitationOpening: false,
   labelIndex: 0,
   activeIntroLabelSlot: 0,
@@ -318,6 +346,14 @@ function populateInvitation() {
   if (elements.heroBackdrop) {
     elements.heroBackdrop.style.backgroundImage = `url("${wedding.media.heroImage}")`;
   }
+  if (elements.weddingAudio?.querySelector("source") && wedding.media.audio) {
+    const source = elements.weddingAudio.querySelector("source");
+    const nextSource = new URL(wedding.media.audio, document.baseURI).toString();
+    if (source.src !== nextSource) {
+      source.src = nextSource;
+      elements.weddingAudio.load();
+    }
+  }
 
   renderActions();
   renderDetails();
@@ -325,19 +361,44 @@ function populateInvitation() {
   renderRsvp();
   renderSeatSection();
   renderGuestQrPass();
+  applyLaylaLanguage();
+}
+
+function isLaylaInvitation() { return document.body.classList.contains("layla-zaid-invitation"); }
+function laylaText(key) { return laylaCopy[key]?.[state.laylaLanguage] || laylaCopy[key]?.en || key; }
+function laylaValue(en, ar) { return state.laylaLanguage === "ar" ? (ar || en || "") : (en || ""); }
+function applyLaylaLanguage() {
+  if (!isLaylaInvitation()) return;
+  const arabic = state.laylaLanguage === "ar";
+  document.documentElement.lang = arabic ? "ar" : "en";
+  document.documentElement.dir = arabic ? "rtl" : "ltr";
+  document.body.classList.toggle("layla-arabic", arabic);
+  document.querySelectorAll("[data-layla-text]").forEach((node) => { node.textContent = laylaText(node.dataset.laylaText); });
+  document.querySelectorAll("[data-layla-language]").forEach((node) => { node.hidden = node.dataset.laylaLanguage !== state.laylaLanguage; });
+  const toggle = document.getElementById("laylaLanguageToggle");
+  if (toggle) { toggle.textContent = arabic ? "English" : "العربية"; toggle.setAttribute("aria-label", arabic ? "Switch to English" : "Switch to Arabic"); }
+}
+
+function toggleLaylaLanguage() {
+  if (!isLaylaInvitation()) return;
+  state.laylaLanguage = state.laylaLanguage === "en" ? "ar" : "en";
+  localStorage.setItem(laylaLanguageStorageKey, state.laylaLanguage);
+  populateInvitation();
+  renderCountdownCards();
+  applyLaylaLanguage();
 }
 
 function renderActions() {
   const wedding = state.wedding;
   const actionMarkup = `
     <button class="luxury-button luxury-button--primary" type="button" data-scroll-rsvp>
-      ${icons.reply}<span>RSVP</span>
+      ${icons.reply}<span>${isLaylaInvitation() ? laylaText("rsvp") : "RSVP"}</span>
     </button>
     <a class="luxury-button luxury-button--secondary" href="${escapeAttribute(wedding.mapsUrl)}" target="_blank" rel="noopener noreferrer">
-      ${icons.location}<span>View Location</span>
+      ${icons.location}<span>${isLaylaInvitation() ? laylaText("viewLocation") : "View Location"}</span>
     </a>
     <button class="luxury-button luxury-button--ghost" type="button" data-calendar-download>
-      ${icons.calendar}<span>Add to Calendar</span>
+      ${icons.calendar}<span>${isLaylaInvitation() ? laylaText("calendar") : "Add to Calendar"}</span>
     </button>
   `;
 
@@ -350,19 +411,26 @@ function renderGuestCard() {
     return;
   }
 
+  if (document.body.classList.contains("layla-zaid-invitation")) {
+    elements.guestSpotlightSection.hidden = true;
+    return;
+  }
+
   elements.guestSpotlightSection.hidden = false;
   setText("guestGreetingTitle", `Dear ${state.guest.fullName || "Guest"}`);
   setText("guestGreetingArabic", "يسعدنا حضوركم");
-  setText("guestGreetingEnglish", "Your personal invitation is ready below with RSVP, seating, and entrance access.");
+  setText(
+    "guestGreetingEnglish",
+    document.body.classList.contains("layla-zaid-invitation")
+      ? ""
+      : "Your personal invitation is ready below with RSVP, seating, and entrance access."
+  );
 }
 
 function renderCountdownCards() {
   const grid = document.getElementById("countdownGrid");
   const units = [
-    { key: "days", en: "Days", ar: "يوم" },
-    { key: "hours", en: "Hours", ar: "ساعة" },
-    { key: "minutes", en: "Minutes", ar: "دقيقة" },
-    { key: "seconds", en: "Seconds", ar: "ثانية" },
+    { key: "days", en: "Days", ar: "يوم" }, { key: "hours", en: "Hours", ar: "ساعة" }, { key: "minutes", en: "Minutes", ar: "دقيقة" }, { key: "seconds", en: "Seconds", ar: "ثانية" },
   ];
 
   grid.innerHTML = units
@@ -371,8 +439,8 @@ function renderCountdownCards() {
         <article class="countdown-card">
           <span class="countdown-card__value" data-unit="${unit.key}" data-value="00">00</span>
           <div class="countdown-card__label">
-            <span>${unit.en}</span>
-            <span class="rtl-copy" lang="ar" dir="rtl">${unit.ar}</span>
+            <span>${isLaylaInvitation() ? laylaValue(unit.en, unit.ar) : unit.en}</span>
+            ${isLaylaInvitation() ? "" : `<span class="rtl-copy" lang="ar" dir="rtl">${unit.ar}</span>`}
           </div>
         </article>
       `
@@ -425,16 +493,15 @@ function renderDetails() {
   const detailCards = [
     {
       icon: icons.date,
-      title: "Date & Time",
-      en: `${formatDate(wedding.eventDateISO)} at ${wedding.timeEn}`,
-      ar: `${formatArabicDate(wedding.eventDateISO)} - ${wedding.timeAr}`,
+      title: isLaylaInvitation() ? laylaText("dateTime") : "Date & Time",
+      en: laylaValue(`${formatDate(wedding.eventDateISO)} at ${wedding.timeEn}`, `${formatArabicDate(wedding.eventDateISO)} - ${wedding.timeAr}`),
     },
     {
       icon: icons.location,
-      title: "Location",
-      en: wedding.locationEn,
+      title: isLaylaInvitation() ? laylaText("location") : "Location",
+      en: laylaValue(wedding.locationEn, wedding.locationAr),
       ar: wedding.locationAr,
-      action: `<a class="detail-card__action" href="${escapeAttribute(wedding.mapsUrl)}" target="_blank" rel="noopener noreferrer">${icons.location}<span>View Location</span></a>`,
+      action: `<a class="detail-card__action" href="${escapeAttribute(wedding.mapsUrl)}" target="_blank" rel="noopener noreferrer">${icons.location}<span>${isLaylaInvitation() ? laylaText("viewLocation") : "View Location"}</span></a>`,
     },
   ];
 
@@ -444,8 +511,8 @@ function renderDetails() {
         <article class="detail-card">
           <div class="detail-card__icon">${detail.icon}</div>
           <h3 class="detail-card__title">${detail.title}</h3>
-          <p class="detail-card__english">${detail.en}</p>
-          <p class="detail-card__arabic rtl-copy" lang="ar" dir="rtl">${detail.ar}</p>
+          <p class="detail-card__english ${state.laylaLanguage === "ar" && isLaylaInvitation() ? "rtl-copy" : ""}" ${state.laylaLanguage === "ar" && isLaylaInvitation() ? 'lang="ar" dir="rtl"' : ""}>${detail.en}</p>
+          ${isLaylaInvitation() ? "" : `<p class="detail-card__arabic rtl-copy" lang="ar" dir="rtl">${detail.ar}</p>`}
           ${detail.action || ""}
         </article>
       `
@@ -486,21 +553,21 @@ function renderFirebaseRsvp(mount) {
       <div class="rsvp-phases">
         <section class="rsvp-phase" data-rsvp-step="1">
           <p class="rsvp-phase__number">01</p>
-          <h3>Are you attending?</h3>
-          <div class="rsvp-choice" role="radiogroup" aria-label="Attendance">
+          <h3>${isLaylaInvitation() ? laylaText("attending") : "Are you attending?"}</h3>
+          <div class="rsvp-choice" role="radiogroup" aria-label="${isLaylaInvitation() ? laylaText("attending") : "Attendance"}">
             <label class="rsvp-answer">
               <input type="radio" name="status" value="confirmed" ${guest.rsvpStatus === "confirmed" ? "checked" : ""} required />
-              <span>Yes</span>
+              <span>${isLaylaInvitation() ? laylaText("yes") : "Yes"}</span>
             </label>
             <label class="rsvp-answer">
               <input type="radio" name="status" value="declined" ${guest.rsvpStatus === "declined" ? "checked" : ""} required />
-              <span>No</span>
+              <span>${isLaylaInvitation() ? laylaText("no") : "No"}</span>
             </label>
           </div>
         </section>
       </div>
       <button class="luxury-button luxury-button--primary rsvp-form__submit" type="submit">
-        ${icons.reply}<span>Send RSVP</span>
+        ${icons.reply}<span>${isLaylaInvitation() ? laylaText("sendRsvp") : "Send RSVP"}</span>
       </button>
     </form>
   `;
@@ -529,15 +596,15 @@ function renderDemoRsvp(mount) {
       <div class="rsvp-phases">
         <section class="rsvp-phase" data-rsvp-step="1">
           <p class="rsvp-phase__number">01</p>
-          <h3>Are you attending?</h3>
+          <h3>${isLaylaInvitation() ? laylaText("attending") : "Are you attending?"}</h3>
           <div class="rsvp-choice" role="radiogroup" aria-label="Attendance">
             <label class="rsvp-answer">
               <input type="radio" name="status" value="Yes" ${saved?.status === "Yes" ? "checked" : ""} required />
-              <span>Yes</span>
+              <span>${isLaylaInvitation() ? laylaText("yes") : "Yes"}</span>
             </label>
             <label class="rsvp-answer">
               <input type="radio" name="status" value="No" ${saved?.status === "No" ? "checked" : ""} required />
-              <span>No</span>
+              <span>${isLaylaInvitation() ? laylaText("no") : "No"}</span>
             </label>
           </div>
         </section>
@@ -561,6 +628,17 @@ function renderSeatSection() {
 
   elements.seatingSection.hidden = false;
   const assignments = getInvitationSeatAssignments(state.guest);
+
+  if (document.body.classList.contains("layla-zaid-invitation")) {
+    document.getElementById("seatDetailsMount").innerHTML = `
+      <div class="layla-seat-greeting">
+        <h3 ${state.laylaLanguage === "ar" ? 'lang="ar" dir="rtl" class="rtl-copy"' : ""}>${laylaValue(`${laylaText("dear")} ${escapeHtml(state.guest.fullName || "Guest")}`, `${laylaText("dear")} ${escapeHtml(state.guest.fullName || "Guest")}`)}</h3>
+      </div>
+    `;
+    renderSeatingMap(state.tables, assignments);
+    return;
+  }
+
   const partyMembers = getInvitationPartyMembers(state.guest, assignments);
 
   document.getElementById("seatDetailsMount").innerHTML = `
@@ -605,7 +683,7 @@ function renderSeatingMap(tables, assignments = []) {
   }
 
   if (!tables.length) {
-    map.innerHTML = '<p class="seat-empty-copy">A seating map will appear here once the venue layout is published.</p>';
+    map.innerHTML = `<p class="seat-empty-copy">${isLaylaInvitation() ? laylaText("seatingEmpty") : "A seating map will appear here once the venue layout is published."}</p>`;
     return;
   }
 
@@ -614,9 +692,9 @@ function renderSeatingMap(tables, assignments = []) {
   const assignedSeatKeys = new Set(assignments.map((assignment) => `${assignment.tableId}::${assignment.seatNumber}`));
   map.innerHTML = `
     <div class="seat-plan-toolbar" aria-label="Seating plan controls">
-      <button type="button" data-seat-plan-control="my-seats" ${assignments.length ? "" : "disabled"}>My seats</button>
+      <button type="button" data-seat-plan-control="my-seats" ${assignments.length ? "" : "disabled"}>${isLaylaInvitation() ? laylaText("mySeats") : "My seats"}</button>
       <button type="button" data-seat-plan-control="zoom-out">-</button>
-      <button type="button" data-seat-plan-control="fit">Fit</button>
+      <button type="button" data-seat-plan-control="fit">${isLaylaInvitation() ? laylaText("fit") : "Fit"}</button>
       <button type="button" data-seat-plan-control="zoom-in">+</button>
     </div>
     <div class="seat-plan-viewport" id="seatPlanViewport">
@@ -637,7 +715,7 @@ function renderSeatingMap(tables, assignments = []) {
           <div class="seat-plan-table__surface seat-plan-table__surface--${escapeAttribute(table.shape || "round")}">
             <strong>${escapeHtml(table.label || table.name)}</strong>
             <span>${escapeHtml(table.name || "Table")}</span>
-            ${isAssigned ? '<small>Your table</small>' : ""}
+            ${isAssigned ? `<small>${isLaylaInvitation() ? laylaText("yourTable") : "Your table"}</small>` : ""}
           </div>
         </article>
       `;
@@ -904,7 +982,7 @@ async function renderGuestQrPass() {
     <div class="qr-pass__content">
       <div class="qr-pass__code" id="guestQrCode"></div>
       <div class="qr-pass__copy">
-        <p>Present this QR code at the entrance.</p>
+        <p>${isLaylaInvitation() ? laylaText("qrInstructions") : "Present this QR code at the entrance."}</p>
       </div>
     </div>
   `;
@@ -954,6 +1032,10 @@ function bindBaseEvents() {
   elements.musicToggle?.addEventListener("click", handleMusicToggle);
 
   document.addEventListener("click", async (event) => {
+    if (event.target.closest("#laylaLanguageToggle")) {
+      toggleLaylaLanguage();
+      return;
+    }
     const calendarButton = event.target.closest("[data-calendar-download]");
     if (calendarButton) {
       downloadCalendarFile();
@@ -1291,7 +1373,9 @@ function showToast(message, tone = "info") {
 }
 
 function buildAbsoluteUrl(path) {
-  return new URL(path, window.location.href).toString();
+  // Designs may be nested below the hosting root. document.baseURI honors
+  // their declared base path while the root invitation continues unchanged.
+  return new URL(path, document.baseURI).toString();
 }
 
 function toIcsDate(date) {

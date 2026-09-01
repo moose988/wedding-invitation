@@ -105,6 +105,12 @@ const laylaCopy = {
   attending: { en: "Are you attending?", ar: "هل ستتمكن من الحضور؟" },
   yes: { en: "Yes", ar: "نعم" }, no: { en: "No", ar: "لا" },
   sendRsvp: { en: "Send RSVP", ar: "إرسال التأكيد" },
+  rsvpConfirmed: { en: "RSVP Confirmed", ar: "تم تأكيد الحضور" },
+  attendanceConfirmed: { en: "Your attendance is confirmed", ar: "تم تأكيد حضورك" },
+  attendanceConfirmedThanks: {
+    en: "Thank you, {name}. We look forward to celebrating with you.",
+    ar: "شكرًا لك، {name}. نتطلع للاحتفال معك.",
+  },
   qrInstructions: { en: "Present this QR code at the entrance.", ar: "يرجى إبراز رمز QR عند المدخل." },
   dear: { en: "Dear", ar: "عزيزنا" },
   mySeats: { en: "My seats", ar: "مقاعدي" }, fit: { en: "Fit", ar: "ملاءمة" },
@@ -537,12 +543,19 @@ function renderFirebaseRsvp(mount) {
   };
   const guest = state.guest;
   if (guest.rsvpStatus === "confirmed") {
+    const isLayla = isLaylaInvitation();
+    const languageAttributes = isLayla && state.laylaLanguage === "ar" ? 'lang="ar" dir="rtl"' : "";
+    const confirmationLabel = isLayla ? laylaText("rsvpConfirmed") : "RSVP Confirmed";
+    const confirmationHeading = isLayla ? laylaText("attendanceConfirmed") : "Your attendance is confirmed";
+    const confirmationMessage = isLayla
+      ? laylaText("attendanceConfirmedThanks").replace("{name}", escapeHtml(guest.fullName || laylaText("dear")))
+      : `Thank you, ${escapeHtml(guest.fullName || "guest")}. We look forward to celebrating with you.`;
     mount.innerHTML = `
       <div class="rsvp-summary rsvp-summary--confirmed" role="status" aria-live="polite">
         <span class="rsvp-confirmation-mark" aria-hidden="true">✓</span>
-        <p class="rsvp-summary__eyebrow">RSVP Confirmed</p>
-        <h3>Your attendance is confirmed</h3>
-        <p>Thank you, ${escapeHtml(guest.fullName || "guest")}. We look forward to celebrating with you.</p>
+        <p class="rsvp-summary__eyebrow" ${languageAttributes}>${confirmationLabel}</p>
+        <h3 ${languageAttributes}>${confirmationHeading}</h3>
+        <p ${languageAttributes}>${confirmationMessage}</p>
       </div>
     `;
     return;

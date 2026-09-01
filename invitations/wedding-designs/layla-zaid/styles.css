@@ -183,6 +183,12 @@ body.layla-zaid-invitation .seating-map-shell {
   margin-top: 12px;
 }
 
+@media (min-width: 768px) {
+  body.layla-zaid-invitation .rsvp-summary--confirmed {
+    margin-inline: auto;
+  }
+}
+
 @media (max-width: 430px) {
   body.layla-zaid-invitation .hero-names__english {
     max-width: 100%;

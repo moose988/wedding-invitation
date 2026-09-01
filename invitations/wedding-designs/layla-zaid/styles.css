@@ -36,9 +36,18 @@ body.layla-zaid-invitation.layla-arabic [data-layla-language="ar"] {
   display: block;
 }
 
-body.layla-zaid-invitation.layla-arabic .site-content,
 body.layla-zaid-invitation.layla-arabic .sticky-actions {
   direction: rtl;
+}
+
+body.layla-zaid-invitation.layla-arabic .site-content {
+  direction: ltr;
+  margin-inline: auto;
+}
+
+body.layla-zaid-invitation.layla-arabic .section-heading {
+  direction: rtl;
+  text-align: center;
 }
 
 body.layla-zaid-invitation.layla-arabic .detail-card,
@@ -50,6 +59,19 @@ body.layla-zaid-invitation .rtl-copy,
 body.layla-zaid-invitation [lang="ar"] {
   font-family: "Amiri", serif;
   line-height: 1.85;
+}
+
+body.layla-zaid-invitation .music-toggle {
+  left: auto;
+  right: 32px;
+  direction: ltr;
+}
+
+@media (max-width: 699px) {
+  body.layla-zaid-invitation .music-toggle {
+    left: auto;
+    right: 12px;
+  }
 }
 
 body.layla-zaid-invitation .hero-names__arabic {

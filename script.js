@@ -377,7 +377,9 @@ function applyLaylaLanguage() {
   if (!isLaylaInvitation()) return;
   const arabic = state.laylaLanguage === "ar";
   document.documentElement.lang = arabic ? "ar" : "en";
-  document.documentElement.dir = arabic ? "rtl" : "ltr";
+  // Keep the document's geometry left-to-right so centered cards and fixed
+  // controls never mirror when only the invitation copy switches to Arabic.
+  document.documentElement.dir = "ltr";
   document.body.classList.toggle("layla-arabic", arabic);
   document.querySelectorAll("[data-layla-text]").forEach((node) => { node.textContent = laylaText(node.dataset.laylaText); });
   document.querySelectorAll("[data-layla-language]").forEach((node) => { node.hidden = node.dataset.laylaLanguage !== state.laylaLanguage; });

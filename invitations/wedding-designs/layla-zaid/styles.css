@@ -96,6 +96,23 @@ body.layla-zaid-invitation .hero-names__english {
   text-wrap: balance;
 }
 
+/* Keep Arabic and English in one fixed hero grid. Without an explicit column,
+   the shorter Arabic copy can shrink the grid track and pull the photo inward. */
+body.layla-zaid-invitation .hero-frame {
+  width: 100%;
+  grid-template-columns: minmax(0, 1fr);
+}
+
+body.layla-zaid-invitation .hero-content-panel {
+  width: 100%;
+}
+
+@media (max-width: 699px) {
+  body.layla-zaid-invitation .hero-content-panel {
+    min-height: clamp(220px, 63vw, 260px);
+  }
+}
+
 body.layla-zaid-invitation .section-heading h2,
 body.layla-zaid-invitation .detail-card__title,
 body.layla-zaid-invitation .rsvp-phase h3,

@@ -12,6 +12,7 @@ import {
   signInWithCustomToken,
   where,
 } from "./firebase-config.js";
+import { resolveTableName } from "./seating-utils.js";
 
 const shell = document.querySelector("#sideShell");
 const modalRoot = document.querySelector("#modalRoot");
@@ -160,6 +161,7 @@ function loadDemo() {
 function normalizeTable(table) {
   return {
     ...table,
+    name: resolveTableName(table),
     x: Number(table.x ?? 20),
     y: Number(table.y ?? 20),
     width: Number(table.width || 160),
@@ -184,7 +186,7 @@ function assignment(table, chair) {
     ...value,
     guestId: value.guestId,
     tableId: table.id,
-    tableName: value.tableName || table.name || "Table",
+    tableName: resolveTableName(table),
     chairId: chair.id,
     seatNumber: Number(value.seatNumber || chair.seatNumber),
     partyMemberIndex: index,
@@ -269,7 +271,7 @@ function renderTables() {
   return state.tables
     .map((t) => {
       const occupied = t.chairs.filter((c) => occupiedBy(t, c)).length;
-      return `<div class="table ${t.shape === "round" ? "round" : ""}" style="left:${t.x}%;top:${t.y}%;width:${t.width}px;height:${t.height}px;--fill:${esc(t.tableColor || "#f3ebdc")};--border:${esc(t.borderColor || "#bc9b61")}"><span class="table-label">${esc(t.label || t.name || "Table")}<small>${occupied}/${t.chairs.length}</small></span>${t.chairs
+      return `<div class="table ${t.shape === "round" ? "round" : ""}" style="left:${t.x}%;top:${t.y}%;width:${t.width}px;height:${t.height}px;--fill:${esc(t.tableColor || "#f3ebdc")};--border:${esc(t.borderColor || "#bc9b61")}"><span class="table-label">${esc(t.name)}<small>${occupied}/${t.chairs.length}</small></span>${t.chairs
         .map((c) => {
           const a = occupiedBy(t, c);
           return `<button class="chair ${a ? "occupied" : ""}" style="left:${Number(c.x) || 50}%;top:${Number(c.y) || 50}%" data-chair="1" data-table-id="${esc(t.id)}" data-chair-id="${esc(c.id)}" aria-label="${esc(a ? `${personName(a)}, ${t.name} chair ${c.seatNumber}` : `Empty ${t.name} chair ${c.seatNumber}`)}">${a ? esc(a.partyMemberIndex === 0 ? initials(findGuest(a.guestId)?.fullName) : `+${a.partyMemberIndex}`) : c.seatNumber}</button>`;

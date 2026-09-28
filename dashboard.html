@@ -11,16 +11,18 @@
       rel="stylesheet"
     />
     <link rel="stylesheet" href="./styles.css" />
-    <link rel="stylesheet" href="./dashboard.css" />
+    <link rel="stylesheet" href="./dashboard.css?v=20260928-seating-name-icons" />
   </head>
   <body class="dashboard-body">
     <main class="da3wa-shell">
       <section class="da3wa-app" id="dashboardApp" hidden>
         <aside class="da3wa-sidebar" id="dashboardSidebar">
+          <button class="da3wa-button da3wa-button--secondary da3wa-sidebar-desktop-toggle" type="button" id="desktopSidebarToggleButton" aria-controls="dashboardSidebar" aria-expanded="true">Collapse navigation</button>
+          <button class="da3wa-sidebar__mobile-close da3wa-icon-button" type="button" id="sidebarCloseButton" aria-label="Close navigation">×</button>
           <nav class="da3wa-sidebar__nav" aria-label="Dashboard navigation">
             <div class="da3wa-nav-group">
               <p class="da3wa-nav-group__label">Workspace</p>
-              <a class="da3wa-nav-link da3wa-nav-link--anchor" href="./weddings.html">All weddings</a>
+              <a class="da3wa-nav-link da3wa-nav-link--anchor" href="./weddings.html">All events</a>
               <button class="da3wa-nav-link" type="button" data-nav-view="overview">Overview</button>
               <button class="da3wa-nav-link" type="button" data-nav-view="guests">Guests</button>
               <button class="da3wa-nav-link" type="button" data-nav-view="seating">Seating</button>
@@ -38,6 +40,9 @@
             <button class="da3wa-button da3wa-button--ghost" type="button" id="signOutButton">Sign out</button>
           </div>
         </aside>
+
+        <button class="da3wa-button da3wa-button--secondary da3wa-sidebar-expand" type="button" id="desktopSidebarExpandButton" aria-controls="dashboardSidebar" aria-expanded="false" hidden>Show navigation</button>
+        <button class="da3wa-icon-button da3wa-seating-mobile-nav" type="button" id="seatingMobileNavButton" aria-controls="dashboardSidebar" aria-expanded="false" aria-label="Open navigation" hidden>☰</button>
 
         <div class="da3wa-main">
           <header class="da3wa-topbar">
@@ -174,10 +179,6 @@
                 <input class="da3wa-input" name="name" required />
               </label>
               <label>
-                <span>Label</span>
-                <input class="da3wa-input" name="label" required />
-              </label>
-              <label>
                 <span>Shape</span>
                 <select class="da3wa-input" name="shape">
                   <option value="round">Round</option>
@@ -300,6 +301,6 @@
     </dialog>
 
     <div class="da3wa-toast-rail" id="toastRail" aria-live="polite" aria-atomic="true"></div>
-    <script type="module" src="./dashboard.js?v=20260721-2"></script>
+    <script type="module" src="./dashboard.js?v=20260928-seating-names"></script>
   </body>
 </html>

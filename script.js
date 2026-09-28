@@ -10,6 +10,7 @@ import {
   updateDoc,
 } from "./firebase-config.js";
 import { renderQrCode } from "./qr.js";
+import { resolveTableName } from "./seating-utils.js";
 
 const demoWedding = {
   coupleName: "Layan & Mohammed",
@@ -71,10 +72,10 @@ const demoGuest = {
 };
 
 const demoTables = [
-  { id: "table-a", name: "Moonlight", label: "Table A", capacity: 8, x: 20, y: 24, shape: "round", floorZone: "Grand Hall" },
-  { id: "table-b", name: "Rose Gold", label: "Table B", capacity: 8, x: 62, y: 18, shape: "round", floorZone: "Grand Hall" },
-  { id: "table-c", name: "Emerald Garden", label: "Table C", capacity: 10, x: 26, y: 62, shape: "rectangle", floorZone: "Garden Wing" },
-  { id: "table-d", name: "Pearl Lounge", label: "Table D", capacity: 10, x: 68, y: 60, shape: "rectangle", floorZone: "Garden Wing" },
+  { id: "table-a", name: "Moonlight", capacity: 8, x: 20, y: 24, shape: "round", floorZone: "Grand Hall" },
+  { id: "table-b", name: "Rose Gold", capacity: 8, x: 62, y: 18, shape: "round", floorZone: "Grand Hall" },
+  { id: "table-c", name: "Emerald Garden", capacity: 10, x: 26, y: 62, shape: "rectangle", floorZone: "Garden Wing" },
+  { id: "table-d", name: "Pearl Lounge", capacity: 10, x: 68, y: 60, shape: "rectangle", floorZone: "Garden Wing" },
 ];
 
 const introLabels = ["Open Invitation", "افتح الدعوة"];
@@ -728,8 +729,7 @@ function renderSeatingMap(tables, assignments = []) {
         >
           ${(table.chairs || []).map((chair) => renderInvitationChair(table, chair, assignedSeatKeys)).join("")}
           <div class="seat-plan-table__surface seat-plan-table__surface--${escapeAttribute(table.shape || "round")}">
-            <strong>${escapeHtml(table.label || table.name)}</strong>
-            <span>${escapeHtml(table.name || "Table")}</span>
+            <strong>${escapeHtml(resolveTableName(table))}</strong>
             ${isAssigned ? `<small>${isLaylaInvitation() ? laylaText("yourTable") : "Your table"}</small>` : ""}
           </div>
         </article>
@@ -784,7 +784,7 @@ function getInvitationSeatAssignments(guest) {
       if (!table || !chair) return null;
       return {
         tableId: assignment.tableId || "",
-        tableName: assignment.tableName || table?.name || "",
+        tableName: table ? resolveTableName(table) : assignment.tableName || "",
         seatNumber: String(assignment.seatNumber || ""),
         personKey,
         label: assignment.label || partyLabelForIndex(partyIndex),
@@ -821,7 +821,7 @@ function getTableAuthoritativeSeatAssignments(guest) {
         const partyMemberIndex = Number.isInteger(Number(assignment.partyMemberIndex)) ? Number(assignment.partyMemberIndex) : index;
         return {
           tableId: table.id,
-          tableName: table.name || assignment.tableName || "",
+          tableName: resolveTableName(table),
           seatNumber: String(assignment.seatNumber || chair.seatNumber || ""),
           personKey: assignment.personKey || personKeyForIndex(partyMemberIndex),
           label: assignment.label || partyLabelForIndex(partyMemberIndex),

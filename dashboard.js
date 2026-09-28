@@ -22,6 +22,11 @@ import {
 } from "./firebase-config.js";
 import { exportGuests } from "./export.js";
 import { createSenderPayload, encodeSenderPayload } from "./sender-codec.js";
+import {
+  assignmentsForGuest,
+  resolveTableName,
+  summarizePartySeating,
+} from "./seating-utils.js";
 
 const params = new URLSearchParams(window.location.search);
 const secureSeatingEditorMode = params.get("seatingEditor") === "1";
@@ -34,6 +39,7 @@ const requestedSeatingSide = ["bride", "groom", "family"].includes(
 const seatingEditorMode = secureSeatingEditorMode || accountSeatingEditorMode;
 const lastWeddingStorageKey = "da3wa:lastDashboardWeddingId";
 const demoDashboardStorageKey = "da3wa:demoDashboardState:v4";
+const dashboardSidebarStorageKey = "da3wa:dashboardSidebarCollapsed:v1";
 const guestDirectoryPageSize = 6;
 
 const plannerPalette = {
@@ -94,7 +100,6 @@ const demoTables = [
   createPlannerTable({
     id: "table-a",
     name: "Moonlight",
-    label: "VIP 1",
     seatCount: 8,
     shape: "round",
     floorZone: "Grand Hall",
@@ -106,7 +111,6 @@ const demoTables = [
   createPlannerTable({
     id: "table-b",
     name: "Jasmine",
-    label: "Family A",
     seatCount: 10,
     shape: "round",
     floorZone: "Grand Hall",
@@ -119,7 +123,6 @@ const demoTables = [
   createPlannerTable({
     id: "table-c",
     name: "Rose",
-    label: "Bride 3",
     seatCount: 6,
     shape: "horseshoe",
     floorZone: "Family Lounge",
@@ -759,10 +762,13 @@ const state = {
   selectedHallObjectId: "",
   selectedGuestId: "",
   selectedGuestIds: [],
-  activeView: "overview",
+  activeView: pageMeta[params.get("view")] ? params.get("view") : "overview",
   selectedTableId: "",
   selectedSeatId: "",
   seatingMode: "layout",
+  seatingPanelTab: "guests",
+  seatingGuestSearch: "",
+  seatingGuestFilter: "all",
   guestAssignmentSearch: "",
   assignmentSession: null,
   activePartyGuestId: "",
@@ -772,6 +778,8 @@ const state = {
   modalError: "",
   returnFocusSelector: "",
   plannerZoom: 1,
+  plannerViewportCenter: null,
+  plannerMapWidth: 0,
   dragState: null,
   guestFilters: {
     search: "",
@@ -787,6 +795,7 @@ const state = {
   activeGuestMenu: null,
   lastGuestMenuTrigger: null,
   sidebarOpen: false,
+  sidebarCollapsed: loadDesktopSidebarPreference(),
   authRedirectMessage: "",
   loadingGuests: true,
   loadingTables: true,
@@ -799,6 +808,7 @@ const state = {
   dirtyDanceFloorForm: false,
   unsubGuests: null,
   unsubTables: null,
+  unsubWedding: null,
   unsubSeatingAccess: null,
   unsubAuth: null,
   initialized: false,
@@ -809,6 +819,10 @@ const state = {
 const elements = {
   dashboardApp: document.getElementById("dashboardApp"),
   dashboardSidebar: document.getElementById("dashboardSidebar"),
+  desktopSidebarToggleButton: document.getElementById("desktopSidebarToggleButton"),
+  desktopSidebarExpandButton: document.getElementById("desktopSidebarExpandButton"),
+  seatingMobileNavButton: document.getElementById("seatingMobileNavButton"),
+  sidebarCloseButton: document.getElementById("sidebarCloseButton"),
   pageEyebrow: document.getElementById("pageEyebrow"),
   pageTitle: document.getElementById("pageTitle"),
   pageDescription: document.getElementById("pageDescription"),
@@ -908,8 +922,34 @@ function bindEvents() {
     }
   });
   elements.navToggleButton?.addEventListener("click", () => {
-    state.sidebarOpen = !state.sidebarOpen;
+    toggleMobileSidebar();
+  });
+  elements.seatingMobileNavButton?.addEventListener("click", toggleMobileSidebar);
+  elements.sidebarCloseButton?.addEventListener("click", closeMobileSidebar);
+  elements.desktopSidebarToggleButton?.addEventListener("click", () => {
+    state.sidebarCollapsed = !state.sidebarCollapsed;
+    try {
+      window.localStorage.setItem(
+        dashboardSidebarStorageKey,
+        state.sidebarCollapsed ? "1" : "0",
+      );
+    } catch {}
     updateSidebarState();
+    refreshPlannerAfterSidebarChange();
+    if (state.sidebarCollapsed) elements.desktopSidebarExpandButton?.focus();
+  });
+  elements.desktopSidebarExpandButton?.addEventListener("click", () => {
+    state.sidebarCollapsed = false;
+    try {
+      window.localStorage.setItem(dashboardSidebarStorageKey, "0");
+    } catch {}
+    updateSidebarState();
+    refreshPlannerAfterSidebarChange();
+    elements.desktopSidebarToggleButton?.focus();
+  });
+  window.addEventListener("resize", () => {
+    updateSidebarState();
+    refreshPlannerAfterSidebarChange();
   });
   elements.guestForm?.addEventListener("submit", saveGuest);
   elements.tableForm?.addEventListener("submit", saveTable);
@@ -1224,6 +1264,22 @@ function handleDocumentInput(event) {
     } else {
       renderActiveView();
     }
+    return;
+  }
+
+  const seatingGuestSearch = event.target.closest(
+    "[data-seating-guest-search]",
+  );
+  if (seatingGuestSearch) {
+    const selectionStart = seatingGuestSearch.selectionStart;
+    const selectionEnd = seatingGuestSearch.selectionEnd;
+    state.seatingGuestSearch = seatingGuestSearch.value;
+    renderActiveView();
+    requestAnimationFrame(() => {
+      const nextSearch = document.querySelector("[data-seating-guest-search]");
+      nextSearch?.focus();
+      nextSearch?.setSelectionRange?.(selectionStart, selectionEnd);
+    });
   }
 }
 
@@ -1331,6 +1387,44 @@ function handleDocumentChange(event) {
 
 function handleDocumentKeydown(event) {
   if (
+    event.key === "Tab" &&
+    state.sidebarOpen &&
+    window.matchMedia("(max-width: 1180px)").matches
+  ) {
+    const focusable = [
+      ...elements.dashboardSidebar.querySelectorAll(
+        'a[href], button:not([disabled]), [tabindex]:not([tabindex="-1"])',
+      ),
+    ].filter((element) => element.getClientRects().length > 0);
+    const first = focusable[0];
+    const last = focusable.at(-1);
+    if (event.shiftKey && document.activeElement === first) {
+      event.preventDefault();
+      last?.focus();
+    } else if (!event.shiftKey && document.activeElement === last) {
+      event.preventDefault();
+      first?.focus();
+    }
+    return;
+  }
+
+  const seatingTab = event.target.closest(".seating-panel-tabs [role='tab']");
+  if (seatingTab && ["ArrowLeft", "ArrowRight"].includes(event.key)) {
+    event.preventDefault();
+    const tabs = [
+      ...seatingTab.parentElement.querySelectorAll(
+        "[role='tab']:not([disabled])",
+      ),
+    ];
+    const direction = event.key === "ArrowRight" ? 1 : -1;
+    const currentIndex = tabs.indexOf(seatingTab);
+    const nextTab = tabs[(currentIndex + direction + tabs.length) % tabs.length];
+    nextTab?.focus();
+    nextTab?.click();
+    return;
+  }
+
+  if (
     state.activeGuestMenu &&
     ["ArrowDown", "ArrowUp", "Home", "End"].includes(event.key)
   ) {
@@ -1348,8 +1442,7 @@ function handleDocumentKeydown(event) {
   }
 
   if (state.sidebarOpen) {
-    state.sidebarOpen = false;
-    updateSidebarState();
+    closeMobileSidebar();
   }
 }
 
@@ -1498,25 +1591,36 @@ async function bootstrapDashboard() {
     ? { ...weddingDoc.data(), id: weddingDoc.id }
     : null;
   state.hallObjects = hydrateHallObjects(state.wedding?.hallObjects);
-  if (isWeddingOwner()) {
-    try {
-      const normalizeSides = httpsCallable(
-        state.services.functions,
-        "normalizeSeatingGuestSides",
-      );
-      await normalizeSides({ weddingId: state.weddingId });
-    } catch (error) {
-      console.error("Guest-side normalization failed.", error);
-      showToast(
-        "Guest sides could not be normalized. Seating access may be limited until this is resolved.",
-        "error",
-      );
-    }
-  }
   showDashboard();
   renderAll();
+  startWeddingListener();
   startListeners();
   startSeatingAccessListener();
+  // A migration outage must not delay dashboard rendering or live data.
+  void normalizeGuestSidesInBackground();
+}
+
+async function normalizeGuestSidesInBackground() {
+  if (!isWeddingOwner()) return;
+  const weddingId = state.weddingId;
+  const userId = state.currentUser.uid;
+  const generation = state.listenerGeneration;
+  try {
+    const normalizeSides = httpsCallable(
+      state.services.functions,
+      "normalizeSeatingGuestSides",
+    );
+    await normalizeSides({ weddingId });
+  } catch (error) {
+    console.error("Guest-side normalization failed.", error);
+    // Ignore UI notifications from a dashboard session that has been disposed.
+    if (generation !== state.listenerGeneration ||
+        weddingId !== state.weddingId || userId !== state.currentUser?.uid) return;
+    showToast(
+      `Guest-side normalization failed (${error.code || "unknown"}). Dashboard loading continues; seating access may be limited until this is resolved.`,
+      "error",
+    );
+  }
 }
 
 function isWeddingOwner() {
@@ -1618,14 +1722,36 @@ function startListeners() {
   );
 }
 
+function startWeddingListener() {
+  state.unsubWedding?.();
+  state.unsubWedding = onSnapshot(
+    doc(state.services.db, "weddings", state.weddingId),
+    (snapshot) => {
+      if (!snapshot.exists()) {
+        redirectToLogin("access-denied");
+        return;
+      }
+      state.wedding = { ...snapshot.data(), id: snapshot.id };
+      state.hallObjects = hydrateHallObjects(state.wedding.hallObjects);
+      renderAll();
+    },
+    (error) => {
+      console.error("Live event settings could not be loaded.", error);
+      showToast("Live event settings could not be loaded. Please refresh.", "error");
+    },
+  );
+}
+
 function disposeDashboardListeners() {
   state.listenerGeneration += 1;
   state.unsubGuests?.();
   state.unsubTables?.();
+  state.unsubWedding?.();
   state.unsubSeatingAccess?.();
   state.unsubAuth?.();
   state.unsubGuests = null;
   state.unsubTables = null;
+  state.unsubWedding = null;
   state.unsubSeatingAccess = null;
   state.unsubAuth = null;
 }
@@ -1786,7 +1912,9 @@ function renderAll() {
 function renderChrome() {
   const meta = pageMeta[state.activeView];
   const isSeatingView = state.activeView === "seating";
+  const isOverviewView = state.activeView === "overview";
   document.body.classList.toggle("is-seating-view", isSeatingView);
+  document.body.classList.toggle("is-overview-view", isOverviewView);
   document.body.classList.toggle("is-seating-editor", state.editorMode);
   elements.dashboardSidebar.hidden = state.secureEditorMode;
   elements.dashboardSidebar.classList.toggle(
@@ -1810,15 +1938,24 @@ function renderChrome() {
       ? ""
       : meta.title;
   elements.pageDescription.textContent = state.editorMode
-    ? "Changes are synchronized live with the wedding dashboard."
+    ? "Changes are synchronized live with the event dashboard."
     : isSeatingView
       ? ""
-      : meta.description;
+      : isOverviewView
+        ? [
+            state.wedding?.coupleName || "Current event",
+            prettifyShape(state.wedding?.status || "active"),
+            formatEventDate(state.wedding?.eventDateISO),
+            state.wedding?.venueEn || "Venue not set",
+          ].join(" · ")
+        : meta.description;
   elements.pageDescription.hidden = !elements.pageDescription.textContent;
   elements.liveIndicator.innerHTML =
     state.mode === "demo"
       ? "Preview mode"
-      : `Firestore: ${state.firestoreGuestCount} guest${state.firestoreGuestCount === 1 ? "" : "s"}`;
+      : isOverviewView
+        ? "Live sync"
+        : `Firestore: ${state.firestoreGuestCount} guest${state.firestoreGuestCount === 1 ? "" : "s"}`;
 
   document.querySelectorAll("[data-nav-view]").forEach((button) => {
     button.classList.toggle(
@@ -1832,7 +1969,87 @@ function renderChrome() {
 }
 
 function updateSidebarState() {
+  const isMobile = window.matchMedia("(max-width: 1180px)").matches;
+  if (!isMobile && state.sidebarOpen) state.sidebarOpen = false;
   elements.dashboardSidebar.classList.toggle("is-open", state.sidebarOpen);
+  elements.dashboardApp.classList.toggle(
+    "is-sidebar-collapsed",
+    !isMobile && state.sidebarCollapsed && !state.secureEditorMode,
+  );
+  if (elements.navToggleButton) {
+    elements.navToggleButton.setAttribute(
+      "aria-expanded",
+      String(state.sidebarOpen),
+    );
+    elements.navToggleButton.setAttribute(
+      "aria-label",
+      state.sidebarOpen ? "Close navigation" : "Open navigation",
+    );
+  }
+  if (elements.seatingMobileNavButton) {
+    const isSeatingMobile = isMobile && state.activeView === "seating" && !state.secureEditorMode;
+    elements.seatingMobileNavButton.hidden = !isSeatingMobile;
+    elements.seatingMobileNavButton.setAttribute(
+      "aria-expanded",
+      String(state.sidebarOpen),
+    );
+    elements.seatingMobileNavButton.setAttribute(
+      "aria-label",
+      state.sidebarOpen ? "Close navigation" : "Open navigation",
+    );
+  }
+  if (elements.desktopSidebarToggleButton) {
+    elements.desktopSidebarToggleButton.hidden = state.secureEditorMode;
+    elements.desktopSidebarToggleButton.setAttribute(
+      "aria-expanded",
+      String(!state.sidebarCollapsed),
+    );
+    elements.desktopSidebarToggleButton.textContent = state.sidebarCollapsed
+      ? "Expand navigation"
+      : "Collapse navigation";
+  }
+  if (elements.desktopSidebarExpandButton) {
+    elements.desktopSidebarExpandButton.hidden =
+      !state.sidebarCollapsed || state.secureEditorMode || isMobile;
+    elements.desktopSidebarExpandButton.setAttribute(
+      "aria-expanded",
+      String(!state.sidebarCollapsed),
+    );
+  }
+}
+
+function toggleMobileSidebar() {
+  state.sidebarOpen = !state.sidebarOpen;
+  updateSidebarState();
+  if (state.sidebarOpen) elements.sidebarCloseButton?.focus();
+}
+
+function closeMobileSidebar() {
+  if (!state.sidebarOpen) return;
+  state.sidebarOpen = false;
+  updateSidebarState();
+  (state.activeView === "seating"
+    ? elements.seatingMobileNavButton
+    : elements.navToggleButton)?.focus();
+}
+
+function loadDesktopSidebarPreference() {
+  try {
+    return window.localStorage.getItem(dashboardSidebarStorageKey) === "1";
+  } catch {
+    return false;
+  }
+}
+
+function refreshPlannerAfterSidebarChange() {
+  requestAnimationFrame(() => {
+    const viewport = document.getElementById("plannerViewport");
+    if (!viewport || state.activeView !== "seating") return;
+    const nextWidth = Math.max(viewport.clientWidth, 820);
+    if (Math.abs(nextWidth - state.plannerMapWidth) < 2) return;
+    capturePlannerViewportCenter();
+    renderActiveView();
+  });
 }
 
 function renderGlobalActions() {
@@ -1841,7 +2058,21 @@ function renderGlobalActions() {
     elements.globalActions.innerHTML = "";
     return;
   }
-  if (state.activeView === "overview" || state.activeView === "guests") {
+  if (state.activeView === "overview") {
+    actions.push(
+      actionButton(
+        "Add guest",
+        "open-add-guest",
+        !can("canEditGuests"),
+        "primary",
+      ),
+      actionButton("Open seating planner", "nav-seating", false, "secondary"),
+      renderOverviewMoreActions(),
+    );
+    elements.globalActions.innerHTML = actions.join("");
+    return;
+  }
+  if (state.activeView === "guests") {
     actions.push(
       actionButton(
         "Add guest",
@@ -1870,6 +2101,24 @@ function renderGlobalActions() {
   elements.globalActions.innerHTML = actions.join("");
 }
 
+function renderOverviewMoreActions() {
+  return `
+    <details class="overview-actions-menu">
+      <summary class="da3wa-button da3wa-button--secondary">More actions</summary>
+      <div class="overview-actions-menu__panel" role="menu" aria-label="More overview actions">
+        ${overviewMenuButton("Refresh", "refresh-dashboard")}
+        ${overviewMenuButton("Export guest list", "export-all", !can("canExport"))}
+        ${overviewMenuButton("Copy invitation link", "copy-invitation-base")}
+        ${overviewMenuButton("Open check-in", "open-checkin")}
+      </div>
+    </details>
+  `;
+}
+
+function overviewMenuButton(label, action, disabled = false) {
+  return `<button class="overview-actions-menu__item" type="button" role="menuitem" data-action="${escapeAttribute(action)}" ${disabled ? 'disabled aria-disabled="true"' : ""}>${escapeHtml(label)}</button>`;
+}
+
 function switchView(view) {
   if (state.editorMode && view !== "seating") return;
   if (!pageMeta[view]) {
@@ -1877,8 +2126,23 @@ function switchView(view) {
   }
   closeGuestMenu({ restoreFocus: false });
   state.activeView = view;
+  const closeDrawer = state.sidebarOpen;
   state.sidebarOpen = false;
+  if (!state.editorMode) {
+    const nextUrl = new URL(window.location.href);
+    if (view === "overview") {
+      nextUrl.searchParams.delete("view");
+    } else {
+      nextUrl.searchParams.set("view", view);
+    }
+    window.history.replaceState(null, "", nextUrl);
+  }
   renderAll();
+  if (closeDrawer && window.matchMedia("(max-width: 1180px)").matches) {
+    (view === "seating"
+      ? elements.seatingMobileNavButton
+      : elements.navToggleButton)?.focus();
+  }
 }
 
 function renderActiveView() {
@@ -1916,109 +2180,75 @@ function renderOverviewPage() {
   const stats = calculateDashboardStats(state.guests, state.tables);
   const attention = calculateAttention(state.guests, state.tables);
   const recentActivity = deriveRecentActivity(state.guests);
-  const distribution = calculateSideDistribution(state.guests);
   const sideStats = calculateSideStats(state.guests, state.tables);
 
   elements.pageContent.innerHTML = `
     <section class="overview-page">
-      <article class="overview-hero">
-        <div class="overview-hero__meta">
-          <span class="pill">${escapeHtml(state.wedding?.status || "active")}</span>
-          <span class="pill pill--live">${state.mode === "demo" ? "Preview data" : "Realtime updates"}</span>
-          <span class="pill">${formatEventDate(state.wedding?.eventDateISO)}</span>
-          <span class="pill">${escapeHtml(state.wedding?.venueEn || "Venue not set")}</span>
-        </div>
-        <div>
-          <p class="da3wa-eyebrow">Event status</p>
-          <h2>${escapeHtml(state.wedding?.coupleName || "Current Wedding")}</h2>
-          <p class="overview-hero__subline">Track invitations, guest readiness, and ballroom setup from a calmer operational view.</p>
-        </div>
-      </article>
-
-      <section class="overview-kpis">
-        ${renderKpiCard("Primary guest documents", stats.total, `${stats.accompanyingGuests} accompanying guests`, `${stats.totalPeople} people total`)}
-        ${renderKpiCard("Confirmed", stats.confirmed, `${stats.confirmedPct}% of total`, "RSVP accepted")}
-        ${renderKpiCard("Pending", stats.pending, `${stats.pendingPct}% awaiting response`, "Needs follow-up")}
-        ${renderKpiCard("Declined", stats.declined, `${stats.declinedPct}% declined`, "Unavailable")}
+      <section class="overview-kpis" aria-label="Event summary">
+        ${renderKpiCard("Total invited", stats.total, `${stats.totalPeople} people total`, `${stats.accompanyingGuests} additional`)}
+        ${renderKpiCard("Confirmed", stats.confirmed, `${stats.confirmedPct}% of parties`, "RSVP accepted")}
+        ${renderKpiCard("Pending", stats.pending, `${stats.pendingPct}% of parties`, "Awaiting reply")}
+        ${renderKpiCard("Seating attention", stats.withoutSeat, `${stats.withoutSeatPct}% of confirmed`, "Parties need seats")}
         ${renderKpiCard("Checked in", stats.checkedIn, `${stats.checkinPct}% arrived`, "Venue arrivals")}
-        ${renderKpiCard("Without seats", stats.withoutSeat, `${stats.withoutSeatPct}% need placement`, "Seating attention")}
       </section>
 
-      <section class="side-overview">
-        ${renderSideOverviewCard("Groom side", "groom", sideStats.groom)}
-        ${renderSideOverviewCard("Bride side", "bride", sideStats.bride)}
-        ${sideStats.other.guestCount ? renderSideOverviewCard("Family & shared", "other", sideStats.other) : ""}
-      </section>
+      <section class="overview-operational" aria-label="Event operations">
+        <article class="overview-card overview-card--attention">
+          <p class="da3wa-eyebrow">Needs attention</p>
+          <h2>Actionable issues</h2>
+          <div class="attention-list">
+            ${attention.length
+              ? attention.map((item) => `
+                  <div class="attention-item">
+                    <strong>${escapeHtml(item.title)}</strong>
+                    <span>${escapeHtml(item.description)}</span>
+                  </div>
+                `).join("")
+              : `<div class="overview-empty-state"><strong>Everything is in good shape</strong><span>No RSVP, seating, capacity, or profile issues need attention right now.</span></div>`}
+          </div>
+        </article>
 
-      <section class="overview-analytics">
-        <article class="analytics-card">
-          <p class="da3wa-eyebrow">RSVP progress</p>
-          <h3>Response completion</h3>
+        <article class="overview-card overview-card--rsvp">
+          <p class="da3wa-eyebrow">RSVP status</p>
+          <h2>Response progress</h2>
           <div class="progress-stack">
             ${progressRow("Confirmed", stats.confirmed, stats.total, "sage")}
             ${progressRow("Pending", stats.pending, stats.total, "amber")}
             ${progressRow("Declined", stats.declined, stats.total, "rose")}
           </div>
+          <p class="overview-card__supporting">${stats.declined} declined · ${stats.declinedPct}% of invited parties</p>
         </article>
 
-        <article class="analytics-card">
-          <p class="da3wa-eyebrow">Seating progress</p>
-          <h3>Assignment readiness</h3>
-          <div class="progress-stack">
-            ${progressRow("Assigned guests", stats.seatedGuests, stats.total, "sage")}
-            ${progressRow("Guest parties needing seats", stats.unassignedGuests, stats.total, "amber")}
-            ${progressRow("Seats remaining", stats.remainingSeats, Math.max(stats.totalSeats, 1), "rose")}
-          </div>
-        </article>
-
-        <article class="analytics-card">
-          <p class="da3wa-eyebrow">Check-in progress</p>
-          <h3>Arrival tracking</h3>
-          <div class="progress-stack">
-            ${progressRow("Checked in", stats.checkedIn, stats.total, "sage")}
-            ${progressRow("Awaiting arrival", stats.notCheckedIn, stats.total, "amber")}
-          </div>
-        </article>
-
-        <article class="analytics-card">
-          <p class="da3wa-eyebrow">Guest-side distribution</p>
-          <h3>Balanced coverage</h3>
-          <div class="split-meter">
-            <div class="split-meter__bar">
-              <span style="width:${distribution.bridePct}%; background:#24554A;"></span>
-              <span style="width:${distribution.groomPct}%; background:#B89156;"></span>
-              <span style="width:${distribution.otherPct}%; background:#B56B63;"></span>
-            </div>
-            <div class="split-meter__legend">
-              ${legendRow("Bride", distribution.bride, distribution.bridePct)}
-              ${legendRow("Groom", distribution.groom, distribution.groomPct)}
-              ${legendRow("Other / Both / Family", distribution.other, distribution.otherPct)}
-            </div>
+        <article class="overview-card overview-card--seating">
+          <p class="da3wa-eyebrow">Seating readiness</p>
+          <h2>Floor plan capacity</h2>
+          <div class="overview-seating-summary">
+            <div><strong>${stats.assignedSeats}</strong><span>Assigned seats</span></div>
+            <div><strong>${stats.withoutSeat}</strong><span>Confirmed parties needing seats</span></div>
+            <div><strong>${stats.remainingSeats}</strong><span>Available seats</span></div>
           </div>
         </article>
       </section>
 
-      <section class="overview-support">
-        <article class="attention-card">
-          <p class="da3wa-eyebrow">Attention required</p>
-          <h3>What needs intervention</h3>
-          <div class="attention-list">
-            ${attention
-              .map(
-                (item) => `
-                  <div class="attention-item">
-                    <strong>${escapeHtml(item.title)}</strong>
-                    <span>${escapeHtml(item.description)}</span>
-                  </div>
-                `,
-              )
-              .join("")}
+      <section class="overview-lower" aria-label="Guest detail">
+        <article class="overview-card overview-distribution">
+          <p class="da3wa-eyebrow">Guest distribution</p>
+          <h2>By invitation side</h2>
+          <div class="overview-table-wrap">
+            <table class="overview-distribution__table">
+              <thead><tr><th scope="col">Side</th><th scope="col">Invited</th><th scope="col">Confirmed</th><th scope="col">Pending</th><th scope="col">Seating</th></tr></thead>
+              <tbody>
+                ${renderDistributionRow("Groom", sideStats.groom)}
+                ${renderDistributionRow("Bride", sideStats.bride)}
+                ${renderDistributionRow("Family & shared", sideStats.other)}
+              </tbody>
+            </table>
           </div>
         </article>
 
-        <article class="activity-card">
+        <article class="overview-card overview-activity">
           <p class="da3wa-eyebrow">Recent activity</p>
-          <h3>Latest movement</h3>
+          <h2>Latest movement</h2>
           <div class="activity-list">
             ${
               recentActivity.length
@@ -2032,20 +2262,8 @@ function renderOverviewPage() {
                     `,
                     )
                     .join("")
-                : `<div class="attention-item"><strong>No recent activity yet</strong><span>Live RSVP, check-in, and reminder timestamps will surface here.</span></div>`
+                : `<div class="overview-empty-state"><strong>No recent activity yet</strong><span>RSVP, check-in, and reminder updates will appear here.</span></div>`
             }
-          </div>
-        </article>
-
-        <article class="quick-actions">
-          <p class="da3wa-eyebrow">Quick actions</p>
-          <h3>Common planner tasks</h3>
-          <div class="quick-actions__grid">
-            ${quickAction("Add guest", "Create a new invitee with the basic organizer details.", "open-add-guest", !can("canEditGuests"))}
-            ${quickAction("Open seating planner", "Jump into table arrangement and seat assignment mode.", "nav-seating")}
-            ${quickAction("Export guest list", "Download the full guest roster for coordination and vendors.", "export-all", !can("canExport"))}
-            ${quickAction("Copy invitation base", "Share the public invitation pattern with the team.", "copy-invitation-base")}
-            ${quickAction("Open check-in console", "Launch the hostess flow with permission-aware access.", "open-checkin")}
           </div>
         </article>
       </section>
@@ -2166,51 +2384,48 @@ function renderSeatingPage() {
 
   const selectedTable = getSelectedTable();
   const selectedHallObject = getSelectedHallObject();
-  const selectedSeat = getSelectedSeat();
   const seatingStats = calculateDashboardStats(state.guests, state.tables);
   const sideStats = calculateSideStats(state.guests, state.tables);
   const isSaving = state.saveState === "saving";
-  const assignmentStatusPanel = state.assignmentSession
-    ? renderAssignmentPanelHint()
-    : renderAssignmentStatusPanel(selectedSeat);
+  const seatingPanelTab = state.seatingPanelTab;
+  const oldViewport = document.getElementById("plannerViewport");
+  if (oldViewport && !state.plannerViewportCenter) {
+    capturePlannerViewportCenter();
+  }
+  const viewportWidth = oldViewport?.clientWidth ||
+    document.querySelector(".planner-canvas-shell")?.clientWidth || 900;
+  const mapWidth = Math.max(viewportWidth, 820);
+  state.plannerMapWidth = mapWidth;
+  if (
+    state.activePartyGuestId &&
+    !state.guests.some(
+      (guest) => guest.id === state.activePartyGuestId &&
+        getGuestAssignedSeats(guest.id).length > 0,
+    )
+  ) {
+    state.activePartyGuestId = "";
+  }
 
   elements.pageContent.innerHTML = `
     <section class="seating-page">
       <article class="planner-toolbar">
-        <div class="planner-toolbar__cluster">
-          <div class="planner-toggle" role="tablist" aria-label="Seating mode">
-            <button class="${state.seatingMode === "layout" ? "is-active" : ""}" type="button" data-action="set-seating-mode" data-mode="layout">Layout mode</button>
-            <button class="${state.seatingMode === "assignment" ? "is-active" : ""}" type="button" data-action="set-seating-mode" data-mode="assignment">Assignment mode</button>
-          </div>
-        </div>
-        <div class="planner-toolbar__actions">
-          <div class="planner-zoom-stack">
-            <div class="planner-zoom-controls" aria-label="Planner zoom controls">
-              ${actionButton("Zoom out", "planner-zoom-out")}
-              ${actionButton("Zoom in", "planner-zoom-in")}
-              <span class="pill">${Math.round(state.plannerZoom * 100)}%</span>
-            </div>
-            <div class="planner-zoom-stats" aria-label="Planner status">
-              ${renderPlannerStatCard(state.tables.length, "Tables")}
-              ${renderPlannerStatCard(seatingStats.totalSeats, "Seats")}
-              ${renderPlannerStatCard(seatingStats.total, "Guests")}
-              ${renderPlannerStatCard(seatingStats.unassignedGuests, "Guest parties needing seats")}
-              ${renderPlannerStatCard(`${sideStats.groom.seated}/${sideStats.groom.confirmed}`, "Groom fully seated", "groom")}
-              ${renderPlannerStatCard(`${sideStats.bride.seated}/${sideStats.bride.confirmed}`, "Bride fully seated", "bride")}
-              <button class="planner-save-status ${isSaving ? "is-saving" : "is-saved"}" type="button" disabled aria-live="polite" aria-label="${isSaving ? "Saving seating changes" : "All seating changes saved"}">
-                <span aria-hidden="true">${isSaving ? "↻" : "✓"}</span>${isSaving ? "Saving…" : "Saved"}
-              </button>
-            </div>
-            <div class="planner-toolbar__buttons">
-              ${actionButton("Add table", "open-add-table", !canManageSeatingLayout(), "primary")}
-              ${actionButton("Add dance floor", "open-add-dance-floor", !canManageSeatingLayout(), "primary")}
-            </div>
-          </div>
+        <div class="planner-status-heading"><p class="da3wa-eyebrow">Seating status</p><span>Live overview of guest and seat progress</span></div>
+        <div class="planner-zoom-stats" aria-label="Planner status">
+          ${renderPlannerStatCard(state.tables.length, "Tables")}
+          ${renderPlannerStatCard(seatingStats.totalSeats, "Seats")}
+          ${renderPlannerStatCard(seatingStats.total, "Guests")}
+          ${renderPlannerStatCard(seatingStats.unassignedGuests, "Need seats")}
+          ${renderPlannerStatCard(`${sideStats.groom.seated}/${sideStats.groom.confirmed}`, "Groom seated", "groom")}
+          ${renderPlannerStatCard(`${sideStats.bride.seated}/${sideStats.bride.confirmed}`, "Bride seated", "bride")}
+          <button class="planner-save-status ${isSaving ? "is-saving" : "is-saved"}" type="button" disabled aria-live="polite" aria-label="${isSaving ? "Saving seating changes" : "All seating changes saved"}">
+            <span aria-hidden="true">${isSaving ? "↻" : "✓"}</span>${isSaving ? "Saving…" : "Saved"}
+          </button>
         </div>
       </article>
 
-      <div class="planner-layout">
+      <div class="planner-layout${state.assignmentSession ? " has-assignment" : ""}">
         <article class="planner-canvas-shell">
+          ${state.assignmentSession ? renderAssignmentControls() : ""}
           <div class="planner-canvas__header">
             <div>
               <p class="da3wa-eyebrow">Venue canvas</p>
@@ -2220,41 +2435,57 @@ function renderSeatingPage() {
               <span class="pill">${state.seatingMode === "layout" ? "Drag tables to reposition" : "Select chairs to assign guests · drag tables to reposition"}</span>
             </div>
           </div>
-          <div class="planner-canvas" id="plannerCanvas">
-            <div class="planner-canvas__floor"></div>
-            ${state.hallObjects.map((item) => renderHallObject(item)).join("")}
-            ${state.tables.length ? state.tables.map((table) => renderPlannerTable(table)).join("") : `<div class="da3wa-empty">No tables yet. Create your first table to start mapping the hall.</div>`}
+          <div class="planner-canvas-controls">
+            <div class="planner-toggle" role="tablist" aria-label="Seating mode">
+              <button class="${state.seatingMode === "layout" ? "is-active" : ""}" type="button" data-action="set-seating-mode" data-mode="layout" aria-selected="${state.seatingMode === "layout"}">Layout mode</button>
+              <button class="${state.seatingMode === "assignment" ? "is-active" : ""}" type="button" data-action="set-seating-mode" data-mode="assignment" aria-selected="${state.seatingMode === "assignment"}">Assignment mode</button>
+            </div>
+            <div class="planner-canvas-controls__actions">
+              <div class="planner-zoom-controls" aria-label="Planner zoom controls">
+                ${actionButton("Zoom out", "planner-zoom-out", state.plannerZoom <= 0.7)}
+                <span class="pill" data-zoom-percentage aria-live="polite">${Math.round(state.plannerZoom * 100)}%</span>
+                ${actionButton("Zoom in", "planner-zoom-in", state.plannerZoom >= 1.6)}
+                ${actionButton("Reset zoom", "planner-zoom-reset", state.plannerZoom === 1, "secondary")}
+              </div>
+              ${actionButton("Add table", "open-add-table", !canManageSeatingLayout(), "primary")}
+              ${actionButton("Add dance floor", "open-add-dance-floor", !canManageSeatingLayout(), "primary")}
+            </div>
           </div>
-          ${state.assignmentSession ? `<div class="assignment-dock">${renderAssignmentControls()}</div>` : ""}
+          <div class="planner-canvas-viewport" id="plannerViewport" aria-label="Scrollable venue map" tabindex="0">
+            <div class="planner-map-extent" style="width:${Math.round(mapWidth * state.plannerZoom)}px;height:${Math.round(720 * state.plannerZoom)}px">
+              <div class="planner-canvas" id="plannerCanvas" style="--planner-zoom:${state.plannerZoom}">
+                <div class="planner-canvas__floor"></div>
+                ${state.hallObjects.map((item) => renderHallObject(item)).join("")}
+                ${state.tables.length ? state.tables.map((table) => renderPlannerTable(table)).join("") : `<div class="da3wa-empty">No tables yet. Create your first table to start mapping the hall.</div>`}
+              </div>
+            </div>
+          </div>
         </article>
 
-        <div class="planner-panel__stack">
-          <article class="planner-panel">
-            ${
-              selectedHallObject
-                ? renderHallObjectInspector(selectedHallObject)
-                : selectedTable
-                ? renderTableInspector(selectedTable)
-                : `<div class="da3wa-empty">Select a table on the canvas to inspect its dimensions, occupancy, and actions.</div>`
-            }
+        <aside class="planner-panel__stack" aria-label="Seating controls">
+          <article class="planner-panel seating-side-panel">
+            <div class="seating-side-panel__header">
+              ${
+                selectedHallObject
+                  ? renderHallObjectInspector(selectedHallObject)
+                  : selectedTable
+                    ? renderTableInspector(selectedTable)
+                    : `<div class="seating-panel-empty"><strong>No table selected</strong><span>Add or select a venue item to continue planning.</span></div>`
+              }
+            </div>
+            <div class="seating-panel-tabs" role="tablist" aria-label="Seating sidebar">
+              <button type="button" role="tab" aria-selected="${seatingPanelTab === "guests"}" class="${seatingPanelTab === "guests" ? "is-active" : ""}" data-action="set-seating-panel-tab" data-tab="guests" ${!state.tables.length ? 'disabled aria-disabled="true"' : ""}>Guests</button>
+              <button type="button" role="tab" aria-selected="${seatingPanelTab === "venue"}" class="${seatingPanelTab === "venue" ? "is-active" : ""}" data-action="set-seating-panel-tab" data-tab="venue">Venue Items</button>
+            </div>
+            <div class="seating-side-panel__body" role="tabpanel">
+              ${
+                seatingPanelTab === "guests"
+                  ? renderSeatingGuestsTab(selectedTable)
+                  : renderLayoutLibrary()
+              }
+            </div>
           </article>
-
-          ${
-            state.seatingMode === "layout"
-              ? `<article class="planner-panel">
-                  <div class="planner-panel__header">
-                    <div>
-                      <p class="da3wa-eyebrow">Planner library</p>
-                      <h3 class="planner-panel__title">Venue layout</h3>
-                    </div>
-                  </div>
-                  ${renderLayoutLibrary()}
-                </article>`
-              : ""
-          }
-
-          ${assignmentStatusPanel ? `<article class="planner-panel">${assignmentStatusPanel}</article>` : ""}
-        </div>
+        </aside>
       </div>
     </section>
   `;
@@ -2264,10 +2495,47 @@ function renderSeatingPage() {
     ?.addEventListener("pointerdown", handlePlannerPointerDown, {
       once: false,
     });
+  restorePlannerViewport();
 }
 
 function renderPlannerStatCard(value, label, tone = "") {
   return `<div class="planner-stat-card${tone ? ` planner-stat-card--${tone}` : ""}"><strong>${escapeHtml(String(value))}</strong><span>${escapeHtml(label)}</span></div>`;
+}
+
+function capturePlannerViewportCenter() {
+  const viewport = document.getElementById("plannerViewport");
+  if (!viewport) return;
+  const zoom = state.plannerZoom || 1;
+  state.plannerViewportCenter = {
+    x: (viewport.scrollLeft + viewport.clientWidth / 2) / zoom,
+    y: (viewport.scrollTop + viewport.clientHeight / 2) / zoom,
+  };
+}
+
+function restorePlannerViewport() {
+  const viewport = document.getElementById("plannerViewport");
+  const center = state.plannerViewportCenter;
+  if (!viewport || !center) return;
+  viewport.scrollLeft = Math.max(
+    0,
+    center.x * state.plannerZoom - viewport.clientWidth / 2,
+  );
+  viewport.scrollTop = Math.max(
+    0,
+    center.y * state.plannerZoom - viewport.clientHeight / 2,
+  );
+  state.plannerViewportCenter = null;
+}
+
+function scrollPlannerToElement(element) {
+  const viewport = document.getElementById("plannerViewport");
+  if (!viewport || !element) return;
+  const viewRect = viewport.getBoundingClientRect();
+  const targetRect = element.getBoundingClientRect();
+  viewport.scrollLeft +=
+    targetRect.left + targetRect.width / 2 - (viewRect.left + viewRect.width / 2);
+  viewport.scrollTop +=
+    targetRect.top + targetRect.height / 2 - (viewRect.top + viewRect.height / 2);
 }
 
 function renderCheckinPage() {
@@ -2384,6 +2652,7 @@ function renderSharePage() {
 
   elements.pageContent.innerHTML = `
     <section class="share-page">
+      ${renderInvitationSettingsCard()}
       ${renderSeatingAccessCard()}
       ${renderSenderCard()}
       ${renderSideViewCard()}
@@ -2395,7 +2664,7 @@ function renderSharePage() {
                 <p class="da3wa-eyebrow">Useful link</p>
                 <h3>${escapeHtml(card.title)}</h3>
                 <p>${escapeHtml(card.description)}</p>
-                <code>${escapeHtml(card.value)}</code>
+                <code title="${escapeAttribute(card.value)}">${escapeHtml(card.value)}</code>
                 <div class="share-card__actions">
                   ${actionButton("Copy", card.copyAction)}
                   ${card.openAction ? actionButton("Open", card.openAction, false, "secondary") : ""}
@@ -2566,28 +2835,18 @@ function renderKpiCard(title, value, meta, note) {
   `;
 }
 
-function renderSideOverviewCard(title, sideKey, bucket) {
+function renderDistributionRow(label, bucket) {
+  const seatingLabel = bucket.confirmed
+    ? `${bucket.seated}/${bucket.confirmed} ready`
+    : "No confirmed parties";
   return `
-    <article class="analytics-card side-card side-card--${escapeAttribute(sideKey)}">
-      <header class="side-card__head">
-        <div>
-          <p class="da3wa-eyebrow">${escapeHtml(title)}</p>
-          <h3>${escapeHtml(String(bucket.confirmedSeats))} attending</h3>
-        </div>
-        <span class="pill">${escapeHtml(String(bucket.guestCount))} invited · ${escapeHtml(String(bucket.partyTotal))} seats</span>
-      </header>
-      <div class="side-card__stats">
-        <div class="side-stat"><strong>${escapeHtml(String(bucket.confirmed))}</strong><span>Confirmed</span></div>
-        <div class="side-stat"><strong>${escapeHtml(String(bucket.pending))}</strong><span>Pending</span></div>
-        <div class="side-stat"><strong>${escapeHtml(String(bucket.declined))}</strong><span>Not coming</span></div>
-        <div class="side-stat"><strong>${escapeHtml(String(bucket.seated))}/${escapeHtml(String(bucket.confirmed))}</strong><span>Seated</span></div>
-      </div>
-      <div class="progress-stack">
-        ${progressRow("Confirmed", bucket.confirmed, bucket.guestCount, "sage")}
-        ${progressRow("Pending", bucket.pending, bucket.guestCount, "amber")}
-        ${progressRow("Not coming", bucket.declined, bucket.guestCount, "rose")}
-      </div>
-    </article>
+    <tr>
+      <th scope="row">${escapeHtml(label)}</th>
+      <td>${escapeHtml(String(bucket.guestCount))}</td>
+      <td>${escapeHtml(String(bucket.confirmed))}</td>
+      <td>${escapeHtml(String(bucket.pending))}</td>
+      <td><span class="overview-seating-status">${escapeHtml(seatingLabel)}</span></td>
+    </tr>
   `;
 }
 
@@ -2603,24 +2862,6 @@ function progressRow(label, value, total, tone) {
         <div class="progress-bar progress-bar--${tone}" style="width:${percent}%"></div>
       </div>
     </div>
-  `;
-}
-
-function legendRow(label, value, percent) {
-  return `
-    <div class="legend-row">
-      <span>${escapeHtml(label)}</span>
-      <strong>${escapeHtml(String(value))} · ${percent}%</strong>
-    </div>
-  `;
-}
-
-function quickAction(title, description, action, disabled = false) {
-  return `
-    <button class="quick-action ${disabled ? "is-disabled" : ""}" type="button" data-action="${escapeAttribute(action)}" ${disabled ? 'aria-disabled="true"' : ""}>
-      <strong>${escapeHtml(title)}</strong>
-      <span>${escapeHtml(description)}</span>
-    </button>
   `;
 }
 
@@ -2765,7 +3006,7 @@ async function openOrCreateSideManagerLink(role, shouldOpen) {
 async function manageSeatingAccess(role, action) {
   if (!canManageSeatingAccess() || !["bride", "groom", "family"].includes(role)) {
     showToast(
-      "Only the wedding owner can manage seating editor access.",
+      "Only the event owner can manage seating editor access.",
       "error",
     );
     return;
@@ -2855,7 +3096,7 @@ function renderPlannerTable(table) {
   const occupied = getTableAssignments(table.id).length;
   const width = Number(table.width || defaultWidthForShape(table.shape));
   const height = Number(table.height || defaultHeightForShape(table.shape));
-  const transform = `translate(-50%, -50%) scale(${state.plannerZoom}) rotate(${Number(table.rotation || 0)}deg)`;
+  const transform = `translate(-50%, -50%) rotate(${Number(table.rotation || 0)}deg)`;
   const shapeClass = `planner-table__surface--${escapeAttribute(table.shape || "round")}`;
   return `
     <div
@@ -2875,7 +3116,7 @@ function renderPlannerTable(table) {
           data-table-id="${table.id}"
         >
           <div class="planner-table__label">
-            <strong>${escapeHtml(table.label || table.name)}</strong>
+            <strong>${escapeHtml(table.name)}</strong>
             <span>${occupied}/${Number(table.seatCount || 0)} seated</span>
           </div>
         </button>
@@ -2931,7 +3172,7 @@ function renderHallObject(item) {
   const icon = item.type === "stage" ? renderStageIcon() : renderEntranceIcon();
   return `
     <button
-      class="hall-object hall-object--${escapeAttribute(item.type)}"
+      class="hall-object hall-object--${escapeAttribute(item.type)} ${item.id === state.selectedHallObjectId ? "is-selected" : ""} ${item.locked ? "is-locked" : ""}"
       type="button"
       style="left:${item.x}%; top:${item.y}%;"
       title="${escapeAttribute(item.label)}"
@@ -2942,6 +3183,30 @@ function renderHallObject(item) {
       ${icon}
       <span>${escapeHtml(item.label)}</span>
     </button>
+  `;
+}
+
+function canManageInvitationSettings() {
+  return isWeddingOwner() || can("canManageUsers");
+}
+
+function renderInvitationSettingsCard() {
+  const canChange = canManageInvitationSettings();
+  const showQr = state.wedding?.showInvitationQr !== false;
+  return `
+    <article class="share-card invitation-settings-card">
+      <p class="da3wa-eyebrow">Invitation settings</p>
+      <h3>Guest access pass</h3>
+      <p>Control whether the QR pass appears on each guest invitation. Existing QR links remain valid for staff check-in.</p>
+      <label class="invitation-setting-toggle">
+        <span>
+          <strong>Show QR code on invitation</strong>
+          <small>${canChange ? "Changes save to this event and update invitations live." : "Only the event owner or an authorized dashboard administrator can change this setting."}</small>
+        </span>
+        <input type="checkbox" data-action="toggle-invitation-qr" ${showQr ? "checked" : ""} ${canChange ? "" : "disabled aria-disabled=\"true\""} aria-label="Show QR code on invitation" />
+      </label>
+      <p class="invitation-settings-card__status" role="status">${showQr ? "QR pass is visible on invitations." : "QR pass is hidden on invitations."}</p>
+    </article>
   `;
 }
 
@@ -2965,33 +3230,33 @@ function renderHallObjectInspector(item) {
 
 function renderStageIcon() {
   return `
-    <span class="hall-object__icon hall-object__icon--stage" aria-hidden="true">
-      <span></span>
-    </span>
+    <svg class="hall-object__icon hall-object__icon--stage" viewBox="0 0 48 40" focusable="false" aria-hidden="true">
+      <path class="hall-icon-stage__curtain" d="M5 5h38v20l-7-4-6 4-6-4-6 4-6-4-7 4V5Z" />
+      <path class="hall-icon-stage__canopy" d="M8 8h32v13l-5-3-6 4-5-4-6 4-6-4-4 3V8Z" />
+      <path class="hall-icon-stage__platform" d="M7 27h34l-3 7H10l-3-7Z" />
+      <path class="hall-icon-stage__front" d="M12 30h24" />
+      <circle class="hall-icon-stage__light" cx="17" cy="13" r="1.3" />
+      <circle class="hall-icon-stage__light" cx="24" cy="13" r="1.3" />
+      <circle class="hall-icon-stage__light" cx="31" cy="13" r="1.3" />
+    </svg>
   `;
 }
 
 function renderEntranceIcon() {
   return `
-    <span class="hall-object__icon hall-object__icon--entrance" aria-hidden="true">
-      <span></span>
-    </span>
+    <svg class="hall-object__icon hall-object__icon--entrance" viewBox="0 0 40 44" focusable="false" aria-hidden="true">
+      <path class="hall-icon-entrance__frame" d="M6 38V8a3 3 0 0 1 3-3h22a3 3 0 0 1 3 3v30" />
+      <path class="hall-icon-entrance__door" d="M13 37V13a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2v24" />
+      <path class="hall-icon-entrance__opening" d="M18 16h6v18h-6z" />
+      <path class="hall-icon-entrance__arrow" d="M2 25h14m-5-5 5 5-5 5" />
+      <path class="hall-icon-entrance__threshold" d="M5 39h30" />
+    </svg>
   `;
 }
 
 function renderTableInspector(table) {
   const assignments = getTableAssignments(table.id);
   const capacity = Number(table.seatCount || table.capacity || 0);
-  const assignedGuests = assignments
-    .map((assignment) => ({
-      assignment,
-      guest: state.guests.find((item) => item.id === assignment.guestId),
-    }))
-    .sort(
-      (left, right) =>
-        Number(left.assignment.seatNumber || 0) -
-        Number(right.assignment.seatNumber || 0),
-    );
   return `
     <div class="planner-table-summary">
       <div>
@@ -3008,32 +3273,157 @@ function renderTableInspector(table) {
       ${actionButton("Duplicate", "duplicate-table", !canManageSeatingLayout(), "secondary", table.id)}
       ${actionButton("Delete", "delete-table", !canManageSeatingLayout(), "danger", table.id)}
     </div>
-    <div class="planner-assigned-guests">
-      <div class="planner-panel__header">
-        <div>
-          <p class="da3wa-eyebrow">Assigned guests</p>
-          <h3 class="planner-panel__title">${assignedGuests.length} of ${capacity} seats filled</h3>
-        </div>
+  `;
+}
+
+function renderSeatingGuestsTab(table) {
+  if (!table) {
+    return '<div class="seating-panel-empty"><strong>Select a table first</strong><span>Guest assignments are shown for the active table.</span></div>';
+  }
+
+  const query = state.seatingGuestSearch.trim().toLowerCase();
+  const allRows = state.guests
+    .map((guest) => {
+      const assignments = getGuestAssignedSeats(getGuestDocumentId(guest));
+      const tableAssignments = assignments.filter(
+        (assignment) => String(assignment.tableId) === String(table.id),
+      );
+      return {
+        guest,
+        assignments,
+        tableAssignments,
+        seating: summarizePartySeating(guest, assignments),
+      };
+    })
+    .filter(({ guest, assignments, tableAssignments }) => {
+      if (
+        query &&
+        ![guest.fullName, guest.phone, guest.side, guest.rsvpStatus].some(
+          (value) => String(value || "").toLowerCase().includes(query),
+        )
+      ) {
+        return false;
+      }
+      return true;
+    })
+    .sort((left, right) => {
+      const assignmentOrder =
+        Number(right.tableAssignments.length > 0) -
+        Number(left.tableAssignments.length > 0);
+      return assignmentOrder ||
+        String(left.guest.fullName || "").localeCompare(
+          String(right.guest.fullName || ""),
+          undefined,
+          { sensitivity: "base" },
+        );
+    });
+  const needsSeats = ({ seating }) => seating.remainingCount > 0;
+  const rows = allRows.filter(({ tableAssignments, seating }) => {
+    if (state.seatingGuestFilter === "assigned") return tableAssignments.length > 0;
+    if (state.seatingGuestFilter === "unassigned") return needsSeats({ seating });
+    return true;
+  });
+  const counts = {
+    all: allRows.length,
+    assigned: allRows.filter(({ tableAssignments }) => tableAssignments.length > 0).length,
+    unassigned: allRows.filter(needsSeats).length,
+  };
+
+  return `
+    <p class="seating-guest-filter-help">Assigned means this table has at least one chair for the guest. Needs seats includes every party that is not fully seated, including partly seated parties.</p>
+    <div class="seating-guest-tools">
+      <label class="seating-guest-search">
+        <span class="sr-only">Search seating guests</span>
+        <input class="da3wa-input" type="search" placeholder="Search guests" value="${escapeAttribute(state.seatingGuestSearch)}" data-seating-guest-search />
+      </label>
+      <div class="seating-guest-filters" role="group" aria-label="Filter seating guests">
+        ${["all", "assigned", "unassigned"].map((filter) => `<button type="button" class="${state.seatingGuestFilter === filter ? "is-active" : ""}" data-action="set-seating-guest-filter" data-filter="${filter}" aria-pressed="${state.seatingGuestFilter === filter}">${filter === "unassigned" ? "Needs seats" : filter[0].toUpperCase() + filter.slice(1)} <span>${counts[filter]}</span></button>`).join("")}
       </div>
-      <div class="planner-guest-list">
-        ${
-          assignedGuests.length
-            ? assignedGuests
-                .map(
-                  ({ assignment, guest }) => `
-                  <div class="planner-guest-pill">
-                    <strong>${escapeHtml(guest?.fullName || "Guest")}</strong>
-                    <small>Seat ${escapeHtml(String(assignment.seatNumber || "—"))} · ${escapeHtml(assignment.label || "Guest")}</small>
-                  </div>
-                `,
-                )
-                .join("")
-            : '<div class="da3wa-empty">No guests have been assigned to this table yet.</div>'
-        }
+    </div>
+    <div class="seating-guest-rows">
+      ${rows.length ? rows.map(({ guest, assignments, tableAssignments, seating }) => renderSeatingGuestRow(guest, assignments, tableAssignments, table, seating)).join("") : `<div class="seating-panel-empty"><strong>${query ? "No guests match your search" : "No guests match this filter"}</strong><span>${query ? "Try a different name or clear your search." : "Choose another filter to see guests."}</span></div>`}
+    </div>
+  `;
+}
+
+function renderSeatingGuestRow(guest, assignments, tableAssignments, table, seating = summarizePartySeating(guest, assignments)) {
+  const remaining = seating.remainingCount;
+  const locations = assignments.length
+    ? assignments.map((assignment) =>
+        `${state.tables.find((item) => String(item.id) === String(assignment.tableId))?.name || assignment.tableName || "Table"} · seat ${assignment.seatNumber}`,
+      ).join(", ")
+    : "No seats assigned";
+  return `
+    <div class="seating-guest-row ${guest.id === state.activePartyGuestId ? "is-active" : ""}">
+      ${assignments.length
+        ? `<button class="seating-guest-row__locate" type="button" data-action="locate-seating-guest" data-guest-id="${escapeAttribute(guest.id)}" aria-label="Locate ${escapeAttribute(guest.fullName || "guest")} on the venue map"><strong>${escapeHtml(guest.fullName || "Guest")}</strong><small>${escapeHtml(locations)}${remaining ? ` · ${remaining} seat${remaining === 1 ? "" : "s"} still needed` : " · Fully seated"}</small></button>`
+        : `<div><strong>${escapeHtml(guest.fullName || "Guest")}</strong><small>No seats assigned · ${remaining} seat${remaining === 1 ? "" : "s"} still needed</small></div>`}
+      <div class="seating-guest-row__actions">
+        <button class="guest-quick-button" type="button" data-action="open-seating-for-guest" data-guest-id="${escapeAttribute(guest.id)}" ${!can("canEditSeating") ? 'disabled aria-disabled="true"' : ""}>${assignments.length ? "Manage" : "Assign"}</button>
       </div>
     </div>
   `;
 }
+
+function locateSeatingGuest(guestId) {
+  const guest = state.guests.find((item) => item.id === guestId);
+  const assignments = guest ? getGuestAssignedSeats(guest.id) : [];
+  if (!guest || !assignments.length) {
+    state.activePartyGuestId = "";
+    renderActiveView();
+    return;
+  }
+  state.activePartyGuestId = guest.id;
+  state.selectedHallObjectId = "";
+  state.selectedTableId = assignments[0].tableId;
+  state.seatingPanelTab = "guests";
+  renderActiveView();
+  scrollPlannerToElement(
+    document.querySelector(`[data-table-drag-id="${CSS.escape(assignments[0].tableId)}"]`),
+  );
+  requestAnimationFrame(() => {
+    [...document.querySelectorAll('[data-action="locate-seating-guest"]')]
+      .find((button) => button.dataset.guestId === guest.id)
+      ?.focus({ preventScroll: true });
+  });
+}
+
+function openSeatingGuestFlow(guestId) {
+  const guest = state.guests.find((item) => item.id === guestId);
+  if (!guest || !can("canEditSeating")) {
+    return;
+  }
+  const assignments = getGuestAssignedSeats(guest.id);
+  state.activeView = "seating";
+  state.seatingMode = "assignment";
+  state.seatingPanelTab = "guests";
+  state.activePartyGuestId = guest.id;
+  state.selectedHallObjectId = "";
+  state.selectedSeatId = "";
+  state.selectedTableId =
+    assignments[0]?.tableId || state.selectedTableId || state.tables[0]?.id || "";
+
+  if (assignments.length) {
+    state.assignmentSession = null;
+    renderAll();
+    openCenteredModal(elements.chairDetailsModal, () =>
+      renderChairDetailsModal(guest.id),
+    );
+    return;
+  }
+
+  state.modalError = "";
+  state.assignmentSession = {
+    mode: "assign",
+    guestId: guest.id,
+    requiredSeats: getPartySize(guest),
+    startingTableId: state.selectedTableId,
+    selectedChairs: [],
+    existingAssignments: [],
+  };
+  renderAll();
+}
+
 function renderLayoutLibrary() {
   const tables = state.tables
     .map((table) => {
@@ -3041,7 +3431,7 @@ function renderLayoutLibrary() {
       return `
         <button class="planner-table-list__button ${table.id === state.selectedTableId ? "is-selected" : ""}" type="button" data-action="select-table" data-table-id="${table.id}">
           <strong>${escapeHtml(table.name)}</strong>
-          <small>${escapeHtml(table.label || prettifyShape(table.shape))} · ${occupied}/${Number(table.seatCount || 0)} seated</small>
+          <small>${escapeHtml(prettifyShape(table.shape))} · ${occupied}/${Number(table.seatCount || 0)} seated</small>
         </button>
       `;
     })
@@ -3125,36 +3515,33 @@ function renderAssignmentControls() {
   const selectedCount = session.selectedChairs.length;
   const required = session.requiredSeats;
   const canComplete = selectedCount > 0 && !state.activeModalOperation;
+  const difference = required - selectedCount;
+  const selectionMessage =
+    difference > 0
+      ? `${difference} more chair${difference === 1 ? "" : "s"} needed for the full party. You can save a partial assignment.`
+      : difference < 0
+        ? `${Math.abs(difference)} too many chairs selected.`
+        : "Required chair count selected.";
   return `
-    <div class="assignment-dock__main">
-      <div>
-        <p class="da3wa-eyebrow">Assignment in progress</p>
-        <h3 class="planner-panel__title">${escapeHtml(guest?.fullName || "Guest party")}</h3>
-        <p class="planner-note">Select one or more chairs on the map. Amber chairs are temporary until you complete the assignment.</p>
+    <div class="assignment-bar" role="region" aria-label="Active seat assignment">
+      <div class="assignment-bar__identity">
+        <span>Assigning</span>
+        <strong>${escapeHtml(guest?.fullName || "Guest party")}</strong>
       </div>
-      ${badge(`${selectedCount} of ${required}`, selectedCount === required ? "confirmed" : "pending")}
-    </div>
-    <div class="assignment-progress">
-      <strong>${selectedCount} of ${required} chairs selected</strong>
-      <span>${escapeHtml(getSelectedChairSummary(session.selectedChairs) || "No chairs selected yet")}</span>
-    </div>
-    ${state.modalError ? `<div class="planner-warning-list"><span class="warning-chip">${escapeHtml(state.modalError)}</span></div>` : ""}
-    <div class="assignment-dock__actions">
-      <button class="da3wa-button da3wa-button--secondary" type="button" data-action="cancel-assignment">Cancel</button>
-      <button class="da3wa-button da3wa-button--primary ${!canComplete ? "is-disabled" : ""}" type="button" data-action="complete-assignment" ${!canComplete ? 'disabled aria-disabled="true"' : ""}>Complete assignment</button>
-    </div>
-  `;
-}
-
-function renderAssignmentPanelHint() {
-  return `
-    <div class="planner-panel__header">
-      <div>
-        <p class="da3wa-eyebrow">Assignment controls</p>
-        <h3 class="planner-panel__title">Below the map</h3>
+      <div class="assignment-bar__counts" aria-label="Assignment progress">
+        <span><strong>${required}</strong> required</span>
+        <span><strong>${selectedCount}</strong> selected</span>
+      </div>
+      <p class="assignment-bar__message ${difference === 0 ? "is-complete" : ""}" role="status">${escapeHtml(state.modalError || selectionMessage)}</p>
+      <details class="assignment-bar__details">
+        <summary>Selected chairs</summary>
+        <span>${escapeHtml(getSelectedChairSummary(session.selectedChairs) || "No chairs selected yet")}</span>
+      </details>
+      <div class="assignment-bar__actions">
+        <button class="da3wa-button da3wa-button--secondary" type="button" data-action="cancel-assignment">Cancel</button>
+        <button class="da3wa-button da3wa-button--primary ${!canComplete ? "is-disabled" : ""}" type="button" data-action="complete-assignment" ${!canComplete ? 'disabled aria-disabled="true"' : ""}>Complete assignment</button>
       </div>
     </div>
-    <p class="planner-note">Use the buttons beneath the seating map when you are ready to save or cancel the move.</p>
   `;
 }
 
@@ -3187,7 +3574,7 @@ function renderSeatAssignment(selectedSeat) {
       </div>
       <div class="seat-assignment__row">
         <span>Seat details</span>
-        <strong>${escapeHtml(selectedSeat.table.label || selectedSeat.table.name)} · Chair ${escapeHtml(String(selectedSeat.chair.seatNumber))}</strong>
+        <strong>${escapeHtml(selectedSeat.table.name)} · Chair ${escapeHtml(String(selectedSeat.chair.seatNumber))}</strong>
       </div>
     </div>
 
@@ -3399,6 +3786,11 @@ function renderReservationReadinessBadge(guest) {
 
 async function handleAction(action, dataset, event = null) {
   switch (action) {
+    case "toggle-invitation-qr": {
+      const input = event?.target?.closest("input[data-action='toggle-invitation-qr']");
+      if (input) await saveInvitationQrSetting(input.checked, input);
+      return;
+    }
     case "open-add-guest":
       await openGuestModal();
       return;
@@ -3473,21 +3865,7 @@ async function handleAction(action, dataset, event = null) {
       return;
     case "open-seating-for-guest":
       elements.missingSeatsModal?.close();
-      state.activeView = "seating";
-      state.seatingMode = "assignment";
-      state.activePartyGuestId = dataset.guestId || "";
-      state.selectedSeatId = "";
-      if (state.activePartyGuestId) {
-        const firstAssignment = getGuestAssignedSeats(
-          state.activePartyGuestId,
-        )[0];
-        state.selectedTableId =
-          firstAssignment?.tableId ||
-          state.selectedTableId ||
-          state.tables[0]?.id ||
-          "";
-      }
-      renderAll();
+      openSeatingGuestFlow(dataset.guestId || "");
       return;
     case "open-checkin":
       window.open(
@@ -3729,10 +4107,13 @@ async function handleAction(action, dataset, event = null) {
       renderActiveView();
       return;
     case "planner-zoom-in":
-      setPlannerZoom(state.plannerZoom + 0.05);
+      setPlannerZoom(state.plannerZoom + 0.1);
       return;
     case "planner-zoom-out":
-      setPlannerZoom(state.plannerZoom - 0.05);
+      setPlannerZoom(state.plannerZoom - 0.1);
+      return;
+    case "planner-zoom-reset":
+      setPlannerZoom(1);
       return;
     case "load-test-guests":
       loadSeatingTestGuests();
@@ -3740,12 +4121,38 @@ async function handleAction(action, dataset, event = null) {
     case "select-table":
       state.selectedTableId = dataset.tableId;
       state.selectedHallObjectId = "";
+      state.activePartyGuestId = "";
       renderActiveView();
+      return;
+    case "set-seating-panel-tab":
+      if (["guests", "venue"].includes(dataset.tab)) {
+        state.seatingPanelTab = dataset.tab;
+        if (dataset.tab === "guests") {
+          state.selectedHallObjectId = "";
+          state.selectedTableId = state.selectedTableId || state.tables[0]?.id || "";
+          state.activePartyGuestId = "";
+        }
+        renderActiveView();
+      }
+      return;
+    case "set-seating-guest-filter":
+      if (["all", "assigned", "unassigned"].includes(dataset.filter)) {
+        state.seatingGuestFilter = dataset.filter;
+        renderActiveView();
+      }
+      return;
+    case "locate-seating-guest":
+      locateSeatingGuest(dataset.guestId || "");
       return;
     case "select-hall-object":
       state.selectedHallObjectId = dataset.hallObjectId;
       state.selectedTableId = "";
+      state.activePartyGuestId = "";
+      state.seatingPanelTab = "venue";
       renderActiveView();
+      scrollPlannerToElement(
+        document.querySelector(`[data-hall-object-id="${CSS.escape(dataset.hallObjectId)}"]`),
+      );
       return;
     case "edit-dance-floor":
       openDanceFloorModal(getSelectedHallObject());
@@ -3913,28 +4320,33 @@ function calculateAttention(guests, tables) {
 
   return [
     {
+      count: confirmedWithoutTables,
       title: `${confirmedWithoutTables} confirmed guest${confirmedWithoutTables === 1 ? "" : "s"} without tables`,
       description: "These guests accepted but still need a final placement.",
     },
     {
+      count: pendingGuests,
       title: `${pendingGuests} pending RSVP${pendingGuests === 1 ? "" : "s"}`,
       description: "Useful for reminder follow-up and late seating decisions.",
     },
     {
+      count: overCapacity,
       title: `${overCapacity} table${overCapacity === 1 ? "" : "s"} over capacity`,
       description:
         "Check manual edits or seat conflicts that exceed the available chairs.",
     },
     {
+      count: incompleteInfo,
       title: `${incompleteInfo} guest profile${incompleteInfo === 1 ? "" : "s"} incomplete`,
       description:
         "Phone or profile details are missing and may block reminders or coordination.",
     },
     {
+      count: conflicts,
       title: `${conflicts} declined guest${conflicts === 1 ? "" : "s"} still seated`,
       description: "Useful conflict warning before finalizing the floor plan.",
     },
-  ];
+  ].filter((item) => item.count > 0);
 }
 
 function deriveRecentActivity(guests) {
@@ -3973,7 +4385,7 @@ function deriveRecentActivity(guests) {
       });
     }
   });
-  return items.sort((a, b) => b.sortKey - a.sortKey).slice(0, 6);
+  return items.sort((a, b) => b.sortKey - a.sortKey).slice(0, 4);
 }
 
 function calculateSideStats(guests, tables = state.tables) {
@@ -4013,23 +4425,6 @@ function emptySideBucket() {
     pending: 0,
     declined: 0,
     seated: 0,
-  };
-}
-
-function calculateSideDistribution(guests) {
-  const bride = guests.filter((guest) => guest.side === "bride").length;
-  const groom = guests.filter((guest) => guest.side === "groom").length;
-  const other = guests.filter(
-    (guest) => !["bride", "groom"].includes(guest.side),
-  ).length;
-  const total = Math.max(guests.length, 1);
-  return {
-    bride,
-    groom,
-    other,
-    bridePct: percentage(bride, total),
-    groomPct: percentage(groom, total),
-    otherPct: percentage(other, total),
   };
 }
 
@@ -4101,7 +4496,7 @@ function normalizeAssignment(assignment, tableId, chair) {
   if (!assignment && !chair?.guestId) {
     return null;
   }
-  const guestId = assignment?.guestId || chair?.guestId || "";
+  const guestId = String(assignment?.guestId || chair?.guestId || "");
   if (!guestId) {
     return null;
   }
@@ -4132,7 +4527,7 @@ function getAllAssignments(tables = state.tables) {
       .map((chair) => {
         const assignment = getChairAssignment(table.id, chair);
         return assignment
-          ? { ...assignment, chairId: chair.id, tableName: table.name, chair }
+          ? { ...assignment, chairId: chair.id, tableName: resolveTableName(table), chair }
           : null;
       })
       .filter(Boolean),
@@ -4149,9 +4544,7 @@ function getGuestAssignedSeats(guestId, tables = state.tables) {
   if (!guestId) {
     return [];
   }
-  return getAllAssignments(tables).filter(
-    (assignment) => assignment.guestId === guestId,
-  );
+  return assignmentsForGuest(getAllAssignments(tables), guestId);
 }
 
 function countAssignedSeats(tables = state.tables) {
@@ -4159,10 +4552,14 @@ function countAssignedSeats(tables = state.tables) {
 }
 
 function getGuestRemainingSeats(guest, tables = state.tables) {
-  return Math.max(
-    0,
-    getPartySize(guest) - getGuestAssignedSeats(guest.id, tables).length,
-  );
+  return summarizePartySeating(
+    guest,
+    getGuestAssignedSeats(getGuestDocumentId(guest), tables),
+  ).remainingCount;
+}
+
+function getGuestDocumentId(guest) {
+  return String(guest?.id || guest?.guestId || "");
 }
 
 function uniqueGuestsFromAssignments(assignments) {
@@ -4941,8 +5338,7 @@ function openTableModal(table = null) {
     elements.tableDeleteButton.hidden = !table;
   }
   elements.tableForm.reset();
-  elements.tableForm.name.value = table?.name || "";
-  elements.tableForm.label.value = table?.label || "";
+  elements.tableForm.name.value = table ? resolveTableName(table) : "";
   elements.tableForm.shape.value = table?.shape || "round";
   elements.tableForm.seatCount.value = table?.seatCount || table?.capacity || 8;
   elements.tableForm.floorZone.value = table?.floorZone || "";
@@ -5007,7 +5403,6 @@ async function saveTable(event) {
   const payload = createPlannerTable({
     id: state.selectedTableId || createId("table"),
     name: elements.tableForm.name.value.trim(),
-    label: elements.tableForm.label.value.trim(),
     capacity: Number(elements.tableForm.seatCount.value || 0),
     seatCount: Number(elements.tableForm.seatCount.value || 0),
     shape: elements.tableForm.shape.value,
@@ -5176,8 +5571,7 @@ async function duplicateTable(table) {
   const duplicated = createPlannerTable({
     ...table,
     id: createId("table"),
-    name: `${table.name} Copy`,
-    label: `${table.label || table.name} Copy`,
+    name: `${resolveTableName(table)} Copy`,
     x: Number(table.x || 20) + 6,
     y: Number(table.y || 20) + 6,
     chairs: table.chairs.map((chair) => ({
@@ -5398,7 +5792,8 @@ async function deleteTable(tableId) {
 }
 
 function setPlannerZoom(nextZoom) {
-  state.plannerZoom = clamp(nextZoom, 0.7, 1.45);
+  capturePlannerViewportCenter();
+  state.plannerZoom = clamp(nextZoom, 0.7, 1.6);
   renderActiveView();
 }
 
@@ -5438,6 +5833,9 @@ function handlePlannerPointerDown(event) {
   if (state.seatingMode !== "layout" && objectNode) {
     state.selectedHallObjectId = objectNode.dataset.hallObjectId;
     state.selectedTableId = "";
+    state.activePartyGuestId = "";
+    state.activePartyGuestId = "";
+    state.seatingPanelTab = "venue";
     renderActiveView();
     return;
   }
@@ -5453,6 +5851,7 @@ function handlePlannerPointerDown(event) {
     }
     state.selectedHallObjectId = objectId;
     state.selectedTableId = "";
+    state.seatingPanelTab = "venue";
     if (hallObject.locked || !canManageSeatingLayout()) {
       renderActiveView();
       return;
@@ -5464,6 +5863,9 @@ function handlePlannerPointerDown(event) {
       startY: event.clientY,
       originalX: Number(hallObject.x || 0),
       originalY: Number(hallObject.y || 0),
+      zoom: state.plannerZoom,
+      mapWidth: document.getElementById("plannerCanvas")?.clientWidth || state.plannerMapWidth,
+      node: objectNode,
     };
     objectNode.setPointerCapture?.(event.pointerId);
     return;
@@ -5476,6 +5878,11 @@ function handlePlannerPointerDown(event) {
   }
 
   state.selectedTableId = tableId;
+  state.activePartyGuestId = "";
+  if (!canManageSeatingLayout()) {
+    renderActiveView();
+    return;
+  }
   state.dragState = {
     type: "table",
     tableId,
@@ -5483,6 +5890,9 @@ function handlePlannerPointerDown(event) {
     startY: event.clientY,
     originalX: Number(table.x || 0),
     originalY: Number(table.y || 0),
+    zoom: state.plannerZoom,
+    mapWidth: document.getElementById("plannerCanvas")?.clientWidth || state.plannerMapWidth,
+    node: tableNode,
   };
   tableNode.setPointerCapture?.(event.pointerId);
 }
@@ -5497,9 +5907,10 @@ function handlePlannerPointerMove(event) {
     return;
   }
 
-  const rect = canvas.getBoundingClientRect();
-  const dx = ((event.clientX - state.dragState.startX) / rect.width) * 100;
-  const dy = ((event.clientY - state.dragState.startY) / rect.height) * 100;
+  const logicalWidth = state.dragState.mapWidth || canvas.clientWidth || 1;
+  const logicalHeight = canvas.clientHeight || 1;
+  const dx = ((event.clientX - state.dragState.startX) / state.dragState.zoom / logicalWidth) * 100;
+  const dy = ((event.clientY - state.dragState.startY) / state.dragState.zoom / logicalHeight) * 100;
   state.dragState.moved =
     state.dragState.moved ||
     Math.abs(event.clientX - state.dragState.startX) > 3 ||
@@ -5528,7 +5939,10 @@ function handlePlannerPointerMove(event) {
         : table,
     );
   }
-  renderActiveView();
+  if (state.dragState.node?.isConnected) {
+    state.dragState.node.style.left = `${nextX}%`;
+    state.dragState.node.style.top = `${nextY}%`;
+  }
 }
 
 async function handlePlannerPointerUp() {
@@ -5552,6 +5966,7 @@ async function handlePlannerPointerUp() {
     ) {
       state.selectedHallObjectId = objectId;
       state.selectedTableId = "";
+      state.seatingPanelTab = "venue";
       renderActiveView();
       return;
     }
@@ -7086,8 +7501,7 @@ function createPlannerTable(table) {
 
   return {
     id: tableId,
-    name: table.name || "New Table",
-    label: table.label || table.name || "Table",
+    name: resolveTableName(table, "New Table"),
     capacity: seatCount,
     seatCount,
     shape: table.shape || "round",
@@ -7340,6 +7754,32 @@ function createHallObjects() {
       y: 90,
     },
   ];
+}
+
+async function saveInvitationQrSetting(showInvitationQr, input) {
+  if (state.mode !== "live" || !canManageInvitationSettings()) {
+    input.checked = state.wedding?.showInvitationQr !== false;
+    showToast("You do not have permission to change invitation settings.", "error");
+    return;
+  }
+
+  input.disabled = true;
+  try {
+    await updateDoc(doc(state.services.db, "weddings", state.weddingId), {
+      showInvitationQr,
+      updatedAt: serverTimestamp(),
+    });
+    showToast(
+      showInvitationQr ? "QR pass will show on invitations." : "QR pass is now hidden on invitations.",
+      "success",
+    );
+  } catch (error) {
+    console.error("Could not save invitation QR setting.", error);
+    input.checked = state.wedding?.showInvitationQr !== false;
+    showToast("We could not save the invitation setting. Please check your access and try again.", "error");
+  } finally {
+    input.disabled = !canManageInvitationSettings();
+  }
 }
 
 function calculateGuestDirectoryCounts(guests) {
@@ -7741,7 +8181,7 @@ function buildWhatsAppReminderLink(guest) {
     return "";
   }
   const couple = `${state.wedding?.brideName || "Bride"} & ${state.wedding?.groomName || "Groom"}`;
-  const message = `Hello ${guest.fullName || "Guest"}, this is a kind reminder to confirm your attendance for the wedding of ${couple}.\nPlease open your personal invitation here:\n${buildInviteLink(guest.guestToken)}`;
+  const message = `Hello ${guest.fullName || "Guest"}, this is a kind reminder to confirm your attendance for the event of ${couple}.\nPlease open your personal invitation here:\n${buildInviteLink(guest.guestToken)}`;
   return `https://wa.me/${phone}?text=${encodeURIComponent(message)}`;
 }
 

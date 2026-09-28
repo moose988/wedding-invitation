@@ -241,11 +241,11 @@ function buildStats() {
 function render() {
   if (!state.wedding) return;
   const s = state.editable ? buildStats() : publicViewStats();
-  const title = state.wedding.coupleName || "Wedding seating";
+  const title = state.wedding.coupleName || "Event seating";
   const accessLabel = state.editable
     ? `${cap(state.role)} manager`
     : `Read-only ${cap(state.role)} status`;
-  shell.innerHTML = `<section class="card head"><div><p class="eyebrow">Live wedding seating</p><h1>${esc(title)}</h1><p class="muted">${state.editable ? "Manage every guest and every chair. Changes sync instantly." : `Complete seating layout and ${state.role} status.`}</p></div><span class="badge ${state.editable ? "" : "readonly"}">${accessLabel}</span></section>
+  shell.innerHTML = `<section class="card head"><div><p class="eyebrow">Live event seating</p><h1>${esc(title)}</h1><p class="muted">${state.editable ? "Manage every guest and every chair. Changes sync instantly." : `Complete seating layout and ${state.role} status.`}</p></div><span class="badge ${state.editable ? "" : "readonly"}">${accessLabel}</span></section>
   <section class="stats" aria-label="Guest statistics">${stat(s.total, "Guest invitations")}${stat(s.invited, "People invited")}${stat(s.confirmed, "Coming")}${stat(s.declined, "Declined")}${stat(s.pending, "Pending")}${stat(s.sent, "Invitations sent")}${stat(s.seated, "People seated")}${stat(s.unseated, "Unseated people")}</section>
   <section class="card workspace-card"><h2>Seating layout</h2><p class="muted">Tap a chair to ${state.editable ? "assign, move, swap, or unassign its occupant." : "inspect its occupant."}</p><div class="toolbar"><button class="btn" data-zoom="in" aria-label="Zoom in">Zoom in</button><button class="btn" data-zoom="out" aria-label="Zoom out">Zoom out</button><button class="btn" data-zoom="fit">Fit layout</button><button class="btn" data-zoom="reset">Reset</button></div><div class="map-viewport" id="mapViewport"><div class="map-world" id="mapWorld">${renderTables()}</div></div></section>
   <section class="card guest-card"><h2>${state.editable ? "Guest list" : "Family guest status"}</h2><p class="muted">${state.editable ? "All Bride and Groom guests, including every additional person." : "Your permitted RSVP and seating overview."}</p><div class="roster">${renderRoster()}</div></section>`;

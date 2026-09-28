@@ -24,7 +24,7 @@ export async function loadInvitationContext({ weddingId, guestToken } = getInvit
     getDoc(doc(db, "weddings", weddingId, "publicGuests", guestToken)),
     getDocs(collection(db, "weddings", weddingId, "tables")),
   ]);
-  if (!weddingSnapshot.exists()) throw new Error("Wedding not found.");
+  if (!weddingSnapshot.exists()) throw new Error("Event not found.");
   if (!guestSnapshot.exists()) throw new Error("Guest not found.");
   return {
     weddingId,

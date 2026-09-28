@@ -15,5 +15,5 @@ export function guestSeat(guest) {
 }
 
 export function setDocumentTitle(wedding) {
-  document.title = `${wedding?.coupleName || `${wedding?.brideName || "Bride"} & ${wedding?.groomName || "Groom"}`} | Wedding Invitation`;
+  document.title = `${wedding?.coupleName || `${wedding?.brideName || "Bride"} & ${wedding?.groomName || "Groom"}`} | Event Invitation`;
 }

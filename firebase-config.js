@@ -63,7 +63,8 @@ export function initFirebase() {
   const app = getApps().length ? getApp() : initializeApp(config);
   const auth = getAuth(app);
   const db = getFirestore(app);
-  const functions = getFunctions(app);
+  // Match the backend's default Cloud Functions region explicitly.
+  const functions = getFunctions(app, "us-central1");
 
   isSupported()
     .then((supported) => {

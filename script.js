@@ -237,7 +237,7 @@ function startFirebaseInvitationListeners(weddingId, guestToken) {
       }
     }
   };
-  state.unsubWedding = onSnapshot(doc(db, "weddings", weddingId), (snapshot) => snapshot.exists() ? refresh() : renderInvitationAccessError("This wedding is no longer available."), () => showToast("Wedding data is unavailable.", "error"));
+  state.unsubWedding = onSnapshot(doc(db, "weddings", weddingId), (snapshot) => snapshot.exists() ? refresh() : renderInvitationAccessError("This event is no longer available."), () => showToast("Event data is unavailable.", "error"));
   state.unsubGuest = onSnapshot(doc(db, "weddings", weddingId, "publicGuests", guestToken), (snapshot) => snapshot.exists() ? refresh() : renderInvitationAccessError("This invitation is no longer available. Please ask the couple for a new link."), () => showToast("Invitation access is unavailable.", "error"));
   state.unsubTables = onSnapshot(collection(db, "weddings", weddingId, "tables"), refresh, () => showToast("Live seating update is unavailable.", "error"));
 }
@@ -256,7 +256,7 @@ async function loadFirebaseInvitation(weddingId, guestToken) {
   const tables = await loadTables(weddingId);
 
   if (!wedding) {
-    throw new Error("Wedding not found.");
+    throw new Error("Event not found.");
   }
 
   if (!guest) {
@@ -341,7 +341,7 @@ function populateInvitation() {
   const englishNames = `${wedding.brideName} & ${wedding.groomName}`;
   const arabicNames = `${wedding.brideNameAr} و ${wedding.groomNameAr}`;
 
-  document.title = `${englishNames} | Wedding Invitation Platform`;
+  document.title = `${englishNames} | Event Invitation Platform`;
   setText("heroArabicNames", arabicNames);
   setText("heroEnglishNames", englishNames);
   setText("heroSubtitleArabic", wedding.subtitleAr);
@@ -1055,8 +1055,16 @@ function defaultHeightForShape(shape) {
 }
 
 async function renderGuestQrPass() {
-  if (state.mode !== "firebase" || !state.guest || !state.weddingId || !state.guestToken) {
+  if (
+    state.mode !== "firebase" ||
+    !state.guest ||
+    !state.weddingId ||
+    !state.guestToken ||
+    state.wedding?.showInvitationQr === false
+  ) {
     elements.qrPassSection.hidden = true;
+    const mount = document.getElementById("qrPassMount");
+    if (mount) mount.innerHTML = "";
     return;
   }
 
@@ -1171,16 +1179,16 @@ function revealInvitation() {
 
 async function playWeddingMusicFromGesture() {
   if (!state.musicAvailable || !elements.weddingAudio) {
-    setMusicToggleState("unavailable", "Off", "Wedding music unavailable");
+    setMusicToggleState("unavailable", "Off", "Event music unavailable");
     return;
   }
 
   try {
     elements.weddingAudio.currentTime = 0;
     await elements.weddingAudio.play();
-    setMusicToggleState("playing", "Stop", "Stop wedding music");
+    setMusicToggleState("playing", "Stop", "Stop event music");
   } catch (error) {
-    setMusicToggleState("paused", "Play", "Play wedding music");
+    setMusicToggleState("paused", "Play", "Play event music");
   }
 }
 
@@ -1192,15 +1200,15 @@ async function handleMusicToggle() {
   if (elements.weddingAudio.paused) {
     try {
       await elements.weddingAudio.play();
-      setMusicToggleState("playing", "Stop", "Stop wedding music");
+      setMusicToggleState("playing", "Stop", "Stop event music");
     } catch (error) {
-      setMusicToggleState("paused", "Play", "Play wedding music");
+      setMusicToggleState("paused", "Play", "Play event music");
     }
     return;
   }
 
   elements.weddingAudio.pause();
-  setMusicToggleState("paused", "Play", "Play wedding music");
+  setMusicToggleState("paused", "Play", "Play event music");
 }
 
 function waitForIntroAnimation() {
@@ -1335,18 +1343,18 @@ function setupRevealObserver() {
 function setupAudioState() {
   elements.weddingAudio?.addEventListener("error", () => {
     state.musicAvailable = false;
-    setMusicToggleState("unavailable", "Off", "Wedding music unavailable");
+    setMusicToggleState("unavailable", "Off", "Event music unavailable");
   });
 
   elements.weddingAudio?.addEventListener("pause", () => {
     if (state.musicAvailable && document.body.classList.contains("invitation-open")) {
-      setMusicToggleState("paused", "Play", "Play wedding music");
+      setMusicToggleState("paused", "Play", "Play event music");
     }
   });
 
   elements.weddingAudio?.addEventListener("play", () => {
     if (state.musicAvailable) {
-      setMusicToggleState("playing", "Stop", "Stop wedding music");
+      setMusicToggleState("playing", "Stop", "Stop event music");
     }
   });
 }
@@ -1412,16 +1420,16 @@ function scrollToRsvp() {
 function downloadCalendarFile() {
   const start = new Date(state.wedding.eventDateISO);
   const end = new Date(start.getTime() + 4 * 60 * 60 * 1000);
-  const summary = `${state.wedding.brideName} & ${state.wedding.groomName} Wedding`;
+  const summary = `${state.wedding.brideName} & ${state.wedding.groomName} Event`;
   const description = `${state.wedding.invitationMessageEn}\n${state.wedding.venueEn}\n${state.wedding.mapsUrl}`;
   const ics = [
     "BEGIN:VCALENDAR",
     "VERSION:2.0",
-    "PRODID:-//Wedding Invitation Platform//EN",
+    "PRODID:-//Event Invitation Platform//EN",
     "CALSCALE:GREGORIAN",
     "METHOD:PUBLISH",
     "BEGIN:VEVENT",
-    `UID:${Date.now()}-wedding-invitation-platform`,
+    `UID:${Date.now()}-event-invitation-platform`,
     `DTSTAMP:${toIcsDate(new Date())}`,
     `DTSTART:${toIcsDate(start)}`,
     `DTEND:${toIcsDate(end)}`,
@@ -1436,7 +1444,7 @@ function downloadCalendarFile() {
   const url = URL.createObjectURL(blob);
   const link = document.createElement("a");
   link.href = url;
-  link.download = "wedding-invitation.ics";
+  link.download = "event-invitation.ics";
   document.body.appendChild(link);
   link.click();
   link.remove();

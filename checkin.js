@@ -86,7 +86,7 @@ async function init() {
   }
 
   if (!state.weddingId) {
-    loadDemoCheckin("Preview mode is on. Add ?wedding=yourWeddingId later for live Firebase data.");
+    loadDemoCheckin("Preview mode is on. Add an event link later for live Firebase data.");
     return;
   }
 

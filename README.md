@@ -1,33 +1,33 @@
-# Wedding Invitation Platform Firebase MVP
+# Event Invitation Platform Firebase MVP
 
 ## Custom coded invitation designs
 
 Public invitation designs are code-owned—not dashboard-configured. Existing
 guest links continue to point to `index.html`; the lightweight router checks
 [`invitations/wedding-designs/registry.js`](./invitations/wedding-designs/registry.js)
-and forwards only mapped wedding IDs to their dedicated design. Unmapped
-weddings keep the current root invitation as the fallback.
+and forwards only mapped event IDs to their dedicated design. Unmapped
+events keep the current root invitation as the fallback.
 
 ### Current design map
 
-| Wedding | Firestore ID | Design folder |
+| Event | Firestore ID | Design folder |
 | --- | --- | --- |
 | Layla & Zaid | `luxury-wedding-demo` | `invitations/wedding-designs/layla-zaid/` |
 | Ali & Salma | `M1S1aBL9134GSAozWh6G` | `invitations/wedding-designs/ali-salma/` |
 
-To add a wedding-specific design:
+To add an event-specific design:
 
 1. Copy `invitations/wedding-designs/layla-zaid/` to a clearly named new folder.
 2. Build the visual markup and CSS only in that folder.
-3. Reuse `invitations/shared/invitation-data.js` for Firebase wedding/guest
+3. Reuse `invitations/shared/invitation-data.js` for Firebase event/guest
    data, live updates, RSVP writes, and check-in QR URLs.
-4. Add the real Firestore wedding ID and route to the registry.
+4. Add the real Firestore event ID and route to the registry.
 
 The dashboard, guest documents, public guest mirror, RSVP rules, QR/check-in,
 seating, exports, and sender links remain shared. Do not duplicate them inside
 individual invitation designs.
 
-This project is a luxury bilingual Arabic/English wedding invitation experience with a Firebase-powered multi-client MVP layered on top of the existing invitation flow.
+This project is a luxury bilingual Arabic/English event invitation experience with a Firebase-powered multi-client MVP layered on top of the existing invitation flow.
 
 ## Included pages
 
@@ -67,7 +67,7 @@ weddings/{weddingId}/dashboardUsers/{userId}
 weddings/{weddingId}/seatingAccess/{bride|groom}
 ```
 
-## 3. Example wedding document
+## 3. Example event document
 
 ```json
 {
@@ -176,7 +176,7 @@ weddings/{weddingId}/dashboardUsers/{userId}
   - `canManageUsers`
 
 The dashboard verifies both Firebase Auth and the matching `dashboardUsers/{userId}` document.
-For a side manager, share the matching Groom or Bride link from **Side status pages**. It opens the authenticated seating sign-in route with the wedding and side preserved; copied public Family links remain read-only.
+For a side manager, share the matching Groom or Bride link from **Side status pages**. It opens the authenticated seating sign-in route with the event and side preserved; copied public Family links remain read-only.
 
 ## 8. Check-in flow
 
@@ -218,9 +218,9 @@ Any static host also works if Firebase Auth and Firestore are configured for the
 
 ### Bride & groom seating editor links
 
-The Invitations page gives the wedding owner exactly two fixed seating-editor cards: Bride and Groom. Creating, opening, copying, regenerating, and revoking a link calls the deployed `manageSeatingEditorAccess` Cloud Function. The function verifies `ownerUserId`, creates a 256-bit random token, stores its SHA-256 lookup value and an AES-GCM encrypted owner-recovery copy, and returns the plaintext link only to the owner. It exchanges a valid link for a Firebase custom token restricted to one wedding and one role.
+The Invitations page gives the event owner exactly two fixed seating-editor cards: Bride and Groom. Creating, opening, copying, regenerating, and revoking a link calls the deployed `manageSeatingEditorAccess` Cloud Function. The function verifies `ownerUserId`, creates a 256-bit random token, stores its SHA-256 lookup value and an AES-GCM encrypted owner-recovery copy, and returns the plaintext link only to the owner. It exchanges a valid link for a Firebase custom token restricted to one event and one role.
 
-Firestore rules allow this custom-token identity to read the wedding's existing `guests` and `tables` data and update only seating fields plus table documents. It cannot read dashboard users, invitation access records, check-in data, exports, or another wedding. Revoking or regenerating increments the access version in `seatingAccess`; rules compare that version on every request, so previously issued editor sessions immediately lose Firestore access as well.
+Firestore rules allow this custom-token identity to read the event's existing `guests` and `tables` data and update only seating fields plus table documents. It cannot read dashboard users, invitation access records, check-in data, exports, or another event. Revoking or regenerating increments the access version in `seatingAccess`; rules compare that version on every request, so previously issued editor sessions immediately lose Firestore access as well.
 
 The secure editor route is `dashboard.html?seatingEditor=1&token=...`. After the one-time exchange, the raw token is removed from the address bar and the route exposes only the existing shared Seating Planner.
 

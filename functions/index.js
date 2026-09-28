@@ -41,7 +41,7 @@ function requireRole(role) {
 
 async function requireSeatingAccessManager(auth, weddingId) {
   if (!auth) throw new HttpsError("unauthenticated", "Sign in is required.");
-  if (!weddingId || typeof weddingId !== "string") throw new HttpsError("invalid-argument", "Invalid wedding.");
+  if (!weddingId || typeof weddingId !== "string") throw new HttpsError("invalid-argument", "Invalid event.");
   const [wedding, dashboardUser] = await Promise.all([
     db.doc(`weddings/${weddingId}`).get(),
     db.doc(`weddings/${weddingId}/dashboardUsers/${auth.uid}`).get(),
@@ -49,16 +49,16 @@ async function requireSeatingAccessManager(auth, weddingId) {
   const isOwner = wedding.exists && wedding.data().ownerUserId === auth.uid;
   const isDashboardAdmin = dashboardUser.exists && dashboardUser.data().canManageUsers === true;
   if (!isOwner && !isDashboardAdmin) {
-    throw new HttpsError("permission-denied", "Only the wedding owner or a dashboard administrator can manage seating editor access.");
+    throw new HttpsError("permission-denied", "Only the event owner or a dashboard administrator can manage seating editor access.");
   }
 }
 
 async function requireWeddingOwner(auth, weddingId) {
   if (!auth) throw new HttpsError("unauthenticated", "Sign in is required.");
-  if (!weddingId || typeof weddingId !== "string") throw new HttpsError("invalid-argument", "Invalid wedding.");
+  if (!weddingId || typeof weddingId !== "string") throw new HttpsError("invalid-argument", "Invalid event.");
   const wedding = await db.doc(`weddings/${weddingId}`).get();
   if (!wedding.exists || wedding.data().ownerUserId !== auth.uid) {
-    throw new HttpsError("permission-denied", "Only the wedding owner can perform this migration.");
+    throw new HttpsError("permission-denied", "Only the event owner can perform this migration.");
   }
 }
 
@@ -211,12 +211,12 @@ exports.deleteWedding = onCall(async (request) => {
   const { weddingId, confirmation } = request.data || {};
   if (!request.auth) throw new HttpsError("unauthenticated", "Sign in is required.");
   if (!weddingId || confirmation !== `DELETE ${weddingId}`) {
-    throw new HttpsError("invalid-argument", "Confirmation does not match this wedding.");
+    throw new HttpsError("invalid-argument", "Confirmation does not match this event.");
   }
   const weddingRef = db.doc(`weddings/${weddingId}`);
   const wedding = await weddingRef.get();
   if (!wedding.exists || wedding.data().ownerUserId !== request.auth.uid) {
-    throw new HttpsError("permission-denied", "Only the wedding owner can permanently delete it.");
+    throw new HttpsError("permission-denied", "Only the event owner can permanently delete it.");
   }
   // Remove every collaborator's private workspace index first. Otherwise a
   // deleted wedding could remain as a stale card in another planner's view.

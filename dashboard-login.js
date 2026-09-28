@@ -32,7 +32,7 @@ function init() {
   if (seatingOnlyMode) {
     document.title = "DA3WA Seating Editor";
     document.querySelector(".da3wa-auth__panel .da3wa-eyebrow").textContent = "Seating Access";
-    document.querySelector(".da3wa-auth__panel h1").textContent = "Wedding Seating Editor";
+    document.querySelector(".da3wa-auth__panel h1").textContent = "Event Seating Editor";
     document.querySelector(".da3wa-auth__panel p:not(.da3wa-eyebrow):not(.da3wa-auth__status)").textContent =
       "Sign in to view and update the seating plan.";
     elements.loginForm.querySelector("button[type=submit]").textContent = "Open seating editor";
@@ -62,7 +62,7 @@ function init() {
     elements.authStatus.textContent = "Please sign in to continue to the dashboard.";
   }
   if (statusMessage === "access-denied") {
-    elements.authStatus.textContent = "This account does not have dashboard access for that wedding.";
+    elements.authStatus.textContent = "This account does not have dashboard access for that event.";
   }
   if (statusMessage === "missing-wedding") {
     elements.authStatus.textContent = "Please sign in from an event-specific dashboard link.";
@@ -105,7 +105,7 @@ async function redirectAfterLogin(user) {
       return;
     }
     elements.authStatus.textContent =
-      "This account does not have dashboard access for that wedding.";
+      "This account does not have dashboard access for that event.";
     return;
   }
 

@@ -65,10 +65,10 @@ export function senderGuestPresentation(guest) {
 
 export function buildSenderWhatsAppMessage(payload, guest, inviteLink) {
   const names = senderGuestPresentation(guest);
-  const couple = payload?.c || "our wedding";
+  const couple = payload?.c || "our event";
   return [
-    `Wedding invitation â€” ${couple}`,
-    `Hello ${names.displayName}! We would be honored to have you at our wedding. All the details and RSVP are here:`,
+    `Event invitation â€” ${couple}`,
+    `Hello ${names.displayName}! We would be honored to have you at our event. All the details and RSVP are here:`,
     inviteLink,
   ].join("\n\n");
 }

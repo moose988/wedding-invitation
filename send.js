@@ -117,7 +117,7 @@ function render() {
   shell.innerHTML = `
     <header class="sender-header">
       <p class="sender-eyebrow">${escapeHtml(sideTitle)} · WhatsApp sender</p>
-      <h1>${escapeHtml(payload.c || "Wedding")} — invitations</h1>
+      <h1>${escapeHtml(payload.c || "Event")} — invitations</h1>
       <p>Tap <strong>Send</strong> on each guest. WhatsApp opens with the invitation ready — just press the send arrow. Every message goes out from your own number.</p>
       <div class="sender-progress">
         <div class="sender-progress__track" role="progressbar" aria-valuemin="0" aria-valuemax="${guests.length}" aria-valuenow="${sentCount}">

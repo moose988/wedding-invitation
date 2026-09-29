@@ -15,6 +15,11 @@ export function getInvitationParams(location = window.location) {
   return { weddingId: params.get("wedding")?.trim() || "", guestToken: params.get("guest")?.trim() || "" };
 }
 
+// Existing event documents omit this field; preserve their current seating UI.
+export function invitationSeatingEnabled(wedding) {
+  return wedding?.seatingEnabled !== false;
+}
+
 export async function loadInvitationContext({ weddingId, guestToken } = getInvitationParams()) {
   if (!weddingId || !guestToken) throw new Error("Invitation link is incomplete.");
   if (!isFirebaseConfigured()) throw new Error("Invitation service is not configured.");

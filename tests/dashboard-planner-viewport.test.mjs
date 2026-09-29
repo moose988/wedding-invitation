@@ -5,7 +5,7 @@ import test from "node:test";
 const root = new URL("../", import.meta.url);
 const read = (name) => readFile(new URL(name, root), "utf8");
 
-test("planner zoom scales the complete map layer and keeps zoom controls outside it", async () => {
+test("planner zoom and pan operate on the complete map layer with a stable logical center", async () => {
   const [dashboard, css] = await Promise.all([
     read("dashboard.js"),
     read("dashboard.css"),
@@ -28,9 +28,12 @@ test("planner zoom scales the complete map layer and keeps zoom controls outside
   assert.match(seatingRenderer, /planner-map-extent/);
   assert.match(seatingRenderer, /planner-canvas-controls/);
   assert.match(css, /body\.is-seating-view \.planner-canvas\s*\{[\s\S]*?transform: scale\(var\(--planner-zoom\)\)/);
-  assert.match(css, /\.planner-canvas-viewport\s*\{[\s\S]*?overflow: auto/);
-  assert.match(zoomSetter, /capturePlannerViewportCenter\(\)/);
+  assert.match(css, /\.planner-canvas-viewport\s*\{[\s\S]*?overflow: hidden/);
+  assert.match(seatingRenderer, /Reset view/);
   assert.match(zoomSetter, /state\.plannerZoom = clamp\(nextZoom, 0\.7, 1\.6\)/);
+  assert.match(dashboard, /type: "pan"[\s\S]*?startCenter: \{ \.\.\.state\.plannerViewCenter \}/);
+  assert.match(dashboard, /x: state\.dragState\.startCenter\.x - dx \/ state\.dragState\.zoom/);
+  assert.match(dashboard, /function resetPlannerView\(\)[\s\S]*?state\.plannerViewCenter =/);
   assert.doesNotMatch(zoomSetter, /updateDoc|setDoc|writeBatch|persistDemoDashboardState/);
 });
 
@@ -47,7 +50,7 @@ test("drag conversion uses logical map dimensions and does not rerender while mo
   assert.doesNotMatch(pointerMove, /renderActiveView\(\)/);
 });
 
-test("guest inspector locates by guest ID and keeps incomplete parties in needs-seats", async () => {
+test("guest selection highlights the party while preserving the planner view", async () => {
   const dashboard = await read("dashboard.js");
   const inspector = dashboard.slice(
     dashboard.indexOf("function renderSeatingGuestsTab("),
@@ -59,13 +62,41 @@ test("guest inspector locates by guest ID and keeps incomplete parties in needs-
   );
 
   assert.match(inspector, /summarizePartySeating\(guest, assignments\)/);
+  assert.match(inspector, /all: total\.all \+ seating\.requiredCount/);
+  assert.match(inspector, /assigned: total\.assigned \+ seating\.assignedCount/);
+  assert.match(inspector, /unassigned: total\.unassigned \+ seating\.remainingCount/);
+  assert.match(inspector, /state\.seatingGuestFilter === "assigned"\) return seating\.assignedCount > 0/);
   assert.match(inspector, /state\.seatingGuestFilter === "unassigned"\) return needsSeats\(\{ seating \}\)/);
   assert.match(inspector, /data-action="locate-seating-guest" data-guest-id="\$\{escapeAttribute\(guest\.id\)\}"/);
   assert.match(inspector, /data-action="open-seating-for-guest"/);
   assert.match(locate, /state\.activePartyGuestId = guest\.id/);
-  assert.match(locate, /state\.selectedTableId = assignments\[0\]\.tableId/);
-  assert.match(locate, /scrollPlannerToElement/);
+  assert.match(locate, /const pageScroll = \{ x: window\.scrollX, y: window\.scrollY \}/);
+  assert.match(locate, /const plannerViewCenter = state\.plannerViewCenter/);
+  assert.match(locate, /focus\(\{ preventScroll: true \}\)/);
+  assert.match(locate, /window\.scrollTo\(pageScroll\.x, pageScroll\.y\)/);
+  assert.doesNotMatch(locate, /state\.selectedTableId\s*=|scrollPlannerToElement/);
   assert.match(dashboard, /assignment\?\.guestId && assignment\.guestId === state\.activePartyGuestId/);
+});
+
+test("manual seating modes and canvas header are removed while selected venue items are announced", async () => {
+  const [dashboard, css] = await Promise.all([
+    read("dashboard.js"),
+    read("dashboard.css"),
+  ]);
+  const seatingRenderer = dashboard.slice(
+    dashboard.indexOf("function renderSeatingPage("),
+    dashboard.indexOf("function renderPlannerStatCard("),
+  );
+  const library = dashboard.slice(
+    dashboard.indexOf("function renderLayoutLibrary("),
+    dashboard.indexOf("function renderAssignmentLibrary("),
+  );
+  assert.doesNotMatch(dashboard, /seatingMode|set-seating-mode|planner-toggle/);
+  assert.doesNotMatch(seatingRenderer, /planner-canvas__header|Venue canvas|Ballroom layout builder|Seat assignment workspace/);
+  assert.match(library, /aria-pressed="\$\{table\.id === state\.selectedTableId\}"/);
+  assert.match(library, /aria-pressed="\$\{item\.id === state\.selectedHallObjectId\}"/);
+  assert.match(css, /\.planner-table-list__button\.is-selected\s*\{[\s\S]*?background: linear-gradient/);
+  assert.match(css, /\.planner-table-list__button:focus-visible\s*\{[\s\S]*?outline: 3px solid/);
 });
 
 test("desktop sidebar preference is separate from the accessible mobile drawer", async () => {

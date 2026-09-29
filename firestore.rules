@@ -114,6 +114,15 @@ service cloud.firestore {
         && request.resource.data.updatedAt == request.time;
     }
 
+    function isInvitationSeatingSettingsUpdate(weddingId) {
+      return isSignedIn()
+        && (request.auth.uid == resource.data.ownerUserId || canManageUsers(weddingId))
+        && request.resource.data.diff(resource.data).affectedKeys()
+          .hasOnly(["seatingEnabled", "updatedAt"])
+        && request.resource.data.seatingEnabled is bool
+        && request.resource.data.updatedAt == request.time;
+    }
+
     function isPublicWedding(weddingId) {
       return get(/databases/$(database)/documents/weddings/$(weddingId)).data.status == "active";
     }
@@ -158,6 +167,7 @@ service cloud.firestore {
       allow update: if (isDashboardMember(weddingId) &&
           request.auth.uid == resource.data.ownerUserId)
         || isInvitationQrSettingsUpdate(weddingId)
+        || isInvitationSeatingSettingsUpdate(weddingId)
         || ((isDashboardMember(weddingId) && dashboardUser(weddingId).data.canEditSeating == true)
           && request.resource.data.diff(resource.data).affectedKeys().hasOnly(["hallObjects", "updatedAt"]));
 

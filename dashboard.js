@@ -765,7 +765,6 @@ const state = {
   activeView: pageMeta[params.get("view")] ? params.get("view") : "overview",
   selectedTableId: "",
   selectedSeatId: "",
-  seatingMode: "layout",
   seatingPanelTab: "guests",
   seatingGuestSearch: "",
   seatingGuestFilter: "all",
@@ -778,7 +777,7 @@ const state = {
   modalError: "",
   returnFocusSelector: "",
   plannerZoom: 1,
-  plannerViewportCenter: null,
+  plannerViewCenter: null,
   plannerMapWidth: 0,
   dragState: null,
   guestFilters: {
@@ -1102,8 +1101,10 @@ function bindEvents() {
   });
   window.addEventListener("scroll", closeGuestMenu, true);
   window.addEventListener("resize", closeGuestMenu);
+  window.addEventListener("resize", refreshPlannerAfterSidebarChange);
   window.addEventListener("pointermove", handlePlannerPointerMove);
   window.addEventListener("pointerup", handlePlannerPointerUp);
+  window.addEventListener("pointercancel", handlePlannerPointerCancel);
 }
 
 function handleDocumentClick(event) {
@@ -1318,10 +1319,13 @@ async function bootstrapSeatingEditor() {
       role: claims.seatingRole,
       canEditSeating: ["bride", "groom"].includes(claims.seatingRole),
     };
-    state.wedding = { coupleName: "", status: "active" };
+    const weddingSnapshot = await getDoc(doc(state.services.db, "weddings", state.weddingId));
+    if (!weddingSnapshot.exists()) throw new Error("This event is no longer available.");
+    state.wedding = { ...weddingSnapshot.data(), id: weddingSnapshot.id };
     state.activeView = "seating";
     showDashboard();
     renderAll();
+    startWeddingListener();
     startListeners();
   } catch (error) {
     console.error(error);
@@ -1591,6 +1595,12 @@ async function bootstrapDashboard() {
     ? { ...weddingDoc.data(), id: weddingDoc.id }
     : null;
   state.hallObjects = hydrateHallObjects(state.wedding?.hallObjects);
+  if (state.wedding?.seatingEnabled === false && state.activeView === "seating" && !state.editorMode) {
+    state.activeView = "overview";
+    const nextUrl = new URL(window.location.href);
+    nextUrl.searchParams.delete("view");
+    window.history.replaceState(null, "", nextUrl);
+  }
   showDashboard();
   renderAll();
   startWeddingListener();
@@ -1733,7 +1743,23 @@ function startWeddingListener() {
       }
       state.wedding = { ...snapshot.data(), id: snapshot.id };
       state.hallObjects = hydrateHallObjects(state.wedding.hallObjects);
+      if (!isSeatingEnabled() && state.activeView === "seating" && !state.editorMode) {
+        state.activeView = "overview";
+        const nextUrl = new URL(window.location.href);
+        nextUrl.searchParams.delete("view");
+        window.history.replaceState(null, "", nextUrl);
+      }
+      const focusedSetting = document.activeElement?.dataset?.action;
+      const pageScroll = { x: window.scrollX, y: window.scrollY };
       renderAll();
+      if (["toggle-invitation-qr", "toggle-seating-enabled"].includes(focusedSetting)) {
+        requestAnimationFrame(() => {
+          document.querySelector(`[data-action="${focusedSetting}"]`)?.focus({ preventScroll: true });
+          if (window.scrollX !== pageScroll.x || window.scrollY !== pageScroll.y) {
+            window.scrollTo(pageScroll.x, pageScroll.y);
+          }
+        });
+      }
     },
     (error) => {
       console.error("Live event settings could not be loaded.", error);
@@ -1962,6 +1988,7 @@ function renderChrome() {
       "is-active",
       button.dataset.navView === state.activeView,
     );
+    if (button.dataset.navView === "seating") button.hidden = !isSeatingEnabled();
   });
 
   updateSidebarState();
@@ -2046,9 +2073,11 @@ function refreshPlannerAfterSidebarChange() {
     const viewport = document.getElementById("plannerViewport");
     if (!viewport || state.activeView !== "seating") return;
     const nextWidth = Math.max(viewport.clientWidth, 820);
-    if (Math.abs(nextWidth - state.plannerMapWidth) < 2) return;
-    capturePlannerViewportCenter();
-    renderActiveView();
+    if (Math.abs(nextWidth - state.plannerMapWidth) >= 2) {
+      renderActiveView();
+      return;
+    }
+    restorePlannerViewport();
   });
 }
 
@@ -2066,7 +2095,9 @@ function renderGlobalActions() {
         !can("canEditGuests"),
         "primary",
       ),
-      actionButton("Open seating planner", "nav-seating", false, "secondary"),
+      ...(isSeatingEnabled()
+        ? [actionButton("Open seating planner", "nav-seating", false, "secondary")]
+        : []),
       renderOverviewMoreActions(),
     );
     elements.globalActions.innerHTML = actions.join("");
@@ -2121,6 +2152,10 @@ function overviewMenuButton(label, action, disabled = false) {
 
 function switchView(view) {
   if (state.editorMode && view !== "seating") return;
+  if (view === "seating" && !isSeatingEnabled()) {
+    showToast("Seating is disabled for this event.", "info");
+    return;
+  }
   if (!pageMeta[view]) {
     return;
   }
@@ -2178,21 +2213,22 @@ function renderOverviewPage() {
   }
 
   const stats = calculateDashboardStats(state.guests, state.tables);
-  const attention = calculateAttention(state.guests, state.tables);
+  const seatingEnabled = isSeatingEnabled();
+  const attention = calculateAttention(state.guests, state.tables, seatingEnabled);
   const recentActivity = deriveRecentActivity(state.guests);
   const sideStats = calculateSideStats(state.guests, state.tables);
 
   elements.pageContent.innerHTML = `
     <section class="overview-page">
-      <section class="overview-kpis" aria-label="Event summary">
+      <section class="overview-kpis${seatingEnabled ? "" : " overview-kpis--no-seating"}" aria-label="Event summary">
         ${renderKpiCard("Total invited", stats.total, `${stats.totalPeople} people total`, `${stats.accompanyingGuests} additional`)}
         ${renderKpiCard("Confirmed", stats.confirmed, `${stats.confirmedPct}% of parties`, "RSVP accepted")}
         ${renderKpiCard("Pending", stats.pending, `${stats.pendingPct}% of parties`, "Awaiting reply")}
-        ${renderKpiCard("Seating attention", stats.withoutSeat, `${stats.withoutSeatPct}% of confirmed`, "Parties need seats")}
+        ${seatingEnabled ? renderKpiCard("Seating attention", stats.withoutSeat, `${stats.withoutSeatPct}% of confirmed`, "Parties need seats") : ""}
         ${renderKpiCard("Checked in", stats.checkedIn, `${stats.checkinPct}% arrived`, "Venue arrivals")}
       </section>
 
-      <section class="overview-operational" aria-label="Event operations">
+      <section class="overview-operational${seatingEnabled ? "" : " overview-operational--no-seating"}" aria-label="Event operations">
         <article class="overview-card overview-card--attention">
           <p class="da3wa-eyebrow">Needs attention</p>
           <h2>Actionable issues</h2>
@@ -2204,7 +2240,7 @@ function renderOverviewPage() {
                     <span>${escapeHtml(item.description)}</span>
                   </div>
                 `).join("")
-              : `<div class="overview-empty-state"><strong>Everything is in good shape</strong><span>No RSVP, seating, capacity, or profile issues need attention right now.</span></div>`}
+              : `<div class="overview-empty-state"><strong>Everything is in good shape</strong><span>No RSVP, ${seatingEnabled ? "seating, " : ""}capacity, or profile issues need attention right now.</span></div>`}
           </div>
         </article>
 
@@ -2219,7 +2255,7 @@ function renderOverviewPage() {
           <p class="overview-card__supporting">${stats.declined} declined · ${stats.declinedPct}% of invited parties</p>
         </article>
 
-        <article class="overview-card overview-card--seating">
+        ${seatingEnabled ? `<article class="overview-card overview-card--seating">
           <p class="da3wa-eyebrow">Seating readiness</p>
           <h2>Floor plan capacity</h2>
           <div class="overview-seating-summary">
@@ -2227,7 +2263,7 @@ function renderOverviewPage() {
             <div><strong>${stats.withoutSeat}</strong><span>Confirmed parties needing seats</span></div>
             <div><strong>${stats.remainingSeats}</strong><span>Available seats</span></div>
           </div>
-        </article>
+        </article>` : ""}
       </section>
 
       <section class="overview-lower" aria-label="Guest detail">
@@ -2376,6 +2412,10 @@ function renderGuestPage() {
 }
 
 function renderSeatingPage() {
+  if (!isSeatingEnabled()) {
+    elements.pageContent.innerHTML = '<section class="seating-page"><article class="share-card"><p class="da3wa-eyebrow">Seating unavailable</p><h2>Seating is disabled for this event</h2><p>The event owner can enable seating again in Invitation settings. Existing tables and assignments are preserved.</p></article></section>';
+    return;
+  }
   if (state.loadingTables) {
     elements.pageContent.innerHTML =
       '<section class="seating-page"><div class="da3wa-skeleton" aria-hidden="true"></div></section>';
@@ -2389,19 +2429,13 @@ function renderSeatingPage() {
   const isSaving = state.saveState === "saving";
   const seatingPanelTab = state.seatingPanelTab;
   const oldViewport = document.getElementById("plannerViewport");
-  if (oldViewport && !state.plannerViewportCenter) {
-    capturePlannerViewportCenter();
-  }
   const viewportWidth = oldViewport?.clientWidth ||
     document.querySelector(".planner-canvas-shell")?.clientWidth || 900;
   const mapWidth = Math.max(viewportWidth, 820);
   state.plannerMapWidth = mapWidth;
   if (
     state.activePartyGuestId &&
-    !state.guests.some(
-      (guest) => guest.id === state.activePartyGuestId &&
-        getGuestAssignedSeats(guest.id).length > 0,
-    )
+    !state.guests.some((guest) => guest.id === state.activePartyGuestId)
   ) {
     state.activePartyGuestId = "";
   }
@@ -2426,34 +2460,21 @@ function renderSeatingPage() {
       <div class="planner-layout${state.assignmentSession ? " has-assignment" : ""}">
         <article class="planner-canvas-shell">
           ${state.assignmentSession ? renderAssignmentControls() : ""}
-          <div class="planner-canvas__header">
-            <div>
-              <p class="da3wa-eyebrow">Venue canvas</p>
-              <h3 class="planner-panel__title">${state.seatingMode === "layout" ? "Ballroom layout builder" : "Seat assignment workspace"}</h3>
-            </div>
-            <div class="guest-toolbar__summary">
-              <span class="pill">${state.seatingMode === "layout" ? "Drag tables to reposition" : "Select chairs to assign guests · drag tables to reposition"}</span>
-            </div>
-          </div>
           <div class="planner-canvas-controls">
-            <div class="planner-toggle" role="tablist" aria-label="Seating mode">
-              <button class="${state.seatingMode === "layout" ? "is-active" : ""}" type="button" data-action="set-seating-mode" data-mode="layout" aria-selected="${state.seatingMode === "layout"}">Layout mode</button>
-              <button class="${state.seatingMode === "assignment" ? "is-active" : ""}" type="button" data-action="set-seating-mode" data-mode="assignment" aria-selected="${state.seatingMode === "assignment"}">Assignment mode</button>
-            </div>
             <div class="planner-canvas-controls__actions">
               <div class="planner-zoom-controls" aria-label="Planner zoom controls">
                 ${actionButton("Zoom out", "planner-zoom-out", state.plannerZoom <= 0.7)}
                 <span class="pill" data-zoom-percentage aria-live="polite">${Math.round(state.plannerZoom * 100)}%</span>
                 ${actionButton("Zoom in", "planner-zoom-in", state.plannerZoom >= 1.6)}
-                ${actionButton("Reset zoom", "planner-zoom-reset", state.plannerZoom === 1, "secondary")}
+                ${actionButton("Reset view", "planner-zoom-reset", false, "secondary")}
               </div>
               ${actionButton("Add table", "open-add-table", !canManageSeatingLayout(), "primary")}
               ${actionButton("Add dance floor", "open-add-dance-floor", !canManageSeatingLayout(), "primary")}
             </div>
           </div>
-          <div class="planner-canvas-viewport" id="plannerViewport" aria-label="Scrollable venue map" tabindex="0">
-            <div class="planner-map-extent" style="width:${Math.round(mapWidth * state.plannerZoom)}px;height:${Math.round(720 * state.plannerZoom)}px">
-              <div class="planner-canvas" id="plannerCanvas" style="--planner-zoom:${state.plannerZoom}">
+          <div class="planner-canvas-viewport" id="plannerViewport" aria-label="Venue map. Drag empty space to pan." tabindex="0">
+            <div class="planner-map-extent">
+              <div class="planner-canvas" id="plannerCanvas" style="width:${mapWidth}px;height:720px;--planner-zoom:${state.plannerZoom}">
                 <div class="planner-canvas__floor"></div>
                 ${state.hallObjects.map((item) => renderHallObject(item)).join("")}
                 ${state.tables.length ? state.tables.map((table) => renderPlannerTable(table)).join("") : `<div class="da3wa-empty">No tables yet. Create your first table to start mapping the hall.</div>`}
@@ -2502,40 +2523,17 @@ function renderPlannerStatCard(value, label, tone = "") {
   return `<div class="planner-stat-card${tone ? ` planner-stat-card--${tone}` : ""}"><strong>${escapeHtml(String(value))}</strong><span>${escapeHtml(label)}</span></div>`;
 }
 
-function capturePlannerViewportCenter() {
-  const viewport = document.getElementById("plannerViewport");
-  if (!viewport) return;
-  const zoom = state.plannerZoom || 1;
-  state.plannerViewportCenter = {
-    x: (viewport.scrollLeft + viewport.clientWidth / 2) / zoom,
-    y: (viewport.scrollTop + viewport.clientHeight / 2) / zoom,
-  };
-}
-
 function restorePlannerViewport() {
   const viewport = document.getElementById("plannerViewport");
-  const center = state.plannerViewportCenter;
-  if (!viewport || !center) return;
-  viewport.scrollLeft = Math.max(
-    0,
-    center.x * state.plannerZoom - viewport.clientWidth / 2,
-  );
-  viewport.scrollTop = Math.max(
-    0,
-    center.y * state.plannerZoom - viewport.clientHeight / 2,
-  );
-  state.plannerViewportCenter = null;
-}
-
-function scrollPlannerToElement(element) {
-  const viewport = document.getElementById("plannerViewport");
-  if (!viewport || !element) return;
-  const viewRect = viewport.getBoundingClientRect();
-  const targetRect = element.getBoundingClientRect();
-  viewport.scrollLeft +=
-    targetRect.left + targetRect.width / 2 - (viewRect.left + viewRect.width / 2);
-  viewport.scrollTop +=
-    targetRect.top + targetRect.height / 2 - (viewRect.top + viewRect.height / 2);
+  const canvas = document.getElementById("plannerCanvas");
+  if (!viewport || !canvas) return;
+  const center = state.plannerViewCenter || {
+    x: state.plannerMapWidth / 2,
+    y: Math.min(360, viewport.clientHeight / (2 * state.plannerZoom)),
+  };
+  state.plannerViewCenter = center;
+  canvas.style.left = `${viewport.clientWidth / 2 - center.x * state.plannerZoom}px`;
+  canvas.style.top = `${viewport.clientHeight / 2 - center.y * state.plannerZoom}px`;
 }
 
 function renderCheckinPage() {
@@ -2653,9 +2651,9 @@ function renderSharePage() {
   elements.pageContent.innerHTML = `
     <section class="share-page">
       ${renderInvitationSettingsCard()}
-      ${renderSeatingAccessCard()}
+      ${isSeatingEnabled() ? renderSeatingAccessCard() : ""}
       ${renderSenderCard()}
-      ${renderSideViewCard()}
+      ${isSeatingEnabled() ? renderSideViewCard() : ""}
       <div class="share-grid">
         ${cards
           .map(
@@ -3190,14 +3188,20 @@ function canManageInvitationSettings() {
   return isWeddingOwner() || can("canManageUsers");
 }
 
+function isSeatingEnabled() {
+  // Missing field means enabled so existing events keep their current behavior.
+  return state.wedding?.seatingEnabled !== false;
+}
+
 function renderInvitationSettingsCard() {
   const canChange = canManageInvitationSettings();
   const showQr = state.wedding?.showInvitationQr !== false;
+  const seatingEnabled = isSeatingEnabled();
   return `
     <article class="share-card invitation-settings-card">
       <p class="da3wa-eyebrow">Invitation settings</p>
-      <h3>Guest access pass</h3>
-      <p>Control whether the QR pass appears on each guest invitation. Existing QR links remain valid for staff check-in.</p>
+      <h3>Guest access and seating</h3>
+      <p>Choose which optional event details appear in the guest invitation.</p>
       <label class="invitation-setting-toggle">
         <span>
           <strong>Show QR code on invitation</strong>
@@ -3205,7 +3209,14 @@ function renderInvitationSettingsCard() {
         </span>
         <input type="checkbox" data-action="toggle-invitation-qr" ${showQr ? "checked" : ""} ${canChange ? "" : "disabled aria-disabled=\"true\""} aria-label="Show QR code on invitation" />
       </label>
-      <p class="invitation-settings-card__status" role="status">${showQr ? "QR pass is visible on invitations." : "QR pass is hidden on invitations."}</p>
+      <label class="invitation-setting-toggle">
+        <span>
+          <strong>Enable seating</strong>
+          <small>${canChange ? "Keep the existing layout and assignments when disabled. Changes save to this event and update invitations live." : "Only the event owner or an authorized dashboard administrator can change this setting."}</small>
+        </span>
+        <input type="checkbox" role="switch" data-action="toggle-seating-enabled" ${seatingEnabled ? "checked" : ""} ${canChange ? "" : "disabled aria-disabled=\"true\""} aria-label="Enable seating for this event" />
+      </label>
+      <p class="invitation-settings-card__status" role="status">QR pass ${showQr ? "visible" : "hidden"} · Seating ${seatingEnabled ? "enabled" : "disabled"}.</p>
     </article>
   `;
 }
@@ -3282,7 +3293,7 @@ function renderSeatingGuestsTab(table) {
   }
 
   const query = state.seatingGuestSearch.trim().toLowerCase();
-  const allRows = state.guests
+  const venueRows = state.guests
     .map((guest) => {
       const assignments = getGuestAssignedSeats(getGuestDocumentId(guest));
       const tableAssignments = assignments.filter(
@@ -3294,8 +3305,13 @@ function renderSeatingGuestsTab(table) {
         tableAssignments,
         seating: summarizePartySeating(guest, assignments),
       };
-    })
-    .filter(({ guest, assignments, tableAssignments }) => {
+    });
+  const counts = venueRows.reduce((total, { seating }) => ({
+    all: total.all + seating.requiredCount,
+    assigned: total.assigned + seating.assignedCount,
+    unassigned: total.unassigned + seating.remainingCount,
+  }), { all: 0, assigned: 0, unassigned: 0 });
+  const allRows = venueRows.filter(({ guest }) => {
       if (
         query &&
         ![guest.fullName, guest.phone, guest.side, guest.rsvpStatus].some(
@@ -3305,11 +3321,10 @@ function renderSeatingGuestsTab(table) {
         return false;
       }
       return true;
-    })
-    .sort((left, right) => {
+    }).sort((left, right) => {
       const assignmentOrder =
-        Number(right.tableAssignments.length > 0) -
-        Number(left.tableAssignments.length > 0);
+        Number(right.assignments.length > 0) -
+        Number(left.assignments.length > 0);
       return assignmentOrder ||
         String(left.guest.fullName || "").localeCompare(
           String(right.guest.fullName || ""),
@@ -3318,26 +3333,20 @@ function renderSeatingGuestsTab(table) {
         );
     });
   const needsSeats = ({ seating }) => seating.remainingCount > 0;
-  const rows = allRows.filter(({ tableAssignments, seating }) => {
-    if (state.seatingGuestFilter === "assigned") return tableAssignments.length > 0;
+  const rows = allRows.filter(({ assignments, seating }) => {
+    if (state.seatingGuestFilter === "assigned") return seating.assignedCount > 0;
     if (state.seatingGuestFilter === "unassigned") return needsSeats({ seating });
     return true;
   });
-  const counts = {
-    all: allRows.length,
-    assigned: allRows.filter(({ tableAssignments }) => tableAssignments.length > 0).length,
-    unassigned: allRows.filter(needsSeats).length,
-  };
 
   return `
-    <p class="seating-guest-filter-help">Assigned means this table has at least one chair for the guest. Needs seats includes every party that is not fully seated, including partly seated parties.</p>
     <div class="seating-guest-tools">
       <label class="seating-guest-search">
         <span class="sr-only">Search seating guests</span>
         <input class="da3wa-input" type="search" placeholder="Search guests" value="${escapeAttribute(state.seatingGuestSearch)}" data-seating-guest-search />
       </label>
-      <div class="seating-guest-filters" role="group" aria-label="Filter seating guests">
-        ${["all", "assigned", "unassigned"].map((filter) => `<button type="button" class="${state.seatingGuestFilter === filter ? "is-active" : ""}" data-action="set-seating-guest-filter" data-filter="${filter}" aria-pressed="${state.seatingGuestFilter === filter}">${filter === "unassigned" ? "Needs seats" : filter[0].toUpperCase() + filter.slice(1)} <span>${counts[filter]}</span></button>`).join("")}
+      <div class="seating-guest-filters" role="group" aria-label="Filter seating guests by people">
+        ${["all", "assigned", "unassigned"].map((filter) => `<button type="button" class="${state.seatingGuestFilter === filter ? "is-active" : ""}" data-action="set-seating-guest-filter" data-filter="${filter}" aria-pressed="${state.seatingGuestFilter === filter}" aria-label="${filter === "unassigned" ? "Needs seats" : filter === "all" ? "All people" : "Assigned people"}: ${counts[filter]} people">${filter === "unassigned" ? "Needs seats" : filter === "all" ? "All people" : "Assigned"} <span>${counts[filter]}</span></button>`).join("")}
       </div>
     </div>
     <div class="seating-guest-rows">
@@ -3356,7 +3365,7 @@ function renderSeatingGuestRow(guest, assignments, tableAssignments, table, seat
   return `
     <div class="seating-guest-row ${guest.id === state.activePartyGuestId ? "is-active" : ""}">
       ${assignments.length
-        ? `<button class="seating-guest-row__locate" type="button" data-action="locate-seating-guest" data-guest-id="${escapeAttribute(guest.id)}" aria-label="Locate ${escapeAttribute(guest.fullName || "guest")} on the venue map"><strong>${escapeHtml(guest.fullName || "Guest")}</strong><small>${escapeHtml(locations)}${remaining ? ` · ${remaining} seat${remaining === 1 ? "" : "s"} still needed` : " · Fully seated"}</small></button>`
+        ? `<button class="seating-guest-row__locate" type="button" data-action="locate-seating-guest" data-guest-id="${escapeAttribute(guest.id)}" aria-label="Highlight ${escapeAttribute(guest.fullName || "guest")} and assigned seats"><strong>${escapeHtml(guest.fullName || "Guest")}</strong><small>${escapeHtml(locations)}${remaining ? ` · ${remaining} seat${remaining === 1 ? "" : "s"} still needed` : " · Fully seated"}</small></button>`
         : `<div><strong>${escapeHtml(guest.fullName || "Guest")}</strong><small>No seats assigned · ${remaining} seat${remaining === 1 ? "" : "s"} still needed</small></div>`}
       <div class="seating-guest-row__actions">
         <button class="guest-quick-button" type="button" data-action="open-seating-for-guest" data-guest-id="${escapeAttribute(guest.id)}" ${!can("canEditSeating") ? 'disabled aria-disabled="true"' : ""}>${assignments.length ? "Manage" : "Assign"}</button>
@@ -3367,35 +3376,55 @@ function renderSeatingGuestRow(guest, assignments, tableAssignments, table, seat
 
 function locateSeatingGuest(guestId) {
   const guest = state.guests.find((item) => item.id === guestId);
-  const assignments = guest ? getGuestAssignedSeats(guest.id) : [];
-  if (!guest || !assignments.length) {
-    state.activePartyGuestId = "";
-    renderActiveView();
-    return;
-  }
+  if (!guest) return;
+
+  const pageScroll = { x: window.scrollX, y: window.scrollY };
+  const viewport = document.getElementById("plannerViewport");
+  const plannerScroll = {
+    left: viewport?.scrollLeft || 0,
+    top: viewport?.scrollTop || 0,
+  };
+  const plannerViewCenter = state.plannerViewCenter
+    ? { ...state.plannerViewCenter }
+    : null;
+  const plannerZoom = state.plannerZoom;
+
   state.activePartyGuestId = guest.id;
-  state.selectedHallObjectId = "";
-  state.selectedTableId = assignments[0].tableId;
-  state.seatingPanelTab = "guests";
+  state.selectedSeatId = "";
   renderActiveView();
-  scrollPlannerToElement(
-    document.querySelector(`[data-table-drag-id="${CSS.escape(assignments[0].tableId)}"]`),
-  );
+
+  // Rebuilding the seating markup replaces the focused guest button. Restore
+  // the existing camera and scroll positions before restoring focus without
+  // asking the browser to bring the guest's table into view.
+  state.plannerZoom = plannerZoom;
+  if (plannerViewCenter) state.plannerViewCenter = plannerViewCenter;
+  const nextViewport = document.getElementById("plannerViewport");
+  if (nextViewport) {
+    nextViewport.scrollLeft = plannerScroll.left;
+    nextViewport.scrollTop = plannerScroll.top;
+    restorePlannerViewport();
+  }
   requestAnimationFrame(() => {
     [...document.querySelectorAll('[data-action="locate-seating-guest"]')]
       .find((button) => button.dataset.guestId === guest.id)
       ?.focus({ preventScroll: true });
+    if (window.scrollX !== pageScroll.x || window.scrollY !== pageScroll.y) {
+      window.scrollTo(pageScroll.x, pageScroll.y);
+    }
   });
 }
 
 function openSeatingGuestFlow(guestId) {
+  if (!isSeatingEnabled()) {
+    showToast("Seating is disabled for this event.", "info");
+    return;
+  }
   const guest = state.guests.find((item) => item.id === guestId);
   if (!guest || !can("canEditSeating")) {
     return;
   }
   const assignments = getGuestAssignedSeats(guest.id);
   state.activeView = "seating";
-  state.seatingMode = "assignment";
   state.seatingPanelTab = "guests";
   state.activePartyGuestId = guest.id;
   state.selectedHallObjectId = "";
@@ -3429,7 +3458,7 @@ function renderLayoutLibrary() {
     .map((table) => {
       const occupied = getTableAssignments(table.id).length;
       return `
-        <button class="planner-table-list__button ${table.id === state.selectedTableId ? "is-selected" : ""}" type="button" data-action="select-table" data-table-id="${table.id}">
+        <button class="planner-table-list__button ${table.id === state.selectedTableId ? "is-selected" : ""}" type="button" data-action="select-table" data-table-id="${escapeAttribute(table.id)}" aria-pressed="${table.id === state.selectedTableId}" aria-label="${escapeAttribute(`${table.name}, ${prettifyShape(table.shape)} table, ${occupied} of ${Number(table.seatCount || 0)} seated`)}">
           <strong>${escapeHtml(table.name)}</strong>
           <small>${escapeHtml(prettifyShape(table.shape))} · ${occupied}/${Number(table.seatCount || 0)} seated</small>
         </button>
@@ -3440,7 +3469,7 @@ function renderLayoutLibrary() {
   const objects = state.hallObjects
     .map(
       (item) => `
-        <button class="planner-table-list__button ${item.id === state.selectedHallObjectId ? "is-selected" : ""}" type="button" data-action="select-hall-object" data-hall-object-id="${escapeAttribute(item.id)}">
+        <button class="planner-table-list__button ${item.id === state.selectedHallObjectId ? "is-selected" : ""}" type="button" data-action="select-hall-object" data-hall-object-id="${escapeAttribute(item.id)}" aria-pressed="${item.id === state.selectedHallObjectId}" aria-label="${escapeAttribute(`${item.label}, ${item.type === "dance-floor" ? `${prettifyShape(item.shape)} dance floor` : `${prettifyShape(item.type)} marker`}`)}">
           <strong>${escapeHtml(item.label)}</strong>
           <small>${escapeHtml(item.type === "dance-floor" ? `${prettifyShape(item.shape)} dance floor` : `${prettifyShape(item.type)} marker`)}</small>
         </button>
@@ -3498,10 +3527,6 @@ function renderAssignmentLibrary(unassignedGuests) {
 }
 
 function renderAssignmentStatusPanel(selectedSeat) {
-  if (state.seatingMode !== "assignment") {
-    return "";
-  }
-
   if (!selectedSeat) {
     return "";
   }
@@ -3775,6 +3800,7 @@ function badge(label, tone) {
 }
 
 function renderReservationReadinessBadge(guest) {
+  if (!isSeatingEnabled()) return "";
   const readiness = getGuestSeatReadiness(guest);
   const label = readiness.ready
     ? "Reservation Ready"
@@ -3789,6 +3815,11 @@ async function handleAction(action, dataset, event = null) {
     case "toggle-invitation-qr": {
       const input = event?.target?.closest("input[data-action='toggle-invitation-qr']");
       if (input) await saveInvitationQrSetting(input.checked, input);
+      return;
+    }
+    case "toggle-seating-enabled": {
+      const input = event?.target?.closest("input[data-action='toggle-seating-enabled']");
+      if (input) await saveSeatingEnabledSetting(input.checked, input);
       return;
     }
     case "open-add-guest":
@@ -4099,21 +4130,14 @@ async function handleAction(action, dataset, event = null) {
       closeGuestMenu({ restoreFocus: false });
       renderActiveView();
       return;
-    case "set-seating-mode":
-      state.seatingMode = dataset.mode;
-      if (state.seatingMode !== "assignment") {
-        cancelAssignmentSession();
-      }
-      renderActiveView();
-      return;
     case "planner-zoom-in":
-      setPlannerZoom(state.plannerZoom + 0.1);
+      setPlannerZoom(state.plannerZoom + 0.05);
       return;
     case "planner-zoom-out":
-      setPlannerZoom(state.plannerZoom - 0.1);
+      setPlannerZoom(state.plannerZoom - 0.05);
       return;
     case "planner-zoom-reset":
-      setPlannerZoom(1);
+      resetPlannerView();
       return;
     case "load-test-guests":
       loadSeatingTestGuests();
@@ -4150,9 +4174,6 @@ async function handleAction(action, dataset, event = null) {
       state.activePartyGuestId = "";
       state.seatingPanelTab = "venue";
       renderActiveView();
-      scrollPlannerToElement(
-        document.querySelector(`[data-hall-object-id="${CSS.escape(dataset.hallObjectId)}"]`),
-      );
       return;
     case "edit-dance-floor":
       openDanceFloorModal(getSelectedHallObject());
@@ -4194,9 +4215,6 @@ async function handleAction(action, dataset, event = null) {
     case "select-seat":
       state.selectedTableId = dataset.tableId;
       state.selectedSeatId = buildSeatKey(dataset.tableId, dataset.chairId);
-      if (state.seatingMode === "layout") {
-        state.seatingMode = "assignment";
-      }
       handleAssignmentChairClick(
         dataset.tableId,
         dataset.chairId,
@@ -5450,6 +5468,7 @@ async function saveTable(event) {
     state.tables = hydrateTables(state.tables);
     state.guests = syncGuestSeatingSummaries(state.guests, state.tables);
     state.selectedTableId = payload.id;
+    state.selectedHallObjectId = "";
     state.dirtyTableForm = false;
     elements.tableModal.close();
     persistDemoDashboardState();
@@ -5792,8 +5811,16 @@ async function deleteTable(tableId) {
 }
 
 function setPlannerZoom(nextZoom) {
-  capturePlannerViewportCenter();
   state.plannerZoom = clamp(nextZoom, 0.7, 1.6);
+  renderActiveView();
+}
+
+function resetPlannerView() {
+  state.plannerZoom = 1;
+  state.plannerViewCenter = {
+    x: state.plannerMapWidth / 2,
+    y: 360,
+  };
   renderActiveView();
 }
 
@@ -5821,27 +5848,34 @@ function loadSeatingTestGuests() {
 }
 
 function handlePlannerPointerDown(event) {
-  const tableNode = event.target.closest("[data-table-drag-id]");
-  const objectNode = event.target.closest("[data-hall-object-id]");
-  const seatNode = event.target.closest("[data-action='select-seat']");
-  if ((!tableNode && !objectNode) || seatNode) {
+  if (event.button !== 0 || state.dragState) return;
+  const viewport = document.getElementById("plannerViewport");
+  if (!viewport) return;
+  const target = event.target;
+  const tableNode = target.closest?.("[data-table-drag-id]");
+  const objectNode = target.closest?.("[data-hall-object-id]");
+  const seatNode = target.closest?.("[data-action='select-seat']");
+  const interactive = target.closest?.("button, input, select, textarea, a, [data-action]");
+
+  if (!tableNode && !objectNode && !interactive) {
+    event.preventDefault();
+    state.dragState = {
+      type: "pan",
+      pointerId: event.pointerId,
+      startX: event.clientX,
+      startY: event.clientY,
+      startCenter: { ...state.plannerViewCenter },
+      zoom: state.plannerZoom,
+      moved: false,
+      node: viewport,
+    };
+    viewport.classList.add("is-panning");
+    document.body.classList.add("is-planner-panning");
+    try { viewport.setPointerCapture(event.pointerId); } catch {}
     return;
   }
 
-  // Hall objects remain selectable in assignment mode, but can only move in
-  // layout mode so they never interfere with chair assignment.
-  if (state.seatingMode !== "layout" && objectNode) {
-    state.selectedHallObjectId = objectNode.dataset.hallObjectId;
-    state.selectedTableId = "";
-    state.activePartyGuestId = "";
-    state.activePartyGuestId = "";
-    state.seatingPanelTab = "venue";
-    renderActiveView();
-    return;
-  }
-  if (state.seatingMode !== "layout" && !tableNode) {
-    return;
-  }
+  if ((!tableNode && !objectNode) || seatNode) return;
 
   if (objectNode) {
     const objectId = objectNode.dataset.hallObjectId;
@@ -5851,6 +5885,7 @@ function handlePlannerPointerDown(event) {
     }
     state.selectedHallObjectId = objectId;
     state.selectedTableId = "";
+    state.activePartyGuestId = "";
     state.seatingPanelTab = "venue";
     if (hallObject.locked || !canManageSeatingLayout()) {
       renderActiveView();
@@ -5866,8 +5901,9 @@ function handlePlannerPointerDown(event) {
       zoom: state.plannerZoom,
       mapWidth: document.getElementById("plannerCanvas")?.clientWidth || state.plannerMapWidth,
       node: objectNode,
+      pointerId: event.pointerId,
     };
-    objectNode.setPointerCapture?.(event.pointerId);
+    try { viewport.setPointerCapture(event.pointerId); } catch {}
     return;
   }
 
@@ -5878,6 +5914,7 @@ function handlePlannerPointerDown(event) {
   }
 
   state.selectedTableId = tableId;
+  state.selectedHallObjectId = "";
   state.activePartyGuestId = "";
   if (!canManageSeatingLayout()) {
     renderActiveView();
@@ -5893,12 +5930,27 @@ function handlePlannerPointerDown(event) {
     zoom: state.plannerZoom,
     mapWidth: document.getElementById("plannerCanvas")?.clientWidth || state.plannerMapWidth,
     node: tableNode,
+    pointerId: event.pointerId,
   };
-  tableNode.setPointerCapture?.(event.pointerId);
+  try { viewport.setPointerCapture(event.pointerId); } catch {}
 }
 
 function handlePlannerPointerMove(event) {
   if (!state.dragState) {
+    return;
+  }
+
+  if (state.dragState.pointerId !== event.pointerId) return;
+
+  if (state.dragState.type === "pan") {
+    const dx = event.clientX - state.dragState.startX;
+    const dy = event.clientY - state.dragState.startY;
+    state.dragState.moved = state.dragState.moved || Math.abs(dx) > 2 || Math.abs(dy) > 2;
+    state.plannerViewCenter = {
+      x: state.dragState.startCenter.x - dx / state.dragState.zoom,
+      y: state.dragState.startCenter.y - dy / state.dragState.zoom,
+    };
+    restorePlannerViewport();
     return;
   }
 
@@ -5945,14 +5997,24 @@ function handlePlannerPointerMove(event) {
   }
 }
 
-async function handlePlannerPointerUp() {
+async function handlePlannerPointerUp(event) {
   if (!state.dragState) {
     return;
   }
 
-  const { type, tableId, objectId, moved, originalX, originalY } =
+  if (event?.pointerId != null && state.dragState.pointerId !== event.pointerId) return;
+
+  const { type, tableId, objectId, moved, originalX, originalY, pointerId, node } =
     state.dragState;
   state.dragState = null;
+
+  if (type === "pan") {
+    node?.classList.remove("is-panning");
+    document.body.classList.remove("is-planner-panning");
+    try { node?.releasePointerCapture(pointerId); } catch {}
+    return;
+  }
+  try { document.getElementById("plannerViewport")?.releasePointerCapture(pointerId); } catch {}
 
   if (type === "hall-object") {
     const hallObject = state.hallObjects.find((item) => item.id === objectId);
@@ -5979,6 +6041,7 @@ async function handlePlannerPointerUp() {
       return;
     }
     await persistHallObjects("Venue object position could not be saved.");
+    renderActiveView();
     return;
   }
 
@@ -5998,6 +6061,7 @@ async function handlePlannerPointerUp() {
 
   if (state.mode === "demo") {
     persistDemoDashboardState();
+    renderActiveView();
     return;
   }
 
@@ -6021,9 +6085,11 @@ async function handlePlannerPointerUp() {
       },
     );
     setSaveState("saved");
+    renderActiveView();
   } catch (error) {
     console.error(error);
     setSaveState("saved");
+    renderActiveView();
   }
 }
 
@@ -7756,6 +7822,29 @@ function createHallObjects() {
   ];
 }
 
+function handlePlannerPointerCancel(event) {
+  if (!state.dragState || state.dragState.pointerId !== event.pointerId) return;
+  const dragState = state.dragState;
+  if (dragState.type === "pan") {
+    state.plannerViewCenter = dragState.startCenter;
+    restorePlannerViewport();
+    dragState.node?.classList.remove("is-panning");
+    document.body.classList.remove("is-planner-panning");
+  } else if (dragState.type === "table") {
+    state.tables = state.tables.map((table) => table.id === dragState.tableId
+      ? { ...table, x: dragState.originalX, y: dragState.originalY }
+      : table);
+    renderActiveView();
+  } else if (dragState.type === "hall-object") {
+    state.hallObjects = state.hallObjects.map((item) => item.id === dragState.objectId
+      ? { ...item, x: dragState.originalX, y: dragState.originalY }
+      : item);
+    renderActiveView();
+  }
+  try { document.getElementById("plannerViewport")?.releasePointerCapture(event.pointerId); } catch {}
+  state.dragState = null;
+}
+
 async function saveInvitationQrSetting(showInvitationQr, input) {
   if (state.mode !== "live" || !canManageInvitationSettings()) {
     input.checked = state.wedding?.showInvitationQr !== false;
@@ -7777,6 +7866,35 @@ async function saveInvitationQrSetting(showInvitationQr, input) {
     console.error("Could not save invitation QR setting.", error);
     input.checked = state.wedding?.showInvitationQr !== false;
     showToast("We could not save the invitation setting. Please check your access and try again.", "error");
+  } finally {
+    input.disabled = !canManageInvitationSettings();
+  }
+}
+
+async function saveSeatingEnabledSetting(seatingEnabled, input) {
+  if (state.mode !== "live" || !canManageInvitationSettings()) {
+    input.checked = isSeatingEnabled();
+    showToast("You do not have permission to change invitation settings.", "error");
+    return;
+  }
+
+  input.disabled = true;
+  try {
+    await updateDoc(doc(state.services.db, "weddings", state.weddingId), {
+      seatingEnabled,
+      updatedAt: serverTimestamp(),
+    });
+    state.wedding = { ...state.wedding, seatingEnabled };
+    renderChrome();
+    const status = input.closest(".invitation-settings-card")?.querySelector("[role='status']");
+    if (status) {
+      status.textContent = `QR pass ${state.wedding.showInvitationQr === false ? "hidden" : "visible"} · Seating ${seatingEnabled ? "enabled" : "disabled"}.`;
+    }
+    showToast(seatingEnabled ? "Seating is enabled for this event." : "Seating is disabled. Existing layouts and assignments are preserved.", "success");
+  } catch (error) {
+    console.error("Could not save seating setting.", error);
+    input.checked = isSeatingEnabled();
+    showToast("We could not save the seating setting. Please check your access and try again.", "error");
   } finally {
     input.disabled = !canManageInvitationSettings();
   }
@@ -7926,6 +8044,7 @@ async function saveDanceFloor(event) {
   });
   state.hallObjects = existing ? state.hallObjects.map((item) => item.id === existing.id ? floor : item) : [...state.hallObjects, floor];
   state.selectedHallObjectId = floor.id;
+  state.selectedTableId = "";
   if (await persistHallObjects("Dance floor could not be saved.")) {
     state.dirtyDanceFloorForm = false;
     elements.danceFloorModal.close();
@@ -7939,6 +8058,7 @@ async function duplicateDanceFloor(id) {
   if (!item || !canManageSeatingLayout()) return;
   const copy = normalizeHallObject({ ...item, id: createId("dance-floor"), label: `${item.label} copy`, x: clamp(item.x + 5, 5, 95), y: clamp(item.y + 5, 5, 95), locked: false });
   state.hallObjects = [...state.hallObjects, copy]; state.selectedHallObjectId = copy.id;
+  state.selectedTableId = "";
   if (await persistHallObjects("Dance floor could not be duplicated.")) renderActiveView();
 }
 
@@ -8295,6 +8415,7 @@ function getGuestSeatReadiness(guest) {
 }
 
 function ensureSenderSeatsReady(side = "all") {
+  if (!isSeatingEnabled()) return true;
   const blocked = getSenderGuests(side)
     .map((guest) => ({ guest, readiness: getGuestSeatReadiness(guest) }))
     .filter((entry) => entry.readiness.missing.length);

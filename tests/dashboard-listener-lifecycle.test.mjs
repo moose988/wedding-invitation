@@ -67,8 +67,8 @@ test("dashboard navigation and seating toolbar keep the requested operational or
   assert.match(dashboard, /elements\.pageDescription\.hidden = !elements\.pageDescription\.textContent/);
   assert.match(dashboard, /restoreGuestSearchFocus\(selectionStart, selectionEnd\)/);
   assert.match(dashboard, /search\.focus\(\{ preventScroll: true \}\)/);
-  assert.match(dashboard, /setPlannerZoom\(state\.plannerZoom \+ 0\.1\)/);
-  assert.match(dashboard, /setPlannerZoom\(state\.plannerZoom - 0\.1\)/);
+  assert.match(dashboard, /setPlannerZoom\(state\.plannerZoom \+ 0\.05\)/);
+  assert.match(dashboard, /setPlannerZoom\(state\.plannerZoom - 0\.05\)/);
   assert.match(dashboard, /renderPlannerStatCard\(state\.tables\.length, "Tables"\)/);
   assert.match(dashboard, /class="planner-canvas-controls"[\s\S]*?actionButton\("Add table"/);
 });

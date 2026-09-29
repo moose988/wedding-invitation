@@ -240,6 +240,10 @@ function buildStats() {
 }
 function render() {
   if (!state.wedding) return;
+  if (state.wedding.seatingEnabled === false) {
+    shell.innerHTML = `<section class="card head"><div><p class="eyebrow">Seating unavailable</p><h1>Seating is disabled</h1><p class="muted">The event owner has disabled seating for this event.</p></div></section>`;
+    return;
+  }
   const s = state.editable ? buildStats() : publicViewStats();
   const title = state.wedding.coupleName || "Event seating";
   const accessLabel = state.editable

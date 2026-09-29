@@ -11,6 +11,7 @@ import {
 } from "./firebase-config.js";
 import { renderQrCode } from "./qr.js";
 import { resolveTableName } from "./seating-utils.js";
+import { invitationSeatingEnabled } from "./invitations/shared/invitation-data.js";
 
 const demoWedding = {
   coupleName: "Layan & Mohammed",
@@ -432,7 +433,7 @@ function renderGuestCard() {
     "guestGreetingEnglish",
     document.body.classList.contains("layla-zaid-invitation")
       ? ""
-      : "Your personal invitation is ready below with RSVP, seating, and entrance access."
+      : `Your personal invitation is ready below with RSVP${invitationSeatingEnabled(state.wedding) ? ", seating," : ""} and entrance access.`
   );
 }
 
@@ -637,7 +638,7 @@ function renderDemoRsvp(mount) {
 }
 
 function renderSeatSection() {
-  if (state.mode !== "firebase" || !state.guest) {
+  if (state.mode !== "firebase" || !state.guest || !invitationSeatingEnabled(state.wedding)) {
     elements.seatingSection.hidden = true;
     return;
   }

@@ -654,6 +654,10 @@ body.is-overview-view .da3wa-topbar__actions {
   gap: 12px;
 }
 
+.overview-page .overview-kpis--no-seating {
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+
 .overview-page .kpi-card {
   padding: 18px;
   border-radius: var(--da3wa-radius-md);
@@ -685,6 +689,10 @@ body.is-overview-view .da3wa-topbar__actions {
     "seating attention";
   gap: 16px;
   align-items: stretch;
+}
+
+.overview-operational--no-seating {
+  grid-template-areas: "rsvp attention";
 }
 
 .overview-card {
@@ -853,8 +861,7 @@ body.is-overview-view .da3wa-topbar__actions {
   .overview-operational {
     grid-template-areas:
       "attention"
-      "rsvp"
-      "seating";
+      "rsvp";
   }
 }
 
@@ -1530,31 +1537,6 @@ body.is-overview-view .da3wa-topbar__actions {
   width: 100%;
 }
 
-.planner-toggle {
-  display: inline-flex;
-  gap: 6px;
-  padding: 6px;
-  border-radius: 14px;
-  background: rgba(246, 241, 232, 0.96);
-  border: 1px solid rgba(205, 187, 151, 0.54);
-}
-
-.planner-toggle button {
-  min-height: 36px;
-  padding: 0 12px;
-  border: 0;
-  border-radius: 10px;
-  background: transparent;
-  color: var(--da3wa-text-soft);
-  font-weight: 700;
-  cursor: pointer;
-}
-
-.planner-toggle button.is-active {
-  background: var(--da3wa-primary);
-  color: #fff;
-}
-
 .planner-layout {
   flex-wrap: wrap;
   align-items: flex-start;
@@ -1596,18 +1578,12 @@ body.is-seating-view .planner-toolbar {
   overflow: hidden;
 }
 
-body.is-seating-view .planner-toggle,
 body.is-seating-view .planner-zoom-controls,
 body.is-seating-view .planner-toolbar__buttons {
   flex-wrap: nowrap;
   white-space: nowrap;
 }
 
-body.is-seating-view .planner-toggle {
-  padding: 4px;
-}
-
-body.is-seating-view .planner-toggle button,
 body.is-seating-view .planner-zoom-controls .da3wa-button,
 body.is-seating-view .planner-toolbar__buttons .da3wa-button {
   min-height: 38px;
@@ -2051,7 +2027,6 @@ body.is-seating-view .planner-panel__stack {
     align-items: stretch;
   }
 
-  body.is-seating-view .planner-toggle,
   body.is-seating-view .planner-zoom-controls,
   body.is-seating-view .planner-toolbar__buttons {
     display: grid;
@@ -2108,7 +2083,6 @@ body.is-seating-view .planner-panel__stack {
   }
 }
 
-.planner-canvas__header,
 .planner-panel__header,
 .seat-assignment__header {
   display: flex;
@@ -3021,14 +2995,7 @@ body.is-seating-view .planner-save-status {
 
 body.is-seating-view .planner-canvas-shell {
   min-height: 0;
-  padding: 16px;
-}
-
-.planner-canvas__header {
-  align-items: center;
-  justify-content: space-between;
-  flex-wrap: wrap;
-  margin-bottom: 10px;
+  padding: 12px;
 }
 
 .planner-canvas-controls {
@@ -3052,7 +3019,6 @@ body.is-seating-view .planner-canvas-shell {
   flex-wrap: wrap;
 }
 
-.planner-canvas-controls .planner-toggle,
 .planner-canvas-controls .planner-zoom-controls {
   flex-wrap: wrap;
   white-space: normal;
@@ -3066,15 +3032,31 @@ body.is-seating-view .planner-canvas-shell {
 }
 
 .planner-canvas-viewport {
+  position: relative;
   width: 100%;
   min-width: 0;
   min-height: 0;
   flex: 1 1 auto;
-  overflow: auto;
+  overflow: hidden;
   overscroll-behavior: contain;
   border-radius: 24px;
   scrollbar-color: rgba(184, 145, 86, 0.58) rgba(246, 241, 232, 0.85);
   scrollbar-width: thin;
+  cursor: grab;
+  touch-action: none;
+  user-select: none;
+}
+
+.planner-canvas-viewport.is-panning,
+.planner-canvas-viewport.is-panning .planner-canvas,
+.planner-canvas-viewport.is-panning .planner-table,
+.planner-canvas-viewport.is-panning .hall-object {
+  cursor: grabbing !important;
+}
+
+body.is-planner-panning,
+body.is-planner-panning * {
+  user-select: none !important;
 }
 
 .planner-canvas-viewport:focus-visible {
@@ -3083,20 +3065,43 @@ body.is-seating-view .planner-canvas-shell {
 }
 
 .planner-map-extent {
-  position: relative;
-  flex: 0 0 auto;
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
 }
 
 body.is-seating-view .planner-canvas {
   position: absolute;
-  inset: 0 auto auto 0;
-  width: calc(100% / var(--planner-zoom));
-  height: calc(100% / var(--planner-zoom));
+  left: 0;
+  top: 0;
   min-height: 0;
   overflow: hidden;
   transform: scale(var(--planner-zoom));
   transform-origin: top left;
-  touch-action: pan-x pan-y;
+  touch-action: none;
+}
+
+.planner-table-list__button.is-selected {
+  color: #fffdf8;
+  border-color: #174d42;
+  background: linear-gradient(135deg, #1f5a4d, #17483e);
+  box-shadow: inset 4px 0 0 #d8b16a, 0 8px 18px rgba(31, 90, 77, 0.2);
+}
+
+.planner-table-list__button.is-selected strong,
+.planner-table-list__button.is-selected small {
+  color: #fffdf8;
+}
+
+.planner-table-list__button.is-selected small {
+  color: #dfece6;
+}
+
+.planner-table-list__button:focus-visible {
+  outline: 3px solid #b89156;
+  outline-offset: 3px;
+  box-shadow: 0 0 0 5px rgba(184, 145, 86, 0.22);
 }
 
 .planner-table,
@@ -3220,7 +3225,6 @@ body.is-seating-view .planner-canvas {
     align-items: stretch;
   }
 
-  .planner-canvas-controls .planner-toggle,
   .planner-canvas-controls__actions,
   .planner-canvas-controls .planner-zoom-controls {
     display: grid;
@@ -3512,6 +3516,8 @@ body.is-seating-view .planner-canvas {
 
 .invitation-setting-toggle input:checked::after { transform: translateX(20px); }
 .invitation-setting-toggle input:disabled { cursor: not-allowed; opacity: .55; }
+.invitation-setting-toggle input:focus-visible { outline: 3px solid var(--da3wa-gold); outline-offset: 3px; }
+.da3wa-sidebar__nav [data-nav-view="seating"][hidden] { display: none; }
 .invitation-settings-card__status { margin: 0; font-size: 13px; }
 
 @media (max-width: 700px) {

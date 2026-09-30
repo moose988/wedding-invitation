@@ -26,6 +26,9 @@ test("seat-only guest writes are restricted to seating fields and the allowed si
   assert.match(rules, /affectedKeys\(\)\.hasOnly\(\[\s*"tableId",\s*"tableName",\s*"seatNumber",\s*"seatingAssignments",\s*"updatedAt"/s);
   assert.match(rules, /isSeatingOnlyDashboardAccount\(weddingId\)[\s\S]*?hasOnly\(\["chairs", "guestIds", "updatedAt"\]\)/);
   assert.doesNotMatch(rules, /affectedKeys\(\)\.hasOnly\(\[[^\]]*"phone"/s);
+  assert.match(rules, /eventCategory", "wedding_engagement"\) == "wedding_engagement"/);
+  assert.match(rules, /function seatingAccountMayReadGuest/);
+  assert.match(rules, /category == "celebration"\s*\? \(side == "general" \|\| unchangedSide\)/);
 });
 
 test("Family remains a public status page and cannot receive a manager link", async () => {

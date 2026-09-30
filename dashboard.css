@@ -147,6 +147,10 @@ a {
   color: var(--da3wa-text-soft);
 }
 
+.da3wa-form-grid label[data-wedding-side-control][hidden] {
+  display: none;
+}
+
 .da3wa-auth__status {
   min-height: 24px;
   margin: 18px 0 0;
@@ -564,6 +568,10 @@ body.is-seating-view .da3wa-page {
 
 .overview-kpis {
   flex-wrap: wrap;
+}
+
+.da3wa-live-indicator[hidden] {
+  display: none;
 }
 
 /* Overview page — intentionally scoped to keep every other dashboard view stable. */
@@ -1161,9 +1169,23 @@ body.is-overview-view .da3wa-topbar__actions {
 
 .guest-table {
   width: 100%;
-  min-width: 980px;
+  min-width: 1080px;
+  table-layout: fixed;
   border-collapse: collapse;
 }
+
+.guest-table__selection-column { width: 4%; }
+.guest-table__actions-column { width: 25%; }
+.guest-table--with-sides .guest-table__name-column { width: 14%; }
+.guest-table--with-sides .guest-table__phone-column { width: 15%; }
+.guest-table--with-sides .guest-table__additional-column { width: 19%; }
+.guest-table--with-sides .guest-table__side-column { width: 9%; }
+.guest-table--with-sides .guest-table__rsvp-column { width: 14%; }
+.guest-table--without-sides .guest-table__name-column { width: 17%; }
+.guest-table--without-sides .guest-table__phone-column { width: 17%; }
+.guest-table--without-sides .guest-table__additional-column { width: 24%; }
+.guest-table--without-sides .guest-table__rsvp-column { width: 14%; }
+.guest-table--without-sides .guest-table__actions-column { width: 24%; }
 
 .guest-table th,
 .guest-table td {
@@ -1171,7 +1193,7 @@ body.is-overview-view .da3wa-topbar__actions {
   padding: 10px 12px;
   border-bottom: 1px solid rgba(205, 187, 151, 0.35);
   text-align: left;
-  vertical-align: top;
+  vertical-align: middle;
   font-size: 14px;
 }
 
@@ -1212,6 +1234,11 @@ body.is-overview-view .da3wa-topbar__actions {
 .guest-primary {
   display: grid;
   gap: 4px;
+}
+
+.guest-table th:last-child {
+  text-align: right;
+  padding-right: 24px;
 }
 
 .guest-name-button {
@@ -1264,6 +1291,19 @@ body.is-overview-view .da3wa-topbar__actions {
   align-items: center;
   flex-wrap: wrap;
   gap: 6px;
+}
+
+.guest-quick-button--copy {
+  width: 36px;
+  min-width: 36px;
+  padding: 0;
+  display: inline-grid;
+  place-items: center;
+}
+
+.guest-quick-button--copy svg {
+  width: 17px;
+  height: 17px;
 }
 
 .guest-rsvp-select,
@@ -1372,6 +1412,8 @@ body.is-overview-view .da3wa-topbar__actions {
 
 .guest-card__actions {
   display: flex;
+  flex-wrap: wrap;
+  align-items: center;
   gap: 10px;
   margin-top: 14px;
 }

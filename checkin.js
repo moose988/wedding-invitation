@@ -10,6 +10,7 @@ import {
   signInWithEmailAndPassword,
   updateDoc,
 } from "./firebase-config.js";
+import { getEventDisplayTitle } from "./event-utils.js";
 
 const params = new URLSearchParams(window.location.search);
 const demoWedding = {
@@ -100,7 +101,7 @@ async function init() {
   state.wedding = weddingDoc.exists()
     ? { ...weddingDoc.data(), id: weddingDoc.id }
     : null;
-  elements.weddingTitle.textContent = state.wedding?.coupleName || "Check-In Console";
+  elements.weddingTitle.textContent = state.wedding ? `${getEventDisplayTitle(state.wedding)} · Check-In` : "Check-In Console";
 
   if (state.guestToken) {
     state.guest = await loadGuestByToken(state.guestToken);
@@ -142,7 +143,7 @@ function loadDemoCheckin(message = "Preview mode is on. Firebase setup can be ad
   state.wedding = demoWedding;
   state.guests = demoGuests.map((guest) => ({ ...guest }));
   state.guest = state.guests.find((guest) => guest.guestToken === state.guestToken) || state.guests[0] || null;
-  elements.weddingTitle.textContent = state.wedding.coupleName;
+  elements.weddingTitle.textContent = `${getEventDisplayTitle(state.wedding)} · Check-In`;
   elements.counter.textContent = `Checked in ${state.guests.filter((guest) => guest.checkedIn).length} of ${state.guests.length} guests`;
   elements.authGate.hidden = true;
   elements.app.hidden = false;

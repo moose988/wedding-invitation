@@ -230,3 +230,30 @@ The secure editor route is `dashboard.html?seatingEditor=1&token=...`. After the
 - `dashboard.html` listens to guests and tables in real time.
 - `export.js` prefers `.xlsx` via SheetJS CDN and falls back to `.csv`.
 - `qr.js` prefers a QR library and falls back to a visible check-in link.
+
+## Event categories
+
+The `weddings/{weddingId}` collection and the `wedding` URL parameter remain in place for backward compatibility. New documents use:
+
+```js
+{
+  eventCategory: "wedding_engagement" | "celebration",
+  eventTitle: string
+}
+```
+
+`wedding_engagement` events retain `brideName`, `groomName`, and `coupleName`; `eventTitle` is normally the couple display name. `celebration` events use `eventTitle` as their display name and do not require Bride/Groom fields. New celebration guests use `side: "general"`. Existing documents with no `eventCategory` continue to behave as weddings, and missing titles resolve from `coupleName`, then Bride/Groom names, then `Untitled event`.
+
+The event category and display title are also copied into each planner's private `users/{uid}/weddingAccess/{weddingId}` card index. Guest data is not included in that index.
+
+### Backfill existing event documents
+
+`functions/migrate-event-categories.js` safely fills only missing category/title fields on existing events using Admin SDK `update` semantics. It does not recreate documents or touch guests, tables, access records, invitation settings, or other fields. It includes the documented Layla & Zaid (`luxury-wedding-demo`) and Ali & Salma (`M1S1aBL9134GSAozWh6G`) IDs and is safe to rerun.
+
+From the repository root, after authenticating with Firebase Application Default Credentials for the project's Firebase project, run:
+
+```powershell
+node .\functions\migrate-event-categories.js --project weddinginvitaion-b4f36
+```
+
+The script reports how many existing event documents were updated. It requires the `firebase-admin` dependency already declared in `functions/package.json`.

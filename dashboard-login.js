@@ -153,7 +153,26 @@ async function findFirstAccessibleWeddingId(user) {
 
 async function canViewWedding(user, weddingId) {
   const permissionDoc = await getDoc(doc(services.db, "weddings", weddingId, "dashboardUsers", user.uid));
-  return permissionDoc.exists() && permissionDoc.data().canViewDashboard;
+  if (!permissionDoc.exists() || permissionDoc.data().canViewDashboard !== true) {
+    return false;
+  }
+
+  const permission = permissionDoc.data();
+  if (!seatingOnlyMode || permission.seatingOnly !== true) {
+    return true;
+  }
+
+  if (
+    permission.canEditSeating !== true ||
+    !["bride", "groom"].includes(permission.allowedSide) ||
+    (requestedSeatingSide && requestedSeatingSide !== permission.allowedSide)
+  ) {
+    return false;
+  }
+
+  const weddingSnapshot = await getDoc(doc(services.db, "weddings", weddingId));
+  return weddingSnapshot.exists() &&
+    weddingSnapshot.data().eventCategory !== "celebration";
 }
 
 function rememberWeddingId(weddingId) {

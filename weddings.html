@@ -8,7 +8,7 @@
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,500;9..144,600&family=Manrope:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
     <link rel="stylesheet" href="./styles.css" />
-    <link rel="stylesheet" href="./weddings.css" />
+    <link rel="stylesheet" href="./weddings.css?v=event-category-visibility" />
   </head>
   <body class="weddings-body">
     <main class="weddings-shell" id="workspace" hidden>
@@ -21,7 +21,7 @@
         <button class="primary-button" id="createWeddingButton" type="button">Create event</button>
       </section>
       <section class="workspace-controls" aria-label="Event controls">
-        <label class="search-field"><span class="sr-only">Search events</span><input id="searchInput" type="search" placeholder="Search couple or venue" /></label>
+        <label class="search-field"><span class="sr-only">Search events</span><input id="searchInput" type="search" placeholder="Search event, people, venue, or location" /></label>
         <label class="sort-field">Sort <select id="sortSelect"><option value="event">Event date</option><option value="updated">Recently updated</option><option value="created">Recently created</option></select></label>
       </section>
       <nav class="filter-row" aria-label="Filter events" id="filterRow">
@@ -36,8 +36,18 @@
     <dialog class="workspace-dialog" id="weddingDialog">
       <form class="workspace-modal" id="weddingForm">
         <header><div><p class="workspace-kicker" id="formKicker">New event</p><h2 id="formTitle">Create an event</h2></div><button class="icon-close" type="button" data-close="weddingDialog" aria-label="Close">×</button></header>
-        <div class="workspace-modal__body form-grid">
-          <label>Bride name<input name="brideName" required autocomplete="given-name" /></label><label>Groom name<input name="groomName" required autocomplete="given-name" /></label>
+        <div class="workspace-modal__body">
+          <section class="event-category-step" id="categoryStep">
+            <h3>Choose an event category</h3>
+            <div class="event-category-grid" role="radiogroup" aria-label="Event category">
+              <label class="event-category-card"><input type="radio" name="eventCategory" value="wedding_engagement" required /><span><strong>Wedding / Engagement</strong><small>For weddings, engagements, and couple celebrations.</small></span></label>
+              <label class="event-category-card"><input type="radio" name="eventCategory" value="celebration" required /><span><strong>Celebration</strong><small>For birthdays, graduations, anniversaries, and other occasions.</small></span></label>
+            </div>
+            <button class="primary-button" id="continueEventButton" type="button" disabled>Continue</button>
+          </section>
+          <div class="form-grid event-information-step" id="eventInformationStep" hidden>
+          <label class="event-identity wedding-identity">Bride name<input name="brideName" autocomplete="given-name" /></label><label class="event-identity wedding-identity">Groom name<input name="groomName" autocomplete="given-name" /></label>
+          <label class="event-identity celebration-identity full">Event name<input name="eventTitle" placeholder="Ahmed’s Graduation" /></label>
           <label>Event date<input name="eventDate" type="date" required /></label><label>Event time<input name="eventTime" type="time" required /></label>
           <label class="full">Venue<input name="venueEn" required /></label>
           <label>Location<input name="location" /></label><label>Maps URL<input name="mapsUrl" type="url" placeholder="https://…" /></label>
@@ -45,11 +55,12 @@
           <label>Status<select name="status"><option value="draft">Draft</option><option value="upcoming">Upcoming</option><option value="active">Active</option><option value="completed">Completed</option></select></label>
           <label class="full">Planner notes<textarea name="plannerNotes" rows="3"></textarea></label>
           <p class="form-error full" id="formError" role="alert"></p>
+          </div>
         </div>
-        <footer><button class="secondary-button" type="button" data-close="weddingDialog">Cancel</button><button class="primary-button" id="saveWeddingButton" type="submit">Create event</button></footer>
+        <footer><button class="secondary-button" id="backEventButton" type="button" hidden>Back</button><button class="secondary-button" type="button" data-close="weddingDialog">Cancel</button><button class="primary-button" id="saveWeddingButton" type="submit" hidden>Create event</button></footer>
       </form>
     </dialog>
     <dialog class="workspace-dialog" id="deleteDialog"><form class="workspace-modal workspace-modal--small" id="deleteForm"><header><div><p class="workspace-kicker">Permanent action</p><h2>Delete event?</h2></div><button class="icon-close" type="button" data-close="deleteDialog" aria-label="Close">×</button></header><div class="workspace-modal__body"><p>This permanently removes the event and all of its guests, invitations, seating, and check-in data. Type <strong id="deletePhrase"></strong> to continue.</p><label>Confirmation<input id="deleteConfirmation" autocomplete="off" /></label><p class="form-error" id="deleteError" role="alert"></p></div><footer><button class="secondary-button" type="button" data-close="deleteDialog">Cancel</button><button class="danger-button" type="submit">Delete permanently</button></footer></form></dialog>
-    <script type="module" src="./weddings.js"></script>
+    <script type="module" src="./weddings.js?v=category-navigation"></script>
   </body>
 </html>

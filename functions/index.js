@@ -47,6 +47,9 @@ async function requireSeatingAccessManager(auth, weddingId) {
     db.doc(`weddings/${weddingId}/dashboardUsers/${auth.uid}`).get(),
   ]);
   const isOwner = wedding.exists && wedding.data().ownerUserId === auth.uid;
+  if (wedding.exists && wedding.data().eventCategory === "celebration") {
+    throw new HttpsError("failed-precondition", "Wedding-side seating access is unavailable for celebration events.");
+  }
   const isDashboardAdmin = dashboardUser.exists && dashboardUser.data().canManageUsers === true;
   if (!isOwner && !isDashboardAdmin) {
     throw new HttpsError("permission-denied", "Only the event owner or a dashboard administrator can manage seating editor access.");
@@ -146,6 +149,10 @@ exports.exchangeSeatingEditorLink = onCall(async (request) => {
   if (!index.exists) throw new HttpsError("permission-denied", "This access link is invalid or expired.");
   const { weddingId, role, version } = index.data();
   requireRole(role);
+  const wedding = await db.doc(`weddings/${weddingId}`).get();
+  if (!wedding.exists || wedding.data().eventCategory === "celebration") {
+    throw new HttpsError("permission-denied", "This wedding-side seating link is unavailable.");
+  }
   const access = await db.doc(`weddings/${weddingId}/seatingAccess/${role}`).get();
   if (!access.exists || access.data().status !== "active" || access.data().tokenHash !== hash || access.data().version !== version) {
     throw new HttpsError("permission-denied", "This access link is invalid or expired.");
@@ -162,9 +169,10 @@ exports.exchangeSeatingEditorLink = onCall(async (request) => {
 
 function normalizeSide(value) {
   const side = String(value || "").trim().toLowerCase().replace(/[ _-]+/g, " ");
+  if (side === "general") return "general";
   if (["bride", "bride side", "brides side"].includes(side)) return "bride";
   if (["groom", "groom side", "grooms side"].includes(side)) return "groom";
-  if (["both", "both sides", "shared"].includes(side)) return "both";
+  if (["both", "both sides", "shared"].includes(side)) return "groom";
   return "family";
 }
 
@@ -175,10 +183,10 @@ function partySize(guest) {
 
 function sideMatches(guest, side) {
   const guestSide = normalizeSide(guest.side);
-  return side === "family" ? guestSide === "family" : guestSide === side || guestSide === "both";
+  return guestSide === side;
 }
 
-// Owner-only, idempotent migration for legacy values such as "Bride Side".
+// Owner-only, idempotent migration for legacy side aliases, including "Both" -> "Groom".
 // It is intentionally server-side so the client never receives authority to
 // rewrite guests outside its normal dashboard permissions.
 exports.normalizeSeatingGuestSides = onCall(async (request) => {
@@ -239,9 +247,7 @@ exports.deleteWedding = onCall(async (request) => {
 
 // Public side pages deliberately expose only this aggregate. Keeping it server
 // generated means editor links cannot write arbitrary public documents.
-exports.refreshPublicSeatingStats = onDocumentWritten("weddings/{weddingId}/{collectionId}/{documentId}", async (event) => {
-  if (!["guests", "tables"].includes(event.params.collectionId)) return;
-  const weddingId = event.params.weddingId;
+async function rebuildPublicStats(weddingId) {
   const [wedding, guests, tables] = await Promise.all([
     db.doc(`weddings/${weddingId}`).get(),
     db.collection(`weddings/${weddingId}/guests`).get(),
@@ -258,6 +264,22 @@ exports.refreshPublicSeatingStats = onDocumentWritten("weddings/{weddingId}/{col
     assignmentsByGuest.set(assignment.guestId, list);
   }));
   const allGuests = guests.docs.map((snapshot) => ({ id: snapshot.id, ...snapshot.data(), side: normalizeSide(snapshot.data().side) }));
+  if (wedding.data().eventCategory === "celebration") {
+    const roster = allGuests.map((guest) => ({ id: guest.id, n: guest.fullName || "", r: ["confirmed", "declined"].includes(guest.rsvpStatus) ? guest.rsvpStatus : "pending", p: partySize(guest), seats: assignmentsByGuest.get(guest.id) || [] }));
+    const confirmed = allGuests.filter((guest) => guest.rsvpStatus === "confirmed");
+    const all = {
+      invited: allGuests.length,
+      seats: allGuests.reduce((sum, guest) => sum + partySize(guest), 0),
+      confirmed: confirmed.length,
+      confirmedSeats: confirmed.reduce((sum, guest) => sum + partySize(guest), 0),
+      pending: allGuests.filter((guest) => !["confirmed", "declined"].includes(guest.rsvpStatus)).length,
+      declined: allGuests.filter((guest) => guest.rsvpStatus === "declined").length,
+      seated: allGuests.filter((guest) => (assignmentsByGuest.get(guest.id) || []).length > 0).length,
+      invitesSent: allGuests.filter((guest) => guest.inviteSentAt || guest.reminderSentAt).length,
+    };
+    await db.doc(`weddings/${weddingId}/publicStats/summary`).set({ eventCategory: "celebration", eventTitle: String(wedding.data().eventTitle || "").trim() || "Untitled event", all, roster: { all: roster }, updatedAt: FieldValue.serverTimestamp() });
+    return;
+  }
   const sides = {}, roster = {};
   ["bride", "groom", "family"].forEach((side) => {
     const members = allGuests.filter((guest) => sideMatches(guest, side));
@@ -272,5 +294,16 @@ exports.refreshPublicSeatingStats = onDocumentWritten("weddings/{weddingId}/{col
     };
     roster[side] = members.map((guest) => ({ id: guest.id, n: guest.fullName || "", r: ["confirmed", "declined"].includes(guest.rsvpStatus) ? guest.rsvpStatus : "pending", p: partySize(guest), seats: assignmentsByGuest.get(guest.id) || [] }));
   });
-  await db.doc(`weddings/${weddingId}/publicStats/summary`).set({ coupleName: wedding.data().coupleName || "", sides, roster, updatedAt: FieldValue.serverTimestamp() });
+  await db.doc(`weddings/${weddingId}/publicStats/summary`).set({ eventCategory: "wedding_engagement", eventTitle: wedding.data().eventTitle || wedding.data().coupleName || "", coupleName: wedding.data().coupleName || "", sides, roster, updatedAt: FieldValue.serverTimestamp() });
+}
+
+exports.refreshPublicSeatingStats = onDocumentWritten("weddings/{weddingId}/{collectionId}/{documentId}", async (event) => {
+  if (!["guests", "tables"].includes(event.params.collectionId)) return;
+  await rebuildPublicStats(event.params.weddingId);
+});
+
+exports.refreshPublicStatsForEventChange = onDocumentWritten("weddings/{weddingId}", async (event) => {
+  if (event.data?.before?.data()?.eventCategory === event.data?.after?.data()?.eventCategory &&
+      event.data?.before?.data()?.eventTitle === event.data?.after?.data()?.eventTitle) return;
+  await rebuildPublicStats(event.params.weddingId);
 });

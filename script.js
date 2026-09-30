@@ -12,6 +12,7 @@ import {
 import { renderQrCode } from "./qr.js";
 import { resolveTableName } from "./seating-utils.js";
 import { invitationSeatingEnabled } from "./invitations/shared/invitation-data.js";
+import { getEventDisplayTitle, isCelebrationEvent } from "./event-utils.js";
 
 const demoWedding = {
   coupleName: "Layan & Mohammed",
@@ -61,7 +62,7 @@ const demoWedding = {
 const demoGuest = {
   fullName: "Our Cherished Guest",
   phone: "",
-  side: "both",
+  side: "groom",
   rsvpStatus: "pending",
   seatNumber: "",
   tableId: "",
@@ -339,8 +340,10 @@ function repairCorruptedArabicText(wedding) {
 
 function populateInvitation() {
   const wedding = state.wedding;
-  const englishNames = `${wedding.brideName} & ${wedding.groomName}`;
-  const arabicNames = `${wedding.brideNameAr} و ${wedding.groomNameAr}`;
+  const englishNames = isCelebrationEvent(wedding)
+    ? getEventDisplayTitle(wedding)
+    : `${wedding.brideName} & ${wedding.groomName}`;
+  const arabicNames = isCelebrationEvent(wedding) ? "" : `${wedding.brideNameAr} و ${wedding.groomNameAr}`;
 
   document.title = `${englishNames} | Event Invitation Platform`;
   setText("heroArabicNames", arabicNames);

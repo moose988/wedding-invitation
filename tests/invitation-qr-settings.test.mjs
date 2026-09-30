@@ -49,7 +49,7 @@ test("seating is enabled for old events, persists per event, and gates seating U
   assert.match(dashboard, /function ensureSenderSeatsReady[\s\S]*?if \(!isSeatingEnabled\(\)\) return true;/);
   assert.match(dashboard, /button\.dataset\.navView === "seating"\) button\.hidden = !isSeatingEnabled\(\)/);
   assert.match(dashboard, /nextUrl\.searchParams\.delete\("view"\)/);
-  assert.match(dashboard, /isSeatingEnabled\(\) \? renderSeatingAccessCard\(\) : ""/);
+  assert.match(dashboard, /isSeatingEnabled\(\) && eventUsesGuestSides\(state\.wedding\) \? renderSeatingAccessCard\(\) : ""/);
   assert.match(rootInvitation, /!invitationSeatingEnabled\(state\.wedding\)/);
   assert.match(rootInvitation, /elements\.seatingSection\.hidden = true/);
   assert.match(aliInvitation, /invitationSeatingEnabled\(wedding\)/);

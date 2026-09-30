@@ -15,5 +15,6 @@ export function guestSeat(guest) {
 }
 
 export function setDocumentTitle(wedding) {
-  document.title = `${wedding?.coupleName || `${wedding?.brideName || "Bride"} & ${wedding?.groomName || "Groom"}`} | Event Invitation`;
+  document.title = `${getEventDisplayTitle(wedding)} | Event Invitation`;
 }
+import { getEventDisplayTitle } from "../../event-utils.js";

@@ -19,7 +19,9 @@ service cloud.firestore {
 
     function canViewDashboard(weddingId) {
       return isDashboardMember(weddingId) &&
-        dashboardUser(weddingId).data.canViewDashboard == true;
+        dashboardUser(weddingId).data.canViewDashboard == true &&
+        (!isSeatingOnlyDashboardAccount(weddingId) ||
+          get(/databases/$(database)/documents/weddings/$(weddingId)).data.get("eventCategory", "wedding_engagement") == "wedding_engagement");
     }
 
     function canEditGuests(weddingId) {
@@ -34,7 +36,10 @@ service cloud.firestore {
 
     function canEditSeating(weddingId) {
       return (isDashboardMember(weddingId) &&
-        dashboardUser(weddingId).data.canEditSeating == true) || isSeatingManager(weddingId);
+        dashboardUser(weddingId).data.canEditSeating == true &&
+        (!isSeatingOnlyDashboardAccount(weddingId) ||
+          get(/databases/$(database)/documents/weddings/$(weddingId)).data.get("eventCategory", "wedding_engagement") == "wedding_engagement"))
+        || isSeatingManager(weddingId);
     }
 
     // Seating-only dashboard accounts are deliberately tied to one side.  The
@@ -54,7 +59,15 @@ service cloud.firestore {
       // A missing or invalid allowedSide is intentionally deny-by-default,
       // which makes adding the field to old seating-only accounts safe.
       return !isSeatingOnlyDashboardAccount(weddingId)
-        || (dashboardUser(weddingId).data.allowedSide in ["bride", "groom"]
+        || (get(/databases/$(database)/documents/weddings/$(weddingId)).data.get("eventCategory", "wedding_engagement") == "wedding_engagement"
+          && dashboardUser(weddingId).data.allowedSide in ["bride", "groom"]
+          && normalizedGuestSide(guest) == dashboardUser(weddingId).data.allowedSide);
+    }
+
+    function seatingAccountMayReadGuest(weddingId, guest) {
+      return !isSeatingOnlyDashboardAccount(weddingId) ||
+        (get(/databases/$(database)/documents/weddings/$(weddingId)).data.get("eventCategory", "wedding_engagement") == "wedding_engagement"
+          && dashboardUser(weddingId).data.allowedSide in ["bride", "groom"]
           && normalizedGuestSide(guest) == dashboardUser(weddingId).data.allowedSide);
     }
 
@@ -70,18 +83,38 @@ service cloud.firestore {
         && request.auth.token.seatingEditor == true
         && request.auth.token.seatingWeddingId == weddingId
         && request.auth.token.seatingRole in ["bride", "groom", "family"]
+        && get(/databases/$(database)/documents/weddings/$(weddingId)).data.get("eventCategory", "wedding_engagement") == "wedding_engagement"
         && seatingAccess(weddingId, request.auth.token.seatingRole).data.status == "active"
         && seatingAccess(weddingId, request.auth.token.seatingRole).data.version == request.auth.token.seatingAccessVersion;
     }
 
     function canReadSeating(weddingId) {
-      return canViewDashboard(weddingId) || isSeatingEditor(weddingId);
+      return canViewDashboard(weddingId) ||
+        (isSeatingOnlyDashboardAccount(weddingId) &&
+          get(/databases/$(database)/documents/weddings/$(weddingId)).data.get("eventCategory", "wedding_engagement") == "wedding_engagement") ||
+        isSeatingEditor(weddingId);
     }
 
     function normalizedGuestSide(guest) {
-      return guest.side in ["bride", "Bride", "bride side", "Bride Side"] ? "bride" :
+      return guest.side == "general" ? "general" :
+        (guest.side in ["bride", "Bride", "bride side", "Bride Side"] ? "bride" :
         (guest.side in ["groom", "Groom", "groom side", "Groom Side"] ? "groom" :
-        (guest.side in ["both", "Both", "both sides", "Both Sides", "shared", "Shared"] ? "both" : "family"));
+        (guest.side in ["both", "Both", "both sides", "Both Sides", "shared", "Shared"] ? "groom" : "family")));
+    }
+
+    function validEventCategory(data) {
+      return !data.keys().hasAny(["eventCategory"]) ||
+        data.eventCategory in ["wedding_engagement", "celebration"];
+    }
+
+    function validGuestSide(weddingId, guest, unchangedSide) {
+      let side = guest.get("side", "");
+      let known = side in ["general", "bride", "Bride", "bride side", "Bride Side", "brides side", "groom", "Groom", "groom side", "Groom Side", "grooms side", "family", "Family", "family side", "Family Side"];
+      let legacyBoth = side in ["both", "Both", "both sides", "Both Sides", "shared", "Shared"] && unchangedSide;
+      let category = get(/databases/$(database)/documents/weddings/$(weddingId)).data.get("eventCategory", "wedding_engagement");
+      return (known || legacyBoth) && (category == "celebration"
+        ? (side == "general" || unchangedSide)
+        : (side != "general" || unchangedSide));
     }
 
     function editorMayReadGuest(guest) {
@@ -158,18 +191,19 @@ service cloud.firestore {
       allow read: if canViewDashboard(weddingId) || resource.data.status == "active";
 
       allow create: if isSignedIn() &&
-        request.auth.uid == request.resource.data.ownerUserId;
+        request.auth.uid == request.resource.data.ownerUserId &&
+        request.resource.data.eventCategory in ["wedding_engagement", "celebration"];
 
       // Table positions are stored in their own table documents, but the
       // stage/entrance markers live on the wedding document. Let seating
       // editors update only that layout field, without granting access to any
       // other wedding settings.
-      allow update: if (isDashboardMember(weddingId) &&
+      allow update: if validEventCategory(request.resource.data) && ((isDashboardMember(weddingId) &&
           request.auth.uid == resource.data.ownerUserId)
         || isInvitationQrSettingsUpdate(weddingId)
         || isInvitationSeatingSettingsUpdate(weddingId)
         || ((isDashboardMember(weddingId) && dashboardUser(weddingId).data.canEditSeating == true)
-          && request.resource.data.diff(resource.data).affectedKeys().hasOnly(["hallObjects", "updatedAt"]));
+          && request.resource.data.diff(resource.data).affectedKeys().hasOnly(["hallObjects", "updatedAt"])));
 
       allow delete: if isDashboardMember(weddingId) &&
         request.auth.uid == resource.data.ownerUserId;
@@ -204,6 +238,7 @@ service cloud.firestore {
             dashboardUser(weddingId).data.canEditSeating == true &&
             !isSeatingOnlyDashboardAccount(weddingId))
           || (isSeatingOnlyDashboardAccount(weddingId) &&
+            get(/databases/$(database)/documents/weddings/$(weddingId)).data.get("eventCategory", "wedding_engagement") == "wedding_engagement" &&
             request.resource.data.diff(resource.data).affectedKeys()
               .hasOnly(["chairs", "guestIds", "updatedAt"]))
           || (isSeatingManager(weddingId) &&
@@ -214,10 +249,18 @@ service cloud.firestore {
       match /guests/{guestId} {
         // Editor links may read only the guest documents for their authorized
         // side. Collection queries must include the matching side values.
-        allow get: if canViewDashboard(weddingId) || (isSeatingEditor(weddingId) && editorMayReadGuest(resource.data));
-        allow list: if canViewDashboard(weddingId) || (isSeatingEditor(weddingId) && editorMayReadGuest(resource.data));
-        allow create, delete: if canEditGuests(weddingId);
-        allow update: if canEditGuests(weddingId) || canCheckIn(weddingId) || isGuestRsvpUpdate(weddingId) || isGuestSeatingUpdate(weddingId);
+        allow get: if canViewDashboard(weddingId) ||
+          (isSeatingOnlyDashboardAccount(weddingId) && seatingAccountMayReadGuest(weddingId, resource.data)) ||
+          (isSeatingEditor(weddingId) && editorMayReadGuest(resource.data));
+        allow list: if canViewDashboard(weddingId) ||
+          (isSeatingOnlyDashboardAccount(weddingId) && seatingAccountMayReadGuest(weddingId, resource.data)) ||
+          (isSeatingEditor(weddingId) && editorMayReadGuest(resource.data));
+        allow create: if canEditGuests(weddingId) && validGuestSide(weddingId, request.resource.data, false);
+        allow delete: if canEditGuests(weddingId);
+        allow update: if (canEditGuests(weddingId) && validGuestSide(weddingId, request.resource.data, resource.data.get("side", "") == request.resource.data.get("side", "")))
+          || (canCheckIn(weddingId) && request.resource.data.diff(resource.data).affectedKeys().hasOnly(["checkedIn", "checkedInAt", "updatedAt"]))
+          || isGuestRsvpUpdate(weddingId)
+          || isGuestSeatingUpdate(weddingId);
       }
 
       // Aggregated side-level stats (counts + seated roster, no phones or
@@ -239,8 +282,9 @@ service cloud.firestore {
         // Check-in-only and seating-only members may patch exactly the fields
         // their role owns. Holding the token (it is the doc id) also authorizes
         // a guest to update their own RSVP answer, mirroring the guests rule.
-        allow create, delete: if canEditGuests(weddingId);
-        allow update: if canEditGuests(weddingId)
+        allow create: if canEditGuests(weddingId) && validGuestSide(weddingId, request.resource.data, false);
+        allow delete: if canEditGuests(weddingId);
+        allow update: if (canEditGuests(weddingId) && validGuestSide(weddingId, request.resource.data, resource.data.get("side", "") == request.resource.data.get("side", "")))
           || (canCheckIn(weddingId)
             && request.resource.data.diff(resource.data).changedKeys().hasOnly(["checkedIn", "checkedInAt", "updatedAt"]))
           || (canEditSeating(weddingId) && editorMayUpdatePublicGuest(weddingId, resource.data)

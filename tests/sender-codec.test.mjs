@@ -52,3 +52,18 @@ test("sender workflow keeps names and excludes unsupported guest fields", () => 
     );
   });
 });
+
+test("celebration sender payloads retain their category and neutral guest group", () => {
+  const payload = createSenderPayload({
+    weddingId: "event-test",
+    coupleName: "Mariam’s Graduation",
+    eventCategory: "celebration",
+    side: "all",
+    guests: [{ fullName: "Noor", phone: "971500000000", side: "general", guestToken: "token" }],
+  });
+  const decoded = decodeSenderPayload(encodeSenderPayload(payload));
+  assert.equal(decoded.cat, "celebration");
+  assert.equal(decoded.c, "Mariam’s Graduation");
+  assert.equal(decoded.side, "all");
+  assert.equal(decoded.g[0].s, "general");
+});

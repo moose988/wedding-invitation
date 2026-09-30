@@ -27,7 +27,7 @@ export async function exportGuests(rows, fileBaseName = "guest-list", options = 
       "Guest Name": row.fullName || "",
       Phone: row.phone || "",
       "Additional Guests": normaliseAdditionalGuests(row.additionalGuests),
-      Side: row.side || "",
+      ...(options.includeSide === false ? {} : { Side: row.side || "" }),
       "RSVP Status": row.rsvpStatus || "",
     };
     if (options.includeSeating) {
@@ -56,7 +56,7 @@ export async function exportGuests(rows, fileBaseName = "guest-list", options = 
       "Guest Name": "",
       Phone: "",
       "Additional Guests": "",
-      Side: "",
+      ...(options.includeSide === false ? {} : { Side: "" }),
       "RSVP Status": "",
     };
     if (options.includeSeating) {

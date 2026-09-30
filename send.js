@@ -69,12 +69,12 @@ function sideLabel(side) {
   if (side === "groom") return "Groom";
   if (side === "bride") return "Bride";
   if (side === "family") return "Family";
-  if (side === "both") return "Both";
+  if (side === "both") return "Groom";
   return "Guest";
 }
 
 function sideChipClass(side) {
-  if (side === "groom") return "sender-chip--groom";
+  if (side === "groom" || side === "both") return "sender-chip--groom";
   if (side === "bride") return "sender-chip--bride";
   return "sender-chip--other";
 }
@@ -97,7 +97,7 @@ function render() {
     shell.innerHTML = `
       <div class="sender-empty">
         <h1>This sender link is empty or invalid</h1>
-        <p>Ask your wedding planner to generate a fresh WhatsApp sender link from the dashboard's Invitations page and send it to you again.</p>
+        <p>Ask your event planner to generate a fresh WhatsApp sender link from the dashboard's Invitations page and send it to you again.</p>
       </div>
     `;
     return;
@@ -137,7 +137,7 @@ function render() {
               <div class="sender-row__info">
                 <span class="sender-row__name">${escapeHtml(names.displayName)}</span>
                 <span class="sender-row__meta">
-                  <span class="sender-chip ${sideChipClass(guest.s)}">${escapeHtml(sideLabel(guest.s))}</span>
+                  ${payload.cat === "celebration" ? "" : `<span class="sender-chip ${sideChipClass(guest.s)}">${escapeHtml(sideLabel(guest.s))}</span>`}
                   <span dir="ltr">${escapeHtml(formatPhone(guest.p))}</span>
                 </span>
               </div>

@@ -26,12 +26,13 @@ export function encodeSenderPayload(payload) {
   return encodeUtf8Base64Url(JSON.stringify(payload));
 }
 
-export function createSenderPayload({ weddingId, coupleName, side, guests }) {
+export function createSenderPayload({ weddingId, coupleName, side, guests, eventCategory }) {
   return {
     v: 1,
     w: weddingId || "",
     c: coupleName || "",
     side: side || "all",
+    ...(eventCategory ? { cat: eventCategory } : {}),
     g: (guests || []).map((guest) => ({
       n: guest.fullName || "",
       p: guest.phone || "",

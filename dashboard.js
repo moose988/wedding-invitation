@@ -818,6 +818,7 @@ const state = {
 const elements = {
   dashboardApp: document.getElementById("dashboardApp"),
   dashboardSidebar: document.getElementById("dashboardSidebar"),
+  allEventsNavLink: document.getElementById("allEventsNavLink"),
   desktopSidebarToggleButton: document.getElementById("desktopSidebarToggleButton"),
   desktopSidebarExpandButton: document.getElementById("desktopSidebarExpandButton"),
   seatingMobileNavButton: document.getElementById("seatingMobileNavButton"),
@@ -2004,6 +2005,9 @@ function renderChrome() {
     "is-seating-only",
     state.editorMode && !state.secureEditorMode,
   );
+  if (elements.allEventsNavLink) {
+    elements.allEventsNavLink.hidden = state.editorMode;
+  }
   elements.signOutButton.textContent = state.editorMode
     ? "End session"
     : "Sign out";

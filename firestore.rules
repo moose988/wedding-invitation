@@ -82,12 +82,15 @@ service cloud.firestore {
 
     function isSeatingEditor(weddingId) {
       return isSignedIn()
-        && request.auth.token.seatingEditor == true
-        && request.auth.token.seatingWeddingId == weddingId
-        && request.auth.token.seatingRole in ["bride", "groom", "family"]
+        // Email/password dashboard accounts do not carry custom seating-link
+        // claims. Missing claims must evaluate as false, not as a rules error
+        // that blocks an otherwise authorized dashboard seating update.
+        && request.auth.token.get("seatingEditor", false) == true
+        && request.auth.token.get("seatingWeddingId", "") == weddingId
+        && request.auth.token.get("seatingRole", "") in ["bride", "groom", "family"]
         && get(/databases/$(database)/documents/weddings/$(weddingId)).data.get("eventCategory", "wedding_engagement") == "wedding_engagement"
-        && seatingAccess(weddingId, request.auth.token.seatingRole).data.status == "active"
-        && seatingAccess(weddingId, request.auth.token.seatingRole).data.version == request.auth.token.seatingAccessVersion;
+        && seatingAccess(weddingId, request.auth.token.get("seatingRole", "")).data.status == "active"
+        && seatingAccess(weddingId, request.auth.token.get("seatingRole", "")).data.version == request.auth.token.get("seatingAccessVersion", "");
     }
 
     function canReadSeating(weddingId) {

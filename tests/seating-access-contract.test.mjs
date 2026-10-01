@@ -20,6 +20,8 @@ test("seat-only guest writes are restricted to seating fields and the allowed si
   const rules = await read("firestore.rules");
 
   assert.match(rules, /function isSeatingOnlyDashboardAccount/);
+  assert.match(rules, /request\.auth\.token\.get\("seatingEditor", false\) == true/);
+  assert.match(rules, /request\.auth\.token\.get\("seatingWeddingId", ""\) == weddingId/);
   assert.match(rules, /data\.get\("seatingOnly", false\) == true/);
   assert.match(rules, /allowedSide in \["bride", "groom", "all"\]/);
   assert.match(rules, /allowedSide == "all"\s*\|\| normalizedGuestSide\(guest\) == dashboardUser\(weddingId\)\.data\.allowedSide/);

@@ -2955,6 +2955,7 @@ function seatingAccountLoginLink() {
   const params = new URLSearchParams({
     wedding: state.weddingId,
     seatingOnly: "1",
+    linkRevision: "all-sides-20261001",
   });
   return new URL(`dashboard-login.html?${params.toString()}`, window.location.href).toString();
 }

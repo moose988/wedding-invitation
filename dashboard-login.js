@@ -5,9 +5,9 @@ import {
   getDocs,
   initFirebase,
   isFirebaseConfigured,
-  onAuthStateChanged,
   query,
   signInWithEmailAndPassword,
+  signOut,
   where,
 } from "./firebase-config.js";
 
@@ -25,6 +25,7 @@ const elements = {
 
 let services = null;
 let isRedirecting = false;
+let sessionResetPromise = Promise.resolve(true);
 
 init();
 
@@ -45,14 +46,17 @@ function init() {
 
   services = initFirebase();
   elements.loginForm?.addEventListener("submit", handleLogin);
-
-  onAuthStateChanged(services.auth, async (user) => {
-    if (!user || isRedirecting) {
-      return;
-    }
-
-    redirectAfterLogin(user);
-  });
+  // Login links should always show the credential form. Firebase persists
+  // sessions across visits, so clear any previous session before accepting
+  // an explicit sign-in instead of redirecting on auth-state restoration.
+  sessionResetPromise = signOut(services.auth).then(
+    () => true,
+    (error) => {
+      console.error("Could not clear the previous dashboard session.", error);
+      elements.authStatus.textContent = "Could not prepare sign-in. Please refresh and try again.";
+      return false;
+    },
+  );
 
   const statusMessage = params.get("message");
   if (statusMessage === "signed-out") {
@@ -84,6 +88,9 @@ async function handleLogin(event) {
   elements.authStatus.textContent = "Signing in...";
 
   try {
+    if (!(await sessionResetPromise)) {
+      return;
+    }
     const credential = await signInWithEmailAndPassword(services.auth, email, password);
     elements.authStatus.textContent = "Redirecting to dashboard...";
     redirectAfterLogin(credential.user);

@@ -170,7 +170,7 @@ weddings/{weddingId}/dashboardUsers/{userId}
   - `canEditGuests`
   - `canEditSeating`
   - `seatingOnly` (set to `true` for the restricted seating workspace)
-  - `allowedSide` (`"bride"` or `"groom"`, required whenever `seatingOnly` is true)
+  - `allowedSide` (`"bride"`, `"groom"`, or `"all"`, required whenever `seatingOnly` is true; `"all"` grants both sides' seating access while keeping the account in the seating-only workspace)
   - `canCheckIn`
   - `canExport`
   - `canManageUsers`

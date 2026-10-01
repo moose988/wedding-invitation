@@ -70,8 +70,8 @@ async function requireWeddingOwner(auth, weddingId) {
 // already be a dashboard member with the three required seating flags.
 exports.setSeatingOnlyAccountSide = onCall(async (request) => {
   const { weddingId, userId, allowedSide } = request.data || {};
-  if (!["bride", "groom"].includes(allowedSide)) {
-    throw new HttpsError("invalid-argument", "allowedSide must be bride or groom.");
+  if (!["bride", "groom", "all"].includes(allowedSide)) {
+    throw new HttpsError("invalid-argument", "allowedSide must be bride, groom, or all.");
   }
   await requireSeatingAccessManager(request.auth, weddingId);
   if (!userId || typeof userId !== "string") {

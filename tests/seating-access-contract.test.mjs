@@ -12,7 +12,7 @@ test("Groom and Bride side links require authenticated, side-scoped seating acce
   assert.match(dashboard, /\["bride", "groom"\]\.includes\(side\)/);
   assert.match(dashboard, /dashboard-login\.html\?\$\{managerParams\.toString\(\)\}/);
   assert.match(dashboard, /seatingOnly: "1"/);
-  assert.match(dashboard, /requestedSeatingSide && requestedSeatingSide !== allowedSide/);
+  assert.match(dashboard, /requestedSeatingSide && allowedSide !== "all" && requestedSeatingSide !== allowedSide/);
   assert.match(login, /nextParams\.set\("side", requestedSeatingSide\)/);
 });
 
@@ -21,8 +21,8 @@ test("seat-only guest writes are restricted to seating fields and the allowed si
 
   assert.match(rules, /function isSeatingOnlyDashboardAccount/);
   assert.match(rules, /data\.get\("seatingOnly", false\) == true/);
-  assert.match(rules, /allowedSide in \["bride", "groom"\]/);
-  assert.match(rules, /normalizedGuestSide\(guest\) == dashboardUser\(weddingId\)\.data\.allowedSide/);
+  assert.match(rules, /allowedSide in \["bride", "groom", "all"\]/);
+  assert.match(rules, /allowedSide == "all"\s*\|\| normalizedGuestSide\(guest\) == dashboardUser\(weddingId\)\.data\.allowedSide/);
   assert.match(rules, /affectedKeys\(\)\.hasOnly\(\[\s*"tableId",\s*"tableName",\s*"seatNumber",\s*"seatingAssignments",\s*"updatedAt"/s);
   assert.match(rules, /isSeatingOnlyDashboardAccount\(weddingId\)[\s\S]*?hasOnly\(\["chairs", "guestIds", "updatedAt"\]\)/);
   assert.doesNotMatch(rules, /affectedKeys\(\)\.hasOnly\(\[[^\]]*"phone"/s);

@@ -56,19 +56,21 @@ service cloud.firestore {
     }
 
     function seatingAccountMayUpdateGuest(weddingId, guest) {
-      // A missing or invalid allowedSide is intentionally deny-by-default,
-      // which makes adding the field to old seating-only accounts safe.
+      // Seating-only accounts may be assigned one side or both sides. A
+      // missing or invalid value remains deny-by-default.
       return !isSeatingOnlyDashboardAccount(weddingId)
         || (get(/databases/$(database)/documents/weddings/$(weddingId)).data.get("eventCategory", "wedding_engagement") == "wedding_engagement"
-          && dashboardUser(weddingId).data.allowedSide in ["bride", "groom"]
-          && normalizedGuestSide(guest) == dashboardUser(weddingId).data.allowedSide);
+          && dashboardUser(weddingId).data.allowedSide in ["bride", "groom", "all"]
+          && (dashboardUser(weddingId).data.allowedSide == "all"
+            || normalizedGuestSide(guest) == dashboardUser(weddingId).data.allowedSide));
     }
 
     function seatingAccountMayReadGuest(weddingId, guest) {
       return !isSeatingOnlyDashboardAccount(weddingId) ||
         (get(/databases/$(database)/documents/weddings/$(weddingId)).data.get("eventCategory", "wedding_engagement") == "wedding_engagement"
-          && dashboardUser(weddingId).data.allowedSide in ["bride", "groom"]
-          && normalizedGuestSide(guest) == dashboardUser(weddingId).data.allowedSide);
+          && dashboardUser(weddingId).data.allowedSide in ["bride", "groom", "all"]
+          && (dashboardUser(weddingId).data.allowedSide == "all"
+            || normalizedGuestSide(guest) == dashboardUser(weddingId).data.allowedSide));
     }
 
     // Editor links are exchanged by Cloud Functions for custom Firebase Auth
@@ -287,7 +289,8 @@ service cloud.firestore {
         allow update: if (canEditGuests(weddingId) && validGuestSide(weddingId, request.resource.data, resource.data.get("side", "") == request.resource.data.get("side", "")))
           || (canCheckIn(weddingId)
             && request.resource.data.diff(resource.data).changedKeys().hasOnly(["checkedIn", "checkedInAt", "updatedAt"]))
-          || (canEditSeating(weddingId) && editorMayUpdatePublicGuest(weddingId, resource.data)
+          || (canEditSeating(weddingId) && seatingAccountMayUpdateGuest(weddingId, resource.data)
+            && editorMayUpdatePublicGuest(weddingId, resource.data)
             && request.resource.data.diff(resource.data).changedKeys().hasOnly(["seatingAssignments", "tableId", "tableName", "seatNumber", "updatedAt"]))
           || (isPublicWedding(weddingId)
             && request.resource.data.diff(resource.data).changedKeys().hasOnly(["rsvpStatus", "additionalGuests", "updatedAt"])

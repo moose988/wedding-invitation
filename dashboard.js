@@ -1577,11 +1577,13 @@ async function bootstrapDashboard() {
     state.activeView = "seating";
   }
   if (state.editorMode) {
-    const allowedSide = normalizeGuestSide(state.permissions.allowedSide);
+    const allowedSide = String(state.permissions.allowedSide || "")
+      .trim()
+      .toLowerCase();
     if (
       !state.permissions.canEditSeating ||
-      !["bride", "groom"].includes(allowedSide) ||
-      (requestedSeatingSide && requestedSeatingSide !== allowedSide)
+      !["bride", "groom", "all"].includes(allowedSide) ||
+      (requestedSeatingSide && allowedSide !== "all" && requestedSeatingSide !== allowedSide)
     ) {
       redirectToLogin("access-denied");
       return;
@@ -1691,7 +1693,7 @@ function startListeners() {
   state.loadingTables = true;
   renderActiveView();
 
-  const guestSource = state.editorMode
+  const guestSource = state.editorMode && state.editorRole !== "all"
     ? query(
         collection(state.services.db, "weddings", state.weddingId, "guests"),
         where("side", "in", editorGuestSideValues(state.editorRole)),
@@ -2014,7 +2016,7 @@ function renderChrome() {
       ? ""
       : meta.eyebrow;
   elements.pageTitle.textContent = state.editorMode
-    ? `${state.editorRole[0].toUpperCase()}${state.editorRole.slice(1)} — Seating Editor`
+    ? `${state.editorRole === "all" ? "All sides" : `${state.editorRole[0].toUpperCase()}${state.editorRole.slice(1)}`} — Seating Editor`
     : isSeatingView
       ? ""
       : meta.title;

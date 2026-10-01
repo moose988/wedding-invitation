@@ -171,8 +171,8 @@ async function canViewWedding(user, weddingId) {
 
   if (
     permission.canEditSeating !== true ||
-    !["bride", "groom"].includes(permission.allowedSide) ||
-    (requestedSeatingSide && requestedSeatingSide !== permission.allowedSide)
+    !["bride", "groom", "all"].includes(permission.allowedSide) ||
+    (requestedSeatingSide && permission.allowedSide !== "all" && requestedSeatingSide !== permission.allowedSide)
   ) {
     return false;
   }

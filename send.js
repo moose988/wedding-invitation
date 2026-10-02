@@ -157,7 +157,7 @@ function render() {
         .join("")}
     </section>
 
-    <p class="sender-footnote">Sent progress is saved on this phone only.<br />Made with DA3WA Planner Suite.</p>
+    <p class="sender-footnote">Sent progress is saved on this phone only.<br />Made with qdsystems Planner Suite.</p>
   `;
 }
 

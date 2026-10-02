@@ -31,7 +31,7 @@ init();
 
 function init() {
   if (seatingOnlyMode) {
-    document.title = "DA3WA Seating Editor";
+    document.title = "qdsystems Seating Editor";
     document.querySelector(".da3wa-auth__panel .da3wa-eyebrow").textContent = "Seating Access";
     document.querySelector(".da3wa-auth__panel h1").textContent = "Event Seating Editor";
     document.querySelector(".da3wa-auth__panel p:not(.da3wa-eyebrow):not(.da3wa-auth__status)").textContent =

@@ -56,6 +56,11 @@ const pageMeta = {
     description:
       "A live operational snapshot of guest progress, seating readiness, and on-the-day attention items.",
   },
+  guestSummary: {
+    eyebrow: "Guest overview",
+    title: "Guest Summary",
+    description: "A quick look at your guest list and RSVP replies.",
+  },
   guests: {
     eyebrow: "Guest management",
     title: "Guest Directory",
@@ -1601,6 +1606,15 @@ async function bootstrapDashboard() {
   state.wedding = weddingDoc.exists()
     ? { ...weddingDoc.data(), id: weddingDoc.id }
     : null;
+  if (state.activeView === "guestSummary" && !canViewGuestSummary()) {
+    state.activeView = "overview";
+  }
+  if (state.activeView === "checkin" && !isInvitationQrEnabled()) {
+    state.activeView = "overview";
+    const nextUrl = new URL(window.location.href);
+    nextUrl.searchParams.delete("view");
+    window.history.replaceState(null, "", nextUrl);
+  }
   if (state.editorMode && isCelebrationEvent(state.wedding)) {
     redirectToLogin("access-denied");
     return;
@@ -1768,6 +1782,12 @@ function startWeddingListener() {
       state.wedding = nextWedding;
       state.hallObjects = hydrateHallObjects(state.wedding.hallObjects);
       if (!isSeatingEnabled() && state.activeView === "seating" && !state.editorMode) {
+        state.activeView = "overview";
+        const nextUrl = new URL(window.location.href);
+        nextUrl.searchParams.delete("view");
+        window.history.replaceState(null, "", nextUrl);
+      }
+      if (!isInvitationQrEnabled() && state.activeView === "checkin" && !state.editorMode) {
         state.activeView = "overview";
         const nextUrl = new URL(window.location.href);
         nextUrl.searchParams.delete("view");
@@ -2029,21 +2049,14 @@ function renderChrome() {
     : isSeatingView
       ? ""
       : isOverviewView
-        ? [
-            getEventDisplayTitle(state.wedding),
-            prettifyShape(state.wedding?.status || "active"),
-            formatEventDate(state.wedding?.eventDateISO),
-            state.wedding?.venueEn || "Venue not set",
-          ].join(" · ")
+        ? ""
         : meta.description;
   elements.pageDescription.hidden = !elements.pageDescription.textContent;
   elements.liveIndicator.textContent =
     state.mode === "demo"
       ? "Preview mode"
-      : isOverviewView
-        ? "Live sync"
-        : "";
-  elements.liveIndicator.hidden = state.mode !== "demo" && !isOverviewView;
+      : "";
+  elements.liveIndicator.hidden = !elements.liveIndicator.textContent;
 
   document.querySelectorAll("[data-nav-view]").forEach((button) => {
     button.classList.toggle(
@@ -2051,6 +2064,12 @@ function renderChrome() {
       button.dataset.navView === state.activeView,
     );
     if (button.dataset.navView === "seating") button.hidden = !isSeatingEnabled();
+    if (button.dataset.navView === "checkin") {
+      button.hidden = !isInvitationQrEnabled();
+    }
+    if (button.dataset.navView === "guestSummary") {
+      button.hidden = !canViewGuestSummary() || state.editorMode;
+    }
   });
 
   updateSidebarState();
@@ -2150,42 +2169,15 @@ function renderGlobalActions() {
     return;
   }
   if (state.activeView === "overview") {
-    actions.push(
-      actionButton(
-        "Add guest",
-        "open-add-guest",
-        !can("canEditGuests"),
-        "primary",
-      ),
-      ...(isSeatingEnabled()
-        ? [actionButton("Open seating planner", "nav-seating", false, "secondary")]
-        : []),
-      renderOverviewMoreActions(),
-    );
+    actions.push(`
+      <button class="da3wa-button da3wa-button--secondary overview-refresh-button" type="button" data-action="reload-dashboard" aria-label="Refresh page" title="Refresh page">
+        <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M20 11a8 8 0 0 0-14.9-3M4 4v4h4M4 13a8 8 0 0 0 14.9 3M20 20v-4h-4" /></svg>
+      </button>
+    `);
     elements.globalActions.innerHTML = actions.join("");
     return;
   }
-  if (state.activeView === "guests") {
-    actions.push(
-      actionButton(
-        "Add guest",
-        "open-add-guest",
-        !can("canEditGuests"),
-        "primary",
-      ),
-    );
-  }
-  if (state.activeView === "guests") {
-    actions.push(
-      actionButton(
-        "Bulk add",
-        "open-bulk-add",
-        !can("canEditGuests"),
-        "secondary",
-      ),
-    );
-  }
-  if (state.activeView !== "seating") {
+  if (state.activeView !== "seating" && state.activeView !== "guests") {
     actions.push(
       actionButton("Refresh", "refresh-dashboard", false, "secondary"),
     );
@@ -2214,6 +2206,8 @@ function overviewMenuButton(label, action, disabled = false) {
 
 function switchView(view) {
   if (state.editorMode && view !== "seating") return;
+  if (view === "guestSummary" && !canViewGuestSummary()) return;
+  if (view === "checkin" && !isInvitationQrEnabled()) return;
   if (view === "seating" && !isSeatingEnabled()) {
     showToast("Seating is disabled for this event.", "info");
     return;
@@ -2247,6 +2241,10 @@ function renderActiveView() {
     case "overview":
       renderOverviewPage();
       break;
+    case "guestSummary":
+      if (canViewGuestSummary()) renderGuestSummaryPage();
+      else renderOverviewPage();
+      break;
     case "guests":
       renderGuestPage();
       break;
@@ -2267,6 +2265,33 @@ function renderActiveView() {
   }
 }
 
+function canViewGuestSummary() {
+  const role = String(state.permissions?.role || "").trim().toLowerCase();
+  return Boolean(
+    isWeddingOwner() || ["owner", "customer", "client"].includes(role),
+  );
+}
+
+function renderGuestSummaryPage() {
+  if (state.loadingGuests || state.loadingTables) {
+    elements.pageContent.innerHTML =
+      '<div class="da3wa-skeleton" aria-hidden="true"></div>';
+    return;
+  }
+
+  const stats = calculateDashboardStats(state.guests, state.tables);
+  elements.pageContent.innerHTML = `
+    <section class="overview-page guest-summary-page">
+      <section class="overview-kpis overview-kpis--no-seating" aria-label="Guest totals">
+        ${renderKpiCard("Total guests", stats.totalPeople, `${stats.total} invitations`, "Including additional guests")}
+        ${renderKpiCard("Confirmed", stats.confirmed, `${stats.confirmedPct}% of invitation groups`, "RSVP accepted")}
+        ${renderKpiCard("Awaiting reply", stats.pending, "Still need an RSVP", "Pending")}
+        ${renderKpiCard("Declined", stats.declined, `${stats.declinedPct}% of invitation groups`, "Unable to attend")}
+      </section>
+    </section>
+  `;
+}
+
 function renderOverviewPage() {
   if (state.loadingGuests || state.loadingTables) {
     elements.pageContent.innerHTML =
@@ -2285,6 +2310,24 @@ function renderOverviewPage() {
 
   elements.pageContent.innerHTML = `
     <section class="overview-page">
+      <div class="overview-event-details" aria-label="Event details">
+        <div class="overview-event-detail">
+          <span>Event</span>
+          <strong>${escapeHtml(getEventDisplayTitle(state.wedding))}</strong>
+        </div>
+        <div class="overview-event-detail">
+          <span>Status</span>
+          <strong class="overview-event-status">${escapeHtml(prettifyShape(state.wedding?.status || "active"))}</strong>
+        </div>
+        <div class="overview-event-detail">
+          <span>Date &amp; time</span>
+          <strong>${escapeHtml(formatEventDate(state.wedding?.eventDateISO))}</strong>
+        </div>
+        <div class="overview-event-detail">
+          <span>Location</span>
+          <strong>${escapeHtml(state.wedding?.venueEn || "Venue not set")}</strong>
+        </div>
+      </div>
       <section class="overview-kpis${seatingEnabled ? "" : " overview-kpis--no-seating"}" aria-label="Event summary">
         ${renderKpiCard("Total invited", stats.total, `${stats.totalPeople} people total`, `${stats.accompanyingGuests} additional`)}
         ${renderKpiCard("Confirmed", stats.confirmed, `${stats.confirmedPct}% of parties`, "RSVP accepted")}
@@ -2387,6 +2430,11 @@ function renderGuestPage() {
 
   elements.pageContent.innerHTML = `
     <section class="guest-page">
+      <div class="guest-page-actions" aria-label="Guest actions">
+        ${actionButton("Add guest", "open-add-guest", !can("canEditGuests"), "primary")}
+        ${actionButton("Bulk add", "open-bulk-add", !can("canEditGuests"), "secondary")}
+        ${actionButton("Refresh", "refresh-dashboard", false, "secondary")}
+      </div>
       <article class="guest-toolbar">
         <div class="guest-toolbar__filters">
           <div class="guest-toolbar__controls">
@@ -2660,7 +2708,6 @@ function renderSharePage() {
       ${renderInvitationSettingsCard()}
       ${isSeatingEnabled() && eventUsesGuestSides(state.wedding) ? renderSeatingAccessCard() : ""}
       ${renderSenderCard()}
-      ${isSeatingEnabled() && eventUsesGuestSides(state.wedding) ? renderSideViewCard() : ""}
     </section>
   `;
 }
@@ -2719,9 +2766,7 @@ function renderSenderCard() {
   };
   return `
     <article class="share-card share-card--sender">
-      <p class="da3wa-eyebrow">WhatsApp sender</p>
-      <h3>${eventUsesGuestSides(state.wedding) ? "Send invitations from the couple's own phones" : "Send invitations to all guests"}</h3>
-      <p>${eventUsesGuestSides(state.wedding) ? "Each link opens a ready-made sending page listing guests by invitation side." : "One ready-made sender link includes every guest with a phone number and invitation link."}</p>
+      ${eventUsesGuestSides(state.wedding) ? "" : `<h3>Send invitations to all guests</h3><p>One ready-made sender link includes every guest with a phone number and invitation link.</p>`}
       <div class="sender-options">
         ${eventUsesGuestSides(state.wedding) ? `${senderOption("Groom side", "groom")}${senderOption("Bride side", "bride")}${familyCount ? senderOption("Family", "family", "family guests appear only here and in All guests") : ""}${senderOption("All guests", "all")}` : senderOption("All guests", "all")}
       </div>
@@ -2737,63 +2782,34 @@ function renderExportsPage() {
       "Guest directory with contact, party size, invitation, RSVP, and attendance data.",
       "XLSX / CSV",
       "export-all",
-      "quarter",
+      "third",
     ),
     exportCard(
       "Confirmed",
       "Guests with accepted RSVP status.",
       "XLSX / CSV",
       "export-confirmed",
-      "quarter",
+      "third",
     ),
     exportCard(
       "Pending",
       "Guests still awaiting a response.",
       "XLSX / CSV",
       "export-pending",
-      "quarter",
+      "third",
     ),
     exportCard(
       "Declined",
       "Guests who cannot attend.",
       "XLSX / CSV",
       "export-declined",
-      "quarter",
+      "half",
     ),
     exportCard(
       "Table assignments",
       "Roster sorted by table and seat placement.",
       "XLSX / CSV",
       "export-tables",
-      "third",
-    ),
-    ...(eventUsesGuestSides(state.wedding) ? [exportCard(
-      "Bride side",
-      "Filtered list of bride-side guests.",
-      "XLSX / CSV",
-      "export-bride",
-      "third",
-    ),
-    exportCard(
-      "Groom side",
-      "Filtered list of groom-side guests.",
-      "XLSX / CSV",
-      "export-groom",
-      "third",
-    ),
-    ] : []),
-    exportCard(
-      "Checked in",
-      "Guests who have arrived at the venue.",
-      "XLSX / CSV",
-      "export-checkedIn",
-      "half",
-    ),
-    exportCard(
-      "Not checked in",
-      "Guests still expected onsite.",
-      "XLSX / CSV",
-      "export-notCheckedIn",
       "half",
     ),
   ];
@@ -2909,9 +2925,7 @@ function renderSeatingAccessCard() {
   const loginLink = seatingAccountLoginLink();
   return `
     <article class="share-card share-card--sender">
-      <p class="da3wa-eyebrow">Wedding Seating Access</p>
       <h3>Bride &amp; Groom seating sign-in</h3>
-      <p>Share this same link with the Bride and Groom. After they sign in with their own account, they are taken directly to the mobile-friendly Seating Editor.</p>
       <code>${escapeHtml(loginLink)}</code>
       <div class="sender-option__actions">
         ${actionButton("Copy sign-in link", "copy-seating-login", false, "primary")}
@@ -3192,15 +3206,18 @@ function isSeatingEnabled() {
   return state.wedding?.seatingEnabled !== false;
 }
 
+function isInvitationQrEnabled() {
+  // Missing field means enabled so existing events keep their current behavior.
+  return state.wedding?.showInvitationQr !== false;
+}
+
 function renderInvitationSettingsCard() {
   const canChange = canManageInvitationSettings();
   const showQr = state.wedding?.showInvitationQr !== false;
   const seatingEnabled = isSeatingEnabled();
   return `
     <article class="share-card invitation-settings-card">
-      <p class="da3wa-eyebrow">Invitation settings</p>
       <h3>Guest access and seating</h3>
-      <p>Choose which optional event details appear in the guest invitation.</p>
       <label class="invitation-setting-toggle">
         <span>
           <strong>Show QR code on invitation</strong>
@@ -3887,6 +3904,9 @@ async function handleAction(action, dataset, event = null) {
         renderAll();
       }
       showToast("Dashboard refreshed.", "success");
+      return;
+    case "reload-dashboard":
+      window.location.reload();
       return;
     case "nav-seating":
       switchView("seating");

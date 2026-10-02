@@ -15,6 +15,21 @@
       rel="stylesheet"
     />
     <link rel="stylesheet" href="./styles.css" />
+    <script>
+      const homeParams = new URLSearchParams(window.location.search);
+      const isHomePath = ["/", "/index.html"].includes(
+        window.location.pathname.replace(/\/+$/, "") || "/",
+      );
+      const isPersonalInvitation =
+        Boolean(homeParams.get("wedding")) && Boolean(homeParams.get("guest"));
+      if (
+        isHomePath &&
+        !isPersonalInvitation &&
+        homeParams.get("demo") !== "1"
+      ) {
+        window.location.replace("./dashboard-login.html");
+      }
+    </script>
   </head>
   <body>
     <div class="page-shell">

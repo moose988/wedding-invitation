@@ -21,6 +21,17 @@ const requestedSeatingSide = ["bride", "groom"].includes(params.get("side"))
 const elements = {
   loginForm: document.getElementById("loginForm"),
   authStatus: document.getElementById("authStatus"),
+  loginEyebrow: document.getElementById("loginEyebrow"),
+  loginTitle: document.getElementById("loginTitle"),
+  loginDescription: document.getElementById("loginDescription"),
+  loginSubmitButton: document.getElementById("loginSubmitButton"),
+  loginSubmitLabel: document.getElementById("loginSubmitLabel"),
+  passwordInput: document.getElementById("loginPassword"),
+  passwordToggle: document.querySelector("[data-password-toggle]"),
+  eyeShow: document.querySelector("[data-eye-show]"),
+  eyeHide: document.querySelector("[data-eye-hide]"),
+  spinner: document.querySelector(".planner-login__spinner"),
+  submitArrow: document.querySelector(".planner-login__submit-arrow"),
 };
 
 let services = null;
@@ -32,12 +43,13 @@ init();
 function init() {
   if (seatingOnlyMode) {
     document.title = "qdsystems Seating Editor";
-    document.querySelector(".da3wa-auth__panel .da3wa-eyebrow").textContent = "Seating Access";
-    document.querySelector(".da3wa-auth__panel h1").textContent = "Event Seating Editor";
-    document.querySelector(".da3wa-auth__panel p:not(.da3wa-eyebrow):not(.da3wa-auth__status)").textContent =
-      "Sign in to view and update the seating plan.";
-    elements.loginForm.querySelector("button[type=submit]").textContent = "Open seating editor";
+    elements.loginEyebrow.textContent = "Seating Access";
+    elements.loginTitle.textContent = "Event Seating Editor";
+    elements.loginDescription.textContent = "Sign in to view and update the seating plan.";
+    elements.loginSubmitLabel.textContent = "Open seating editor";
   }
+
+  elements.passwordToggle?.addEventListener("click", togglePasswordVisibility);
 
   if (!isFirebaseConfigured()) {
     elements.authStatus.textContent = "Firebase is not configured yet. Dashboard access is unavailable.";
@@ -78,7 +90,7 @@ function init() {
 
 async function handleLogin(event) {
   event.preventDefault();
-  if (!services?.auth) {
+  if (!services?.auth || elements.loginSubmitButton.disabled) {
     elements.authStatus.textContent = "Firebase is not ready yet.";
     return;
   }
@@ -86,6 +98,7 @@ async function handleLogin(event) {
   const email = event.currentTarget.email.value.trim();
   const password = event.currentTarget.password.value;
   elements.authStatus.textContent = "Signing in...";
+  setSubmitLoading(true);
 
   try {
     if (!(await sessionResetPromise)) {
@@ -93,11 +106,34 @@ async function handleLogin(event) {
     }
     const credential = await signInWithEmailAndPassword(services.auth, email, password);
     elements.authStatus.textContent = "Redirecting to dashboard...";
-    redirectAfterLogin(credential.user);
+    await redirectAfterLogin(credential.user);
   } catch (error) {
     console.error(error);
     elements.authStatus.textContent = "Sign-in failed. Please check your email and password.";
+  } finally {
+    if (!isRedirecting) {
+      setSubmitLoading(false);
+    }
   }
+}
+
+function togglePasswordVisibility() {
+  const isVisible = elements.passwordInput.type === "text";
+  elements.passwordInput.type = isVisible ? "password" : "text";
+  elements.passwordToggle.setAttribute("aria-pressed", String(!isVisible));
+  elements.passwordToggle.setAttribute("aria-label", isVisible ? "Show password" : "Hide password");
+  elements.eyeShow.hidden = !isVisible;
+  elements.eyeHide.hidden = isVisible;
+}
+
+function setSubmitLoading(isLoading) {
+  elements.loginSubmitButton.disabled = isLoading;
+  elements.loginSubmitButton.setAttribute("aria-busy", String(isLoading));
+  elements.loginSubmitLabel.textContent = isLoading
+    ? "Signing in..."
+    : seatingOnlyMode ? "Open seating editor" : "Sign in";
+  elements.spinner.hidden = !isLoading;
+  elements.submitArrow.hidden = isLoading;
 }
 
 async function redirectAfterLogin(user) {

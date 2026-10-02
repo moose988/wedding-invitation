@@ -3,41 +3,150 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="theme-color" content="#f4efe5" />
     <title>qdsystems Planner Login</title>
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link
-      href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,500;9..144,600&family=Manrope:wght@400;500;600;700;800&family=Noto+Naskh+Arabic:wght@400;500;600;700&display=swap"
+      href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,500;9..144,600;9..144,700&family=Manrope:wght@400;500;600;700;800&display=swap"
       rel="stylesheet"
     />
-    <link rel="stylesheet" href="./styles.css" />
     <link rel="stylesheet" href="./dashboard.css" />
+    <link rel="stylesheet" href="./dashboard-login.css?v=20261002-celebration-login-2" />
   </head>
-  <body class="dashboard-body">
-    <main class="da3wa-shell">
-      <section class="da3wa-auth">
-        <div class="da3wa-auth__panel">
-          <p class="da3wa-eyebrow">Planner Access</p>
-          <h1>qdsystems Operations Console</h1>
-          <p>
-            Sign in on this separate access page, then continue directly into the planner dashboard for your event.
-          </p>
-          <form class="da3wa-auth__form" id="loginForm">
-            <label>
-              <span>Email</span>
-              <input class="da3wa-input" name="email" type="email" autocomplete="email" required />
-            </label>
-            <label>
-              <span>Password</span>
-              <input class="da3wa-input" name="password" type="password" autocomplete="current-password" required />
-            </label>
-            <button class="da3wa-button da3wa-button--primary" type="submit">Sign in to dashboard</button>
-          </form>
-          <p class="da3wa-auth__status" id="authStatus" aria-live="polite"></p>
-        </div>
-      </section>
+  <body class="dashboard-body planner-login-page">
+    <main class="planner-login">
+      <div class="planner-login__layout">
+        <section class="planner-login__story" aria-labelledby="celebrationTitle">
+          <a class="planner-login__brand" href="./" aria-label="qdsystems home">
+            <span class="planner-login__brand-mark" aria-hidden="true">
+              <svg viewBox="0 0 40 40" focusable="false">
+                <path d="M20 3.5 23.9 15l11.8-3.4-7.1 10 8.4 8.8-12.1-1.7L20 40l-4.9-11.3L3 30.4l8.4-8.8-7.1-10L16.1 15 20 3.5Z" />
+                <circle cx="20" cy="21" r="4.1" />
+              </svg>
+            </span>
+            <span>qdsystems</span>
+          </a>
+
+          <div class="planner-login__story-copy">
+            <p class="planner-login__eyebrow">One space for every occasion</p>
+            <h1 id="celebrationTitle">Every celebration <em>starts here.</em></h1>
+            <p class="planner-login__intro">Beautiful invitations. Thoughtful planning. Memorable moments.</p>
+            <ul class="planner-login__occasions" aria-label="Events you can plan">
+              <li>Weddings</li>
+              <li>Birthdays</li>
+              <li>Celebrations</li>
+            </ul>
+          </div>
+
+          <div class="planner-login__art" aria-hidden="true">
+            <svg class="planner-login__arch" viewBox="0 0 560 390" preserveAspectRatio="xMidYMid meet" focusable="false">
+              <path class="planner-login__arch-fill" d="M93 390V190a187 187 0 0 1 374 0v200H93Z" />
+              <path class="planner-login__arch-line" d="M117 390V190a163 163 0 0 1 326 0v200" />
+              <path class="planner-login__arch-inner" d="M137 390V190a143 143 0 0 1 286 0v200" />
+              <path class="planner-login__botanical" d="M112 300c-20-28-18-55 2-79m-1 34c-18-4-29-15-32-33m36 3c16-8 23-22 21-42m-28 88c-16-7-25-18-26-34m31-31c-3-19 2-34 15-45m-18 98c-8-17-7-32 3-48m-21 65c-12-2-21-9-27-20" />
+              <path class="planner-login__botanical-leaf" d="M82 223c13 1 23 9 31 23-14 2-25-6-31-23Zm36-29c-1 15-9 26-23 34-2-15 6-27 23-34Zm-26 62c13 2 23 10 29 24-14 1-24-7-29-24Zm-7 38c12-1 22 5 31 17-13 4-24-2-31-17Z" />
+              <path class="planner-login__balloon-line" d="M436 100c7 15 8 29 3 44m-3-44 9-3m-9 3-7-7" />
+              <path class="planner-login__balloon" d="M420 69c0-13 8-22 18-22s18 9 18 22-9 25-18 25-18-12-18-25Z" />
+              <path class="planner-login__cap" d="m90 335 22-11 22 11-22 11-22-11Zm8 5v12c9 7 19 7 28 0v-12m8-5v15" />
+            </svg>
+            <div class="planner-login__art-glow"></div>
+            <div class="planner-login__art-card planner-login__art-card--back"></div>
+            <div class="planner-login__art-card planner-login__art-card--middle"></div>
+            <div class="planner-login__envelope">
+              <span class="planner-login__envelope-fold"></span>
+            </div>
+            <div class="planner-login__invitation">
+              <span class="planner-login__invitation-rule"></span>
+              <span class="planner-login__invitation-kicker">A moment to remember</span>
+              <span class="planner-login__invitation-title">Made for<br />your story</span>
+              <span class="planner-login__invitation-detail">INVITATIONS · PLANNING · JOY</span>
+              <svg class="planner-login__invitation-flower" viewBox="0 0 32 32" focusable="false">
+                <path d="M16 4c3 5 7 9 12 12-5 3-9 7-12 12C13 23 9 19 4 16 9 13 13 9 16 4Z" />
+                <circle cx="16" cy="16" r="2.3" />
+              </svg>
+            </div>
+            <div class="planner-login__wax-seal">q</div>
+            <div class="planner-login__art-caption"><span></span> Every detail, in its place</div>
+          </div>
+        </section>
+
+        <section class="planner-login__form-side" aria-labelledby="loginTitle">
+          <div class="planner-login__card">
+            <div class="planner-login__card-heading">
+              <p class="planner-login__card-eyebrow" id="loginEyebrow">Planner Access</p>
+              <h2 id="loginTitle">Welcome back</h2>
+              <p id="loginDescription">Sign in to manage your invitations and events.</p>
+            </div>
+
+            <form class="planner-login__form" id="loginForm">
+              <label class="planner-login__field" for="loginEmail">
+                <span>Email</span>
+                <input
+                  id="loginEmail"
+                  name="email"
+                  type="email"
+                  inputmode="email"
+                  autocomplete="username"
+                  placeholder="you@example.com"
+                  required
+                />
+              </label>
+
+              <label class="planner-login__field" for="loginPassword">
+                <span>Password</span>
+                <span class="planner-login__password-wrap">
+                  <input
+                    id="loginPassword"
+                    name="password"
+                    type="password"
+                    autocomplete="current-password"
+                    placeholder="Enter your password"
+                    required
+                  />
+                  <button
+                    class="planner-login__password-toggle"
+                    type="button"
+                    data-password-toggle
+                    aria-label="Show password"
+                    aria-pressed="false"
+                  >
+                    <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false" data-eye-show>
+                      <path d="M2.5 12s3.3-6 9.5-6 9.5 6 9.5 6-3.3 6-9.5 6-9.5-6-9.5-6Z" />
+                      <circle cx="12" cy="12" r="2.7" />
+                    </svg>
+                    <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false" data-eye-hide hidden>
+                      <path d="m3 3 18 18M10.6 6.2A10.5 10.5 0 0 1 12 6c6.2 0 9.5 6 9.5 6a15 15 0 0 1-3.1 3.7M6.2 6.3C3.8 8 2.5 12 2.5 12s3.3 6 9.5 6c1.1 0 2.1-.2 3-.5" />
+                    </svg>
+                  </button>
+                </span>
+              </label>
+
+              <button class="planner-login__submit" type="submit" id="loginSubmitButton">
+                <span id="loginSubmitLabel">Sign in</span>
+                <svg class="planner-login__spinner" viewBox="0 0 24 24" aria-hidden="true" focusable="false" hidden>
+                  <circle cx="12" cy="12" r="9" />
+                </svg>
+                <svg class="planner-login__submit-arrow" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+                  <path d="M5 12h14m-6-6 6 6-6 6" />
+                </svg>
+              </button>
+            </form>
+
+            <p class="planner-login__status" id="authStatus" role="status" aria-live="polite" aria-atomic="true"></p>
+            <div class="planner-login__card-footer">
+              <svg class="planner-login__footer-mark" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+                <path d="M12 2.5c2.3 3.6 4.1 5.4 9.5 9.5-5.4 4.1-7.2 5.9-9.5 9.5-2.3-3.6-4.1-5.4-9.5-9.5 5.4-4.1 7.2-5.9 9.5-9.5Z" />
+                <circle cx="12" cy="12" r="1.6" />
+              </svg>
+              <span>Your next celebration, beautifully organized.</span>
+            </div>
+          </div>
+          <p class="planner-login__form-note">A thoughtful start to every occasion.</p>
+        </section>
+      </div>
     </main>
 
-    <script type="module" src="./dashboard-login.js?v=20261002-qdsystems-brand"></script>
+    <script type="module" src="./dashboard-login.js?v=20261002-celebration-login"></script>
   </body>
 </html>

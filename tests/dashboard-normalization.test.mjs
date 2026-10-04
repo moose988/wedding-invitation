@@ -11,12 +11,15 @@ function fixture(owner = true) {
   let reject;
   const pending = new Promise((_, fail) => { reject = fail; });
   const state = {
-    services: { db: {}, functions: {} }, weddingId: "isolated-wedding",
+    services: { db: {}, functions: {} }, mode: "live", weddingId: "isolated-wedding",
     currentUser: { uid: "isolated-owner" }, listenerGeneration: 0,
   };
   const context = vm.createContext({
-    state, requestedSeatingSide: "", doc: () => ({}),
-    getDoc: async () => ({ exists: () => true, data: () => ({ canViewDashboard: true }), id: "isolated-wedding" }),
+    state, requestedSeatingSide: "", accountSeatingEditorMode: false, doc: () => ({}),
+    can: (permission) => permission === "canEditGuests" && owner,
+    collection: () => ({}),
+    getDocs: () => { events.push("call"); return pending; },
+    getDoc: async () => ({ exists: () => true, data: () => ({ canViewDashboard: true, canEditGuests: owner }), id: "isolated-wedding" }),
     rememberWeddingId() {}, hydrateHallObjects: () => [], isWeddingOwner: () => owner,
     showDashboard: () => events.push("show"), renderAll: () => events.push("render"),
     startWeddingListener: () => events.push("wedding-listener"),
@@ -47,8 +50,7 @@ test("dashboard finishes bootstrap while normalization is pending and reports re
   await new Promise(setImmediate);
   assert.equal(f.events.find(e => e[0] === "error")[2], error);
   const toast = f.events.find(e => e[0] === "toast");
-  assert.match(toast[1], /functions\/internal/);
-  assert.match(toast[1], /seating access may be limited/);
+  assert.match(toast[1], /could not update all legacy guest side assignments/);
   assert.equal(toast[2], "error");
 });
 

@@ -161,6 +161,72 @@ service cloud.firestore {
         && request.resource.data.updatedAt == request.time;
     }
 
+    function validEventDetails(data) {
+      let mapsUrl = data.get("mapsUrl", "");
+      return data.eventTitle is string
+        && data.eventTitle.size() > 0
+        && data.eventTitle.size() <= 160
+        && data.eventDateISO is string
+        && data.eventDateISO.matches("^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}\\.\\d{3}Z$")
+        && data.venueEn is string
+        && data.venueEn.size() > 0
+        && data.venueEn.size() <= 200
+        && data.get("location", "") is string
+        && data.get("locationEn", "") is string
+        && data.get("timeEn", "") is string
+        && data.get("timeAr", "") is string
+        && mapsUrl is string
+        && (mapsUrl == "" || mapsUrl.matches("^https?://[^ ]+$"))
+        && (!data.keys().hasAny(["eventCategory"]) || data.eventCategory in ["wedding_engagement", "celebration"])
+        && (!data.keys().hasAny(["status"]) || data.status in ["draft", "upcoming", "active", "completed", "archived"]);
+    }
+
+    function isOwnerEventDetailsUpdate(weddingId) {
+      let changes = request.resource.data.diff(resource.data).affectedKeys();
+      let statusUnchanged = !changes.hasAny(["status"]);
+      let normalStatusChange = resource.data.get("status", "") != "completed"
+        && request.resource.data.get("status", "") in ["draft", "upcoming", "active", "archived"];
+      return isDashboardMember(weddingId)
+        && request.auth.uid == resource.data.ownerUserId
+        && changes.hasOnly([
+          "eventCategory", "eventTitle", "coupleName", "brideName", "groomName",
+          "eventDateISO", "timeEn", "timeAr", "venueEn", "location", "locationEn",
+          "mapsUrl", "whatsAppCountryCode", "invitationLanguage", "plannerNotes", "status", "updatedAt"
+        ])
+        && (statusUnchanged || normalStatusChange)
+        && validEventDetails(request.resource.data);
+    }
+
+    function isOwnerLifecycleUpdate(weddingId) {
+      let changes = request.resource.data.diff(resource.data).affectedKeys();
+      let nextStatus = request.resource.data.get("status", "");
+      let wasCompleted = resource.data.get("status", "") == "completed";
+      let completing = nextStatus == "completed"
+        && !wasCompleted
+        && request.resource.data.get("completedAt", null) == request.time
+        && request.resource.data.get("statusBeforeCompletion", "") in ["draft", "upcoming", "active"];
+      let reopening = wasCompleted
+        && nextStatus in ["draft", "upcoming", "active"]
+        && request.resource.data.get("completedAt", null) == null
+        && request.resource.data.get("statusBeforeCompletion", null) == null;
+      let ordinaryStatusChange = !wasCompleted
+        && nextStatus in ["draft", "upcoming", "active"]
+        && changes.hasOnly(["status", "updatedAt"]);
+      let archiving = nextStatus in ["archived", "draft"]
+        && changes.hasOnly(["status", "updatedAt"]);
+      return isDashboardMember(weddingId)
+        && request.auth.uid == resource.data.ownerUserId
+        && changes.hasOnly(["status", "completedAt", "statusBeforeCompletion", "updatedAt"])
+        && request.resource.data.updatedAt == request.time
+        && (completing || reopening || ordinaryStatusChange || archiving);
+    }
+
+    function isOwnerHallLayoutUpdate(weddingId) {
+      return isDashboardMember(weddingId)
+        && request.auth.uid == resource.data.ownerUserId
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(["hallObjects", "updatedAt"]);
+    }
+
     function isPublicWedding(weddingId) {
       return get(/databases/$(database)/documents/weddings/$(weddingId)).data.status == "active";
     }
@@ -203,8 +269,9 @@ service cloud.firestore {
       // stage/entrance markers live on the wedding document. Let seating
       // editors update only that layout field, without granting access to any
       // other wedding settings.
-      allow update: if validEventCategory(request.resource.data) && ((isDashboardMember(weddingId) &&
-          request.auth.uid == resource.data.ownerUserId)
+      allow update: if validEventCategory(request.resource.data) && (isOwnerEventDetailsUpdate(weddingId)
+        || isOwnerLifecycleUpdate(weddingId)
+        || isOwnerHallLayoutUpdate(weddingId)
         || isInvitationQrSettingsUpdate(weddingId)
         || isInvitationSeatingSettingsUpdate(weddingId)
         || ((isDashboardMember(weddingId) && dashboardUser(weddingId).data.canEditSeating == true)

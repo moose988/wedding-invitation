@@ -17,7 +17,7 @@
         <div class="workspace-account"><span id="userEmail"></span><button class="text-button" id="signOutButton" type="button">Sign out</button></div>
       </header>
       <section class="workspace-hero">
-        <div><p class="workspace-kicker">Planner workspace</p><h1>My Events</h1><p>Every celebration, beautifully organized in one private workspace.</p></div>
+        <div><h1>My Events</h1></div>
         <button class="primary-button" id="createWeddingButton" type="button">Create event</button>
       </section>
       <section class="workspace-controls" aria-label="Event controls">
@@ -25,7 +25,7 @@
         <label class="sort-field">Sort <select id="sortSelect"><option value="event">Event date</option><option value="updated">Recently updated</option><option value="created">Recently created</option></select></label>
       </section>
       <nav class="filter-row" aria-label="Filter events" id="filterRow">
-        <button class="filter-button is-active" data-filter="all" type="button">All</button><button class="filter-button" data-filter="draft" type="button">Draft</button><button class="filter-button" data-filter="upcoming" type="button">Upcoming</button><button class="filter-button" data-filter="active" type="button">Active</button><button class="filter-button" data-filter="completed" type="button">Completed</button><button class="filter-button" data-filter="archived" type="button">Archived</button>
+        <button class="filter-button is-active" data-filter="all" type="button">All</button><button class="filter-button" data-filter="draft" type="button">Draft</button><button class="filter-button" data-filter="upcoming" type="button">Upcoming</button><button class="filter-button" data-filter="active" type="button">Active</button><button class="filter-button" data-filter="old" type="button">Old Events</button><button class="filter-button" data-filter="completed" type="button">Completed</button><button class="filter-button" data-filter="archived" type="button">Archived</button>
       </nav>
       <p class="workspace-status" id="workspaceStatus" role="status">Loading your events…</p>
       <section class="wedding-grid" id="weddingGrid" aria-live="polite"></section>
@@ -61,6 +61,6 @@
       </form>
     </dialog>
     <dialog class="workspace-dialog" id="deleteDialog"><form class="workspace-modal workspace-modal--small" id="deleteForm"><header><div><p class="workspace-kicker">Permanent action</p><h2>Delete event?</h2></div><button class="icon-close" type="button" data-close="deleteDialog" aria-label="Close">×</button></header><div class="workspace-modal__body"><p>This permanently removes the event and all of its guests, invitations, seating, and check-in data. Type <strong id="deletePhrase"></strong> to continue.</p><label>Confirmation<input id="deleteConfirmation" autocomplete="off" /></label><p class="form-error" id="deleteError" role="alert"></p></div><footer><button class="secondary-button" type="button" data-close="deleteDialog">Cancel</button><button class="danger-button" type="submit">Delete permanently</button></footer></form></dialog>
-    <script type="module" src="./weddings.js?v=category-navigation"></script>
+    <script type="module" src="./weddings.js?v=20261004-old-events"></script>
   </body>
 </html>

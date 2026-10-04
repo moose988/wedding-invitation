@@ -13,8 +13,12 @@ test("invitation QR visibility defaults to enabled and is synchronized through e
   ]);
 
   assert.match(dashboard, /state\.wedding\?\.showInvitationQr !== false/);
-  assert.match(dashboard, /data-action="toggle-invitation-qr"/);
-  assert.match(dashboard, /await updateDoc\(doc\(state\.services\.db, "weddings", state\.weddingId\), \{\s*showInvitationQr,/);
+  assert.match(dashboard, /data-action="toggle-event-qr"/);
+  assert.match(dashboard, /queueEventSettingSave\(key, eventSetting\.checked\)/);
+  assert.match(dashboard, /\[key\]: desired/);
+  assert.match(dashboard, /function renderEventSettingsPage\(/);
+  const sharePage = dashboard.slice(dashboard.indexOf("function renderSharePage()"), dashboard.indexOf("function eventSettingsDateParts("));
+  assert.doesNotMatch(sharePage, /toggle-event-qr|toggle-event-seating|Guest access and seating/);
   assert.match(dashboard, /startWeddingListener\(\)/);
   assert.match(rootInvitation, /state\.wedding\?\.showInvitationQr === false/);
   assert.match(rootInvitation, /elements\.qrPassSection\.hidden = true/);
@@ -43,9 +47,9 @@ test("seating is enabled for old events, persists per event, and gates seating U
   ]);
 
   assert.match(dashboard, /function isSeatingEnabled\(\)[\s\S]*?state\.wedding\?\.seatingEnabled !== false/);
-  assert.match(dashboard, /data-action="toggle-seating-enabled"/);
-  assert.match(dashboard, /role="switch" data-action="toggle-seating-enabled"/);
-  assert.match(dashboard, /await updateDoc\(doc\(state\.services\.db, "weddings", state\.weddingId\), \{\s*seatingEnabled,/);
+  assert.match(dashboard, /data-action="toggle-event-seating"/);
+  assert.match(dashboard, /role="switch" data-action="toggle-event-seating"/);
+  assert.match(dashboard, /queueEventSettingSave\(key, eventSetting\.checked\)/);
   assert.match(dashboard, /function ensureSenderSeatsReady[\s\S]*?if \(!isSeatingEnabled\(\)\) return true;/);
   assert.match(dashboard, /button\.dataset\.navView === "seating"\) button\.hidden = !isSeatingEnabled\(\)/);
   assert.match(dashboard, /nextUrl\.searchParams\.delete\("view"\)/);

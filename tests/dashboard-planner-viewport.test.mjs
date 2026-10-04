@@ -78,7 +78,7 @@ test("guest selection highlights the party while preserving the planner view", a
   assert.match(dashboard, /assignment\?\.guestId && assignment\.guestId === state\.activePartyGuestId/);
 });
 
-test("manual seating modes and canvas header are removed while selected venue items are announced", async () => {
+test("mobile seating modes keep the desktop planner markup and selected venue list accessible", async () => {
   const [dashboard, css] = await Promise.all([
     read("dashboard.js"),
     read("dashboard.css"),
@@ -91,7 +91,12 @@ test("manual seating modes and canvas header are removed while selected venue it
     dashboard.indexOf("function renderLayoutLibrary("),
     dashboard.indexOf("function renderAssignmentLibrary("),
   );
-  assert.doesNotMatch(dashboard, /seatingMode|set-seating-mode|planner-toggle/);
+  assert.match(dashboard, /mobileSeatingMode: "assign"/);
+  assert.match(dashboard, /function renderMobileSeatingPage\(/);
+  assert.match(dashboard, /renderMobileSeatingPage\(\{ selectedTable, selectedHallObject, seatingStats, sideStats, isSaving \}\)/);
+  assert.match(dashboard, /function handleMobileMapTouchMove\(/);
+  assert.match(dashboard, /session\.mobileDirectAssignment/);
+  assert.doesNotMatch(dashboard, /state\.seatingMode|data-action="set-seating-mode"|planner-toggle/);
   assert.doesNotMatch(seatingRenderer, /planner-canvas__header|Venue canvas|Ballroom layout builder|Seat assignment workspace/);
   assert.match(library, /aria-pressed="\$\{table\.id === state\.selectedTableId\}"/);
   assert.match(library, /aria-pressed="\$\{item\.id === state\.selectedHallObjectId\}"/);
@@ -111,6 +116,9 @@ test("desktop sidebar preference is separate from the accessible mobile drawer",
   assert.match(dashboard, /dashboardSidebarStorageKey,[\s\S]*?state\.sidebarCollapsed \? "1" : "0"/);
   assert.match(dashboard, /event\.key === "Tab"[\s\S]*?state\.sidebarOpen[\s\S]*?focusable/);
   assert.match(dashboard, /function closeMobileSidebar\(\)[\s\S]*?elements\.seatingMobileNavButton[\s\S]*?elements\.navToggleButton\)\?\.focus\(\)/);
-  assert.match(css, /\.da3wa-app\.is-sidebar-collapsed\s*\{\s*grid-template-columns: minmax\(0, 1fr\)/);
+  assert.match(css, /\.da3wa-app\.is-sidebar-collapsed\s*\{\s*grid-template-columns: 76px minmax\(0, 1fr\)/);
+  assert.match(css, /\.da3wa-app\.is-sidebar-collapsed > \.da3wa-sidebar\s*\{\s*display: grid/);
+  assert.match(css, /\.da3wa-app\.is-sidebar-collapsed \.da3wa-nav-label,/);
+  assert.match(html, /data-nav-view="settings" title="Event Settings" aria-label="Event Settings"/);
   assert.match(css, /@media \(max-width: 1180px\)[\s\S]*?\.da3wa-sidebar-desktop-toggle\s*\{\s*display: none/);
 });

@@ -83,6 +83,11 @@ const pageMeta = {
     title: "Links & Invitations",
     description: "",
   },
+  settings: {
+    eyebrow: "Event configuration",
+    title: "Event Settings",
+    description: "Manage event details, guest access, seating, and event status.",
+  },
   exports: {
     eyebrow: "Data exports",
     title: "Exports",
@@ -784,6 +789,14 @@ const state = {
   plannerZoom: 1,
   plannerViewCenter: null,
   plannerMapWidth: 0,
+  mobileSeatingMode: "assign",
+  mobileSeatingView: "tables",
+  mobileMapOpen: false,
+  mobileSavedScrollY: 0,
+  mobileTouchGesture: null,
+  showFullSeatingSummary: false,
+  mobileAssignmentFilter: "unassigned",
+  renderedMobileSeatingLayout: null,
   dragState: null,
   guestFilters: {
     search: "",
@@ -810,6 +823,15 @@ const state = {
   dirtyGuestForm: false,
   dirtyTableForm: false,
   dirtyDanceFloorForm: false,
+  dirtyEventSettings: false,
+  savingEventSettings: false,
+  eventSettingsDraft: null,
+  eventSettingsOriginal: null,
+  eventSettingsErrors: {},
+  eventSettingWrites: {},
+  eventSettingsMessage: "",
+  eventStatusPending: false,
+  eventLifecycleMessage: "",
   unsubGuests: null,
   unsubTables: null,
   unsubWedding: null,
@@ -872,6 +894,11 @@ async function init() {
   state.initialized = true;
   bindEvents();
   window.addEventListener("pagehide", disposeDashboardListeners, { once: true });
+  window.addEventListener("beforeunload", (event) => {
+    if (!state.dirtyEventSettings) return;
+    event.preventDefault();
+    event.returnValue = "";
+  });
 
   if (state.mode === "demo") {
     loadDemoDashboard();
@@ -941,7 +968,7 @@ function bindEvents() {
     } catch {}
     updateSidebarState();
     refreshPlannerAfterSidebarChange();
-    if (state.sidebarCollapsed) elements.desktopSidebarExpandButton?.focus();
+    if (state.sidebarCollapsed) elements.desktopSidebarToggleButton?.focus();
   });
   elements.desktopSidebarExpandButton?.addEventListener("click", () => {
     state.sidebarCollapsed = false;
@@ -1010,6 +1037,9 @@ function bindEvents() {
   document.addEventListener("input", handleDocumentInput);
   document.addEventListener("change", handleDocumentChange);
   document.addEventListener("keydown", handleDocumentKeydown);
+  elements.pageContent?.addEventListener("submit", (event) => {
+    if (event.target?.id === "eventSettingsForm") void saveEventSettings(event);
+  });
   elements.guestModal?.addEventListener("click", handleDialogBackdropClick);
   elements.bulkAddModal?.addEventListener("click", handleDialogBackdropClick);
   elements.tableModal?.addEventListener("click", handleDialogBackdropClick);
@@ -1108,6 +1138,7 @@ function bindEvents() {
   window.addEventListener("scroll", closeGuestMenu, true);
   window.addEventListener("resize", closeGuestMenu);
   window.addEventListener("resize", refreshPlannerAfterSidebarChange);
+  window.addEventListener("resize", refreshMobileSeatingLayout);
   window.addEventListener("pointermove", handlePlannerPointerMove);
   window.addEventListener("pointerup", handlePlannerPointerUp);
   window.addEventListener("pointercancel", handlePlannerPointerCancel);
@@ -1225,6 +1256,21 @@ function handleDialogBackdropClick(event) {
 }
 
 function handleDocumentInput(event) {
+  const settingsField = event.target.closest("[data-event-setting-field]");
+  if (settingsField) {
+    syncEventSettingsDraftFromForm();
+    state.dirtyEventSettings = Object.keys(state.eventSettingsOriginal || {}).some(
+      (key) => state.eventSettingsDraft?.[key] !== state.eventSettingsOriginal?.[key],
+    );
+    state.eventSettingsMessage = "";
+    if (state.eventSettingsErrors) delete state.eventSettingsErrors[settingsField.name];
+    updateEventSettingsFormState();
+    settingsField.removeAttribute("aria-invalid");
+    const error = settingsField.closest("label")?.querySelector(".event-setting-error");
+    if (error) error.textContent = "";
+    return;
+  }
+
   if (event.target === elements.guestForm?.fullName) {
     event.target.setCustomValidity(
       event.target.value.trim() ? "" : "Enter the guest's full name.",
@@ -1352,6 +1398,17 @@ function showEditorAccessError() {
 }
 
 function handleDocumentChange(event) {
+  const eventSetting = event.target.closest(
+    "[data-action='toggle-event-qr'], [data-action='toggle-event-seating']",
+  );
+  if (eventSetting) {
+    const key = eventSetting.dataset.action === "toggle-event-qr"
+      ? "showInvitationQr"
+      : "seatingEnabled";
+    void queueEventSettingSave(key, eventSetting.checked);
+    return;
+  }
+
   const guestFilter = event.target.closest("[data-guest-filter]");
   if (guestFilter) {
     state.guestFilters[guestFilter.dataset.guestFilter] = guestFilter.value;
@@ -1637,6 +1694,7 @@ async function bootstrapDashboard() {
 
 async function normalizeGuestSidesInBackground() {
   if (!can("canEditGuests") || state.mode !== "live") return;
+  const generation = state.listenerGeneration;
   try {
     const guestsSnapshot = await getDocs(
       collection(state.services.db, "weddings", state.weddingId, "guests"),
@@ -1654,6 +1712,7 @@ async function normalizeGuestSidesInBackground() {
       });
       await batch.commit();
     }
+    if (generation !== state.listenerGeneration) return;
     if (legacyGuests.length) {
       showToast(
         `Updated ${legacyGuests.length} legacy guest side assignment${legacyGuests.length === 1 ? "" : "s"} to Groom.`,
@@ -1662,6 +1721,7 @@ async function normalizeGuestSidesInBackground() {
     }
   } catch (error) {
     console.error("Legacy guest-side migration failed.", error);
+    if (generation !== state.listenerGeneration) return;
     showToast("We could not update all legacy guest side assignments. Please refresh and try again.", "error");
   }
 }
@@ -1796,7 +1856,7 @@ function startWeddingListener() {
       const focusedSetting = document.activeElement?.dataset?.action;
       const pageScroll = { x: window.scrollX, y: window.scrollY };
       renderAll();
-      if (["toggle-invitation-qr", "toggle-seating-enabled"].includes(focusedSetting)) {
+      if (["toggle-event-qr", "toggle-event-seating"].includes(focusedSetting)) {
         requestAnimationFrame(() => {
           document.querySelector(`[data-action="${focusedSetting}"]`)?.focus({ preventScroll: true });
           if (window.scrollX !== pageScroll.x || window.scrollY !== pageScroll.y) {
@@ -2019,6 +2079,7 @@ function renderChrome() {
   const isOverviewView = state.activeView === "overview";
   document.body.classList.toggle("is-seating-view", isSeatingView);
   document.body.classList.toggle("is-overview-view", isOverviewView);
+  document.body.classList.toggle("is-guests-view", state.activeView === "guests");
   document.body.classList.toggle("is-seating-editor", state.editorMode);
   elements.dashboardSidebar.hidden = state.secureEditorMode;
   elements.dashboardSidebar.classList.toggle(
@@ -2117,12 +2178,12 @@ function updateSidebarState() {
       : "Collapse navigation";
   }
   if (elements.desktopSidebarExpandButton) {
-    elements.desktopSidebarExpandButton.hidden =
-      !state.sidebarCollapsed || state.secureEditorMode || isMobile;
-    elements.desktopSidebarExpandButton.setAttribute(
-      "aria-expanded",
-      String(!state.sidebarCollapsed),
-    );
+    elements.desktopSidebarExpandButton.hidden = true;
+  }
+  if (elements.desktopSidebarToggleButton) {
+    const label = state.sidebarCollapsed ? "Expand navigation" : "Collapse navigation";
+    elements.desktopSidebarToggleButton.title = label;
+    elements.desktopSidebarToggleButton.setAttribute("aria-label", label);
   }
 }
 
@@ -2205,6 +2266,13 @@ function overviewMenuButton(label, action, disabled = false) {
 }
 
 function switchView(view) {
+  if (state.dirtyEventSettings && view !== state.activeView) {
+    if (!window.confirm("Discard unsaved event detail changes and leave Event Settings?")) {
+      return;
+    }
+    state.dirtyEventSettings = false;
+    state.eventSettingsMessage = "";
+  }
   if (state.editorMode && view !== "seating") return;
   if (view === "guestSummary" && !canViewGuestSummary()) return;
   if (view === "checkin" && !isInvitationQrEnabled()) return;
@@ -2247,6 +2315,9 @@ function renderActiveView() {
       break;
     case "guests":
       renderGuestPage();
+      break;
+    case "settings":
+      renderEventSettingsPage();
       break;
     case "seating":
       renderSeatingPage();
@@ -2306,7 +2377,7 @@ function renderOverviewPage() {
   const sideStats = calculateSideStats(state.guests, state.tables);
   const sideDistribution = eventUsesGuestSides(state.wedding)
     ? `<article class="overview-card overview-distribution"><p class="da3wa-eyebrow">Guest distribution</p><h2>By invitation side</h2><div class="overview-table-wrap"><table class="overview-distribution__table"><thead><tr><th scope="col">Side</th><th scope="col">Invited</th><th scope="col">Confirmed</th><th scope="col">Pending</th><th scope="col">Seating</th></tr></thead><tbody>${renderDistributionRow("Groom", sideStats.groom)}${renderDistributionRow("Bride", sideStats.bride)}${renderDistributionRow("Family", sideStats.other)}</tbody></table></div></article>`
-    : `<article class="overview-card overview-distribution"><p class="da3wa-eyebrow">Guest summary</p><h2>Overall RSVP totals</h2><div class="overview-seating-summary"><div><strong>${stats.total}</strong><span>Guests invited</span></div><div><strong>${stats.confirmed}</strong><span>Confirmed</span></div><div><strong>${stats.pending}</strong><span>Awaiting reply</span></div><div><strong>${stats.declined}</strong><span>Declined</span></div></div></article>`;
+    : `<article class="overview-card overview-distribution"><p class="da3wa-eyebrow">Guest summary</p><h2>Overall RSVP totals</h2><div class="overview-seating-summary overview-seating-summary--totals"><div><strong>${stats.total}</strong><span>Guests invited</span></div><div><strong>${stats.confirmed}</strong><span>Confirmed</span></div><div><strong>${stats.pending}</strong><span>Awaiting reply</span></div><div><strong>${stats.declined}</strong><span>Declined</span></div></div></article>`;
 
   elements.pageContent.innerHTML = `
     <section class="overview-page">
@@ -2430,15 +2501,10 @@ function renderGuestPage() {
 
   elements.pageContent.innerHTML = `
     <section class="guest-page">
-      <div class="guest-page-actions" aria-label="Guest actions">
-        ${actionButton("Add guest", "open-add-guest", !can("canEditGuests"), "primary")}
-        ${actionButton("Bulk add", "open-bulk-add", !can("canEditGuests"), "secondary")}
-        ${actionButton("Refresh", "refresh-dashboard", false, "secondary")}
-      </div>
       <article class="guest-toolbar">
-        <div class="guest-toolbar__filters">
+        <div class="guest-toolbar__filters ${usesSides ? "guest-toolbar__filters--with-sides" : "guest-toolbar__filters--single-filter"}">
           <div class="guest-toolbar__controls">
-            <input class="da3wa-input guest-toolbar__search" type="search" placeholder="Search name or phone" value="${escapeAttribute(state.guestFilters.search)}" data-guest-search />
+            <input class="da3wa-input guest-toolbar__search" type="search" placeholder="Search name or phone" value="${escapeAttribute(state.guestFilters.search)}" data-guest-search aria-label="Search guests by name or phone" />
             ${selectInput("rsvp", state.guestFilters.rsvp, [
               ["all", "All RSVP"],
               ["confirmed", "Confirmed"],
@@ -2474,6 +2540,12 @@ function renderGuestPage() {
           : ""
       }
 
+      <div class="guest-page-actions" aria-label="Guest actions">
+        ${actionButton("Add guest", "open-add-guest", !can("canEditGuests"), "primary")}
+        ${actionButton("Bulk add", "open-bulk-add", !can("canEditGuests"), "secondary")}
+        ${actionButton("Refresh", "refresh-dashboard", false, "secondary")}
+      </div>
+
       ${
         !guests.length
           ? `<div class="da3wa-empty">No guests match the current search and filters.</div>`
@@ -2506,9 +2578,9 @@ function renderGuestPage() {
               </table>
             </article>
             <article class="guest-page-controls" aria-label="Guest directory pages">
-              <button class="da3wa-button da3wa-button--secondary" type="button" data-action="guest-page-prev" ${state.guestPageIndex === 0 ? 'disabled aria-disabled="true"' : ""}>←</button>
+              <button class="da3wa-button da3wa-button--secondary" type="button" data-action="guest-page-prev" aria-label="Previous guest page" ${state.guestPageIndex === 0 ? 'disabled aria-disabled="true"' : ""}>←</button>
               <span>Showing ${pageStart + 1}-${Math.min(pageStart + guestDirectoryPageSize, guests.length)} of ${guests.length}</span>
-              <button class="da3wa-button da3wa-button--secondary" type="button" data-action="guest-page-next" ${state.guestPageIndex >= totalGuestPages - 1 ? 'disabled aria-disabled="true"' : ""}>→</button>
+              <button class="da3wa-button da3wa-button--secondary" type="button" data-action="guest-page-next" aria-label="Next guest page" ${state.guestPageIndex >= totalGuestPages - 1 ? 'disabled aria-disabled="true"' : ""}>→</button>
             </article>
             <div class="guest-cards">
               ${visibleGuests.map((guest) => renderGuestCard(guest)).join("")}
@@ -2535,6 +2607,12 @@ function renderSeatingPage() {
   const seatingStats = calculateDashboardStats(state.guests, state.tables);
   const sideStats = calculateSideStats(state.guests, state.tables);
   const isSaving = state.saveState === "saving";
+  const mobileLayout = window.matchMedia("(max-width: 700px)").matches;
+  state.renderedMobileSeatingLayout = mobileLayout;
+  if (mobileLayout) {
+    renderMobileSeatingPage({ selectedTable, selectedHallObject, seatingStats, sideStats, isSaving });
+    return;
+  }
   const seatingPanelTab = state.seatingPanelTab;
   const oldViewport = document.getElementById("plannerViewport");
   const viewportWidth = oldViewport?.clientWidth ||
@@ -2627,8 +2705,152 @@ function renderSeatingPage() {
   restorePlannerViewport();
 }
 
+function refreshMobileSeatingLayout() {
+  if (state.activeView !== "seating") return;
+  const mobileLayout = window.matchMedia("(max-width: 700px)").matches;
+  if (state.renderedMobileSeatingLayout === mobileLayout) return;
+  if (!mobileLayout && state.mobileMapOpen) {
+    state.mobileMapOpen = false;
+    document.body.classList.remove("is-mobile-map-open");
+    document.getElementById("mobileMapPortal")?.remove();
+  }
+  renderActiveView();
+}
+
 function renderPlannerStatCard(value, label, tone = "") {
   return `<div class="planner-stat-card${tone ? ` planner-stat-card--${tone}` : ""}"><strong>${escapeHtml(String(value))}</strong><span>${escapeHtml(label)}</span></div>`;
+}
+
+function renderMobileSeatingPage({ seatingStats, sideStats, isSaving }) {
+  const editing = state.mobileSeatingMode === "edit";
+  const seatedPeople = state.tables.reduce((sum, table) => sum + getTableAssignments(table.id).length, 0);
+  const peopleNeedingSeats = state.guests.reduce((sum, guest) => sum + getGuestRemainingSeats(guest), 0);
+  const controls = `<div class="mobile-seating-map-tools">${actionButton("Zoom out", "planner-zoom-out", state.plannerZoom <= 0.7)}<span class="pill" data-zoom-percentage>${Math.round(state.plannerZoom * 100)}%</span>${actionButton("Zoom in", "planner-zoom-in", state.plannerZoom >= 1.6)}${actionButton("Fit all", "planner-zoom-reset", false, "secondary")}</div>`;
+  const canvas = `<div class="planner-canvas-viewport mobile-seating-map ${editing ? "is-editing" : ""}" id="plannerViewport" aria-label="Venue map" tabindex="0"><div class="planner-map-extent"><div class="planner-canvas" id="plannerCanvas" style="width:${state.plannerMapWidth}px;height:720px;--planner-zoom:${state.plannerZoom}"><div class="planner-canvas__floor"></div>${state.hallObjects.map(renderHallObject).join("")}${state.tables.length ? state.tables.map(renderPlannerTable).join("") : `<div class="da3wa-empty">No tables yet. Edit the floor plan to add one.</div>`}</div></div></div>`;
+  const tables = state.tables.length ? state.tables.map((table) => {
+    const occupied = getTableAssignments(table.id).length;
+    const capacity = Number(table.seatCount || table.capacity || table.chairs?.length || 0);
+    return `<article class="mobile-seating-table ${table.id === state.selectedTableId ? "is-selected" : ""}"><div><strong>${escapeHtml(table.name || "Table")}</strong><span>${occupied}/${capacity} seats occupied · ${Math.max(0, capacity - occupied)} available</span></div><button class="da3wa-button da3wa-button--secondary" type="button" data-action="mobile-browse-table" data-table-id="${escapeAttribute(table.id)}">${occupied ? "Manage seats" : "Assign guests"}</button></article>`;
+  }).join("") : `<div class="mobile-seating-empty"><strong>No tables yet</strong><p>Add tables and venue items to start seating people.</p><button class="da3wa-button da3wa-button--primary" type="button" data-action="mobile-set-seating-mode" data-mode="edit">Edit floor plan</button></div>`;
+  elements.pageContent.innerHTML = `<section class="seating-page mobile-seating-page">
+    <header class="mobile-seating-header"><div><p class="da3wa-eyebrow">Seating plan</p><h1>Seating</h1></div><span class="mobile-seating-save" aria-live="polite">${isSaving ? "Saving changes…" : "✓ Saved"}</span></header>
+    <nav class="mobile-seating-modes" aria-label="Seating mode"><button type="button" data-action="mobile-set-seating-mode" data-mode="assign" aria-pressed="${!editing}" class="${!editing ? "is-active" : ""}">Assign seats</button><button type="button" data-action="mobile-set-seating-mode" data-mode="edit" aria-pressed="${editing}" class="${editing ? "is-active" : ""}">Edit floor plan</button></nav>
+    ${editing ? `<div class="mobile-seating-edit-banner"><strong>Editing floor plan</strong><span>Select an object, then drag it to move. Drag the background to pan.</span><button class="da3wa-button da3wa-button--primary" type="button" data-action="mobile-set-seating-mode" data-mode="assign">Done editing</button></div>` : ""}
+    <article class="mobile-seating-progress"><div><strong>${seatedPeople}</strong><span>People seated</span></div><div><strong>${peopleNeedingSeats}</strong><span>People needing seats</span></div><button type="button" data-action="mobile-toggle-seating-summary" aria-expanded="${state.showFullSeatingSummary}">${state.showFullSeatingSummary ? "Hide seating summary" : "View seating summary"}</button>${state.showFullSeatingSummary ? `<div class="mobile-seating-full-stats">${renderPlannerStatCard(state.tables.length,"Tables")}${renderPlannerStatCard(seatingStats.totalSeats,"Seat capacity")}${renderPlannerStatCard(seatingStats.total,"Primary guest records")}${renderPlannerStatCard(peopleNeedingSeats,"People needing seats")}${renderPlannerStatCard(seatingStats.unassignedGuests,"Parties needing seats")}${eventUsesGuestSides(state.wedding) ? renderPlannerStatCard(`${sideStats.groom.seated}/${sideStats.groom.confirmed}`,"Groom seated") : ""}${eventUsesGuestSides(state.wedding) ? renderPlannerStatCard(`${sideStats.bride.seated}/${sideStats.bride.confirmed}`,"Bride seated") : ""}</div>` : ""}</article>
+    ${editing ? `<section class="mobile-floor-tools">${controls}<div>${actionButton("Add table","open-add-table",!canManageSeatingLayout(),"primary")}${actionButton("Add dance floor","open-add-dance-floor",!canManageSeatingLayout(),"secondary")}${actionButton("Done editing","mobile-set-seating-mode",false,"secondary")}</div></section><article class="planner-canvas-shell mobile-seating-canvas-shell">${canvas}${getSelectedTable() ? `<div class="mobile-selected-object">${renderTableInspector(getSelectedTable())}</div>` : getSelectedHallObject() ? `<div class="mobile-selected-object">${renderHallObjectInspector(getSelectedHallObject())}</div>` : ""}<p class="mobile-edit-instruction">Drag a selected object to move it · drag open floor to pan</p></article>` : `<nav class="mobile-seating-views" aria-label="Seating view"><button type="button" data-action="mobile-seating-view" data-view="tables" aria-pressed="${state.mobileSeatingView === "tables"}" class="${state.mobileSeatingView === "tables" ? "is-active" : ""}">Tables</button><button type="button" data-action="mobile-seating-view" data-view="map" aria-pressed="${state.mobileSeatingView === "map"}" class="${state.mobileSeatingView === "map" ? "is-active" : ""}">Map</button></nav>${state.mobileSeatingView === "tables" ? `<section class="mobile-seating-table-list" aria-label="Tables">${tables}</section>` : `<article class="planner-canvas-shell mobile-seating-canvas-shell"><div class="mobile-map-preview-note">Map preview · tables are locked</div>${canvas}<button class="da3wa-button da3wa-button--primary mobile-explore-map" type="button" data-action="mobile-explore-map">Explore map</button></article>`}`}
+    ${state.mobileMapOpen ? `<div class="mobile-map-overlay" role="dialog" aria-modal="true" aria-label="Explore seating map"><header><strong>Explore map</strong><button class="da3wa-button da3wa-button--secondary" type="button" data-action="mobile-close-map">Close map</button></header><p>Drag to explore. Tap a seat to assign.</p>${controls}</div>` : ""}
+  </section>`;
+  document.getElementById("plannerCanvas")?.addEventListener("pointerdown", handlePlannerPointerDown);
+  const mobileViewport = document.getElementById("plannerViewport");
+  if (state.mobileMapOpen && mobileViewport) {
+    let portal = document.getElementById("mobileMapPortal");
+    if (!portal) {
+      portal = document.createElement("div");
+      portal.id = "mobileMapPortal";
+      document.body.append(portal);
+    }
+    portal.replaceChildren(mobileViewport, document.querySelector(".mobile-map-overlay"));
+  } else {
+    document.getElementById("mobileMapPortal")?.remove();
+  }
+  if (mobileViewport && (state.mobileMapOpen || state.mobileSeatingMode === "edit")) {
+    mobileViewport.addEventListener("touchstart", handleMobileMapTouchStart, { passive: false });
+    mobileViewport.addEventListener("touchmove", handleMobileMapTouchMove, { passive: false });
+    mobileViewport.addEventListener("touchend", handleMobileMapTouchEnd, { passive: false });
+    mobileViewport.addEventListener("touchcancel", handleMobileMapTouchEnd, { passive: false });
+  }
+  restorePlannerViewport();
+}
+
+function mobileTouchDistance(touches) {
+  if (touches.length < 2) return 0;
+  return Math.hypot(touches[0].clientX - touches[1].clientX, touches[0].clientY - touches[1].clientY);
+}
+
+function handleMobileMapTouchStart(event) {
+  if (!(state.mobileMapOpen || state.mobileSeatingMode === "edit") || !event.touches.length) return;
+  if (state.mobileMapOpen || event.touches.length > 1) event.preventDefault();
+  const viewport = document.getElementById("plannerViewport");
+  const rect = viewport?.getBoundingClientRect();
+  state.mobileTouchGesture = {
+    target: event.target.closest?.("[data-action='select-seat'],[data-action='select-table'],[data-action='select-hall-object']"),
+    startX: event.touches[0].clientX,
+    startY: event.touches[0].clientY,
+    lastX: event.touches[0].clientX,
+    lastY: event.touches[0].clientY,
+    center: { ...(state.plannerViewCenter || { x: state.plannerMapWidth / 2, y: 360 }) },
+    zoom: state.plannerZoom,
+    distance: mobileTouchDistance(event.touches),
+    moved: false,
+    rect,
+  };
+}
+
+function handleMobileMapTouchMove(event) {
+  const gesture = state.mobileTouchGesture;
+  if (!gesture || !event.touches.length) return;
+  const viewport = document.getElementById("plannerViewport");
+  const canvas = document.getElementById("plannerCanvas");
+  if (!viewport || !canvas) return;
+  if (event.touches.length > 1) event.preventDefault();
+  if (Math.abs(event.touches[0].clientX - gesture.startX) > 8 || Math.abs(event.touches[0].clientY - gesture.startY) > 8) gesture.moved = true;
+  if (event.touches.length > 1) {
+    if (state.dragState) {
+      const drag = state.dragState;
+      if (drag.type === "table") {
+        state.tables = state.tables.map((row) => row.id === drag.tableId ? { ...row, x: drag.originalX, y: drag.originalY } : row);
+        if (drag.node?.isConnected) { drag.node.style.left = `${drag.originalX}%`; drag.node.style.top = `${drag.originalY}%`; }
+      }
+      if (drag.type === "hall-object") {
+        state.hallObjects = state.hallObjects.map((row) => row.id === drag.objectId ? { ...row, x: drag.originalX, y: drag.originalY } : row);
+        if (drag.node?.isConnected) { drag.node.style.left = `${drag.originalX}%`; drag.node.style.top = `${drag.originalY}%`; }
+      }
+      state.dragState = null;
+    }
+    const distance = mobileTouchDistance(event.touches);
+    if (gesture.distance > 0 && distance > 0) {
+      const nextZoom = clamp(gesture.zoom * distance / gesture.distance, 0.7, 1.6);
+      const midpointX = (event.touches[0].clientX + event.touches[1].clientX) / 2 - gesture.rect.left;
+      const midpointY = (event.touches[0].clientY + event.touches[1].clientY) / 2 - gesture.rect.top;
+      const focalX = gesture.center.x + (midpointX - viewport.clientWidth / 2) / gesture.zoom;
+      const focalY = gesture.center.y + (midpointY - viewport.clientHeight / 2) / gesture.zoom;
+      state.plannerZoom = nextZoom;
+      state.plannerViewCenter = { x: focalX - (midpointX - viewport.clientWidth / 2) / nextZoom, y: focalY - (midpointY - viewport.clientHeight / 2) / nextZoom };
+      canvas.style.setProperty("--planner-zoom", String(nextZoom));
+      restorePlannerViewport();
+    }
+    return;
+  }
+  if (!state.mobileMapOpen) return;
+  const touch = event.touches[0];
+  const dx = touch.clientX - gesture.lastX;
+  const dy = touch.clientY - gesture.lastY;
+  state.plannerViewCenter = { x: (state.plannerViewCenter || gesture.center).x - dx / state.plannerZoom, y: (state.plannerViewCenter || gesture.center).y - dy / state.plannerZoom };
+  gesture.lastX = touch.clientX;
+  gesture.lastY = touch.clientY;
+  restorePlannerViewport();
+}
+
+function handleMobileMapTouchEnd(event) {
+  const gesture = state.mobileTouchGesture;
+  if (!gesture) return;
+  if (event.type === "touchcancel") {
+    state.mobileTouchGesture = null;
+    return;
+  }
+  if (event.touches.length) {
+    gesture.lastX = event.touches[0].clientX;
+    gesture.lastY = event.touches[0].clientY;
+    gesture.center = { ...(state.plannerViewCenter || gesture.center) };
+    gesture.zoom = state.plannerZoom;
+    gesture.distance = 0;
+    gesture.target = null;
+    return;
+  }
+  if (!event.touches.length) {
+    if (state.mobileMapOpen && !gesture.moved && gesture.target?.isConnected) gesture.target.click();
+    state.mobileTouchGesture = null;
+  }
 }
 
 function restorePlannerViewport() {
@@ -2705,9 +2927,346 @@ function renderCheckinPage() {
 function renderSharePage() {
   elements.pageContent.innerHTML = `
     <section class="share-page">
-      ${renderInvitationSettingsCard()}
       ${isSeatingEnabled() && eventUsesGuestSides(state.wedding) ? renderSeatingAccessCard() : ""}
       ${renderSenderCard()}
+    </section>
+  `;
+}
+
+function eventSettingsDateParts(value) {
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return { date: "", time: "" };
+  const pad = (part) => String(part).padStart(2, "0");
+  return {
+    date: `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}`,
+    time: `${pad(date.getHours())}:${pad(date.getMinutes())}`,
+  };
+}
+
+function eventSettingsDraftFromWedding(wedding = state.wedding) {
+  const parts = eventSettingsDateParts(wedding?.eventDateISO);
+  return {
+    eventTitle: wedding?.eventTitle || getEventDisplayTitle(wedding),
+    brideName: wedding?.brideName || "",
+    groomName: wedding?.groomName || "",
+    eventDate: parts.date,
+    eventTime: parts.time,
+    venueEn: wedding?.venueEn || "",
+    location: wedding?.location || wedding?.locationEn || "",
+    mapsUrl: wedding?.mapsUrl || "",
+  };
+}
+
+function syncEventSettingsDraftFromForm() {
+  const form = document.getElementById("eventSettingsForm");
+  if (!form) return;
+  state.eventSettingsDraft = Object.fromEntries(
+    [...form.querySelectorAll("[data-event-setting-field]")].map((field) => [field.name, field.value]),
+  );
+}
+
+function updateEventSettingsFormState() {
+  const form = document.getElementById("eventSettingsForm");
+  const saveButton = form?.querySelector("[data-action='save-event-settings']");
+  if (saveButton) {
+    saveButton.disabled = !state.dirtyEventSettings || state.savingEventSettings || !isWeddingOwner();
+  }
+}
+
+function validateEventSettingsDraft(draft) {
+  const errors = {};
+  if (!String(draft.eventTitle || "").trim()) errors.eventTitle = "Enter an event name.";
+  if (!String(draft.venueEn || "").trim()) errors.venueEn = "Enter a venue name.";
+  const dateValue = String(draft.eventDate || "");
+  const timeValue = String(draft.eventTime || "");
+  const parsed = new Date(`${dateValue}T${timeValue}`);
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(dateValue) || Number.isNaN(parsed.getTime())) {
+    errors.eventDate = "Enter a valid event date.";
+  } else {
+    const parts = eventSettingsDateParts(parsed.toISOString());
+    if (parts.date !== dateValue) errors.eventDate = "Enter a valid event date.";
+  }
+  if (!/^\d{2}:\d{2}$/.test(timeValue) || Number.isNaN(parsed.getTime())) {
+    errors.eventTime = "Enter a valid event time.";
+  }
+  const mapsUrl = String(draft.mapsUrl || "").trim();
+  if (mapsUrl) {
+    try {
+      const url = new URL(mapsUrl);
+      if (!/^https?:$/.test(url.protocol) || !url.hostname) throw new Error("Unsupported URL.");
+    } catch {
+      errors.mapsUrl = "Enter a valid HTTP or HTTPS maps link, or leave it blank.";
+    }
+  }
+  return errors;
+}
+
+async function saveEventSettings(event) {
+  event.preventDefault();
+  if (!isWeddingOwner() || state.savingEventSettings) return;
+  syncEventSettingsDraftFromForm();
+  const draft = state.eventSettingsDraft || {};
+  const errors = validateEventSettingsDraft(draft);
+  state.eventSettingsErrors = errors;
+  if (Object.keys(errors).length) {
+    state.eventSettingsMessage = "Please correct the highlighted fields.";
+    renderActiveView();
+    document.querySelector(`[name="${Object.keys(errors)[0]}"]`)?.focus();
+    return;
+  }
+
+  const localDateTime = new Date(`${draft.eventDate}T${draft.eventTime}`);
+  const eventDateISO = localDateTime.toISOString();
+  const coupleName = [draft.brideName, draft.groomName].map((value) => String(value || "").trim()).filter(Boolean).join(" & ");
+  const data = {
+    eventTitle: String(draft.eventTitle).trim(),
+    eventDateISO,
+    timeEn: localDateTime.toLocaleTimeString("en", { hour: "numeric", minute: "2-digit" }),
+    timeAr: `الساعة ${localDateTime.toLocaleTimeString("ar", { hour: "numeric", minute: "2-digit" })}`,
+    venueEn: String(draft.venueEn).trim(),
+    location: String(draft.location || "").trim(),
+    locationEn: String(draft.location || "").trim(),
+    mapsUrl: String(draft.mapsUrl || "").trim(),
+    updatedAt: serverTimestamp(),
+  };
+  if (eventUsesGuestSides(state.wedding)) {
+    data.brideName = String(draft.brideName || "").trim();
+    data.groomName = String(draft.groomName || "").trim();
+    data.coupleName = coupleName || data.eventTitle;
+  }
+
+  state.savingEventSettings = true;
+  state.eventSettingsMessage = "Saving event details…";
+  renderActiveView();
+  try {
+    const batch = writeBatch(state.services.db);
+    batch.update(doc(state.services.db, "weddings", state.weddingId), data);
+    batch.set(
+      doc(state.services.db, "users", state.currentUser.uid, "weddingAccess", state.weddingId),
+      eventWorkspaceIndexData({ ...state.wedding, ...data }),
+      { merge: true },
+    );
+    await batch.commit();
+    state.wedding = { ...state.wedding, ...data };
+    state.eventSettingsDraft = null;
+    state.eventSettingsOriginal = null;
+    state.dirtyEventSettings = false;
+    state.eventSettingsErrors = {};
+    state.eventSettingsMessage = "Event details saved.";
+    showToast("Event details saved.", "success");
+  } catch (error) {
+    console.error("Could not save event details.", error);
+    state.eventSettingsMessage = "We could not save event details. Your changes are still here; check your access and try again.";
+    showToast("We could not save event details. Your changes are still here.", "error");
+  } finally {
+    state.savingEventSettings = false;
+    renderAll();
+  }
+}
+
+function eventWorkspaceIndexData(wedding) {
+  return {
+    weddingId: state.weddingId,
+    ownerUserId: wedding.ownerUserId || state.currentUser?.uid || "",
+    eventCategory: wedding.eventCategory || "wedding_engagement",
+    eventTitle: wedding.eventTitle || getEventDisplayTitle(wedding),
+    coupleName: wedding.coupleName || "",
+    brideName: wedding.brideName || "",
+    groomName: wedding.groomName || "",
+    eventDateISO: wedding.eventDateISO || "",
+    venueEn: wedding.venueEn || "",
+    location: wedding.location || "",
+    status: wedding.status || "active",
+    updatedAt: serverTimestamp(),
+  };
+}
+
+async function queueEventSettingSave(key, value) {
+  if (state.mode !== "live" || !canManageInvitationSettings()) {
+    renderActiveView();
+    showToast("You do not have permission to change this event setting.", "error");
+    return;
+  }
+  const currentValue = key === "showInvitationQr" ? isInvitationQrEnabled() : isSeatingEnabled();
+  const mutation = state.eventSettingWrites[key] || {
+    version: 0,
+    pending: false,
+    running: false,
+    desired: currentValue,
+    persisted: currentValue,
+    message: "",
+  };
+  mutation.version += 1;
+  mutation.desired = Boolean(value);
+  mutation.pending = true;
+  mutation.message = "";
+  state.eventSettingWrites[key] = mutation;
+  state.wedding = { ...state.wedding, [key]: mutation.desired };
+  renderAll();
+  if (!mutation.running) void processEventSettingQueue(key, mutation);
+}
+
+async function processEventSettingQueue(key, mutation) {
+  mutation.running = true;
+  const label = key === "showInvitationQr" ? "QR visibility" : "Seating";
+  while (mutation.pending) {
+    const version = mutation.version;
+    const desired = mutation.desired;
+    try {
+      await updateDoc(doc(state.services.db, "weddings", state.weddingId), {
+        [key]: desired,
+        updatedAt: serverTimestamp(),
+      });
+      mutation.persisted = desired;
+      if (version !== mutation.version) continue;
+      mutation.pending = false;
+      mutation.message = "Saved automatically.";
+      state.wedding = { ...state.wedding, [key]: desired };
+      if (key === "seatingEnabled" && !desired && state.activeView === "seating") {
+        state.activeView = "overview";
+        const nextUrl = new URL(window.location.href);
+        nextUrl.searchParams.delete("view");
+        window.history.replaceState(null, "", nextUrl);
+      }
+      renderAll();
+      showToast(key === "seatingEnabled"
+        ? desired ? "Seating is enabled for this event." : "Seating is disabled. Existing layouts and assignments are preserved."
+        : desired ? "QR pass will show on invitations." : "QR pass is now hidden on invitations.", "success");
+    } catch (error) {
+      console.error(`Could not save event setting: ${key}.`, error);
+      if (version !== mutation.version) continue;
+      mutation.pending = false;
+      mutation.desired = mutation.persisted;
+      mutation.message = "Save failed. The saved value has been restored.";
+      state.wedding = { ...state.wedding, [key]: mutation.persisted };
+      renderAll();
+      showToast(`We could not save ${label.toLowerCase()}. The saved value has been restored.`, "error");
+    }
+  }
+  mutation.running = false;
+}
+
+async function updateEventLifecycle(action) {
+  if (!isWeddingOwner() || state.eventStatusPending) return;
+  if (state.dirtyEventSettings) {
+    showToast("Save or discard your event detail edits before changing the event status.", "info");
+    return;
+  }
+  const wedding = state.wedding;
+  if (!wedding || wedding.status === "archived") return;
+  const completing = action === "complete-event";
+  if (completing === (wedding.status === "completed")) return;
+  const title = getEventDisplayTitle(wedding);
+  const confirmation = completing
+    ? `Mark “${title}” as completed? It will move into Old Events. You can reopen it later.`
+    : `Reopen “${title}” and return it to the active event list?`;
+  if (!window.confirm(confirmation)) return;
+
+  const previousStatus = ["draft", "upcoming", "active"].includes(wedding.status)
+    ? wedding.status
+    : "active";
+  const lifecycleData = completing
+    ? { status: "completed", statusBeforeCompletion: previousStatus, completedAt: serverTimestamp() }
+    : { status: ["draft", "upcoming", "active"].includes(wedding.statusBeforeCompletion) ? wedding.statusBeforeCompletion : "active", statusBeforeCompletion: null, completedAt: null };
+  state.eventStatusPending = true;
+  state.eventLifecycleMessage = "Updating event status…";
+  renderActiveView();
+  try {
+    const nextWedding = { ...wedding, ...lifecycleData };
+    const batch = writeBatch(state.services.db);
+    batch.update(doc(state.services.db, "weddings", state.weddingId), {
+      ...lifecycleData,
+      updatedAt: serverTimestamp(),
+    });
+    batch.set(
+      doc(state.services.db, "users", state.currentUser.uid, "weddingAccess", state.weddingId),
+      eventWorkspaceIndexData(nextWedding),
+      { merge: true },
+    );
+    await batch.commit();
+    state.wedding = nextWedding;
+    state.eventLifecycleMessage = completing ? "Event marked as completed." : "Event reopened.";
+    showToast(state.eventLifecycleMessage, "success");
+  } catch (error) {
+    console.error("Could not update event status.", error);
+    state.eventLifecycleMessage = "We could not update the event status. Please try again.";
+    showToast(state.eventLifecycleMessage, "error");
+  } finally {
+    state.eventStatusPending = false;
+    renderAll();
+  }
+}
+
+function renderEventSettingsPage() {
+  const wedding = state.wedding || {};
+  if (!state.eventSettingsDraft || !state.dirtyEventSettings) {
+    state.eventSettingsDraft = eventSettingsDraftFromWedding(wedding);
+    state.eventSettingsOriginal = { ...state.eventSettingsDraft };
+  }
+  const draft = state.eventSettingsDraft;
+  const errors = state.eventSettingsErrors || {};
+  const canEditDetails = isWeddingOwner();
+  const canChangeOptions = state.mode === "live" && canManageInvitationSettings();
+  const showQr = state.eventSettingWrites.showInvitationQr?.pending
+    ? state.eventSettingWrites.showInvitationQr.desired
+    : wedding.showInvitationQr !== false;
+  const seatingEnabled = state.eventSettingWrites.seatingEnabled?.pending
+    ? state.eventSettingWrites.seatingEnabled.desired
+    : wedding.seatingEnabled !== false;
+  const isCompleted = wedding.status === "completed";
+  const statusAction = isCompleted ? "reopen-event" : "complete-event";
+  const statusLabel = isCompleted ? "Reopen event" : "Mark event as completed";
+  const title = getEventDisplayTitle(wedding);
+  const settingStatus = (key) => {
+    const mutation = state.eventSettingWrites[key];
+    if (mutation?.pending) return "Saving automatically…";
+    if (mutation?.message) return mutation.message;
+    return "Changes save automatically for this event.";
+  };
+  const field = (name, label, type = "text", full = false, required = false, autocomplete = "") => {
+    const value = draft[name] || "";
+    const message = errors[name] || "";
+    return `<label class="event-settings-field${full ? " is-full" : ""}"><span>${label}${required ? " <b aria-hidden=\"true\">*</b>" : ""}</span><input class="da3wa-input" name="${name}" type="${type}" value="${escapeAttribute(value)}" data-event-setting-field ${required ? "required" : ""} ${autocomplete ? `autocomplete="${autocomplete}"` : ""} ${canEditDetails ? "" : "disabled aria-disabled=\"true\""} ${message ? "aria-invalid=\"true\"" : ""} /><small class="event-setting-error" role="alert">${escapeHtml(message)}</small></label>`;
+  };
+
+  elements.pageContent.innerHTML = `
+    <section class="event-settings-page">
+      <form class="event-settings-section share-card" id="eventSettingsForm" novalidate>
+        <header class="event-settings-section__header">
+          <div><p class="da3wa-eyebrow">Event information</p><h2>Event details</h2><p>These details appear on your event overview and guest invitations.</p></div>
+        </header>
+        <div class="event-settings-fields">
+          ${field("eventTitle", isCelebrationEvent(wedding) ? "Event name" : "Event title", "text", true, true)}
+          ${isCelebrationEvent(wedding) ? "" : `${field("brideName", "Bride name", "text", false, false, "given-name")}${field("groomName", "Groom name", "text", false, false, "given-name")}`}
+          ${field("eventDate", "Event date", "date", false, true)}
+          ${field("eventTime", "Event time", "time", false, true)}
+          ${field("venueEn", "Venue name", "text", false, true)}
+          ${field("location", "Location / address", "text", false, false, "street-address")}
+          ${field("mapsUrl", "Maps link", "url", true, false)}
+          <p class="event-settings-timezone">Date and time use the same local time display as the rest of the dashboard.</p>
+        </div>
+        <div class="event-settings-actions">
+          <p class="event-settings-feedback ${state.eventSettingsMessage.startsWith("We could not") ? "is-error" : ""}" role="status">${escapeHtml(state.eventSettingsMessage || (state.dirtyEventSettings ? "Unsaved changes" : ""))}</p>
+          <button class="da3wa-button da3wa-button--primary" type="submit" data-action="save-event-settings" ${!state.dirtyEventSettings || state.savingEventSettings || !canEditDetails ? "disabled aria-disabled=\"true\"" : ""}>${state.savingEventSettings ? "Saving…" : "Save changes"}</button>
+        </div>
+      </form>
+
+      <section class="event-settings-section share-card" aria-labelledby="eventOptionsTitle">
+        <header class="event-settings-section__header"><div><p class="da3wa-eyebrow">Guest experience</p><h2 id="eventOptionsTitle">Invitation and seating options</h2><p>These event-specific options save automatically.</p></div></header>
+        <label class="invitation-setting-toggle">
+          <span><strong>Show QR code on invitation</strong><small>Show the guest’s existing entrance pass on their invitation.</small><small class="event-setting-option-status" role="status">${escapeHtml(settingStatus("showInvitationQr"))}</small></span>
+          <input type="checkbox" data-action="toggle-event-qr" ${showQr ? "checked" : ""} ${canChangeOptions ? "" : "disabled aria-disabled=\"true\""} aria-label="Show QR code on invitation" />
+        </label>
+        <label class="invitation-setting-toggle">
+          <span><strong>Enable seating</strong><small>Turn off seating controls while keeping the saved layout and assignments.</small><small class="event-setting-option-status" role="status">${escapeHtml(settingStatus("seatingEnabled"))}</small></span>
+          <input type="checkbox" role="switch" data-action="toggle-event-seating" ${seatingEnabled ? "checked" : ""} ${canChangeOptions ? "" : "disabled aria-disabled=\"true\""} aria-label="Enable seating" />
+        </label>
+      </section>
+
+      <section class="event-settings-section event-settings-status share-card" aria-labelledby="eventStatusTitle">
+        <header class="event-settings-section__header"><div><p class="da3wa-eyebrow">Lifecycle</p><h2 id="eventStatusTitle">Event status</h2><p>Current status: <strong class="event-settings-status__value">${escapeHtml(prettifyShape(wedding.status || "active"))}</strong></p></div></header>
+        ${wedding.status === "archived" ? `<p class="event-settings-feedback is-error">Archived events cannot be completed or reopened here.</p>` : `<div class="event-settings-actions"><p class="event-settings-feedback ${state.eventLifecycleMessage.startsWith("We could not") ? "is-error" : ""}" role="status" id="eventStatusFeedback">${escapeHtml(state.eventLifecycleMessage)}</p><button class="da3wa-button ${isCompleted ? "da3wa-button--secondary" : "da3wa-button--primary"}" type="button" data-action="${statusAction}" ${!canEditDetails || state.eventStatusPending ? "disabled aria-disabled=\"true\"" : ""}>${state.eventStatusPending ? "Updating status…" : statusLabel}</button></div>`}
+      </section>
     </section>
   `;
 }
@@ -2842,11 +3401,11 @@ function renderDistributionRow(label, bucket) {
     : "No confirmed parties";
   return `
     <tr>
-      <th scope="row">${escapeHtml(label)}</th>
-      <td>${escapeHtml(String(bucket.guestCount))}</td>
-      <td>${escapeHtml(String(bucket.confirmed))}</td>
-      <td>${escapeHtml(String(bucket.pending))}</td>
-      <td><span class="overview-seating-status">${escapeHtml(seatingLabel)}</span></td>
+      <th scope="row" data-label="Side">${escapeHtml(label)}</th>
+      <td data-label="Invited">${escapeHtml(String(bucket.guestCount))}</td>
+      <td data-label="Confirmed">${escapeHtml(String(bucket.confirmed))}</td>
+      <td data-label="Pending">${escapeHtml(String(bucket.pending))}</td>
+      <td data-label="Seating"><span class="overview-seating-status">${escapeHtml(seatingLabel)}</span></td>
     </tr>
   `;
 }
@@ -2910,7 +3469,7 @@ function renderGuestCard(guest) {
         <span>Phone: ${escapeHtml(guest.phone || "Not set")}</span>
         <span>Additional guests: ${escapeHtml(String(normalizeAdditionalGuests(guest.additionalGuests)))}</span>
         ${eventUsesGuestSides(state.wedding) ? `<span>Side: ${escapeHtml(guest.side || "other")}</span>` : ""}
-        <span>${renderReservationReadinessBadge(guest)}</span>
+        ${isSeatingEnabled() ? `<span>${renderReservationReadinessBadge(guest)}</span>` : ""}
       </div>
       <div class="guest-card__actions">
         ${renderGuestInlineActions(guest)}
@@ -3211,34 +3770,9 @@ function isInvitationQrEnabled() {
   return state.wedding?.showInvitationQr !== false;
 }
 
-function renderInvitationSettingsCard() {
-  const canChange = canManageInvitationSettings();
-  const showQr = state.wedding?.showInvitationQr !== false;
-  const seatingEnabled = isSeatingEnabled();
-  return `
-    <article class="share-card invitation-settings-card">
-      <h3>Guest access and seating</h3>
-      <label class="invitation-setting-toggle">
-        <span>
-          <strong>Show QR code on invitation</strong>
-          <small>${canChange ? "Changes save to this event and update invitations live." : "Only the event owner or an authorized dashboard administrator can change this setting."}</small>
-        </span>
-        <input type="checkbox" data-action="toggle-invitation-qr" ${showQr ? "checked" : ""} ${canChange ? "" : "disabled aria-disabled=\"true\""} aria-label="Show QR code on invitation" />
-      </label>
-      <label class="invitation-setting-toggle">
-        <span>
-          <strong>Enable seating</strong>
-          <small>${canChange ? "Keep the existing layout and assignments when disabled. Changes save to this event and update invitations live." : "Only the event owner or an authorized dashboard administrator can change this setting."}</small>
-        </span>
-        <input type="checkbox" role="switch" data-action="toggle-seating-enabled" ${seatingEnabled ? "checked" : ""} ${canChange ? "" : "disabled aria-disabled=\"true\""} aria-label="Enable seating for this event" />
-      </label>
-      <p class="invitation-settings-card__status" role="status">QR pass ${showQr ? "visible" : "hidden"} · Seating ${seatingEnabled ? "enabled" : "disabled"}.</p>
-    </article>
-  `;
-}
-
 function renderHallObjectInspector(item) {
   const isDanceFloor = item.type === "dance-floor";
+  const compactEdit = window.matchMedia("(max-width: 700px)").matches && state.mobileSeatingMode === "edit";
   return `
     <div class="planner-table-summary">
       <div><span>${isDanceFloor ? "Dance floor" : "Venue object"}</span><strong>${escapeHtml(item.label)}</strong></div>
@@ -3248,9 +3782,9 @@ function renderHallObjectInspector(item) {
     ${item.notes ? `<p class="planner-note">${escapeHtml(item.notes)}</p>` : ""}
     <div class="guest-toolbar__summary">
       ${isDanceFloor ? actionButton("Edit", "edit-dance-floor", !canManageSeatingLayout(), "secondary", item.id) : ""}
-      ${isDanceFloor ? actionButton("Duplicate", "duplicate-dance-floor", !canManageSeatingLayout(), "secondary", item.id) : ""}
+      ${compactEdit ? `<details class="mobile-object-actions"><summary>More actions</summary>${isDanceFloor ? actionButton("Duplicate", "duplicate-dance-floor", !canManageSeatingLayout(), "secondary", item.id) : ""}${isDanceFloor ? actionButton("Delete", "delete-dance-floor", !canManageSeatingLayout(), "danger", item.id) : ""}</details>` : isDanceFloor ? actionButton("Duplicate", "duplicate-dance-floor", !canManageSeatingLayout(), "secondary", item.id) : ""}
       ${actionButton(item.locked ? "Unlock position" : "Lock position", "toggle-hall-object-lock", !canManageSeatingLayout(), "secondary", item.id)}
-      ${isDanceFloor ? actionButton("Delete", "delete-dance-floor", !canManageSeatingLayout(), "danger", item.id) : ""}
+      ${compactEdit ? "" : isDanceFloor ? actionButton("Delete", "delete-dance-floor", !canManageSeatingLayout(), "danger", item.id) : ""}
     </div>
   `;
 }
@@ -3284,6 +3818,7 @@ function renderEntranceIcon() {
 function renderTableInspector(table) {
   const assignments = getTableAssignments(table.id);
   const capacity = Number(table.seatCount || table.capacity || 0);
+  const compactEdit = window.matchMedia("(max-width: 700px)").matches && state.mobileSeatingMode === "edit";
   return `
     <div class="planner-table-summary">
       <div>
@@ -3297,8 +3832,7 @@ function renderTableInspector(table) {
     </div>
     <div class="guest-toolbar__summary">
       ${actionButton("Edit", "edit-table", !canManageSeatingLayout(), "secondary", table.id)}
-      ${actionButton("Duplicate", "duplicate-table", !canManageSeatingLayout(), "secondary", table.id)}
-      ${actionButton("Delete", "delete-table", !canManageSeatingLayout(), "danger", table.id)}
+      ${compactEdit ? `<details class="mobile-object-actions"><summary>More actions</summary>${actionButton("Duplicate", "duplicate-table", !canManageSeatingLayout(), "secondary", table.id)}${actionButton("Delete", "delete-table", !canManageSeatingLayout(), "danger", table.id)}</details>` : `${actionButton("Duplicate", "duplicate-table", !canManageSeatingLayout(), "secondary", table.id)}${actionButton("Delete", "delete-table", !canManageSeatingLayout(), "danger", table.id)}`}
     </div>
   `;
 }
@@ -3796,8 +4330,9 @@ function handleGuestMenuKeyboard(event) {
 }
 
 function selectInput(key, value, options) {
+  const label = key === "rsvp" ? "Filter guests by RSVP status" : "Filter guests by invitation side";
   return `
-    <select class="da3wa-input" data-guest-filter="${escapeAttribute(key)}">
+    <select class="da3wa-input" data-guest-filter="${escapeAttribute(key)}" aria-label="${label}">
       ${options
         .map(
           ([optionValue, label]) => `
@@ -3826,16 +4361,6 @@ function renderReservationReadinessBadge(guest) {
 
 async function handleAction(action, dataset, event = null) {
   switch (action) {
-    case "toggle-invitation-qr": {
-      const input = event?.target?.closest("input[data-action='toggle-invitation-qr']");
-      if (input) await saveInvitationQrSetting(input.checked, input);
-      return;
-    }
-    case "toggle-seating-enabled": {
-      const input = event?.target?.closest("input[data-action='toggle-seating-enabled']");
-      if (input) await saveSeatingEnabledSetting(input.checked, input);
-      return;
-    }
     case "open-add-guest":
       await openGuestModal();
       return;
@@ -3907,6 +4432,12 @@ async function handleAction(action, dataset, event = null) {
       return;
     case "reload-dashboard":
       window.location.reload();
+      return;
+    case "save-event-settings":
+      return;
+    case "complete-event":
+    case "reopen-event":
+      await updateEventLifecycle(action);
       return;
     case "nav-seating":
       switchView("seating");
@@ -4156,6 +4687,52 @@ async function handleAction(action, dataset, event = null) {
     case "planner-zoom-reset":
       resetPlannerView();
       return;
+    case "mobile-set-seating-mode":
+      state.mobileSeatingMode = dataset.mode === "edit" ? "edit" : "assign";
+      state.mobileMapOpen = false;
+      document.body.classList.remove("is-mobile-map-open");
+      renderActiveView();
+      return;
+    case "mobile-seating-view":
+      state.mobileSeatingView = dataset.view === "map" ? "map" : "tables";
+      renderActiveView();
+      return;
+    case "mobile-toggle-seating-summary":
+      state.showFullSeatingSummary = !state.showFullSeatingSummary;
+      renderActiveView();
+      return;
+    case "mobile-explore-map":
+      state.mobileSavedScrollY = window.scrollY;
+      state.mobileMapOpen = true;
+      document.body.classList.add("is-mobile-map-open");
+      renderActiveView();
+      document.querySelector(".mobile-map-overlay [data-action='mobile-close-map']")?.focus({ preventScroll: true });
+      return;
+    case "mobile-close-map":
+      state.mobileMapOpen = false;
+      document.body.classList.remove("is-mobile-map-open");
+      renderActiveView();
+      window.scrollTo(0, state.mobileSavedScrollY);
+      return;
+    case "mobile-browse-table":
+      openMobileTableSeatBrowser(dataset.tableId);
+      return;
+    case "mobile-open-seat": {
+      const tableId = dataset.tableId;
+      const chairId = dataset.chairId;
+      state.assignmentSession = null;
+      elements.assignmentModal?.close();
+      handleAssignmentChairClick(tableId, chairId, event?.target);
+      return;
+    }
+    case "mobile-assignment-filter":
+      state.mobileAssignmentFilter = dataset.filter === "all" ? "all" : "unassigned";
+      renderAssignmentWorkflow();
+      return;
+    case "open-layout-library":
+      state.seatingPanelTab = "venue";
+      renderActiveView();
+      return;
     case "load-test-guests":
       loadSeatingTestGuests();
       return;
@@ -4163,6 +4740,10 @@ async function handleAction(action, dataset, event = null) {
       state.selectedTableId = dataset.tableId;
       state.selectedHallObjectId = "";
       state.activePartyGuestId = "";
+      if (window.matchMedia("(max-width: 700px)").matches && state.mobileSeatingMode !== "edit") {
+        openMobileTableSeatBrowser(dataset.tableId);
+        return;
+      }
       renderActiveView();
       return;
     case "set-seating-panel-tab":
@@ -5881,6 +6462,10 @@ function loadSeatingTestGuests() {
 
 function handlePlannerPointerDown(event) {
   if (event.button !== 0 || state.dragState) return;
+  const mobile = window.matchMedia("(max-width: 700px)").matches;
+  const mobileEditing = mobile && state.mobileSeatingMode === "edit";
+  const mobileExploring = mobile && state.mobileMapOpen;
+  if (mobile && !mobileEditing && !mobileExploring) return;
   const viewport = document.getElementById("plannerViewport");
   if (!viewport) return;
   const target = event.target;
@@ -5908,6 +6493,10 @@ function handlePlannerPointerDown(event) {
   }
 
   if ((!tableNode && !objectNode) || seatNode) return;
+
+  if (mobile && !mobileEditing && mobileExploring) return;
+  if (mobileEditing && tableNode && tableNode.dataset.tableDragId !== state.selectedTableId) return;
+  if (mobileEditing && objectNode && objectNode.dataset.hallObjectId !== state.selectedHallObjectId) return;
 
   if (objectNode) {
     const objectId = objectNode.dataset.hallObjectId;
@@ -6159,6 +6748,10 @@ function handleAssignmentChairClick(tableId, chairId, trigger) {
     showToast("Your role does not allow seating edits.", "error");
     return;
   }
+  if (window.matchMedia("(max-width: 700px)").matches && state.mobileSeatingMode === "edit") {
+    showToast("Switch to Assign seats to manage people.", "info");
+    return;
+  }
   const table = state.tables.find((item) => item.id === tableId);
   const chair = table?.chairs.find((item) => item.id === chairId);
   if (!table || !chair) {
@@ -6186,6 +6779,7 @@ function handleAssignmentChairClick(tableId, chairId, trigger) {
     startingTableId: tableId,
     selectedChairs: [{ tableId, chairId }],
     existingAssignments: [],
+    mobileDirectAssignment: window.matchMedia("(max-width: 700px)").matches,
   };
   openCenteredModal(
     elements.assignmentModal,
@@ -6195,11 +6789,31 @@ function handleAssignmentChairClick(tableId, chairId, trigger) {
   renderActiveView();
 }
 
+function openMobileTableSeatBrowser(tableId) {
+  const table = state.tables.find((item) => item.id === tableId);
+  if (!table) return;
+  state.selectedTableId = table.id;
+  state.selectedHallObjectId = "";
+  state.assignmentSession = { mode: "mobile-table", tableId: table.id, mobileDirectAssignment: true };
+  openCenteredModal(elements.assignmentModal, renderAssignmentModal, "[data-action='cancel-assignment']");
+}
+
+function renderMobileTableSeatBrowser(table) {
+  const capacity = Number(table.seatCount || table.capacity || table.chairs?.length || 0);
+  const occupied = getTableAssignments(table.id).length;
+  return `<div class="da3wa-sheet__header"><div><p class="da3wa-eyebrow">Table · ${occupied}/${capacity} occupied</p><h2>${escapeHtml(table.name || "Table")}</h2></div><button class="da3wa-icon-button" type="button" data-action="cancel-assignment" aria-label="Close table seats">×</button></div><div class="da3wa-sheet__body"><p class="planner-note">Choose a numbered seat to assign or manage the person already seated there.</p><div class="mobile-seat-browser">${[...table.chairs].sort((a,b)=>Number(a.seatNumber)-Number(b.seatNumber)).map((chair)=>{ const assignment=getChairAssignment(table.id,chair); const guest=assignment?.guestId ? state.guests.find((item)=>item.id===assignment.guestId) : null; return `<button type="button" class="mobile-seat-choice ${assignment ? "is-occupied" : "is-empty"}" data-action="mobile-open-seat" data-table-id="${escapeAttribute(table.id)}" data-chair-id="${escapeAttribute(chair.id)}"><strong>Seat ${escapeHtml(String(chair.seatNumber))}</strong><span>${assignment ? escapeHtml(partyMemberLabel(guest, assignment.partyMemberIndex)) : "Available · assign a person"}</span></button>`; }).join("")}</div></div><div class="da3wa-sheet__footer"><button class="da3wa-button da3wa-button--secondary" type="button" data-action="cancel-assignment">Close</button></div>`;
+}
+
 function renderAssignmentModal() {
   if (!elements.assignmentContent || !state.assignmentSession) {
     return;
   }
   const session = state.assignmentSession;
+  if (session.mode === "mobile-table") {
+    const table = state.tables.find((item) => item.id === session.tableId);
+    elements.assignmentContent.innerHTML = table ? renderMobileTableSeatBrowser(table) : `<div class="da3wa-sheet__body"><p>This table is no longer available.</p></div>`;
+    return;
+  }
   const guest = session.guestId
     ? state.guests.find((item) => item.id === session.guestId)
     : null;
@@ -6207,6 +6821,7 @@ function renderAssignmentModal() {
     (item) => getGuestRemainingSeats(item) > 0 || item.id === session.guestId,
   );
   const filtered = candidates.filter((item) => {
+    if (session.mobileDirectAssignment && state.mobileAssignmentFilter === "unassigned" && getGuestRemainingSeats(item) <= 0 && item.id !== session.guestId) return false;
     if (!state.guestAssignmentSearch) {
       return true;
     }
@@ -6230,13 +6845,14 @@ function renderAssignmentModal() {
         guest
           ? `
         <div class="assignment-progress">
-          <strong>${selectedCount} of ${session.requiredSeats} chairs selected</strong>
-          <span>${escapeHtml(getSelectedChairSummary(session.selectedChairs))}</span>
+          <strong>${session.mobileDirectAssignment ? "Assign one person to this seat" : `${selectedCount} of ${session.requiredSeats} chairs selected`}</strong>
+          <span>${escapeHtml(getSelectedChairSummary(session.selectedChairs))} · ${getPartySize(guest)} people in party · ${getGuestAssignedSeats(guest.id).length} already seated</span>
         </div>
         ${state.modalError ? `<div class="planner-warning-list"><span class="warning-chip">${escapeHtml(state.modalError)}</span></div>` : ""}
-        <p class="planner-note">Use the canvas behind this modal to add or remove empty chairs. You can save a partial party assignment and finish the remaining seats later.</p>
+        ${session.mobileDirectAssignment ? `<p class="planner-note">This assigns one unseated person from ${escapeHtml(guest.fullName || "this party")} to the selected seat. Remaining party members stay unassigned.</p>` : `<p class="planner-note">Use the canvas behind this modal to add or remove empty chairs. You can save a partial party assignment and finish the remaining seats later.</p>`}
       `
           : `
+        ${session.mobileDirectAssignment ? `<div class="mobile-assignment-filters"><button type="button" data-action="mobile-assignment-filter" data-filter="unassigned" class="${state.mobileAssignmentFilter === "unassigned" ? "is-active" : ""}">Needs seats</button><button type="button" data-action="mobile-assignment-filter" data-filter="all" class="${state.mobileAssignmentFilter === "all" ? "is-active" : ""}">All eligible</button></div>` : ""}
         <label class="planner-drawer__search">
           <span>Search by guest name or phone</span>
           <input class="da3wa-input" type="search" value="${escapeAttribute(state.guestAssignmentSearch)}" data-seat-search />
@@ -6250,7 +6866,7 @@ function renderAssignmentModal() {
     <div class="da3wa-sheet__footer">
       <button class="da3wa-button da3wa-button--secondary" type="button" data-action="cancel-assignment">Cancel</button>
       <div class="da3wa-sheet__footer-actions">
-        ${guest ? actionButton("Complete assignment", "complete-assignment", selectedCount < 1 || Boolean(state.activeModalOperation), "primary") : ""}
+        ${guest ? actionButton(session.mobileDirectAssignment ? "Assign guest" : "Complete assignment", "complete-assignment", selectedCount < 1 || Boolean(state.activeModalOperation), "primary") : ""}
       </div>
     </div>
   `;
@@ -6289,6 +6905,11 @@ function chooseGuestForAssignment(guestId) {
   session.existingAssignments = existingAssignments;
   session.selectedChairs = session.selectedChairs.slice(0, remainingSeats);
   state.activePartyGuestId = guest.id;
+  if (session.mobileDirectAssignment) {
+    session.selectedChairs = session.selectedChairs.slice(0, 1);
+    renderAssignmentModal();
+    return;
+  }
   elements.assignmentModal?.close();
   renderActiveView();
 }
@@ -6373,6 +6994,7 @@ async function completeAssignmentSession() {
   state.activeModalOperation = "assignment";
   renderAssignmentWorkflow();
   try {
+    const assignedSummary = getSelectedChairSummary(session.selectedChairs);
     await savePartyAssignment(
       guest,
       session.selectedChairs,
@@ -6383,7 +7005,7 @@ async function completeAssignmentSession() {
     elements.assignmentModal?.close();
     elements.chairDetailsModal?.close();
     renderAll();
-    showToast("Party assignment saved.", "success");
+    showToast(session.mobileDirectAssignment ? `Person assigned to ${assignedSummary}.` : "Party assignment saved.", "success");
   } catch (error) {
     const diagnosticError = reportSeatingOperationFailure(
       {
@@ -7876,61 +8498,6 @@ function handlePlannerPointerCancel(event) {
   }
   try { document.getElementById("plannerViewport")?.releasePointerCapture(event.pointerId); } catch {}
   state.dragState = null;
-}
-
-async function saveInvitationQrSetting(showInvitationQr, input) {
-  if (state.mode !== "live" || !canManageInvitationSettings()) {
-    input.checked = state.wedding?.showInvitationQr !== false;
-    showToast("You do not have permission to change invitation settings.", "error");
-    return;
-  }
-
-  input.disabled = true;
-  try {
-    await updateDoc(doc(state.services.db, "weddings", state.weddingId), {
-      showInvitationQr,
-      updatedAt: serverTimestamp(),
-    });
-    showToast(
-      showInvitationQr ? "QR pass will show on invitations." : "QR pass is now hidden on invitations.",
-      "success",
-    );
-  } catch (error) {
-    console.error("Could not save invitation QR setting.", error);
-    input.checked = state.wedding?.showInvitationQr !== false;
-    showToast("We could not save the invitation setting. Please check your access and try again.", "error");
-  } finally {
-    input.disabled = !canManageInvitationSettings();
-  }
-}
-
-async function saveSeatingEnabledSetting(seatingEnabled, input) {
-  if (state.mode !== "live" || !canManageInvitationSettings()) {
-    input.checked = isSeatingEnabled();
-    showToast("You do not have permission to change invitation settings.", "error");
-    return;
-  }
-
-  input.disabled = true;
-  try {
-    await updateDoc(doc(state.services.db, "weddings", state.weddingId), {
-      seatingEnabled,
-      updatedAt: serverTimestamp(),
-    });
-    state.wedding = { ...state.wedding, seatingEnabled };
-    renderChrome();
-    const status = input.closest(".invitation-settings-card")?.querySelector("[role='status']");
-    if (status) {
-      status.textContent = `QR pass ${state.wedding.showInvitationQr === false ? "hidden" : "visible"} · Seating ${seatingEnabled ? "enabled" : "disabled"}.`;
-    }
-    showToast(seatingEnabled ? "Seating is enabled for this event." : "Seating is disabled. Existing layouts and assignments are preserved.", "success");
-  } catch (error) {
-    console.error("Could not save seating setting.", error);
-    input.checked = isSeatingEnabled();
-    showToast("We could not save the seating setting. Please check your access and try again.", "error");
-  } finally {
-    input.disabled = !canManageInvitationSettings();
-  }
 }
 
 function calculateGuestDirectoryCounts(guests) {

@@ -89,10 +89,9 @@ const pageMeta = {
     description: "Manage event details, guest access, seating, and event status.",
   },
   exports: {
-    eyebrow: "Data exports",
+    eyebrow: "",
     title: "Exports",
-    description:
-      "Download guest lists and seating views without disturbing live event data.",
+    description: "",
   },
 };
 
@@ -1733,6 +1732,10 @@ function isWeddingOwner() {
   );
 }
 
+function canEditEventDetails() {
+  return isWeddingOwner() || can("canEditEventDetails");
+}
+
 function canManageSeatingAccess() {
   return isWeddingOwner() || state.permissions?.canManageUsers === true;
 }
@@ -2969,7 +2972,7 @@ function updateEventSettingsFormState() {
   const form = document.getElementById("eventSettingsForm");
   const saveButton = form?.querySelector("[data-action='save-event-settings']");
   if (saveButton) {
-    saveButton.disabled = !state.dirtyEventSettings || state.savingEventSettings || !isWeddingOwner();
+    saveButton.disabled = !state.dirtyEventSettings || state.savingEventSettings || !canEditEventDetails();
   }
 }
 
@@ -3003,7 +3006,7 @@ function validateEventSettingsDraft(draft) {
 
 async function saveEventSettings(event) {
   event.preventDefault();
-  if (!isWeddingOwner() || state.savingEventSettings) return;
+  if (!canEditEventDetails() || state.savingEventSettings) return;
   syncEventSettingsDraftFromForm();
   const draft = state.eventSettingsDraft || {};
   const errors = validateEventSettingsDraft(draft);
@@ -3147,7 +3150,7 @@ async function processEventSettingQueue(key, mutation) {
 }
 
 async function updateEventLifecycle(action) {
-  if (!isWeddingOwner() || state.eventStatusPending) return;
+  if (!canEditEventDetails() || state.eventStatusPending) return;
   if (state.dirtyEventSettings) {
     showToast("Save or discard your event detail edits before changing the event status.", "info");
     return;
@@ -3205,7 +3208,7 @@ function renderEventSettingsPage() {
   }
   const draft = state.eventSettingsDraft;
   const errors = state.eventSettingsErrors || {};
-  const canEditDetails = isWeddingOwner();
+  const canEditDetails = canEditEventDetails();
   const canChangeOptions = state.mode === "live" && canManageInvitationSettings();
   const showQr = state.eventSettingWrites.showInvitationQr?.pending
     ? state.eventSettingWrites.showInvitationQr.desired
@@ -3339,37 +3342,32 @@ function renderExportsPage() {
     exportCard(
       "All guests",
       "Guest directory with contact, party size, invitation, RSVP, and attendance data.",
-      "XLSX / CSV",
       "export-all",
-      "third",
-    ),
-    exportCard(
-      "Confirmed",
-      "Guests with accepted RSVP status.",
-      "XLSX / CSV",
-      "export-confirmed",
       "third",
     ),
     exportCard(
       "Pending",
       "Guests still awaiting a response.",
-      "XLSX / CSV",
       "export-pending",
+      "third",
+    ),
+    exportCard(
+      "Confirmed",
+      "Guests with accepted RSVP status.",
+      "export-confirmed",
       "third",
     ),
     exportCard(
       "Declined",
       "Guests who cannot attend.",
-      "XLSX / CSV",
       "export-declined",
-      "half",
+      "third",
     ),
     exportCard(
       "Table assignments",
       "Roster sorted by table and seat placement.",
-      "XLSX / CSV",
       "export-tables",
-      "half",
+      "third",
     ),
   ];
 
@@ -4211,13 +4209,11 @@ function plannerStat(label, value) {
   `;
 }
 
-function exportCard(title, description, format, action, layout) {
+function exportCard(title, description, action, layout) {
   return `
     <article class="export-card export-card--${escapeHtml(layout)}">
-      <p class="da3wa-eyebrow">Export package</p>
       <h3>${escapeHtml(title)}</h3>
       <p>${escapeHtml(description)}</p>
-      <code>${escapeHtml(format)}</code>
       <div class="export-card__footer">
         ${actionButton("Download", action, !can("canExport"), "primary")}
       </div>

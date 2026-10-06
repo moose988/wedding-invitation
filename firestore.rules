@@ -143,6 +143,13 @@ service cloud.firestore {
         dashboardUser(weddingId).data.canManageUsers == true;
     }
 
+    // Event owners retain access automatically. Other dashboard users need
+    // the explicit per-event permission before editing event details/status.
+    function canEditEventDetails(weddingId) {
+      return isDashboardMember(weddingId) &&
+        dashboardUser(weddingId).data.get("canEditEventDetails", false) == true;
+    }
+
     function isInvitationQrSettingsUpdate(weddingId) {
       return isSignedIn()
         && (request.auth.uid == resource.data.ownerUserId || canManageUsers(weddingId))
@@ -186,8 +193,7 @@ service cloud.firestore {
       let statusUnchanged = !changes.hasAny(["status"]);
       let normalStatusChange = resource.data.get("status", "") != "completed"
         && request.resource.data.get("status", "") in ["draft", "upcoming", "active", "archived"];
-      return isDashboardMember(weddingId)
-        && request.auth.uid == resource.data.ownerUserId
+      return (request.auth.uid == resource.data.ownerUserId || canEditEventDetails(weddingId))
         && changes.hasOnly([
           "eventCategory", "eventTitle", "coupleName", "brideName", "groomName",
           "eventDateISO", "timeEn", "timeAr", "venueEn", "location", "locationEn",
@@ -214,8 +220,7 @@ service cloud.firestore {
         && changes.hasOnly(["status", "updatedAt"]);
       let archiving = nextStatus in ["archived", "draft"]
         && changes.hasOnly(["status", "updatedAt"]);
-      return isDashboardMember(weddingId)
-        && request.auth.uid == resource.data.ownerUserId
+      return (request.auth.uid == resource.data.ownerUserId || canEditEventDetails(weddingId))
         && changes.hasOnly(["status", "completedAt", "statusBeforeCompletion", "updatedAt"])
         && request.resource.data.updatedAt == request.time
         && (completing || reopening || ordinaryStatusChange || archiving);

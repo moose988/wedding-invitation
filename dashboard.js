@@ -2613,6 +2613,11 @@ function renderSeatingPage() {
   const mobileLayout = window.matchMedia("(max-width: 700px)").matches;
   state.renderedMobileSeatingLayout = mobileLayout;
   if (mobileLayout) {
+    const currentViewport = document.getElementById("plannerViewport");
+    state.plannerMapWidth = Math.max(
+      currentViewport?.clientWidth || window.innerWidth - 24,
+      820,
+    );
     renderMobileSeatingPage({ selectedTable, selectedHallObject, seatingStats, sideStats, isSaving });
     return;
   }
@@ -2728,7 +2733,7 @@ function renderMobileSeatingPage({ seatingStats, sideStats, isSaving }) {
   const editing = state.mobileSeatingMode === "edit";
   const seatedPeople = state.tables.reduce((sum, table) => sum + getTableAssignments(table.id).length, 0);
   const peopleNeedingSeats = state.guests.reduce((sum, guest) => sum + getGuestRemainingSeats(guest), 0);
-  const controls = `<div class="mobile-seating-map-tools">${actionButton("Zoom out", "planner-zoom-out", state.plannerZoom <= 0.7)}<span class="pill" data-zoom-percentage>${Math.round(state.plannerZoom * 100)}%</span>${actionButton("Zoom in", "planner-zoom-in", state.plannerZoom >= 1.6)}${actionButton("Fit all", "planner-zoom-reset", false, "secondary")}</div>`;
+  const controls = `<div class="mobile-seating-map-tools">${actionButton("Zoom out", "planner-zoom-out", state.plannerZoom <= 0.35)}<span class="pill" data-zoom-percentage>${Math.round(state.plannerZoom * 100)}%</span>${actionButton("Zoom in", "planner-zoom-in", state.plannerZoom >= 1.6)}${actionButton("Fit all", "planner-zoom-reset", false, "secondary")}</div>`;
   const canvas = `<div class="planner-canvas-viewport mobile-seating-map ${editing ? "is-editing" : ""}" id="plannerViewport" aria-label="Venue map" tabindex="0"><div class="planner-map-extent"><div class="planner-canvas" id="plannerCanvas" style="width:${state.plannerMapWidth}px;height:720px;--planner-zoom:${state.plannerZoom}"><div class="planner-canvas__floor"></div>${state.hallObjects.map(renderHallObject).join("")}${state.tables.length ? state.tables.map(renderPlannerTable).join("") : `<div class="da3wa-empty">No tables yet. Edit the floor plan to add one.</div>`}</div></div></div>`;
   const tables = state.tables.length ? state.tables.map((table) => {
     const occupied = getTableAssignments(table.id).length;
@@ -2740,7 +2745,7 @@ function renderMobileSeatingPage({ seatingStats, sideStats, isSaving }) {
     <nav class="mobile-seating-modes" aria-label="Seating mode"><button type="button" data-action="mobile-set-seating-mode" data-mode="assign" aria-pressed="${!editing}" class="${!editing ? "is-active" : ""}">Assign seats</button><button type="button" data-action="mobile-set-seating-mode" data-mode="edit" aria-pressed="${editing}" class="${editing ? "is-active" : ""}">Edit floor plan</button></nav>
     ${editing ? `<div class="mobile-seating-edit-banner"><strong>Editing floor plan</strong><span>Select an object, then drag it to move. Drag the background to pan.</span><button class="da3wa-button da3wa-button--primary" type="button" data-action="mobile-set-seating-mode" data-mode="assign">Done editing</button></div>` : ""}
     <article class="mobile-seating-progress"><div><strong>${seatedPeople}</strong><span>People seated</span></div><div><strong>${peopleNeedingSeats}</strong><span>People needing seats</span></div><button type="button" data-action="mobile-toggle-seating-summary" aria-expanded="${state.showFullSeatingSummary}">${state.showFullSeatingSummary ? "Hide seating summary" : "View seating summary"}</button>${state.showFullSeatingSummary ? `<div class="mobile-seating-full-stats">${renderPlannerStatCard(state.tables.length,"Tables")}${renderPlannerStatCard(seatingStats.totalSeats,"Seat capacity")}${renderPlannerStatCard(seatingStats.total,"Primary guest records")}${renderPlannerStatCard(peopleNeedingSeats,"People needing seats")}${renderPlannerStatCard(seatingStats.unassignedGuests,"Parties needing seats")}${eventUsesGuestSides(state.wedding) ? renderPlannerStatCard(`${sideStats.groom.seated}/${sideStats.groom.confirmed}`,"Groom seated") : ""}${eventUsesGuestSides(state.wedding) ? renderPlannerStatCard(`${sideStats.bride.seated}/${sideStats.bride.confirmed}`,"Bride seated") : ""}</div>` : ""}</article>
-    ${editing ? `<section class="mobile-floor-tools">${controls}<div>${actionButton("Add table","open-add-table",!canManageSeatingLayout(),"primary")}${actionButton("Add dance floor","open-add-dance-floor",!canManageSeatingLayout(),"secondary")}${actionButton("Done editing","mobile-set-seating-mode",false,"secondary")}</div></section><article class="planner-canvas-shell mobile-seating-canvas-shell">${canvas}${getSelectedTable() ? `<div class="mobile-selected-object">${renderTableInspector(getSelectedTable())}</div>` : getSelectedHallObject() ? `<div class="mobile-selected-object">${renderHallObjectInspector(getSelectedHallObject())}</div>` : ""}<p class="mobile-edit-instruction">Drag a selected object to move it · drag open floor to pan</p></article>` : `<nav class="mobile-seating-views" aria-label="Seating view"><button type="button" data-action="mobile-seating-view" data-view="tables" aria-pressed="${state.mobileSeatingView === "tables"}" class="${state.mobileSeatingView === "tables" ? "is-active" : ""}">Tables</button><button type="button" data-action="mobile-seating-view" data-view="map" aria-pressed="${state.mobileSeatingView === "map"}" class="${state.mobileSeatingView === "map" ? "is-active" : ""}">Map</button></nav>${state.mobileSeatingView === "tables" ? `<section class="mobile-seating-table-list" aria-label="Tables">${tables}</section>` : `<article class="planner-canvas-shell mobile-seating-canvas-shell"><div class="mobile-map-preview-note">Map preview · tables are locked</div>${canvas}<button class="da3wa-button da3wa-button--primary mobile-explore-map" type="button" data-action="mobile-explore-map">Explore map</button></article>`}`}
+    ${editing ? `<section class="mobile-floor-tools">${controls}<div>${actionButton("Add table","open-add-table",!canManageSeatingLayout(),"primary")}${actionButton("Add dance floor","open-add-dance-floor",!canManageSeatingLayout(),"secondary")}</div></section><article class="planner-canvas-shell mobile-seating-canvas-shell">${canvas}${getSelectedTable() ? `<div class="mobile-selected-object">${renderTableInspector(getSelectedTable())}</div>` : getSelectedHallObject() ? `<div class="mobile-selected-object">${renderHallObjectInspector(getSelectedHallObject())}</div>` : ""}<p class="mobile-edit-instruction">Drag a selected object to move it · drag open floor to pan</p></article>` : `<nav class="mobile-seating-views" aria-label="Seating view"><button type="button" data-action="mobile-seating-view" data-view="tables" aria-pressed="${state.mobileSeatingView === "tables"}" class="${state.mobileSeatingView === "tables" ? "is-active" : ""}">Tables</button><button type="button" data-action="mobile-seating-view" data-view="map" aria-pressed="${state.mobileSeatingView === "map"}" class="${state.mobileSeatingView === "map" ? "is-active" : ""}">Map</button></nav>${state.mobileSeatingView === "tables" ? `<section class="mobile-seating-table-list" aria-label="Tables">${tables}</section>` : `<article class="planner-canvas-shell mobile-seating-canvas-shell"><div class="mobile-map-preview-note">Map preview · tables are locked</div>${canvas}<button class="da3wa-button da3wa-button--primary mobile-explore-map" type="button" data-action="mobile-explore-map">Explore map</button></article>`}`}
     ${state.mobileMapOpen ? `<div class="mobile-map-overlay" role="dialog" aria-modal="true" aria-label="Explore seating map"><header><strong>Explore map</strong><button class="da3wa-button da3wa-button--secondary" type="button" data-action="mobile-close-map">Close map</button></header><p>Drag to explore. Tap a seat to assign.</p>${controls}</div>` : ""}
   </section>`;
   document.getElementById("plannerCanvas")?.addEventListener("pointerdown", handlePlannerPointerDown);
@@ -2762,6 +2767,20 @@ function renderMobileSeatingPage({ seatingStats, sideStats, isSaving }) {
     mobileViewport.addEventListener("touchend", handleMobileMapTouchEnd, { passive: false });
     mobileViewport.addEventListener("touchcancel", handleMobileMapTouchEnd, { passive: false });
   }
+  if (!state.plannerViewCenter) fitMobilePlannerView();
+  else restorePlannerViewport();
+}
+
+function fitMobilePlannerView() {
+  const viewport = document.getElementById("plannerViewport");
+  if (!viewport || !state.plannerMapWidth) return;
+  const canvasHeight = 720;
+  const horizontalPadding = 32;
+  const verticalPadding = state.mobileMapOpen ? 180 : 28;
+  const widthZoom = (viewport.clientWidth - horizontalPadding) / state.plannerMapWidth;
+  const heightZoom = (viewport.clientHeight - verticalPadding) / canvasHeight;
+  state.plannerZoom = clamp(Math.min(widthZoom, heightZoom), 0.35, 1.6);
+  state.plannerViewCenter = { x: state.plannerMapWidth / 2, y: canvasHeight / 2 };
   restorePlannerViewport();
 }
 
@@ -2812,7 +2831,7 @@ function handleMobileMapTouchMove(event) {
     }
     const distance = mobileTouchDistance(event.touches);
     if (gesture.distance > 0 && distance > 0) {
-      const nextZoom = clamp(gesture.zoom * distance / gesture.distance, 0.7, 1.6);
+      const nextZoom = clamp(gesture.zoom * distance / gesture.distance, 0.35, 1.6);
       const midpointX = (event.touches[0].clientX + event.touches[1].clientX) / 2 - gesture.rect.left;
       const midpointY = (event.touches[0].clientY + event.touches[1].clientY) / 2 - gesture.rect.top;
       const focalX = gesture.center.x + (midpointX - viewport.clientWidth / 2) / gesture.zoom;
@@ -4700,6 +4719,7 @@ async function handleAction(action, dataset, event = null) {
     case "mobile-explore-map":
       state.mobileSavedScrollY = window.scrollY;
       state.mobileMapOpen = true;
+      state.plannerViewCenter = null;
       document.body.classList.add("is-mobile-map-open");
       renderActiveView();
       document.querySelector(".mobile-map-overlay [data-action='mobile-close-map']")?.focus({ preventScroll: true });
@@ -6420,11 +6440,17 @@ async function deleteTable(tableId) {
 }
 
 function setPlannerZoom(nextZoom) {
-  state.plannerZoom = clamp(nextZoom, 0.7, 1.6);
+  const minimumZoom = window.matchMedia("(max-width: 700px)").matches ? 0.35 : 0.7;
+  state.plannerZoom = clamp(nextZoom, minimumZoom, 1.6);
   renderActiveView();
 }
 
 function resetPlannerView() {
+  if (window.matchMedia("(max-width: 700px)").matches) {
+    state.plannerViewCenter = null;
+    renderActiveView();
+    return;
+  }
   state.plannerZoom = 1;
   state.plannerViewCenter = {
     x: state.plannerMapWidth / 2,
@@ -6797,7 +6823,7 @@ function openMobileTableSeatBrowser(tableId) {
 function renderMobileTableSeatBrowser(table) {
   const capacity = Number(table.seatCount || table.capacity || table.chairs?.length || 0);
   const occupied = getTableAssignments(table.id).length;
-  return `<div class="da3wa-sheet__header"><div><p class="da3wa-eyebrow">Table · ${occupied}/${capacity} occupied</p><h2>${escapeHtml(table.name || "Table")}</h2></div><button class="da3wa-icon-button" type="button" data-action="cancel-assignment" aria-label="Close table seats">×</button></div><div class="da3wa-sheet__body"><p class="planner-note">Choose a numbered seat to assign or manage the person already seated there.</p><div class="mobile-seat-browser">${[...table.chairs].sort((a,b)=>Number(a.seatNumber)-Number(b.seatNumber)).map((chair)=>{ const assignment=getChairAssignment(table.id,chair); const guest=assignment?.guestId ? state.guests.find((item)=>item.id===assignment.guestId) : null; return `<button type="button" class="mobile-seat-choice ${assignment ? "is-occupied" : "is-empty"}" data-action="mobile-open-seat" data-table-id="${escapeAttribute(table.id)}" data-chair-id="${escapeAttribute(chair.id)}"><strong>Seat ${escapeHtml(String(chair.seatNumber))}</strong><span>${assignment ? escapeHtml(partyMemberLabel(guest, assignment.partyMemberIndex)) : "Available · assign a person"}</span></button>`; }).join("")}</div></div><div class="da3wa-sheet__footer"><button class="da3wa-button da3wa-button--secondary" type="button" data-action="cancel-assignment">Close</button></div>`;
+  return `<div class="da3wa-sheet__header"><div><p class="da3wa-eyebrow">Table · ${occupied}/${capacity} occupied</p><h2>${escapeHtml(table.name || "Table")}</h2></div><button class="da3wa-icon-button" type="button" data-action="cancel-assignment" aria-label="Close table seats">×</button></div><div class="da3wa-sheet__body"><p class="planner-note">Choose a numbered seat to assign or manage the person already seated there.</p><div class="mobile-seat-browser">${[...table.chairs].sort((a,b)=>Number(a.seatNumber)-Number(b.seatNumber)).map((chair)=>{ const assignment=getChairAssignment(table.id,chair); const guest=assignment?.guestId ? state.guests.find((item)=>item.id===assignment.guestId) : null; return `<button type="button" class="mobile-seat-choice ${assignment ? "is-occupied" : "is-empty"}" data-action="mobile-open-seat" data-table-id="${escapeAttribute(table.id)}" data-chair-id="${escapeAttribute(chair.id)}"><strong>Seat ${escapeHtml(String(chair.seatNumber))}</strong><span>${assignment ? escapeHtml(guest?.fullName || partyMemberLabel(guest, assignment.partyMemberIndex)) : "Available · assign a person"}</span></button>`; }).join("")}</div></div><div class="da3wa-sheet__footer"><button class="da3wa-button da3wa-button--secondary" type="button" data-action="cancel-assignment">Close</button></div>`;
 }
 
 function renderAssignmentModal() {

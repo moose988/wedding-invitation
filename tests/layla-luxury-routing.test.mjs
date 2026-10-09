@@ -33,6 +33,6 @@ test("luxury-wedding-demo routes to the restored Layla & Zaid luxury invitation"
   assert.doesNotMatch(script, /Guest of Honor/);
   assert.match(script, /elements\.guestSpotlightSection\.hidden = true;/);
   assert.match(script, /laylaLanguageStorageKey/);
-  assert.match(script, /function toggleLaylaLanguage\(\)/);
+  assert.match(script, /function setLaylaLanguage\(language\)/);
   assert.match(script, /document\.documentElement\.dir = "ltr"/);
 });

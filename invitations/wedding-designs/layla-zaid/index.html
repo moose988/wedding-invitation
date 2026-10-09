@@ -1,192 +1,112 @@
-<!DOCTYPE html>
-<html lang="en">
+<!doctype html>
+<html lang="en" dir="ltr">
   <head>
-    <!-- This design is nested three directories below the hosting root. -->
     <base href="../../../" />
     <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <meta
-      name="description"
-      content="A premium bilingual Arabic and English digital event invitation platform."
-    />
-    <title>Event Invitation Platform</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <meta name="theme-color" content="#f5efe4" />
+    <meta name="description" content="A personal wedding invitation from Layla and Zaid." />
+    <title>Wedding Invitation</title>
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-    <link
-      href="https://fonts.googleapis.com/css2?family=Amiri:wght@400;700&family=Aref+Ruqaa:wght@400;700&family=Cormorant+Garamond:ital,wght@0,400;0,500;0,600;1,500&family=Great+Vibes&family=Lora:wght@400;500;600&display=swap"
-      rel="stylesheet"
-    />
+    <link href="https://fonts.googleapis.com/css2?family=Amiri:wght@400;700&family=Aref+Ruqaa:wght@400;700&family=Cormorant+Garamond:ital,wght@0,400;0,500;0,600;1,500&family=Great+Vibes&family=Lora:wght@400;500;600&display=swap" rel="stylesheet" />
     <link rel="stylesheet" href="./invitations/wedding-designs/layla-zaid/styles.css" />
   </head>
   <body class="layla-zaid-invitation">
-    <div class="page-shell">
-      <button class="layla-language-toggle" id="laylaLanguageToggle" type="button" aria-label="Switch to Arabic">العربية</button>
-      <div class="ambient ambient-top"></div>
-      <div class="ambient ambient-bottom"></div>
-
-      <div class="petals" aria-hidden="true">
-        <span class="petal petal-1"></span>
-        <span class="petal petal-2"></span>
-        <span class="petal petal-3"></span>
-        <span class="petal petal-4"></span>
-        <span class="petal petal-5"></span>
-        <span class="petal petal-6"></span>
-      </div>
-
-      <div class="floral-frame" aria-hidden="true">
-        <span class="floral-frame__corner floral-frame__corner--top-left"></span>
-        <span class="floral-frame__corner floral-frame__corner--top-right"></span>
-        <span class="floral-frame__corner floral-frame__corner--bottom-left"></span>
-        <span class="floral-frame__corner floral-frame__corner--bottom-right"></span>
-      </div>
-
-      <div class="intro-screen" id="introScreen">
-        <div class="intro-halo"></div>
-        <button
-          class="intro-card intro-card--envelope"
-          id="openInvitation"
-          type="button"
-          aria-label="Open event invitation"
-        >
-          <span class="envelope-stage" aria-hidden="true">
-            <span class="envelope-glow"></span>
-            <img class="envelope-layer envelope-layer--back" src="./images/envelope-back.png" alt="" onerror="this.hidden=true" />
-            <img class="envelope-layer envelope-layer--card" src="./images/invitation-card.png" alt="" onerror="this.hidden=true" />
-            <img class="envelope-layer envelope-layer--flap" src="./images/envelope-flap.png" alt="" onerror="this.hidden=true" />
-            <img class="envelope-layer envelope-layer--front" src="./images/envelope-front.png" alt="" onerror="this.hidden=true" />
-            <img class="envelope-layer envelope-layer--flowers" src="./images/envelope-flowers.png" alt="" onerror="this.hidden=true" />
-            <img class="envelope-layer envelope-layer--seal" src="./images/wax-seal.png" alt="" onerror="this.hidden=true" />
-            <span class="envelope-shimmer"></span>
-            <span class="envelope-sparkles"></span>
-          </span>
-          <span class="intro-card__cta-wrap">
-            <span class="intro-card__cta intro-card__cta--overlay" id="openInvitationLabel">
-              <span class="intro-card__cta-text is-active" id="openInvitationLabelPrimary">Open Invitation</span>
-              <span class="intro-card__cta-text" id="openInvitationLabelSecondary" aria-hidden="true"></span>
-            </span>
-          </span>
-        </button>
-      </div>
-
-      <button
-        class="music-toggle"
-        id="musicToggle"
-        type="button"
-        aria-label="Play event music"
-        hidden
-      >
-        <span class="music-toggle__record-wrap">
-          <img class="music-toggle__record" src="./images/music-record.png" alt="" />
-          <span class="music-toggle__label">Play Music</span>
-        </span>
-      </button>
-
-      <audio id="weddingAudio" preload="none" loop>
-        <source src="./music/wedding.mp3" type="audio/mpeg" />
-      </audio>
-
-      <main class="site-content" id="siteContent">
-        <section class="hero section reveal">
-          <div class="section-frame hero-frame">
-            <div class="hero-backdrop" id="heroBackdrop" aria-hidden="true"></div>
-            <img
-              class="hero-blossom hero-blossom--top-right"
-              src="./images/landing-blossom-branch.png"
-              alt=""
-              aria-hidden="true"
-              onerror="this.hidden=true"
-            />
-            <div class="hero-flourish hero-flourish--left" aria-hidden="true"></div>
-            <div class="hero-flourish hero-flourish--right" aria-hidden="true"></div>
-            <div class="hero-content-panel">
-              <p class="section-kicker" id="heroKicker" data-layla-text="heroKicker">A Celebration of Love</p>
-              <div class="hero-names">
-                <h1 class="hero-names__arabic rtl-copy" id="heroArabicNames" data-layla-language="ar" lang="ar" dir="rtl"></h1>
-                <p class="hero-names__english" id="heroEnglishNames" data-layla-language="en"></p>
-              </div>
-              <div class="hero-copy">
-                <p class="hero-copy__arabic rtl-copy" id="heroSubtitleArabic" data-layla-language="ar" lang="ar" dir="rtl"></p>
-                <p class="hero-copy__english" id="heroSubtitleEnglish" data-layla-language="en"></p>
-              </div>
-            </div>
-          </div>
-        </section>
-
-        <section class="section reveal" id="guestSpotlightSection" hidden>
-          <div class="section-frame guest-honoree-card">
-            <div class="section-heading section-heading--center">
-              <p class="section-kicker">Guest of Honor</p>
-              <h2 id="guestGreetingTitle">Dear Guest</h2>
-            </div>
-            <p class="guest-honoree-card__arabic rtl-copy" id="guestGreetingArabic" lang="ar" dir="rtl"></p>
-            <p class="guest-honoree-card__english" id="guestGreetingEnglish"></p>
-          </div>
-        </section>
-
-        <section class="section reveal">
-          <div class="section-frame invitation-note countdown-note">
-            <div class="section-heading section-heading--center">
-              <p class="section-kicker" data-layla-text="countdownLabel">Countdown</p>
-              <h2 data-layla-text="countdownHeading">Until the Celebration Begins</h2>
-            </div>
-            <div class="hero-countdown" id="countdownGrid"></div>
-          </div>
-        </section>
-
-        <section class="section reveal">
-          <div class="section-frame">
-            <div class="section-heading">
-              <p class="section-kicker" data-layla-text="detailsLabel">Details</p>
-              <h2 data-layla-text="detailsHeading">The Evening at a Glance</h2>
-            </div>
-            <div class="details-grid" id="detailsGrid"></div>
-          </div>
-        </section>
-
-        <section class="section reveal" id="seatingSection" hidden>
-          <div class="section-frame seating-card">
-            <div class="section-heading">
-              <p class="section-kicker" data-layla-text="seatLabel">Your Seat</p>
-            </div>
-            <div id="seatDetailsMount"></div>
-            <div class="seating-map-shell">
-              <div class="seating-map" id="seatingMap"></div>
-            </div>
-          </div>
-        </section>
-
-        <section class="section reveal" id="rsvpSection" aria-labelledby="rsvpTitle">
-          <div class="section-frame rsvp-card">
-            <div class="section-heading">
-              <p class="section-kicker" data-layla-text="rsvpLabel">RSVP</p>
-              <h2 id="rsvpTitle" data-layla-text="rsvpHeading">Kindly Reply</h2>
-            </div>
-            <div id="rsvpMount"></div>
-          </div>
-        </section>
-
-        <section class="section reveal" id="qrPassSection" hidden>
-          <div class="section-frame qr-pass-card">
-            <div class="section-heading">
-              <p class="section-kicker" data-layla-text="passLabel">Entrance Pass</p>
-              <h2 data-layla-text="passHeading">Your QR Access</h2>
-            </div>
-            <div class="qr-pass" id="qrPassMount"></div>
-          </div>
-        </section>
-
-        <section class="section reveal">
-          <div class="section-frame closing-card">
-            <p class="closing-card__arabic rtl-copy" id="closingArabic" data-layla-language="ar" lang="ar" dir="rtl"></p>
-            <p class="closing-card__english" id="closingEnglish" data-layla-language="en"></p>
-          </div>
-        </section>
-      </main>
-
-      <nav class="sticky-actions" id="stickyActions" aria-label="Quick event actions" hidden></nav>
-      <div class="toast-rail" id="toastRail" aria-live="polite" aria-atomic="true"></div>
+    <div class="layla-language-toggle" id="laylaLanguageToggle" role="group" aria-label="Invitation language">
+      <button type="button" data-language="en" aria-pressed="true">EN</button>
+      <button type="button" data-language="ar" aria-pressed="false" lang="ar">ع</button>
     </div>
+    <div class="invitation-ornaments" aria-hidden="true"><span class="invitation-flower invitation-flower--left">❧</span><span class="invitation-flower invitation-flower--right">✿</span><span class="invitation-flower invitation-flower--lower">❀</span></div>
 
+    <section class="envelope-intro" id="introScreen" aria-label="Wedding invitation envelope">
+      <div class="envelope-intro__stage" id="envelopeStage">
+        <img class="envelope-intro__poster" src="./invitations/wedding-designs/layla-zaid/assets/Ivory Wedding Envelope with LZ Seal.png" alt="Ivory envelope sealed with the Layla and Zaid monogram" />
+        <button class="envelope-intro__open" id="openInvitation" type="button" aria-label="Open your wedding invitation">
+          <span class="visually-hidden" id="openInvitationLabelPrimary" data-layla-text="openInvitation">Open invitation</span>
+        </button>
+        <p class="envelope-intro__caption" data-layla-text="introCaption">Your invitation awaits — tap to open</p>
+        <video class="envelope-intro__video" id="openingVideo" playsinline muted preload="auto" poster="./invitations/wedding-designs/layla-zaid/assets/Ivory Wedding Envelope with LZ Seal.png" aria-label="The wedding invitation envelope opening">
+          <source src="./invitations/wedding-designs/layla-zaid/assets/enevlope opening.mp4" type="video/mp4" />
+        </video>
+      </div>
+      <button class="envelope-intro__skip" id="skipOpening" type="button" hidden data-layla-text="skip">Skip</button>
+    </section>
+
+    <button class="music-toggle" id="musicToggle" type="button" aria-label="Play event music" hidden>
+      <span class="music-toggle__record-wrap" aria-hidden="true"><span class="music-toggle__record">♫</span></span>
+    </button>
+    <audio id="weddingAudio" preload="none" loop><source src="./music/wedding.mp3" type="audio/mpeg" /></audio>
+
+    <main class="site-content" id="siteContent" inert>
+      <section class="hero section reveal" id="heroSection">
+        <div class="hero-paper">
+          <div class="hero-paper__content">
+            <p class="section-kicker" data-layla-text="heroKicker">Our Wedding Day</p>
+            <h1 class="hero-names">
+              <span class="hero-names__arabic" id="heroArabicNames" data-layla-language="ar" lang="ar" dir="rtl"></span>
+              <span class="hero-names__english" id="heroEnglishNames" data-layla-language="en"></span>
+            </h1>
+            <span class="hero-divider" aria-hidden="true"><i></i> ❦ <i></i></span>
+            <p class="hero-copy__english" id="heroSubtitleEnglish" data-layla-language="en"></p>
+            <p class="hero-copy__arabic" id="heroSubtitleArabic" data-layla-language="ar" lang="ar" dir="rtl"></p>
+            <p class="hero-event-line" id="heroEventLine"></p>
+            <button class="luxury-button luxury-button--primary" type="button" data-scroll-details data-layla-text="viewDetails">View details</button>
+            <a class="hero-down" href="#countdownSection" aria-label="Scroll to event details">↓</a>
+          </div>
+        </div>
+      </section>
+
+      <section class="section reveal" id="countdownSection">
+        <div class="section-frame countdown-note">
+          <div class="section-heading section-heading--center"><p class="section-kicker" data-layla-text="countdownLabel">Until we celebrate</p><h2 data-layla-text="countdownHeading">The day is drawing near</h2></div>
+          <div class="hero-countdown" id="countdownGrid"></div>
+        </div>
+      </section>
+
+      <section class="section reveal" id="detailsSection">
+        <div class="section-frame venue-section">
+          <div class="section-heading section-heading--center"><p class="section-kicker" data-layla-text="detailsLabel">When & where</p><h2 data-layla-text="detailsHeading">A place to gather</h2></div>
+          <div class="venue-illustration-wrap" aria-hidden="true"><img class="venue-illustration" src="./invitations/wedding-designs/layla-zaid/assets/Watercolor Ivory Courtyard Wedding Venue.png" alt="" loading="lazy" /></div>
+          <div class="details-grid" id="detailsGrid"></div>
+          <div class="venue-actions" id="venueActions">
+            <a class="luxury-button luxury-button--primary" id="openMapsLink" target="_blank" rel="noopener noreferrer" hidden><span data-layla-text="openInMaps">Open in Maps</span></a>
+            <button class="luxury-button luxury-button--secondary" type="button" data-calendar-download><span data-layla-text="calendar">Add to Calendar</span></button>
+          </div>
+          <div id="venueMapPreviewMount"></div>
+        </div>
+      </section>
+
+      <section class="section reveal schedule-section" id="scheduleSection" hidden>
+        <div class="section-frame">
+          <div class="section-heading section-heading--center"><p class="section-kicker" data-layla-text="scheduleLabel">Our plan</p><h2 data-layla-text="scheduleHeading">The evening together</h2></div>
+          <ol class="schedule-timeline" id="scheduleMount"></ol>
+        </div>
+      </section>
+
+      <section class="section reveal" id="guestSpotlightSection" hidden><div class="section-frame guest-honoree-card"><h2 id="guestGreetingTitle">Dear Guest</h2><p id="guestGreetingArabic" lang="ar" dir="rtl"></p><p id="guestGreetingEnglish"></p></div></section>
+
+      <section class="section reveal" id="seatingSection" hidden>
+        <div class="section-frame seating-card"><div class="section-heading section-heading--center"><p class="section-kicker" data-layla-text="seatLabel">Your seat</p><h2 data-layla-text="seatingHeading">A place reserved for you</h2></div><div id="seatDetailsMount"></div><div class="seating-map-shell"><div class="seating-map" id="seatingMap"></div></div></div>
+      </section>
+
+      <section class="section reveal" id="rsvpSection" aria-labelledby="rsvpTitle">
+        <div class="section-frame rsvp-card">
+          <img class="rsvp-pearl" src="./invitations/wedding-designs/layla-zaid/assets/Luxury Pearl Oyster Shell Ornament.png" alt="" aria-hidden="true" loading="eager" decoding="async" />
+          <div class="section-heading section-heading--center"><p class="section-kicker" data-layla-text="rsvpLabel">Kindly reply</p><h2 id="rsvpTitle" data-layla-text="rsvpHeading">Will you join us?</h2></div>
+          <div id="rsvpMount"></div>
+        </div>
+      </section>
+
+      <section class="section reveal" id="qrPassSection" hidden>
+        <div class="section-frame qr-pass-card"><div class="section-heading section-heading--center"><p class="section-kicker" data-layla-text="passLabel">Entrance pass</p><h2 data-layla-text="passHeading">Your QR access</h2></div><div class="qr-pass" id="qrPassMount"></div></div>
+      </section>
+
+      <section class="section reveal closing-section"><div class="section-frame closing-card"><p class="closing-card__arabic" id="closingArabic" data-layla-language="ar" lang="ar" dir="rtl"></p><p class="closing-card__english" id="closingEnglish" data-layla-language="en"></p><span class="closing-flourish" aria-hidden="true">❦</span></div></section>
+      <footer class="qd-footer"><span data-layla-text="madeBy">Made by</span> <a href="https://qdsystems.ae" target="_blank" rel="noopener noreferrer">QD Systems</a></footer>
+    </main>
+    <nav class="sticky-actions" id="stickyActions" aria-label="Quick event actions" hidden></nav>
+    <div class="toast-rail" id="toastRail" aria-live="polite" aria-atomic="true"></div>
     <script type="module" src="./script.js"></script>
   </body>
 </html>

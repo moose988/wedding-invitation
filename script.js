@@ -6,34 +6,42 @@ import {
   initFirebase,
   isFirebaseConfigured,
   onSnapshot,
-  serverTimestamp,
-  updateDoc,
 } from "./firebase-config.js";
+import { saveInvitationRsvp } from "./invitations/shared/invitation-data.js";
+import { invitationRefreshIsCurrent, invitationRsvpStorageKey, invitationRsvpView } from "./invitations/shared/rsvp-state.js";
+import { buildSatelliteMapEmbedUrl } from "./invitations/shared/map-embed.js";
+import { buildInvitationCalendar } from "./invitations/shared/calendar.js";
 import { renderQrCode } from "./qr.js";
 import { resolveTableName } from "./seating-utils.js";
 import { invitationSeatingEnabled } from "./invitations/shared/invitation-data.js";
 import { getEventDisplayTitle, isCelebrationEvent } from "./event-utils.js";
 
 const demoWedding = {
-  coupleName: "Layan & Mohammed",
-  brideName: "Layan",
-  groomName: "Mohammed",
-  brideNameAr: "ليان",
-  groomNameAr: "محمد",
-  subtitleEn: "With love, we invite you to celebrate our special day.",
+  coupleName: "Layla & Zaid",
+  brideName: "Layla",
+  groomName: "Zaid",
+  brideNameAr: "ليلى",
+  groomNameAr: "زايد",
+  subtitleEn: "With love, we invite you to celebrate our wedding evening.",
   subtitleAr: "بكل الحب ندعوكم لمشاركتنا فرحة العمر.",
   invitationMessageEn:
     "On an evening filled with love and grace, we would be honored by your presence as we begin a beautiful new chapter together.",
   invitationMessageAr:
     "في مساء يفيض حباً وطمأنينة، نتشرف بحضوركم لتشهدوا معنا بداية فصل جديد من العمر.",
   eventDateISO: "2026-12-20T20:00:00+04:00",
+  schedule: [
+    { time: "7:30 PM", timeAr: "٧:٣٠ مساءً", titleEn: "Welcome & arrival", titleAr: "استقبال الضيوف", descriptionEn: "A warm welcome as everyone gathers.", descriptionAr: "نرحب بكم مع بداية الأمسية." },
+    { time: "8:00 PM", timeAr: "٨:٠٠ مساءً", titleEn: "A celebration of love", titleAr: "احتفال بالحب", descriptionEn: "Join us for the wedding celebration.", descriptionAr: "نحتفل معاً بهذه المناسبة السعيدة." },
+    { time: "9:00 PM", timeAr: "٩:٠٠ مساءً", titleEn: "Dinner & dancing", titleAr: "العشاء والرقص", descriptionEn: "An evening of good food and joyful company.", descriptionAr: "أمسية من الطعام الطيب والفرح." },
+  ],
   timeEn: "8:00 PM",
   timeAr: "الساعة ٨:٠٠ مساءً",
-  venueEn: "Pearl Ballroom, Dubai",
-  venueAr: "قاعة اللؤلؤة، دبي",
-  locationEn: "Dubai, United Arab Emirates",
-  locationAr: "دبي، الإمارات العربية المتحدة",
-  mapsUrl: "https://maps.app.goo.gl/8QDgAnwByyYeUt2i9",
+  venueEn: "Sofitel Dubai The Palm",
+  venueAr: "سوفيتيل دبي النخلة",
+  locationEn: "Palm Jumeirah, Dubai, United Arab Emirates",
+  locationAr: "نخلة جميرا، دبي، الإمارات العربية المتحدة",
+  venueMapEmbedUrl: "https://www.google.com/maps/embed?pb=!1m18!1m12!1m3!1d3884.645870813754!2d55.12983347537994!3d25.139942477747873!2m3!1f0!2f0!3f0!3m2!1i1024!2i768!4f13.1!3m3!1m2!1s0x3e5f154a3af8b24f%3A0x6607557459d2717c!2sSofitel%20Dubai%20The%20Palm!5e1!3m2!1sen!2sae!4v1791536214433!5m2!1sen!2sae",
+  mapsUrl: "https://www.google.com/maps/dir/?api=1&destination=25.139942477747873%2C55.12983347537994",
   dressCodeEn: "Formal attire in champagne, mocha, emerald, and soft neutrals.",
   dressCodeAr: "الزي الرسمي بألوان الشامبانيا والموكا والزمردي والدرجات الهادئة.",
   closingEn: "Your presence makes our joy complete.",
@@ -80,33 +88,49 @@ const demoTables = [
   { id: "table-d", name: "Pearl Lounge", capacity: 10, x: 68, y: 60, shape: "rectangle", floorZone: "Garden Wing" },
 ];
 
-const introLabels = ["Open Invitation", "افتح الدعوة"];
-const rsvpStorageKey = "premium-invitation-demo-rsvp";
-const introAnimationDuration = 1450;
-const reducedMotionIntroDuration = 180;
 const invitationParams = new URLSearchParams(window.location.search);
+const rsvpStorageKey = invitationRsvpStorageKey(invitationParams.get("wedding"), invitationParams.get("guest"));
 const explicitDemoMode = invitationParams.get("demo") === "1";
 const laylaLanguageStorageKey = "layla-zaid-invitation-language";
 const laylaCopy = {
-  heroKicker: { en: "A Celebration of Love", ar: "احتفال بالحب" },
-  countdownLabel: { en: "Countdown", ar: "العد التنازلي" },
-  countdownHeading: { en: "Until the Celebration Begins", ar: "حتى تبدأ الاحتفالية" },
+  heroKicker: { en: "Our Wedding Day", ar: "يوم زفافنا" },
+  playMusic: { en: "Play event music", ar: "تشغيل موسيقى الحفل" },
+  stopMusic: { en: "Pause event music", ar: "إيقاف موسيقى الحفل" },
+  musicUnavailable: { en: "Event music unavailable", ar: "موسيقى الحفل غير متاحة" },
+  introCaption: { en: "Your invitation awaits — tap to open", ar: "دعوتكم بانتظاركم — اضغطوا لفتحها" },
+  openInvitation: { en: "Open your wedding invitation", ar: "افتحوا دعوة زفافكم" },
+  skip: { en: "Skip", ar: "تخطي" },
+  viewDetails: { en: "View details", ar: "عرض التفاصيل" },
+  scrollDetails: { en: "Scroll to event details", ar: "انتقلوا إلى تفاصيل الحفل" },
+  videoLabel: { en: "The wedding invitation envelope opening", ar: "فتح مظروف دعوة الزفاف" },
+  mapTitle: { en: "Satellite map preview for", ar: "معاينة القمر الصناعي لـ" },
+  countdownLabel: { en: "Until we celebrate", ar: "حتى نحتفل معاً" },
+  countdownHeading: { en: "The day is drawing near", ar: "اقترب موعد لقائنا" },
   invitationLabel: { en: "Invitation", ar: "الدعوة" },
   invitationHeading: { en: "An Evening of Love and Grace", ar: "أمسية من الحب والرقي" },
+  venue: { en: "Venue", ar: "القاعة" },
+  hall: { en: "Hall", ar: "الصالة" },
   detailsLabel: { en: "Details", ar: "التفاصيل" },
-  detailsHeading: { en: "The Evening at a Glance", ar: "لمحة عن الأمسية" },
+  detailsHeading: { en: "A place to gather", ar: "مكان يجمعنا" },
+  scheduleLabel: { en: "Our plan", ar: "برنامج أمسيتنا" },
+  scheduleHeading: { en: "The evening together", ar: "تفاصيل أمسيتنا" },
+  seatingHeading: { en: "A place reserved for you", ar: "مقاعدنا بانتظاركم" },
   seatLabel: { en: "Your Seat", ar: "مقعدك" },
   rsvpLabel: { en: "RSVP", ar: "تأكيد الحضور" },
-  rsvpHeading: { en: "Kindly Reply", ar: "يرجى تأكيد الحضور" },
+  rsvpHeading: { en: "Will you join us?", ar: "هل ستشاركوننا فرحتنا؟" },
   passLabel: { en: "Entrance Pass", ar: "بطاقة الدخول" },
   passHeading: { en: "Your QR Access", ar: "رمز الدخول الخاص بك" },
   dateTime: { en: "Date & Time", ar: "التاريخ والوقت" },
   location: { en: "Location", ar: "الموقع" },
   viewLocation: { en: "View Location", ar: "عرض الموقع" },
+  openInMaps: { en: "Open in Maps", ar: "افتح في الخرائط" },
+  mapUnavailable: { en: "Map preview is unavailable. Use directions for the venue location.", ar: "معاينة الخريطة غير متاحة. استخدم الاتجاهات للوصول إلى موقع القاعة." },
   rsvp: { en: "RSVP", ar: "تأكيد الحضور" },
   calendar: { en: "Add to Calendar", ar: "أضف إلى التقويم" },
-  attending: { en: "Are you attending?", ar: "هل ستتمكن من الحضور؟" },
-  yes: { en: "Yes", ar: "نعم" }, no: { en: "No", ar: "لا" },
+  attending: { en: "Will you be joining us?", ar: "هل ستشاركوننا؟" },
+  yes: { en: "Yes, I'll be there.", ar: "نعم، سأكون معكم." }, no: { en: "Can't make it.", ar: "أعتذر عن الحضور." },
+  messageLabel: { en: "A little note for the couple (optional)", ar: "رسالة صغيرة للعروسين (اختياري)" },
+  messagePlaceholder: { en: "Write a note…", ar: "اكتبوا رسالتكم…" },
   sendRsvp: { en: "Send RSVP", ar: "إرسال التأكيد" },
   rsvpConfirmed: { en: "RSVP Confirmed", ar: "تم تأكيد الحضور" },
   attendanceConfirmed: { en: "Your attendance is confirmed", ar: "تم تأكيد حضورك" },
@@ -114,7 +138,18 @@ const laylaCopy = {
     en: "Thank you, {name}. We look forward to celebrating with you.",
     ar: "شكرًا لك، {name}. نتطلع للاحتفال معك.",
   },
+  attendanceDeclined: { en: "Your response is recorded as not attending.", ar: "تم تسجيل ردك بعدم الحضور." },
+  changeResponse: { en: "Change response", ar: "تغيير الرد" },
+  responseSaving: { en: "Saving your response…", ar: "جارٍ حفظ ردك…" },
+  responseSaved: { en: "Your response has been saved.", ar: "تم حفظ ردك." },
+  responseSaveError: { en: "We could not save your response. Please try again.", ar: "تعذر حفظ ردك. يرجى المحاولة مرة أخرى." },
+  retryResponse: { en: "Retry", ar: "إعادة المحاولة" },
+  pendingResponse: { en: "Your response is pending. Please choose an option.", ar: "لم يتم تسجيل ردك بعد. يرجى اختيار أحد الخيارات." },
+  attendanceDeclinedThanks: { en: "Thank you for letting us know.", ar: "شكرًا لإبلاغنا." },
+  declinedLabel: { en: "Response saved", ar: "تم حفظ الرد" },
   qrInstructions: { en: "Present this QR code at the entrance.", ar: "يرجى إبراز رمز QR عند المدخل." },
+  madeBy: { en: "Made by", ar: "تصميم" },
+  deadline: { en: "Kindly reply by", ar: "يرجى الرد قبل" },
   dear: { en: "Dear", ar: "عزيزنا" },
   mySeats: { en: "My seats", ar: "مقاعدي" }, fit: { en: "Fit", ar: "ملاءمة" },
   yourTable: { en: "Your table", ar: "طاولتك" }, seatingEmpty: { en: "A seating map will appear here once the venue layout is published.", ar: "ستظهر خريطة المقاعد هنا عند نشر مخطط القاعة." },
@@ -135,6 +170,14 @@ const state = {
   firebaseReady: false,
   laylaLanguage: document.body?.classList.contains("layla-zaid-invitation") && localStorage.getItem(laylaLanguageStorageKey) === "ar" ? "ar" : "en",
   invitationOpening: false,
+  introCompletion: null,
+  rsvpMessage: "",
+  revealObserver: null,
+  motionObserver: null,
+  invitationRefreshVersion: 0,
+  isRsvpSaving: false,
+  rsvpSaveError: "",
+  rsvpSelection: "",
   labelIndex: 0,
   activeIntroLabelSlot: 0,
   countdownTimer: null,
@@ -158,13 +201,14 @@ const icons = {
 const elements = {
   introScreen: document.getElementById("introScreen"),
   openInvitationButton: document.getElementById("openInvitation"),
-  openInvitationLabelPrimary: document.getElementById("openInvitationLabelPrimary"),
-  openInvitationLabelSecondary: document.getElementById("openInvitationLabelSecondary"),
+  openingVideo: document.getElementById("openingVideo"),
+  skipOpeningButton: document.getElementById("skipOpening"),
   weddingAudio: document.getElementById("weddingAudio"),
   musicToggle: document.getElementById("musicToggle"),
   heroBackdrop: document.getElementById("heroBackdrop"),
   stickyActions: document.getElementById("stickyActions"),
   guestSpotlightSection: document.getElementById("guestSpotlightSection"),
+  rsvpMount: document.getElementById("rsvpMount"),
   seatingSection: document.getElementById("seatingSection"),
   qrPassSection: document.getElementById("qrPassSection"),
   toastRail: document.getElementById("toastRail"),
@@ -176,7 +220,8 @@ boot();
 
 async function boot() {
   bindBaseEvents();
-  setupIntroLabelSwap();
+  void warmEnvelopeAssets();
+  elements.openingVideo?.addEventListener("playing", () => elements.introScreen?.classList.add("is-playing"));
   setupRevealObserver();
   setupAudioState();
   setupStickyFooterAwareness();
@@ -220,17 +265,31 @@ async function boot() {
 
 function renderInvitationAccessError(message) {
   document.body.classList.remove("intro-active");
-  document.body.innerHTML = `<main style="min-height:100vh;display:grid;place-items:center;padding:24px;background:#f6f1e8;color:#2f312d;font-family:Georgia,serif"><section style="max-width:520px;text-align:center;background:#fffdf8;border:1px solid #dccfb8;border-radius:20px;padding:32px"><h1>Invitation unavailable</h1><p>${escapeHtml(message)}</p></section></main>`;
+  const isArabic = isLaylaInvitation() && state.laylaLanguage === "ar";
+  const unavailable = isArabic ? "الدعوة غير متاحة" : "Invitation unavailable";
+  const privateInvite = isArabic ? "دعوة شخصية" : "Private invitation";
+  const localizedMessage = isArabic
+    ? (/incomplete/i.test(message) ? "رابط الدعوة غير مكتمل. يرجى استخدام الرابط الشخصي الذي شاركه العروسان." : /configured/i.test(message) ? "خدمة الدعوة غير مهيأة. يرجى التواصل مع العروسين." : "هذه الدعوة غير متاحة. يرجى طلب رابط جديد من العروسين.")
+    : message;
+  document.body.innerHTML = `<main class="invitation-error"><section class="invitation-error__card"><p class="section-kicker">${privateInvite}</p><h1>${unavailable}</h1><p>${escapeHtml(localizedMessage)}</p></section></main>`;
+}
+
+function warmEnvelopeAssets() {
+  const images = [...document.querySelectorAll(".envelope-intro__poster, .venue-illustration")];
+  return Promise.allSettled(images.map((image) => image.decode ? Promise.race([image.decode().catch(() => undefined), new Promise((resolve) => window.setTimeout(resolve, 900))]) : Promise.resolve()));
 }
 
 function startFirebaseInvitationListeners(weddingId, guestToken) {
   state.unsubWedding?.(); state.unsubGuest?.(); state.unsubTables?.();
   const db = initFirebase().db;
   const refresh = async () => {
+    const requestVersion = ++state.invitationRefreshVersion;
     try {
-      await loadFirebaseInvitation(weddingId, guestToken);
+      await loadFirebaseInvitation(weddingId, guestToken, requestVersion);
+      if (!invitationRefreshIsCurrent(requestVersion, state.invitationRefreshVersion)) return;
       populateInvitation();
     } catch (error) {
+      if (!invitationRefreshIsCurrent(requestVersion, state.invitationRefreshVersion)) return;
       console.error(error);
       if (/guest not found|wedding not found/i.test(error.message || "")) {
         renderInvitationAccessError("This invitation is no longer available. Please ask the couple for a new link.");
@@ -252,10 +311,12 @@ function getUrlParams() {
   };
 }
 
-async function loadFirebaseInvitation(weddingId, guestToken) {
+async function loadFirebaseInvitation(weddingId, guestToken, requestVersion = ++state.invitationRefreshVersion) {
   const wedding = await loadWedding(weddingId);
   const guest = await loadGuestByToken(weddingId, guestToken);
   const tables = await loadTables(weddingId);
+
+  if (!invitationRefreshIsCurrent(requestVersion, state.invitationRefreshVersion)) return;
 
   if (!wedding) {
     throw new Error("Event not found.");
@@ -263,6 +324,9 @@ async function loadFirebaseInvitation(weddingId, guestToken) {
 
   if (!guest) {
     throw new Error("Guest not found.");
+  }
+  if (guest.guestToken !== guestToken || !guest.guestId || guest.id !== guestToken) {
+    throw new Error("Invitation token does not map to a valid guest record.");
   }
 
   state.wedding = normaliseWedding(wedding);
@@ -302,11 +366,36 @@ function normaliseWedding(wedding) {
   const normalised = {
     ...structuredClone(demoWedding),
     ...wedding,
+    eventTitle: wedding.eventTitle || "",
+    coupleName: wedding.coupleName || "",
+    brideName: wedding.brideName || "",
+    groomName: wedding.groomName || "",
+    brideNameAr: wedding.brideNameAr || "",
+    groomNameAr: wedding.groomNameAr || "",
+    subtitleEn: wedding.subtitleEn || "",
+    subtitleAr: wedding.subtitleAr || "",
+    invitationMessageEn: wedding.invitationMessageEn || "",
+    invitationMessageAr: wedding.invitationMessageAr || "",
+    eventDateISO: wedding.eventDateISO || "",
+    timeEn: wedding.timeEn || "",
+    timeAr: wedding.timeAr || "",
+    venueEn: wedding.venueEn || wedding.venueName || "",
+    venueAr: wedding.venueAr || wedding.venueNameAr || "",
+    hallEn: wedding.hallEn || wedding.hall || wedding.hallName || "",
+    hallAr: wedding.hallAr || wedding.hall || "",
+    location: wedding.location || "",
+    locationEn: wedding.locationEn || wedding.location || "",
+    locationAr: wedding.locationAr || "",
+    mapsUrl: wedding.mapsUrl || "",
+    venueMapEmbedUrl: wedding.venueMapEmbedUrl || "",
+    closingEn: wedding.closingEn || "",
+    closingAr: wedding.closingAr || "",
     media: {
       ...demoWedding.media,
       ...(wedding.media || {}),
     },
     palette: Array.isArray(wedding.palette) && wedding.palette.length ? wedding.palette : demoWedding.palette,
+    schedule: Array.isArray(wedding.schedule) ? wedding.schedule : [],
   };
 
   // Some older records were created through a form that converted Arabic
@@ -339,13 +428,18 @@ function repairCorruptedArabicText(wedding) {
 }
 
 function populateInvitation() {
+  const activeElement = document.activeElement;
+  const activeName = elements.rsvpMount?.contains(activeElement) ? activeElement?.getAttribute("name") : "";
+  const selection = activeName && typeof activeElement.selectionStart === "number"
+    ? [activeElement.selectionStart, activeElement.selectionEnd]
+    : null;
   const wedding = state.wedding;
   const englishNames = isCelebrationEvent(wedding)
     ? getEventDisplayTitle(wedding)
     : `${wedding.brideName} & ${wedding.groomName}`;
   const arabicNames = isCelebrationEvent(wedding) ? "" : `${wedding.brideNameAr} و ${wedding.groomNameAr}`;
 
-  document.title = `${englishNames} | Event Invitation Platform`;
+  document.title = `${englishNames} | Wedding Invitation`;
   setText("heroArabicNames", arabicNames);
   setText("heroEnglishNames", englishNames);
   setText("heroSubtitleArabic", wedding.subtitleAr);
@@ -354,9 +448,8 @@ function populateInvitation() {
   setText("invitationMessageEnglish", wedding.invitationMessageEn);
   setText("closingArabic", wedding.closingAr);
   setText("closingEnglish", wedding.closingEn);
-  if (elements.heroBackdrop) {
-    elements.heroBackdrop.style.backgroundImage = `url("${wedding.media.heroImage}")`;
-  }
+  const dateText = state.laylaLanguage === "ar" ? formatArabicDate(wedding.eventDateISO) : formatDate(wedding.eventDateISO);
+  setText("heroEventLine", [dateText, laylaValue(wedding.timeEn, wedding.timeAr), laylaValue(wedding.venueEn || wedding.venueName, wedding.venueAr || wedding.venueNameAr)].filter(Boolean).join(" · "));
   if (elements.weddingAudio?.querySelector("source") && wedding.media.audio) {
     const source = elements.weddingAudio.querySelector("source");
     const nextSource = new URL(wedding.media.audio, document.baseURI).toString();
@@ -368,11 +461,20 @@ function populateInvitation() {
 
   renderActions();
   renderDetails();
+  renderSchedule();
   renderGuestCard();
   renderRsvp();
   renderSeatSection();
   renderGuestQrPass();
   applyLaylaLanguage();
+  setupRevealObserver();
+  if (activeName) {
+    const replacement = elements.rsvpMount.querySelector(`[name="${activeName}"]`);
+    replacement?.focus({ preventScroll: true });
+    if (replacement && selection && typeof replacement.setSelectionRange === "function") {
+      replacement.setSelectionRange(selection[0], selection[1]);
+    }
+  }
 }
 
 function isLaylaInvitation() { return document.body.classList.contains("layla-zaid-invitation"); }
@@ -388,32 +490,30 @@ function applyLaylaLanguage() {
   document.body.classList.toggle("layla-arabic", arabic);
   document.querySelectorAll("[data-layla-text]").forEach((node) => { node.textContent = laylaText(node.dataset.laylaText); });
   document.querySelectorAll("[data-layla-language]").forEach((node) => { node.hidden = node.dataset.laylaLanguage !== state.laylaLanguage; });
-  const toggle = document.getElementById("laylaLanguageToggle");
-  if (toggle) { toggle.textContent = arabic ? "English" : "العربية"; toggle.setAttribute("aria-label", arabic ? "Switch to English" : "Switch to Arabic"); }
+  document.querySelectorAll("#laylaLanguageToggle [data-language]").forEach((button) => {
+    button.setAttribute("aria-pressed", String(button.dataset.language === state.laylaLanguage));
+  });
+  elements.openInvitationButton?.setAttribute("aria-label", laylaText("openInvitation"));
+  elements.skipOpeningButton?.setAttribute("aria-label", laylaText("skip"));
+  document.querySelector(".hero-down")?.setAttribute("aria-label", laylaText("scrollDetails"));
+  elements.openingVideo?.setAttribute("aria-label", laylaText("videoLabel"));
+  if (elements.musicToggle) elements.musicToggle.setAttribute("aria-label", laylaText(elements.weddingAudio?.paused === false ? "stopMusic" : "playMusic"));
 }
 
-function toggleLaylaLanguage() {
-  if (!isLaylaInvitation()) return;
-  state.laylaLanguage = state.laylaLanguage === "en" ? "ar" : "en";
-  localStorage.setItem(laylaLanguageStorageKey, state.laylaLanguage);
+function setLaylaLanguage(language) {
+  if (!isLaylaInvitation() || !["en", "ar"].includes(language) || language === state.laylaLanguage) return;
+  const scrollY = window.scrollY;
+  state.laylaLanguage = language;
+  localStorage.setItem(laylaLanguageStorageKey, language);
   populateInvitation();
   renderCountdownCards();
   applyLaylaLanguage();
+  requestAnimationFrame(() => window.scrollTo(0, scrollY));
 }
 
 function renderActions() {
   const wedding = state.wedding;
-  const actionMarkup = `
-    <button class="luxury-button luxury-button--primary" type="button" data-scroll-rsvp>
-      ${icons.reply}<span>${isLaylaInvitation() ? laylaText("rsvp") : "RSVP"}</span>
-    </button>
-    <a class="luxury-button luxury-button--secondary" href="${escapeAttribute(wedding.mapsUrl)}" target="_blank" rel="noopener noreferrer">
-      ${icons.location}<span>${isLaylaInvitation() ? laylaText("viewLocation") : "View Location"}</span>
-    </a>
-    <button class="luxury-button luxury-button--ghost" type="button" data-calendar-download>
-      ${icons.calendar}<span>${isLaylaInvitation() ? laylaText("calendar") : "Add to Calendar"}</span>
-    </button>
-  `;
+  const actionMarkup = `<button class="luxury-button luxury-button--primary" type="button" data-scroll-rsvp>${icons.reply}<span>${isLaylaInvitation() ? laylaText("rsvp") : "RSVP"}</span></button>`;
 
   elements.stickyActions.innerHTML = actionMarkup;
 }
@@ -507,16 +607,21 @@ function renderDetails() {
     {
       icon: icons.date,
       title: isLaylaInvitation() ? laylaText("dateTime") : "Date & Time",
-      en: laylaValue(`${formatDate(wedding.eventDateISO)} at ${wedding.timeEn}`, `${formatArabicDate(wedding.eventDateISO)} - ${wedding.timeAr}`),
+      en: laylaValue(`${formatDate(wedding.eventDateISO)}${wedding.timeEn ? ` · ${wedding.timeEn}` : ""}`, `${formatArabicDate(wedding.eventDateISO)}${wedding.timeAr ? ` · ${wedding.timeAr}` : ""}`),
+    },
+    {
+      icon: icons.venue,
+      title: isLaylaInvitation() ? laylaText("venue") : "Venue",
+      en: laylaValue(wedding.venueEn || wedding.venueName, wedding.venueAr || wedding.venueNameAr),
     },
     {
       icon: icons.location,
       title: isLaylaInvitation() ? laylaText("location") : "Location",
-      en: laylaValue(wedding.locationEn, wedding.locationAr),
-      ar: wedding.locationAr,
-      action: `<a class="detail-card__action" href="${escapeAttribute(wedding.mapsUrl)}" target="_blank" rel="noopener noreferrer">${icons.location}<span>${isLaylaInvitation() ? laylaText("viewLocation") : "View Location"}</span></a>`,
+      en: laylaValue(wedding.locationEn || wedding.location, wedding.locationAr || wedding.location),
     },
   ];
+  const hall = laylaValue(wedding.hallEn || wedding.hall || wedding.hallName, wedding.hallAr || wedding.hall);
+  if (hall) detailCards.push({ icon: icons.venue, title: isLaylaInvitation() ? laylaText("hall") : "Hall", en: hall });
 
   document.getElementById("detailsGrid").innerHTML = detailCards
     .map(
@@ -525,12 +630,68 @@ function renderDetails() {
           <div class="detail-card__icon">${detail.icon}</div>
           <h3 class="detail-card__title">${detail.title}</h3>
           <p class="detail-card__english ${state.laylaLanguage === "ar" && isLaylaInvitation() ? "rtl-copy" : ""}" ${state.laylaLanguage === "ar" && isLaylaInvitation() ? 'lang="ar" dir="rtl"' : ""}>${detail.en}</p>
-          ${isLaylaInvitation() ? "" : `<p class="detail-card__arabic rtl-copy" lang="ar" dir="rtl">${detail.ar}</p>`}
-          ${detail.action || ""}
         </article>
       `
     )
     .join("");
+  renderLocationMap();
+}
+
+function renderSchedule() {
+  const section = document.getElementById("scheduleSection");
+  const mount = document.getElementById("scheduleMount");
+  if (!section || !mount) return;
+  const items = Array.isArray(state.wedding?.schedule) ? state.wedding.schedule.filter((item) => item && (item.titleEn || item.titleAr)) : [];
+  section.hidden = !items.length;
+  mount.innerHTML = items.map((item, index) => {
+    const title = laylaValue(item.titleEn, item.titleAr);
+    const description = laylaValue(item.descriptionEn, item.descriptionAr);
+    const time = laylaValue(item.time, item.timeAr);
+    return `<li class="schedule-item" style="--item-index:${index}" ${state.laylaLanguage === "ar" ? 'lang="ar" dir="rtl"' : ""}><time class="schedule-item__time">${escapeHtml(time)}</time><span class="schedule-item__marker" aria-hidden="true"></span><div><h3>${escapeHtml(title)}</h3>${description ? `<p>${escapeHtml(description)}</p>` : ""}</div></li>`;
+  }).join("");
+}
+
+function renderLocationMap() {
+  const mount = document.getElementById("venueMapPreviewMount");
+  if (!mount) return;
+  const wedding = state.wedding || {};
+  const venue = String(laylaValue(wedding.venueEn || wedding.venueName, wedding.venueAr || wedding.venueNameAr) || "").trim();
+  const address = String(laylaValue(wedding.locationEn, wedding.locationAr) || "").trim();
+  const directions = safeMapsLink(wedding.mapsUrl) || (venue ? `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent([venue, address].filter(Boolean).join(", "))}` : "");
+  const iframeUrl = buildSatelliteMapEmbedUrl(wedding, window.GOOGLE_MAPS_EMBED_API_KEY);
+  const label = isLaylaInvitation() ? laylaText("openInMaps") : "Open in Maps";
+  const unavailable = isLaylaInvitation() ? laylaText("mapUnavailable") : "Satellite preview is unavailable. Open directions for this venue.";
+  const mapTitle = isLaylaInvitation() ? `${laylaText("mapTitle")} ${venue}` : `Satellite map preview for ${venue}`;
+  const mapsLink = document.getElementById("openMapsLink");
+  if (mapsLink) { mapsLink.href = directions || "#"; mapsLink.hidden = !directions; }
+  const mapActionMarkup = mapsLink
+    ? (directions ? "" : `<p class="venue-map-card__fallback">${escapeHtml(unavailable)}</p>`)
+    : (directions ? `<a class="detail-card__action" href="${escapeAttribute(directions)}" target="_blank" rel="noopener noreferrer">${icons.location}<span>${label}</span></a>` : `<p class="venue-map-card__fallback">${escapeHtml(unavailable)}</p>`);
+  mount.innerHTML = `
+    <div class="venue-map-card" aria-label="${escapeAttribute(venue || "Venue map")}">
+      ${venue ? `<p class="venue-map-card__venue">${escapeHtml(venue)}</p>` : ""}
+      ${iframeUrl
+        ? `<div class="venue-map-preview"><iframe src="${escapeAttribute(iframeUrl)}" title="${escapeAttribute(mapTitle)}" loading="lazy" referrerpolicy="strict-origin-when-cross-origin" tabindex="-1" aria-hidden="true"></iframe></div>`
+        : `<div class="venue-map-preview venue-map-preview--fallback" role="img" aria-label="${escapeAttribute(unavailable)}"><span aria-hidden="true">⌖</span><p>${escapeHtml(unavailable)}</p></div>`}
+      ${mapActionMarkup}
+    </div>
+  `;
+  mount.querySelector("iframe")?.addEventListener("error", () => {
+    const preview = mount.querySelector(".venue-map-preview");
+    if (!preview) return;
+    preview.className = "venue-map-preview venue-map-preview--fallback";
+    preview.replaceChildren();
+    const note = document.createElement("p");
+    note.textContent = unavailable;
+    preview.append(note);
+  }, { once: true });
+}
+
+function safeMapsLink(value) {
+  try {
+    const url = new URL(String(value || ""));
+    return ["https:", "http:"].includes(url.protocol) ? url.href : "";
+  } catch { return ""; }
 }
 
 function renderRsvp() {
@@ -543,69 +704,79 @@ function renderRsvp() {
 }
 
 function renderFirebaseRsvp(mount) {
-  const statusCopy = {
-    confirmed: "You have confirmed your attendance.",
-    declined: "You have declined this invitation.",
-    pending: "Please confirm your attendance.",
-  };
   const guest = state.guest;
-  if (guest.rsvpStatus === "confirmed") {
-    const isLayla = isLaylaInvitation();
+  const view = invitationRsvpView(guest);
+  const isLayla = isLaylaInvitation();
+  const copy = (key, fallback) => isLayla ? laylaText(key) : fallback;
+  if (view.showSummary && !state.isRsvpEditing) {
     const languageAttributes = isLayla && state.laylaLanguage === "ar" ? 'lang="ar" dir="rtl"' : "";
-    const confirmationLabel = isLayla ? laylaText("rsvpConfirmed") : "RSVP Confirmed";
-    const confirmationHeading = isLayla ? laylaText("attendanceConfirmed") : "Your attendance is confirmed";
-    const confirmationMessage = isLayla
-      ? laylaText("attendanceConfirmedThanks").replace("{name}", escapeHtml(guest.fullName || laylaText("dear")))
-      : `Thank you, ${escapeHtml(guest.fullName || "guest")}. We look forward to celebrating with you.`;
+    const confirmationLabel = view.status === "confirmed" ? copy("rsvpConfirmed", "Response saved") : copy("declinedLabel", "Response saved");
+    const confirmationHeading = view.status === "confirmed" ? copy("attendanceConfirmed", "Your attendance is confirmed") : copy("attendanceDeclined", "Your response is recorded as not attending.");
+    const confirmationMessage = view.status === "confirmed"
+      ? (isLayla ? laylaText("attendanceConfirmedThanks").replace("{name}", escapeHtml(guest.fullName || laylaText("dear"))) : `Thank you, ${escapeHtml(guest.fullName || "guest")}. We look forward to celebrating with you.`)
+      : copy("attendanceDeclinedThanks", "Thank you for letting us know.");
     mount.innerHTML = `
-      <div class="rsvp-summary rsvp-summary--confirmed" role="status" aria-live="polite">
-        <span class="rsvp-confirmation-mark" aria-hidden="true">✓</span>
+      <div class="rsvp-summary rsvp-summary--${view.status}" role="status" aria-live="polite">
+        <span class="rsvp-confirmation-mark" aria-hidden="true">${view.status === "confirmed" ? "✓" : "♡"}</span>
         <p class="rsvp-summary__eyebrow" ${languageAttributes}>${confirmationLabel}</p>
         <h3 ${languageAttributes}>${confirmationHeading}</h3>
         <p ${languageAttributes}>${confirmationMessage}</p>
+        <button class="luxury-button luxury-button--secondary" type="button" data-change-rsvp><span>${copy("changeResponse", "Change response")}</span></button>
       </div>
     `;
     return;
   }
+  const pendingCopy = copy("pendingResponse", "Your response is pending. Please choose an option.");
+  const savingCopy = copy("responseSaving", "Saving your response…");
+  const errorCopy = state.rsvpSaveError || "";
   mount.innerHTML = `
     <form class="firebase-rsvp-panel rsvp-form" id="firebaseRsvpForm">
-      <p class="firebase-rsvp-status">${statusCopy[guest.rsvpStatus] || statusCopy.pending}</p>
+      <p class="firebase-rsvp-greeting" ${isLayla && state.laylaLanguage === "ar" ? 'lang="ar" dir="rtl"' : ""}>${copy("dear", "Dear")} ${escapeHtml(guest.fullName || (isLayla ? laylaText("dear") : "Guest"))}</p>
+      <p class="firebase-rsvp-status" role="status" aria-live="polite">${state.isRsvpSaving ? savingCopy : (errorCopy || pendingCopy)}</p>
       <div class="rsvp-phases">
         <section class="rsvp-phase" data-rsvp-step="1">
           <p class="rsvp-phase__number">01</p>
           <h3>${isLaylaInvitation() ? laylaText("attending") : "Are you attending?"}</h3>
           <div class="rsvp-choice" role="radiogroup" aria-label="${isLaylaInvitation() ? laylaText("attending") : "Attendance"}">
             <label class="rsvp-answer">
-              <input type="radio" name="status" value="confirmed" ${guest.rsvpStatus === "confirmed" ? "checked" : ""} required />
+              <input type="radio" name="status" value="confirmed" ${state.rsvpSelection === "confirmed" ? "checked" : ""} required ${state.isRsvpSaving ? "disabled" : ""} />
               <span>${isLaylaInvitation() ? laylaText("yes") : "Yes"}</span>
             </label>
             <label class="rsvp-answer">
-              <input type="radio" name="status" value="declined" ${guest.rsvpStatus === "declined" ? "checked" : ""} required />
+              <input type="radio" name="status" value="declined" ${state.rsvpSelection === "declined" ? "checked" : ""} required ${state.isRsvpSaving ? "disabled" : ""} />
               <span>${isLaylaInvitation() ? laylaText("no") : "No"}</span>
             </label>
           </div>
         </section>
       </div>
-      <button class="luxury-button luxury-button--primary rsvp-form__submit" type="submit">
-        ${icons.reply}<span>${isLaylaInvitation() ? laylaText("sendRsvp") : "Send RSVP"}</span>
+      <label class="rsvp-form__message"><span>${copy("messageLabel", "Optional message")}</span><textarea name="message" maxlength="1000" placeholder="${escapeAttribute(copy("messagePlaceholder", "Write a note…"))}" ${languageAttributes} ${state.isRsvpSaving ? "disabled" : ""}>${escapeHtml(state.rsvpMessage)}</textarea></label>
+      ${state.wedding.rsvpDeadlineISO ? `<p class="rsvp-deadline">${copy("deadline", "Kindly reply by")} ${escapeHtml(state.laylaLanguage === "ar" ? formatArabicDate(state.wedding.rsvpDeadlineISO) : formatDate(state.wedding.rsvpDeadlineISO))}</p>` : ""}
+      <button class="luxury-button luxury-button--primary rsvp-form__submit" type="submit" ${state.isRsvpSaving ? "disabled" : ""}>
+        ${icons.reply}<span>${state.rsvpSaveError ? copy("retryResponse", "Retry") : copy("sendRsvp", "Send RSVP")}</span>
       </button>
     </form>
   `;
   const form = document.getElementById("firebaseRsvpForm");
   form?.addEventListener("submit", handleFirebaseRsvpSubmit);
+  form?.addEventListener("change", (event) => {
+    if (event.target.matches('input[name="status"]')) state.rsvpSelection = event.target.value;
+  });
+  form?.querySelector('[name="message"]')?.addEventListener("input", (event) => { state.rsvpMessage = event.target.value.slice(0, 1000); });
+  if (form && state.isRsvpSaving) form.querySelector(".rsvp-form__submit span").textContent = savingCopy;
   setupRsvpPhases(form);
 }
 
 function renderDemoRsvp(mount) {
   const saved = readSavedRsvp();
-  if (saved && !state.isRsvpEditing) {
+  if (saved && ["confirmed", "declined"].includes(saved.status) && !state.isRsvpEditing) {
+    const confirmed = saved.status === "confirmed";
     mount.innerHTML = `
-      <div class="rsvp-summary" aria-live="polite">
-        <p class="rsvp-summary__eyebrow">${escapeHtml(saved.status)}</p>
-        <h3>Your reply has been saved</h3>
-        <p>Thank you. Your response is stored on this device for the demo invitation.</p>
-        ${saved.additionalGuests ? `<p><strong>Additional guests:</strong> ${escapeHtml(saved.additionalGuests)}</p>` : ""}
-        <button class="luxury-button luxury-button--secondary" type="button" data-edit-rsvp><span>Edit RSVP</span></button>
+      <div class="rsvp-summary rsvp-summary--${confirmed ? "confirmed" : "declined"}" aria-live="polite">
+        <span class="rsvp-confirmation-mark" aria-hidden="true">${confirmed ? "✓" : "♡"}</span>
+        <p class="rsvp-summary__eyebrow">${escapeHtml(confirmed ? laylaText("rsvpConfirmed") : laylaText("declinedLabel"))}</p>
+        <h3>${escapeHtml(confirmed ? laylaText("attendanceConfirmed") : laylaText("attendanceDeclined"))}</h3>
+        <p>${escapeHtml(confirmed ? laylaText("attendanceConfirmedThanks").replace("{name}", demoGuest.fullName) : laylaText("attendanceDeclinedThanks"))}</p>
+        <button class="luxury-button luxury-button--secondary" type="button" data-edit-rsvp><span>${escapeHtml(laylaText("changeResponse"))}</span></button>
       </div>
     `;
     return;
@@ -613,30 +784,35 @@ function renderDemoRsvp(mount) {
 
   mount.innerHTML = `
     <form class="rsvp-form" id="rsvpForm">
+      <p class="rsvp-demo-greeting">${escapeHtml(laylaText("dear"))} ${escapeHtml(demoGuest.fullName)}</p>
+      <p class="firebase-rsvp-status" role="status" aria-live="polite">${escapeHtml(state.rsvpSaveError || laylaText("pendingResponse"))}</p>
       <div class="rsvp-phases">
         <section class="rsvp-phase" data-rsvp-step="1">
           <p class="rsvp-phase__number">01</p>
           <h3>${isLaylaInvitation() ? laylaText("attending") : "Are you attending?"}</h3>
           <div class="rsvp-choice" role="radiogroup" aria-label="Attendance">
             <label class="rsvp-answer">
-              <input type="radio" name="status" value="Yes" ${saved?.status === "Yes" ? "checked" : ""} required />
+              <input type="radio" name="status" value="confirmed" ${state.rsvpSelection === "confirmed" ? "checked" : ""} required />
               <span>${isLaylaInvitation() ? laylaText("yes") : "Yes"}</span>
             </label>
             <label class="rsvp-answer">
-              <input type="radio" name="status" value="No" ${saved?.status === "No" ? "checked" : ""} required />
+              <input type="radio" name="status" value="declined" ${state.rsvpSelection === "declined" ? "checked" : ""} required />
               <span>${isLaylaInvitation() ? laylaText("no") : "No"}</span>
             </label>
           </div>
         </section>
       </div>
-      <button class="luxury-button luxury-button--primary rsvp-form__submit" type="submit" ${saved?.status ? "" : "hidden"}>
-        ${icons.reply}<span>Send RSVP</span>
+      <label class="rsvp-form__message"><span>${escapeHtml(laylaText("messageLabel"))}</span><textarea name="message" maxlength="1000" placeholder="${escapeAttribute(laylaText("messagePlaceholder"))}">${escapeHtml(state.rsvpMessage || saved?.message || "")}</textarea></label>
+      ${state.wedding.rsvpDeadlineISO ? `<p class="rsvp-deadline">${escapeHtml(laylaText("deadline"))} ${escapeHtml(state.laylaLanguage === "ar" ? formatArabicDate(state.wedding.rsvpDeadlineISO) : formatDate(state.wedding.rsvpDeadlineISO))}</p>` : ""}
+      <button class="luxury-button luxury-button--primary rsvp-form__submit" type="submit" hidden>
+        ${icons.reply}<span>${escapeHtml(laylaText(state.rsvpSaveError ? "retryResponse" : "sendRsvp"))}</span>
       </button>
     </form>
   `;
 
   const form = document.getElementById("rsvpForm");
   form?.addEventListener("submit", handleDemoRsvpSubmit);
+  form?.querySelector('[name="message"]')?.addEventListener("input", (event) => { state.rsvpMessage = event.target.value.slice(0, 1000); });
   setupRsvpPhases(form);
 }
 
@@ -1086,41 +1262,38 @@ async function renderGuestQrPass() {
   await renderQrCode(document.getElementById("guestQrCode"), checkinUrl, { size: 220 });
 }
 
-async function updateRsvp(status, additionalGuests = 0) {
-  if (state.mode !== "firebase" || !state.guest?.guestId) {
-    return;
-  }
+async function updateRsvp(status, additionalGuests) {
+  if (state.mode !== "firebase" || state.isRsvpSaving || !state.guest?.guestId || !["confirmed", "declined"].includes(status)) return;
+  state.isRsvpSaving = true;
+  state.rsvpSaveError = "";
+  const liveForm = document.getElementById("firebaseRsvpForm");
+  liveForm?.querySelectorAll("button, input, textarea").forEach((control) => { control.disabled = true; });
+  const statusNode = liveForm?.querySelector(".firebase-rsvp-status");
+  if (statusNode) statusNode.textContent = isLaylaInvitation() ? laylaText("responseSaving") : "Saving your response…";
 
   try {
-    const nextAdditionalGuests = status === "confirmed" ? normalizeAdditionalGuests(additionalGuests) : 0;
-    await updateDoc(
-      doc(initFirebase().db, "weddings", state.weddingId, "guests", state.guest.guestId),
-      {
-        rsvpStatus: status,
-        additionalGuests: nextAdditionalGuests,
-        updatedAt: serverTimestamp(),
-      }
-    );
-    if (state.guestToken) {
-      // Keep the token-keyed public mirror fresh so reloading this page shows the saved answer.
-      await updateDoc(
-        doc(initFirebase().db, "weddings", state.weddingId, "publicGuests", state.guestToken),
-        {
-          rsvpStatus: status,
-          additionalGuests: nextAdditionalGuests,
-          updatedAt: serverTimestamp(),
-        }
-      ).catch((error) => {
-        console.warn("RSVP mirror update failed.", error);
-      });
-    }
+    const message = state.rsvpMessage.trim();
+    if (message.length > 1000) throw new Error("Message must be 1000 characters or fewer.");
+    await saveInvitationRsvp({
+      weddingId: state.weddingId,
+      guestToken: state.guestToken,
+      guest: state.guest,
+    }, status, additionalGuests, message || undefined);
     state.guest.rsvpStatus = status;
-    state.guest.additionalGuests = nextAdditionalGuests;
+    if (additionalGuests !== undefined && additionalGuests !== null) state.guest.additionalGuests = Number(additionalGuests);
+    state.isRsvpSaving = false;
+    state.isRsvpEditing = false;
+    state.rsvpSelection = "";
+    state.rsvpMessage = "";
     renderFirebaseRsvp(document.getElementById("rsvpMount"));
-    showToast("Your RSVP has been updated.", "success");
+    showToast(isLaylaInvitation() ? laylaText("responseSaved") : "Your response has been saved.", "success");
   } catch (error) {
-    console.error(error);
-    showToast("We could not update your RSVP just now.", "error");
+    console.error("Invitation RSVP save failed.", error);
+    state.isRsvpSaving = false;
+    state.rsvpSaveError = isLaylaInvitation() ? laylaText("responseSaveError") : "We could not save your response. Please try again.";
+    state.rsvpSelection = status;
+    renderFirebaseRsvp(document.getElementById("rsvpMount"));
+    showToast(state.rsvpSaveError, "error");
   }
 }
 
@@ -1130,12 +1303,17 @@ function bindBaseEvents() {
 
   document.addEventListener("click", async (event) => {
     if (event.target.closest("#laylaLanguageToggle")) {
-      toggleLaylaLanguage();
+      const language = event.target.closest("[data-language]")?.dataset.language;
+      if (language === "en" || language === "ar") setLaylaLanguage(language);
       return;
     }
     const calendarButton = event.target.closest("[data-calendar-download]");
     if (calendarButton) {
       downloadCalendarFile();
+    }
+
+    if (event.target.closest("[data-scroll-details]")) {
+      document.getElementById("detailsSection")?.scrollIntoView({ behavior: "smooth", block: "start" });
     }
 
     const rsvpTrigger = event.target.closest("[data-scroll-rsvp]");
@@ -1149,6 +1327,12 @@ function bindBaseEvents() {
       renderRsvp();
     }
 
+    if (event.target.closest("[data-change-rsvp]")) {
+      state.isRsvpEditing = true;
+      state.rsvpSelection = "";
+      renderRsvp();
+    }
+
     const rsvpButton = event.target.closest("[data-rsvp-status]");
     if (rsvpButton) {
       await updateRsvp(rsvpButton.dataset.rsvpStatus);
@@ -1157,42 +1341,58 @@ function bindBaseEvents() {
 }
 
 async function handleOpenInvitation() {
-  if (state.invitationOpening) {
+  if (state.invitationOpening || document.body.classList.contains("invitation-open")) {
     return;
   }
 
   state.invitationOpening = true;
-  elements.openInvitationButton.disabled = true;
-  document.body.classList.add("intro-opening");
-  await playWeddingMusicFromGesture();
-  await waitForIntroAnimation();
-  revealInvitation();
+  elements.introScreen?.classList.add("is-opening");
+  if (elements.skipOpeningButton) elements.skipOpeningButton.hidden = false;
+  // The envelope video starts directly in the tap gesture. Music is an
+  // independent best-effort action and is never awaited by this sequence.
+  void playWeddingMusicFromGesture();
+  if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) {
+    window.setTimeout(revealInvitation, 180);
+    return;
+  }
+  void waitForIntroAnimation();
+  if (!elements.openingVideo) { window.setTimeout(revealInvitation, 450); return; }
+  elements.openingVideo.muted = true;
+  elements.openingVideo.playsInline = true;
+  elements.openingVideo.currentTime = 0;
+  // Don't wait on the play promise. Its settle time is browser/network owned;
+  // the video events and bounded timer below drive the visible transition.
+  const playback = elements.openingVideo.play();
+  if (playback && typeof playback.catch === "function") playback.catch(() => revealInvitation());
 }
 
 function revealInvitation() {
+  if (document.body.classList.contains("invitation-open")) return;
+  if (state.introCompletion) { state.introCompletion(); state.introCompletion = null; }
+  elements.openingVideo?.pause();
   document.body.classList.remove("intro-active");
   document.body.classList.add("invitation-open");
   elements.introScreen.classList.add("is-hidden");
+  const siteContent = document.getElementById("siteContent");
+  if (siteContent) siteContent.inert = false;
+  if (elements.skipOpeningButton) elements.skipOpeningButton.hidden = true;
   elements.musicToggle.hidden = false;
   elements.stickyActions.hidden = false;
-
-  window.setTimeout(() => {
-    document.body.classList.remove("intro-opening");
-  }, 480);
+  setupRevealObserver();
 }
 
 async function playWeddingMusicFromGesture() {
   if (!state.musicAvailable || !elements.weddingAudio) {
-    setMusicToggleState("unavailable", "Off", "Event music unavailable");
+    setMusicToggleState("unavailable", "♫", isLaylaInvitation() ? laylaText("musicUnavailable") : "Event music unavailable");
     return;
   }
 
   try {
     elements.weddingAudio.currentTime = 0;
     await elements.weddingAudio.play();
-    setMusicToggleState("playing", "Stop", "Stop event music");
+    setMusicToggleState("playing", "♫", isLaylaInvitation() ? laylaText("stopMusic") : "Stop event music");
   } catch (error) {
-    setMusicToggleState("paused", "Play", "Play event music");
+    setMusicToggleState("paused", "♫", isLaylaInvitation() ? laylaText("playMusic") : "Play event music");
   }
 }
 
@@ -1204,85 +1404,71 @@ async function handleMusicToggle() {
   if (elements.weddingAudio.paused) {
     try {
       await elements.weddingAudio.play();
-      setMusicToggleState("playing", "Stop", "Stop event music");
+      setMusicToggleState("playing", "♫", isLaylaInvitation() ? laylaText("stopMusic") : "Stop event music");
     } catch (error) {
-      setMusicToggleState("paused", "Play", "Play event music");
+      setMusicToggleState("paused", "♫", isLaylaInvitation() ? laylaText("playMusic") : "Play event music");
     }
     return;
   }
 
   elements.weddingAudio.pause();
-  setMusicToggleState("paused", "Play", "Play event music");
+  setMusicToggleState("paused", "♫", isLaylaInvitation() ? laylaText("playMusic") : "Play event music");
 }
 
 function waitForIntroAnimation() {
-  const reduceMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
-  const duration = reduceMotion ? reducedMotionIntroDuration : introAnimationDuration;
-  return new Promise((resolve) => window.setTimeout(resolve, duration));
-}
-
-function setupIntroLabelSwap() {
-  syncIntroLabel(elements.openInvitationLabelPrimary, 0);
-  syncIntroLabel(elements.openInvitationLabelSecondary, 1);
-  elements.openInvitationLabelSecondary.classList.remove("is-active");
-
-  if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) {
-    return;
-  }
-
-  window.setInterval(() => {
-    state.labelIndex = (state.labelIndex + 1) % introLabels.length;
-    const nextSlot = state.activeIntroLabelSlot === 0 ? 1 : 0;
-    const nextNode = nextSlot === 0 ? elements.openInvitationLabelPrimary : elements.openInvitationLabelSecondary;
-    const currentNode = nextSlot === 0 ? elements.openInvitationLabelSecondary : elements.openInvitationLabelPrimary;
-    syncIntroLabel(nextNode, state.labelIndex);
-    nextNode.classList.add("is-active");
-    currentNode.classList.remove("is-active");
-    state.activeIntroLabelSlot = nextSlot;
-  }, 2600);
-}
-
-function syncIntroLabel(node, nextLabelIndex) {
-  if (!node) {
-    return;
-  }
-  const isArabic = nextLabelIndex === 1;
-  node.textContent = introLabels[nextLabelIndex];
-  node.lang = isArabic ? "ar" : "en";
-  node.dir = isArabic ? "rtl" : "ltr";
+  return new Promise((resolve) => {
+    let settled = false;
+    const finish = () => {
+      if (settled) return;
+      settled = true;
+      window.clearTimeout(fallback);
+      elements.openingVideo?.removeEventListener("ended", finish);
+      elements.openingVideo?.removeEventListener("error", fail);
+      elements.openingVideo?.removeEventListener("stalled", fail);
+      elements.skipOpeningButton?.removeEventListener("click", finish);
+      resolve();
+      revealInvitation();
+    };
+    const fail = () => window.setTimeout(finish, 450);
+    const fallback = window.setTimeout(finish, 6800);
+    elements.openingVideo?.addEventListener("ended", finish, { once: true });
+    elements.openingVideo?.addEventListener("error", fail, { once: true });
+    elements.openingVideo?.addEventListener("stalled", fail, { once: true });
+    elements.skipOpeningButton?.addEventListener("click", finish, { once: true });
+    state.introCompletion = finish;
+  });
 }
 
 function handleDemoRsvpSubmit(event) {
   event.preventDefault();
   const form = event.currentTarget;
   const statusValue = form.elements.status.value;
-
-  if (statusValue === "No") {
-    localStorage.setItem(
-      rsvpStorageKey,
-      JSON.stringify({ status: "No", additionalGuests: "0", savedAt: new Date().toISOString() })
-    );
-    state.isRsvpEditing = false;
-    renderRsvp();
-    return;
-  }
-
+  if (!["confirmed", "declined"].includes(statusValue)) return;
+  const message = String(form.elements.message?.value || "").trim();
+  if (message.length > 1000) return;
   const response = {
     status: statusValue,
-    additionalGuests: "0",
+    additionalGuests: readSavedRsvp()?.additionalGuests,
+    message,
     savedAt: new Date().toISOString(),
   };
 
   localStorage.setItem(rsvpStorageKey, JSON.stringify(response));
+  state.rsvpSelection = "";
+  state.rsvpSaveError = "";
+  state.rsvpMessage = "";
   state.isRsvpEditing = false;
   renderRsvp();
+  showToast(laylaText("responseSaved"), "success");
 }
 
 async function handleFirebaseRsvpSubmit(event) {
   event.preventDefault();
   const form = event.currentTarget;
   const statusValue = form.elements.status.value;
-  await updateRsvp(statusValue, 0);
+  if (!["confirmed", "declined"].includes(statusValue)) return;
+  state.rsvpMessage = String(form.elements.message?.value || "").slice(0, 1000);
+  await updateRsvp(statusValue);
 }
 
 function setupRsvpPhases(form) {
@@ -1294,7 +1480,7 @@ function setupRsvpPhases(form) {
   const submitButton = form.querySelector(".rsvp-form__submit");
 
   const updateFlow = (statusValue) => {
-    submitButton.hidden = !(statusValue === "Yes" || statusValue === "No" || statusValue === "confirmed" || statusValue === "declined");
+    submitButton.hidden = !(statusValue === "confirmed" || statusValue === "declined");
   };
 
   statusInputs.forEach((input) => input.addEventListener("change", () => updateFlow(input.value)));
@@ -1303,7 +1489,13 @@ function setupRsvpPhases(form) {
 function readSavedRsvp() {
   try {
     const saved = localStorage.getItem(rsvpStorageKey);
-    return saved ? JSON.parse(saved) : null;
+    if (!saved) return null;
+    const value = JSON.parse(saved);
+    if (value?.status === "Yes" || value?.status === "No") {
+      value.status = value.status === "Yes" ? "confirmed" : "declined";
+      localStorage.setItem(rsvpStorageKey, JSON.stringify(value));
+    }
+    return ["confirmed", "declined"].includes(value?.status) ? value : null;
   } catch (error) {
     return null;
   }
@@ -1322,29 +1514,46 @@ function clamp(value, min, max) {
 }
 
 function setupRevealObserver() {
-  const reduceMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
-  const revealItems = document.querySelectorAll(".reveal");
-  if (reduceMotion) {
-    revealItems.forEach((item) => item.classList.add("is-visible"));
+  if (!document.body.classList.contains("invitation-open")) return;
+  if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) {
+    document.querySelectorAll(".reveal").forEach((item) => item.classList.add("is-visible"));
     return;
   }
-
-  const observer = new IntersectionObserver(
-    (entries) => {
+  if (!state.revealObserver && "IntersectionObserver" in window) {
+    state.revealObserver = new IntersectionObserver((entries) => {
       entries.forEach((entry) => {
         if (entry.isIntersecting) {
           entry.target.classList.add("is-visible");
-          observer.unobserve(entry.target);
+          state.revealObserver.unobserve(entry.target);
+          entry.target.removeAttribute("data-reveal-observed");
         }
       });
-    },
-    { threshold: 0.12, rootMargin: "0px 0px -8% 0px" }
-  );
-
-  revealItems.forEach((item) => observer.observe(item));
+    }, { threshold: 0.12, rootMargin: "0px 0px -8% 0px" });
+  }
+  const items = [...document.querySelectorAll(".reveal:not(.is-visible)")].filter((item) => !item.hidden && !item.closest("[hidden]"));
+  items.forEach((item, index) => {
+    item.style.setProperty("--reveal-delay", `${Math.min(index, 4) * 75}ms`);
+    if (state.revealObserver) state.revealObserver.observe(item);
+    else item.classList.add("is-visible");
+  });
+  if (!state.motionObserver && "IntersectionObserver" in window) {
+    state.motionObserver = new IntersectionObserver((entries) => {
+      entries.forEach((entry) => { entry.target.style.animationPlayState = entry.isIntersecting ? "running" : "paused"; });
+    }, { threshold: 0 });
+  }
+  if (state.motionObserver) {
+    [...document.querySelectorAll(".petal:not([data-motion-observed]), .hero-blossom:not([data-motion-observed]), .section-kicker:not([data-motion-observed]), .invitation-flower:not([data-motion-observed])")].filter((item) => !item.hidden && !item.closest("[hidden]")).forEach((item) => {
+      item.dataset.motionObserved = "true";
+      item.style.animationPlayState = "paused";
+      state.motionObserver.observe(item);
+    });
+  }
 }
 
 function setupAudioState() {
+  document.addEventListener("visibilitychange", () => {
+    document.body.classList.toggle("page-hidden", document.hidden);
+  });
   elements.weddingAudio?.addEventListener("error", () => {
     state.musicAvailable = false;
     setMusicToggleState("unavailable", "Off", "Event music unavailable");
@@ -1352,13 +1561,13 @@ function setupAudioState() {
 
   elements.weddingAudio?.addEventListener("pause", () => {
     if (state.musicAvailable && document.body.classList.contains("invitation-open")) {
-      setMusicToggleState("paused", "Play", "Play event music");
+      setMusicToggleState("paused", "♫", isLaylaInvitation() ? laylaText("playMusic") : "Play event music");
     }
   });
 
   elements.weddingAudio?.addEventListener("play", () => {
     if (state.musicAvailable) {
-      setMusicToggleState("playing", "Stop", "Stop event music");
+      setMusicToggleState("playing", "♫", isLaylaInvitation() ? laylaText("stopMusic") : "Stop event music");
     }
   });
 }
@@ -1422,27 +1631,7 @@ function scrollToRsvp() {
 }
 
 function downloadCalendarFile() {
-  const start = new Date(state.wedding.eventDateISO);
-  const end = new Date(start.getTime() + 4 * 60 * 60 * 1000);
-  const summary = `${state.wedding.brideName} & ${state.wedding.groomName} Event`;
-  const description = `${state.wedding.invitationMessageEn}\n${state.wedding.venueEn}\n${state.wedding.mapsUrl}`;
-  const ics = [
-    "BEGIN:VCALENDAR",
-    "VERSION:2.0",
-    "PRODID:-//Event Invitation Platform//EN",
-    "CALSCALE:GREGORIAN",
-    "METHOD:PUBLISH",
-    "BEGIN:VEVENT",
-    `UID:${Date.now()}-event-invitation-platform`,
-    `DTSTAMP:${toIcsDate(new Date())}`,
-    `DTSTART:${toIcsDate(start)}`,
-    `DTEND:${toIcsDate(end)}`,
-    `SUMMARY:${escapeIcs(summary)}`,
-    `DESCRIPTION:${escapeIcs(description)}`,
-    `LOCATION:${escapeIcs(`${state.wedding.venueEn}, ${state.wedding.locationEn}`)}`,
-    "END:VEVENT",
-    "END:VCALENDAR",
-  ].join("\r\n");
+  const ics = buildInvitationCalendar(state.wedding, state.weddingId || "layla-zaid-demo");
 
   const blob = new Blob([ics], { type: "text/calendar;charset=utf-8" });
   const url = URL.createObjectURL(blob);
@@ -1452,7 +1641,8 @@ function downloadCalendarFile() {
   document.body.appendChild(link);
   link.click();
   link.remove();
-  URL.revokeObjectURL(url);
+  // Give the browser's download pipeline a moment to consume the object URL.
+  window.setTimeout(() => URL.revokeObjectURL(url), 1500);
 }
 
 function showToast(message, tone = "info") {
@@ -1473,18 +1663,6 @@ function buildAbsoluteUrl(path) {
   // Designs may be nested below the hosting root. document.baseURI honors
   // their declared base path while the root invitation continues unchanged.
   return new URL(path, document.baseURI).toString();
-}
-
-function toIcsDate(date) {
-  return date.toISOString().replace(/[-:]/g, "").replace(/\.\d{3}/, "");
-}
-
-function escapeIcs(value) {
-  return String(value)
-    .replace(/\\/g, "\\\\")
-    .replace(/\n/g, "\\n")
-    .replace(/,/g, "\\,")
-    .replace(/;/g, "\\;");
 }
 
 function formatDate(dateISO) {

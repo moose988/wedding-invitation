@@ -7,8 +7,9 @@ import {
   isFirebaseConfigured,
   onSnapshot,
   serverTimestamp,
-  updateDoc,
+  writeBatch,
 } from "../../firebase-config.js";
+import { buildInvitationRsvpPatch, commitInvitationRsvpPatch, normalizeInvitationRsvpStatus } from "./rsvp-state.js";
 
 export function getInvitationParams(location = window.location) {
   const params = new URLSearchParams(location.search);
@@ -31,11 +32,15 @@ export async function loadInvitationContext({ weddingId, guestToken } = getInvit
   ]);
   if (!weddingSnapshot.exists()) throw new Error("Event not found.");
   if (!guestSnapshot.exists()) throw new Error("Guest not found.");
+  const publicGuest = guestSnapshot.data();
+  if (publicGuest.guestToken !== guestToken || !publicGuest.guestId) {
+    throw new Error("This invitation link is invalid or incomplete.");
+  }
   return {
     weddingId,
     guestToken,
     wedding: { id: weddingSnapshot.id, ...weddingSnapshot.data() },
-    guest: { id: guestSnapshot.id, ...guestSnapshot.data() },
+    guest: { id: guestSnapshot.id, ...publicGuest },
     tables: tablesSnapshot.docs.map((snapshot) => ({ id: snapshot.id, ...snapshot.data() })),
   };
 }
@@ -44,26 +49,43 @@ export async function loadInvitationContext({ weddingId, guestToken } = getInvit
 // reads. Return the unsubscribe function from the design's boot sequence.
 export function subscribeToInvitation(context, onChange, onError = console.error) {
   const { db } = initFirebase();
+  let requestVersion = 0;
+  let active = true;
   const refresh = async () => {
-    try { onChange(await loadInvitationContext(context)); } catch (error) { onError(error); }
+    const currentVersion = ++requestVersion;
+    try {
+      const next = await loadInvitationContext(context);
+      if (active && currentVersion === requestVersion) onChange(next);
+    } catch (error) {
+      if (active && currentVersion === requestVersion) onError(error);
+    }
   };
   const unsubscribers = [
     onSnapshot(doc(db, "weddings", context.weddingId), refresh, onError),
     onSnapshot(doc(db, "weddings", context.weddingId, "publicGuests", context.guestToken), refresh, onError),
     onSnapshot(collection(db, "weddings", context.weddingId, "tables"), refresh, onError),
   ];
-  return () => unsubscribers.forEach((unsubscribe) => unsubscribe());
+  return () => {
+    active = false;
+    requestVersion += 1;
+    unsubscribers.forEach((unsubscribe) => unsubscribe());
+  };
 }
 
-export async function saveInvitationRsvp(context, status, additionalGuests = 0) {
-  if (!context?.guest?.guestId) throw new Error("Guest data is unavailable.");
-  if (!["confirmed", "declined"].includes(status)) throw new Error("Invalid RSVP status.");
-  const nextAdditionalGuests = status === "confirmed" ? Math.max(0, Math.min(10, Number(additionalGuests) || 0)) : 0;
+export async function saveInvitationRsvp(context, status, additionalGuests, message) {
+  const normalizedStatus = normalizeInvitationRsvpStatus(status);
+  if (!context?.weddingId || !context?.guestToken || !context?.guest?.guestId ||
+      context.guest.guestToken !== context.guestToken || !normalizedStatus ||
+      !context.guest.id || context.guest.id !== context.guestToken) {
+    throw new Error("Guest data is unavailable or does not match this invitation link.");
+  }
+  const privatePayload = { ...buildInvitationRsvpPatch(normalizedStatus, additionalGuests, message), updatedAt: serverTimestamp() };
+  const publicPayload = { ...privatePayload };
+  delete publicPayload.rsvpMessage;
   const { db } = initFirebase();
-  const payload = { rsvpStatus: status, additionalGuests: nextAdditionalGuests, updatedAt: serverTimestamp() };
-  await updateDoc(doc(db, "weddings", context.weddingId, "guests", context.guest.guestId), payload);
-  // The token-keyed mirror is what every public design reads; keep it in sync.
-  await updateDoc(doc(db, "weddings", context.weddingId, "publicGuests", context.guestToken), payload);
+  // Firestore commits both copies atomically. update() preserves guest identity,
+  // seating, check-in, and any party size omitted by this invitation form.
+  await commitInvitationRsvpPatch({ db, context, payload: publicPayload, privatePayload, writeBatch, doc });
 }
 
 export function invitationCheckinUrl(context) {

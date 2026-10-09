@@ -2,7 +2,8 @@
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <meta name="theme-color" content="#e9dfcc" />
     <meta
       name="description"
       content="A premium bilingual Arabic and English digital event invitation platform."
@@ -20,11 +21,11 @@
       const isHomePath = ["/", "/index.html"].includes(
         window.location.pathname.replace(/\/+$/, "") || "/",
       );
-      const isPersonalInvitation =
-        Boolean(homeParams.get("wedding")) && Boolean(homeParams.get("guest"));
+      const hasInvitationParameters =
+        Boolean(homeParams.get("wedding")) || Boolean(homeParams.get("guest"));
       if (
         isHomePath &&
-        !isPersonalInvitation &&
+        !isPersonalInvitation && !hasInvitationParameters &&
         homeParams.get("demo") !== "1"
       ) {
         window.location.replace("./dashboard-login.html");

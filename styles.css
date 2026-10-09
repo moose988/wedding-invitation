@@ -28,9 +28,12 @@
 
 html {
   scroll-behavior: smooth;
+  min-height: 100%;
+  background-color: #e9dfcc;
 }
 
 body {
+  display: flow-root;
   margin: 0;
   min-width: 320px;
   background:
@@ -40,6 +43,9 @@ body {
   color: var(--ink);
   font-family: "Cormorant Garamond", serif;
   overflow-x: hidden;
+  min-height: 100vh;
+  min-height: 100svh;
+  min-height: 100dvh;
 }
 
 body.intro-active {
@@ -86,6 +92,9 @@ a {
 .page-shell {
   position: relative;
   isolation: isolate;
+  min-height: 100vh;
+  min-height: 100svh;
+  min-height: 100dvh;
 }
 
 .floral-frame {
@@ -4308,4 +4317,306 @@ body.invitation-open .site-content .hero-countdown {
   body.invitation-open .site-content {
     margin: 10px auto calc(124px + env(safe-area-inset-bottom, 0px));
   }
+}
+
+/* Viewport edge coverage, motion polish, and event venue map. */
+html,
+body {
+  background-color: #e9dfcc;
+}
+
+body.intro-active {
+  background-color: #e8dfcf;
+}
+
+body.invitation-open {
+  background-color: #e8e2d7;
+  background-attachment: scroll, scroll;
+}
+
+.intro-screen {
+  height: 100vh;
+  height: 100svh;
+  min-height: 100dvh;
+  padding-top: env(safe-area-inset-top, 0px);
+  padding-right: env(safe-area-inset-right, 0px);
+  padding-bottom: env(safe-area-inset-bottom, 0px);
+  padding-left: env(safe-area-inset-left, 0px);
+}
+
+.invitation-error {
+  min-height: 100vh;
+  min-height: 100svh;
+  min-height: 100dvh;
+  display: grid;
+  place-items: center;
+  padding: max(24px, env(safe-area-inset-top, 0px)) max(20px, env(safe-area-inset-right, 0px)) max(24px, env(safe-area-inset-bottom, 0px)) max(20px, env(safe-area-inset-left, 0px));
+  color: #354237;
+  background: radial-gradient(circle at top, rgba(212, 191, 151, 0.2), transparent 50%), #f5f0e6;
+}
+
+.invitation-error__card {
+  width: min(100%, 520px);
+  padding: clamp(24px, 6vw, 42px);
+  border: 1px solid rgba(174, 145, 91, 0.48);
+  border-radius: 24px;
+  text-align: center;
+  background: #fffdf8;
+  box-shadow: 0 22px 55px rgba(76, 70, 54, 0.12);
+}
+
+.invitation-error__card h1 {
+  margin: 0;
+  font: 500 clamp(2rem, 7vw, 3rem)/1.1 "Cormorant Garamond", Georgia, serif;
+}
+
+.invitation-error__card p:last-child { margin-bottom: 0; line-height: 1.7; }
+
+.intro-card--envelope,
+.intro-card--envelope:hover,
+.intro-card--envelope:focus-visible {
+  transform: none;
+}
+
+body.intro-opening .intro-card--envelope {
+  animation: none;
+}
+
+.envelope-layer--card,
+.envelope-layer--flap,
+.envelope-layer--seal {
+  -webkit-backface-visibility: hidden;
+}
+
+body.invitation-open .petals {
+  opacity: 0.72;
+  transition: opacity 700ms ease;
+}
+
+body.invitation-open .petal {
+  width: 9px;
+  height: 16px;
+  opacity: 0.11;
+}
+
+body.invitation-open .petal-1,
+body.invitation-open .petal-2 {
+  left: 2%;
+}
+
+body.invitation-open .petal-3,
+body.invitation-open .petal-4 {
+  right: 2%;
+}
+
+body.invitation-open .petal-5,
+body.invitation-open .petal-6 {
+  display: none;
+}
+
+body.invitation-open .hero-backdrop {
+  animation: heroPhotoReveal 1000ms cubic-bezier(0.2, 0.8, 0.2, 1) 100ms both;
+}
+
+body.invitation-open .hero-names {
+  animation: heroCopyReveal 780ms cubic-bezier(0.2, 0.8, 0.2, 1) 300ms both;
+}
+
+body.invitation-open .hero-copy {
+  animation: heroCopyReveal 760ms cubic-bezier(0.2, 0.8, 0.2, 1) 480ms both;
+}
+
+.reveal {
+  transition-delay: var(--reveal-delay, 0ms);
+}
+
+.section-kicker {
+  animation: stationeryGlow 7s ease-in-out infinite alternate;
+}
+
+.hero-blossom {
+  animation: flowersBreathe 8s ease-in-out infinite;
+}
+
+.luxury-button,
+.detail-card__action,
+.layla-language-toggle,
+.music-toggle {
+  transition: transform 220ms ease, box-shadow 260ms ease, background-color 260ms ease, border-color 260ms ease;
+}
+
+.luxury-button:active,
+.detail-card__action:active,
+.layla-language-toggle:active {
+  transform: translateY(1px) scale(0.985);
+}
+
+.rsvp-summary {
+  animation: rsvpConfirmation 580ms cubic-bezier(0.2, 0.85, 0.25, 1) both;
+}
+
+.rsvp-summary--declined .rsvp-confirmation-mark {
+  color: #77836f;
+  border-color: rgba(119, 131, 111, 0.46);
+}
+
+.rsvp-form__submit:disabled {
+  cursor: wait;
+  opacity: 0.72;
+}
+
+.detail-card__action {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  margin-top: 14px;
+  padding: 9px 14px;
+  border: 1px solid rgba(164, 139, 91, 0.42);
+  border-radius: 999px;
+  color: #60725b;
+  background: rgba(255, 252, 246, 0.7);
+  text-decoration: none;
+  font-size: 0.9rem;
+}
+
+.detail-card__action svg {
+  width: 18px;
+  height: 18px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.7;
+}
+
+.venue-map-card {
+  width: min(100%, 480px);
+  margin: 18px auto 0;
+  padding: 10px;
+  border: 1px solid rgba(174, 145, 91, 0.52);
+  border-radius: 20px;
+  background: linear-gradient(145deg, #fbf8f0, #e8eee4);
+  box-shadow: 0 12px 26px rgba(85, 77, 57, 0.12);
+}
+
+.venue-map-card__venue {
+  margin: 2px 5px 9px;
+  color: #495b4b;
+  font-family: "Cormorant Garamond", Georgia, serif;
+  font-size: 1.35rem;
+  font-weight: 600;
+}
+
+.venue-map-preview {
+  position: relative;
+  width: 100%;
+  aspect-ratio: 16 / 8.5;
+  min-height: 148px;
+  overflow: hidden;
+  border: 1px solid rgba(168, 140, 87, 0.65);
+  border-radius: 14px;
+  background: #dfe5d8;
+}
+
+.venue-map-preview iframe {
+  display: block;
+  width: 100%;
+  height: 100%;
+  border: 0;
+  pointer-events: none;
+}
+
+.venue-map-preview--fallback {
+  display: grid;
+  align-content: center;
+  justify-items: center;
+  gap: 4px;
+  padding: 16px;
+  color: #64715d;
+  background:
+    linear-gradient(45deg, transparent 48%, rgba(170, 156, 123, 0.14) 49%, rgba(170, 156, 123, 0.14) 51%, transparent 52%) 0 0 / 36px 36px,
+    #e8ebdf;
+}
+
+.venue-map-preview--fallback > span {
+  font-size: 1.7rem;
+  color: #a88e5d;
+}
+
+.venue-map-preview--fallback p,
+.venue-map-card__fallback {
+  max-width: 32ch;
+  margin: 0;
+  font-size: 0.85rem;
+}
+
+.venue-map-card .detail-card__action {
+  margin-top: 10px;
+}
+
+@keyframes stationeryGlow {
+  from { text-shadow: 0 0 0 rgba(184, 151, 91, 0); }
+  to { text-shadow: 0 0 12px rgba(184, 151, 91, 0.2); }
+}
+
+@keyframes rsvpConfirmation {
+  from { opacity: 0; transform: translateY(10px) scale(0.99); }
+  to { opacity: 1; transform: translateY(0) scale(1); }
+}
+
+@keyframes heroPhotoReveal {
+  from { opacity: 0.35; transform: scale(0.985); }
+  to { opacity: 1; transform: scale(1); }
+}
+
+@keyframes heroCopyReveal {
+  from { opacity: 0; transform: translateY(12px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+@media (max-width: 699px) {
+  .intro-card--envelope { width: min(92vw, calc(100vw - 28px), 820px); }
+  .envelope-stage { width: 100%; max-height: min(66svh, calc(100dvh - 128px)); }
+  .intro-card--envelope .intro-card__cta-wrap { margin-top: -24px; }
+  .venue-map-preview { aspect-ratio: 4 / 3; min-height: 160px; }
+  .section-kicker { animation-duration: 10s; }
+  .petal-2,
+  .petal-4 { display: none; }
+}
+
+@media (orientation: landscape) and (max-height: 520px) {
+  .envelope-stage { width: min(68vw, 760px); max-height: 68svh; }
+  .intro-card--envelope .intro-card__cta-wrap { margin-top: -12px; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .section-kicker,
+  .hero-blossom,
+  body.invitation-open .petal { animation: none; }
+  .reveal { transition: none; }
+}
+
+body.page-hidden * { animation-play-state: paused !important; }
+body.content-refresh .rsvp-summary { animation: none; }
+
+body.intro-active .section-kicker,
+body.intro-active .hero-blossom { animation-play-state: paused; }
+
+@supports not (transform-style: preserve-3d) {
+  body.intro-opening .envelope-layer--flap {
+    animation-name: flapOpenFlat;
+  }
+  body.intro-opening .envelope-layer--card {
+    animation-name: cardRevealFlat;
+  }
+}
+
+@keyframes flapOpenFlat {
+  from { transform: translateY(0) rotate(0); opacity: 1; }
+  to { transform: translateY(-34%) rotate(-5deg); opacity: 0.35; }
+}
+
+@keyframes cardRevealFlat {
+  0% { opacity: 0; transform: translateY(12%) scale(0.72); }
+  18% { opacity: 1; }
+  100% { opacity: 1; transform: translateY(-28%) scale(0.96); }
 }

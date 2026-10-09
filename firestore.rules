@@ -170,6 +170,7 @@ service cloud.firestore {
 
     function validEventDetails(data) {
       let mapsUrl = data.get("mapsUrl", "");
+      let venueMapEmbedUrl = data.get("venueMapEmbedUrl", "");
       return data.eventTitle is string
         && data.eventTitle.size() > 0
         && data.eventTitle.size() <= 160
@@ -184,6 +185,10 @@ service cloud.firestore {
         && data.get("timeAr", "") is string
         && mapsUrl is string
         && (mapsUrl == "" || mapsUrl.matches("^https?://[^ ]+$"))
+        && venueMapEmbedUrl is string
+        && venueMapEmbedUrl.size() <= 3000
+        && (venueMapEmbedUrl == "" || venueMapEmbedUrl.matches("^https://www\\.google\\.com/maps/embed\\?pb=.+$"))
+        && (!data.keys().hasAny(["schedule"]) || (data.schedule is list && data.schedule.size() <= 12))
         && (!data.keys().hasAny(["eventCategory"]) || data.eventCategory in ["wedding_engagement", "celebration"])
         && (!data.keys().hasAny(["status"]) || data.status in ["draft", "upcoming", "active", "completed", "archived"]);
     }
@@ -197,7 +202,7 @@ service cloud.firestore {
         && changes.hasOnly([
           "eventCategory", "eventTitle", "coupleName", "brideName", "groomName",
           "eventDateISO", "timeEn", "timeAr", "venueEn", "location", "locationEn",
-          "mapsUrl", "whatsAppCountryCode", "invitationLanguage", "plannerNotes", "status", "updatedAt"
+          "mapsUrl", "venueMapEmbedUrl", "schedule", "whatsAppCountryCode", "invitationLanguage", "plannerNotes", "status", "updatedAt"
         ])
         && (statusUnchanged || normalStatusChange)
         && validEventDetails(request.resource.data);
@@ -238,7 +243,20 @@ service cloud.firestore {
 
     function isGuestRsvpUpdate(weddingId) {
       return isPublicWedding(weddingId)
-        && request.resource.data.diff(resource.data).changedKeys().hasOnly(["rsvpStatus", "additionalGuests", "updatedAt"])
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(["rsvpStatus", "additionalGuests", "rsvpMessage", "updatedAt"])
+        && request.resource.data.guestToken == resource.data.guestToken
+        && request.resource.data.rsvpStatus in ["pending", "confirmed", "declined"]
+        && request.resource.data.additionalGuests is int
+        && request.resource.data.additionalGuests >= 0
+        && request.resource.data.additionalGuests <= 10
+        && (!request.resource.data.keys().hasAny(["rsvpMessage"])
+          || (request.resource.data.rsvpMessage is string && request.resource.data.rsvpMessage.size() <= 1000))
+        && request.resource.data.updatedAt == request.time;
+    }
+
+    function isPublicGuestRsvpUpdate(weddingId) {
+      return isPublicWedding(weddingId)
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(["rsvpStatus", "additionalGuests", "updatedAt"])
         && request.resource.data.guestToken == resource.data.guestToken
         && request.resource.data.rsvpStatus in ["pending", "confirmed", "declined"]
         && request.resource.data.additionalGuests is int
@@ -367,13 +385,7 @@ service cloud.firestore {
           || (canEditSeating(weddingId) && seatingAccountMayUpdateGuest(weddingId, resource.data)
             && editorMayUpdatePublicGuest(weddingId, resource.data)
             && request.resource.data.diff(resource.data).changedKeys().hasOnly(["seatingAssignments", "tableId", "tableName", "seatNumber", "updatedAt"]))
-          || (isPublicWedding(weddingId)
-            && request.resource.data.diff(resource.data).changedKeys().hasOnly(["rsvpStatus", "additionalGuests", "updatedAt"])
-            && request.resource.data.rsvpStatus in ["pending", "confirmed", "declined"]
-            && request.resource.data.additionalGuests is int
-            && request.resource.data.additionalGuests >= 0
-            && request.resource.data.additionalGuests <= 10
-            && request.resource.data.updatedAt == request.time);
+          || isPublicGuestRsvpUpdate(weddingId);
       }
     }
 

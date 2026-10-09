@@ -30,7 +30,10 @@ test("planner zoom and pan operate on the complete map layer with a stable logic
   assert.match(css, /body\.is-seating-view \.planner-canvas\s*\{[\s\S]*?transform: scale\(var\(--planner-zoom\)\)/);
   assert.match(css, /\.planner-canvas-viewport\s*\{[\s\S]*?overflow: hidden/);
   assert.match(seatingRenderer, /Reset view/);
-  assert.match(zoomSetter, /state\.plannerZoom = clamp\(nextZoom, 0\.7, 1\.6\)/);
+  // Mobile intentionally permits a wider minimum zoom so the full seating
+  // canvas can be explored on narrow viewports; desktop keeps its 0.7 floor.
+  assert.match(zoomSetter, /const minimumZoom = window\.matchMedia\("\(max-width: 700px\)"\)\.matches \? 0\.35 : 0\.7/);
+  assert.match(zoomSetter, /state\.plannerZoom = clamp\(nextZoom, minimumZoom, 1\.6\)/);
   assert.match(dashboard, /type: "pan"[\s\S]*?startCenter: \{ \.\.\.state\.plannerViewCenter \}/);
   assert.match(dashboard, /x: state\.dragState\.startCenter\.x - dx \/ state\.dragState\.zoom/);
   assert.match(dashboard, /function resetPlannerView\(\)[\s\S]*?state\.plannerViewCenter =/);

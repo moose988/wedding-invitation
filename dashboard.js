@@ -1799,7 +1799,9 @@ function startListeners() {
       });
       state.loadingGuests = false;
       renderAll();
-      if (!state.publicMirrorsReconciled && can("canEditGuests")) {
+      // Cached guest rows can predate a visitor's latest RSVP. Wait for the
+      // server-backed snapshot before any one-time mirror repair is allowed.
+      if (!snapshot.metadata.fromCache && !state.publicMirrorsReconciled && can("canEditGuests")) {
         state.publicMirrorsReconciled = true;
         void reconcilePublicGuestMirrors(state.guests);
       }
@@ -2976,6 +2978,8 @@ function eventSettingsDraftFromWedding(wedding = state.wedding) {
     venueEn: wedding?.venueEn || "",
     location: wedding?.location || wedding?.locationEn || "",
     mapsUrl: wedding?.mapsUrl || "",
+    venueMapEmbedUrl: wedding?.venueMapEmbedUrl || "",
+    schedule: JSON.stringify(Array.isArray(wedding?.schedule) ? wedding.schedule : [], null, 2),
   };
 }
 
@@ -3020,6 +3024,28 @@ function validateEventSettingsDraft(draft) {
       errors.mapsUrl = "Enter a valid HTTP or HTTPS maps link, or leave it blank.";
     }
   }
+  const venueMapEmbedUrl = String(draft.venueMapEmbedUrl || "").trim();
+  if (venueMapEmbedUrl) {
+    try {
+      const url = new URL(venueMapEmbedUrl);
+      if (url.protocol !== "https:" || url.hostname !== "www.google.com" ||
+          url.pathname !== "/maps/embed" || !url.searchParams.has("pb") || venueMapEmbedUrl.length > 3000) {
+        throw new Error("Unsupported Google Maps embed URL.");
+      }
+    } catch {
+      errors.venueMapEmbedUrl = "Paste the src URL from a Google Maps embed iframe.";
+    }
+  }
+  try {
+    const schedule = JSON.parse(String(draft.schedule || "[]"));
+    if (!Array.isArray(schedule) || schedule.length > 12 || schedule.some((item) =>
+      !item || typeof item !== "object" || Array.isArray(item) ||
+      ["time", "timeAr", "titleEn", "titleAr", "descriptionEn", "descriptionAr"].some((key) => item[key] !== undefined && (typeof item[key] !== "string" || item[key].length > 240)) ||
+      !(String(item.titleEn || "").trim() || String(item.titleAr || "").trim())
+    )) errors.schedule = "Use a JSON list of up to 12 items. Each item needs titleEn or titleAr; text values can be up to 240 characters.";
+  } catch {
+    errors.schedule = "Enter a valid JSON list for the schedule, or leave it as [].";
+  }
   return errors;
 }
 
@@ -3049,6 +3075,8 @@ async function saveEventSettings(event) {
     location: String(draft.location || "").trim(),
     locationEn: String(draft.location || "").trim(),
     mapsUrl: String(draft.mapsUrl || "").trim(),
+    venueMapEmbedUrl: String(draft.venueMapEmbedUrl || "").trim(),
+    schedule: JSON.parse(String(draft.schedule || "[]")),
     updatedAt: serverTimestamp(),
   };
   if (eventUsesGuestSides(state.wedding)) {
@@ -3265,6 +3293,9 @@ function renderEventSettingsPage() {
           ${field("venueEn", "Venue name", "text", false, true)}
           ${field("location", "Location / address", "text", false, false, "street-address")}
           ${field("mapsUrl", "Maps link", "url", true, false)}
+          ${field("venueMapEmbedUrl", "Google Maps embed URL", "url", true, false)}
+          <p class="event-settings-timezone">Paste the src URL from the Google Maps iframe. It is saved for this event only.</p>
+          <label class="event-settings-field is-full"><span>Invitation schedule (JSON, optional)</span><textarea class="da3wa-input" name="schedule" rows="8" data-event-setting-field ${canEditDetails ? "" : "disabled aria-disabled=\"true\""}>${escapeHtml(draft.schedule || "[]")}</textarea><small class="event-setting-error" role="alert">${escapeHtml(errors.schedule || "")}</small><small class="event-settings-timezone">Use up to 12 items with time, timeAr, titleEn, titleAr, descriptionEn, and descriptionAr. Leave [] to hide the schedule.</small></label>
           <p class="event-settings-timezone">Date and time use the same local time display as the rest of the dashboard.</p>
         </div>
         <div class="event-settings-actions">
@@ -3455,6 +3486,7 @@ function renderGuestRow(guest) {
       <td>
         <div class="guest-primary">
           <button class="guest-name-button" type="button" data-action="edit-guest" data-id="${escapeAttribute(guest.id)}">${escapeHtml(guest.fullName || "Guest")}</button>
+          ${guest.rsvpMessage ? `<details class="guest-rsvp-message"><summary>Message for the couple</summary><p>${escapeHtml(guest.rsvpMessage)}</p></details>` : ""}
         </div>
       </td>
       <td>${escapeHtml(guest.phone || "Not set")}</td>
@@ -3488,6 +3520,7 @@ function renderGuestCard(guest) {
         ${eventUsesGuestSides(state.wedding) ? `<span>Side: ${escapeHtml(guest.side || "other")}</span>` : ""}
         ${isSeatingEnabled() ? `<span>${renderReservationReadinessBadge(guest)}</span>` : ""}
       </div>
+      ${guest.rsvpMessage ? `<details class="guest-rsvp-message"><summary>Message for the couple</summary><p>${escapeHtml(guest.rsvpMessage)}</p></details>` : ""}
       <div class="guest-card__actions">
         ${renderGuestInlineActions(guest)}
         ${renderGuestMenuToggle(guest, "card", state.activeGuestMenu?.guestId === guest.id)}
@@ -5599,22 +5632,29 @@ async function reconcilePublicGuestMirrors(guests) {
   if (state.mode !== "live" || !can("canEditGuests")) return;
   const eligibleGuests = guests.filter((guest) => Boolean(guest.guestToken));
   try {
-    // set() without merge is deliberate: it removes legacy private fields
-    // such as phone/notes from public documents and cannot create duplicates
-    // because every mirror has the stable guestToken as its document ID.
+    // Existing public documents keep their RSVP and party-size fields. The
+    // dashboard may have received those rows from cache before the server
+    // snapshot; reconciliation must never roll a visitor's newer response back.
     for (let offset = 0; offset < eligibleGuests.length; offset += 400) {
       const batch = writeBatch(state.services.db);
-      eligibleGuests.slice(offset, offset + 400).forEach((guest) => {
-        batch.set(
-          doc(
+      const chunk = eligibleGuests.slice(offset, offset + 400);
+      const mirrorSnapshots = await Promise.all(chunk.map((guest) => getDoc(
+        doc(
             state.services.db,
             "weddings",
             state.weddingId,
             "publicGuests",
             guest.guestToken,
           ),
-          buildPublicGuestPayload(guest.id, guest),
-        );
+      )));
+      chunk.forEach((guest, index) => {
+        const mirrorRef = doc(state.services.db, "weddings", state.weddingId, "publicGuests", guest.guestToken);
+        const payload = buildPublicGuestPayload(guest.id, guest);
+        if (mirrorSnapshots[index].exists()) {
+          delete payload.rsvpStatus;
+          delete payload.additionalGuests;
+        }
+        batch.set(mirrorRef, payload, { merge: true });
       });
       await batch.commit();
     }

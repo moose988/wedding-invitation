@@ -117,3 +117,7 @@ window.FIREBASE_CONFIG = window.FIREBASE_CONFIG || {
   appId: "1:868779408613:web:96b330cb386ec2fcefa80c",
   measurementId: "G-GD5D6WJRB0",
 };
+
+// Optional browser-restricted Google Maps Embed API key. Keep empty until a
+// key restricted to Maps Embed API and the public invitation host is supplied.
+window.GOOGLE_MAPS_EMBED_API_KEY = window.GOOGLE_MAPS_EMBED_API_KEY || "";

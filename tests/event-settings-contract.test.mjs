@@ -27,6 +27,8 @@ test("event details validate and persist to the selected event and workspace ind
   assert.match(rules, /function isOwnerEventDetailsUpdate\(weddingId\)/);
   assert.match(rules, /data\.eventDateISO\.matches/);
   assert.match(rules, /mapsUrl\.matches/);
+  assert.match(dashboard, /venueMapEmbedUrl/);
+  assert.match(rules, /venueMapEmbedUrl/);
 });
 
 test("QR and seating toggles live only in Settings and serialize rapid writes", async () => {

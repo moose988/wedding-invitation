@@ -27,6 +27,7 @@ body.layla-zaid-invitation .layla-language-toggle {
 body.layla-zaid-invitation [data-layla-language="ar"] {
   display: none;
 }
+body.layla-zaid-invitation [data-layla-language][hidden] { display: none !important; }
 
 body.layla-zaid-invitation.layla-arabic [data-layla-language="en"] {
   display: none;
@@ -107,9 +108,65 @@ body.layla-zaid-invitation .hero-content-panel {
   width: 100%;
 }
 
+body.layla-zaid-invitation.invitation-open .hero-frame {
+  width: 100%;
+  grid-template-columns: minmax(0, 1fr);
+  justify-items: center;
+  margin-inline: auto;
+}
+
+body.layla-zaid-invitation.invitation-open .hero-backdrop,
+body.layla-zaid-invitation.invitation-open .hero-content-panel {
+  justify-self: center;
+  margin-inline: auto;
+  text-align: center;
+}
+
+body.layla-zaid-invitation.invitation-open .hero-names,
+body.layla-zaid-invitation.invitation-open .hero-copy {
+  width: 100%;
+  text-align: center;
+}
+
+body.layla-zaid-invitation.invitation-open .hero-names__english,
+body.layla-zaid-invitation.invitation-open .hero-names__arabic {
+  margin-inline: auto;
+  text-align: center;
+}
+
+body.layla-zaid-invitation.invitation-open .site-content,
+body.layla-zaid-invitation.invitation-open .site-content .section-frame,
+body.layla-zaid-invitation.invitation-open .site-content .section-heading,
+body.layla-zaid-invitation.invitation-open .site-content .detail-card,
+body.layla-zaid-invitation.invitation-open .site-content .location-card,
+body.layla-zaid-invitation.invitation-open .site-content .rsvp-card,
+body.layla-zaid-invitation.invitation-open .site-content .closing-card {
+  text-align: center;
+}
+
+body.layla-zaid-invitation.invitation-open .site-content .section-frame,
+body.layla-zaid-invitation.invitation-open .site-content .detail-card,
+body.layla-zaid-invitation.invitation-open .venue-map-card {
+  margin-inline: auto;
+}
+
+body.layla-zaid-invitation.invitation-open .hero-countdown,
+body.layla-zaid-invitation.invitation-open .venue-map-card,
+body.layla-zaid-invitation.invitation-open .venue-map-preview,
+body.layla-zaid-invitation.invitation-open .map-link,
+body.layla-zaid-invitation.invitation-open .detail-card__action {
+  margin-inline: auto;
+}
+
+body.layla-zaid-invitation.invitation-open .site-content [lang="ar"] {
+  direction: rtl;
+  text-align: center;
+}
+
 @media (max-width: 699px) {
   body.layla-zaid-invitation .hero-content-panel {
-    min-height: clamp(220px, 63vw, 260px);
+    min-height: 0;
+    height: auto;
   }
 }
 
@@ -272,5 +329,319 @@ body.layla-zaid-invitation .seat-plan-object--dance-floor span {
   body.layla-zaid-invitation .rsvp-phase h3,
   body.layla-zaid-invitation .rsvp-summary h3 {
     font-size: clamp(1.85rem, 8vw, 2.25rem);
+  }
+}
+
+/* Layla & Zaid invitation redesign */
+html:has(body.layla-zaid-invitation) { min-height: 100%; background: #f5efe4; }
+body.layla-zaid-invitation {
+  --paper: #f5efe4;
+  --paper-light: #fbf7ee;
+  --mocha: #5b493b;
+  --mocha-deep: #403328;
+  --champagne: #c9ae82;
+  --champagne-pale: #e8d8b7;
+  --ink: #55483e;
+  --muted: #796b5d;
+  min-height: 100vh;
+  min-height: 100svh;
+  margin: 0;
+  overflow-x: clip;
+  color: var(--ink);
+  background: var(--paper);
+  font-family: "Lora", Georgia, serif;
+}
+body.layla-zaid-invitation::before {
+  position: fixed; z-index: -1; inset: 0; content: ""; pointer-events: none;
+  background: radial-gradient(ellipse at 50% 15%, #fffdf8 0, var(--paper) 65%, #eee4d4 100%);
+  animation: paper-glow 18s ease-in-out infinite alternate;
+}
+body.layla-zaid-invitation button, body.layla-zaid-invitation a { -webkit-tap-highlight-color: transparent; }
+body.layla-zaid-invitation button:focus-visible, body.layla-zaid-invitation a:focus-visible, body.layla-zaid-invitation input:focus-visible, body.layla-zaid-invitation textarea:focus-visible {
+  outline: 2px solid #8e6e4e; outline-offset: 4px;
+}
+body.layla-zaid-invitation .visually-hidden { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0,0,0,0); white-space: nowrap; border: 0; }
+body.layla-zaid-invitation .invitation-ornaments { position: fixed; z-index: 0; inset: 0; overflow: hidden; pointer-events: none; opacity: 0; transition: opacity .8s ease; }
+body.layla-zaid-invitation.invitation-open .invitation-ornaments { opacity: 1; }
+body.layla-zaid-invitation .invitation-flower { position: absolute; display: block; color: #aa906e; font-family: "Cormorant Garamond", serif; font-size: clamp(22px, 3vw, 36px); opacity: .34; text-shadow: 0 1px 9px #cfb98e55; animation: edge-drift 14s ease-in-out infinite; }
+body.layla-zaid-invitation .invitation-flower--left { inset-inline-start: 2.5vw; inset-block-start: 42vh; transform: rotate(-25deg); }
+body.layla-zaid-invitation .invitation-flower--right { inset-inline-end: 3vw; inset-block-start: 68vh; animation-delay: -5s; }
+body.layla-zaid-invitation .invitation-flower--lower { inset-inline-start: 8vw; inset-block-end: 8vh; font-size: 22px; animation-delay: -9s; }
+body.layla-zaid-invitation .layla-language-toggle {
+  position: fixed; z-index: 30; inset-block-start: max(12px, env(safe-area-inset-top)); inset-inline-end: max(12px, env(safe-area-inset-right));
+  display: flex; padding: 3px; gap: 2px; border: 1px solid #cdb891; border-radius: 999px; background: #faf6ed;
+  box-shadow: 0 4px 14px #44382b1a; direction: ltr;
+}
+body.layla-zaid-invitation .layla-language-toggle button {
+  min-width: 42px; min-height: 34px; padding: 5px 11px; border: 0; border-radius: 999px; color: var(--mocha); background: transparent;
+  font: 600 .77rem "Lora", Georgia, serif; cursor: pointer; transition: color .2s ease, background .2s ease;
+}
+body.layla-zaid-invitation .layla-language-toggle button[aria-pressed="true"] { color: #fffaf0; background: var(--mocha); }
+body.layla-zaid-invitation .envelope-intro {
+  position: fixed; z-index: 25; inset: 0; display: grid; place-items: center; min-height: 100vh; min-height: 100svh;
+  padding: max(20px, env(safe-area-inset-top)) max(14px, env(safe-area-inset-right)) max(20px, env(safe-area-inset-bottom)) max(14px, env(safe-area-inset-left));
+  background: radial-gradient(ellipse at center, #fffdf8 0, #f5efe4 70%, #e9decc 100%); transition: opacity .55s ease, visibility .55s ease;
+}
+body.layla-zaid-invitation .envelope-intro__stage { position: relative; width: min(100%, 530px, calc((100svh - 44px) * .5625)); aspect-ratio: 941/1672; overflow: hidden; isolation: isolate; }
+body.layla-zaid-invitation .envelope-intro__poster, body.layla-zaid-invitation .envelope-intro__video {
+  position: absolute; inset: 0; width: 100%; height: 100%; object-fit: contain; display: block;
+}
+body.layla-zaid-invitation .envelope-intro__poster { z-index: 0; }
+body.layla-zaid-invitation .envelope-intro__video { z-index: 1; opacity: 0; transition: opacity .28s ease; background: transparent; }
+body.layla-zaid-invitation .envelope-intro.is-playing .envelope-intro__video { opacity: 1; }
+body.layla-zaid-invitation .envelope-intro__open {
+  position: absolute; z-index: 2; inset-inline-start: 31%; inset-block-start: 34%; width: 38%; height: 26%; border: 0; border-radius: 50%;
+  background: transparent; cursor: pointer; touch-action: manipulation;
+}
+body.layla-zaid-invitation .envelope-intro__open:focus-visible { outline: 3px solid #8d6b49; outline-offset: 4px; background: #fff8e322; }
+body.layla-zaid-invitation .envelope-intro__caption {
+  position: absolute; z-index: 2; inset-inline: 12%; inset-block-start: 62%; margin: 0; text-align: center; color: #725e4c;
+  font: italic clamp(.95rem, 3.6vw, 1.35rem) "Cormorant Garamond", Georgia, serif; letter-spacing: .04em; pointer-events: none;
+}
+body.layla-zaid-invitation .envelope-intro__skip {
+  position: absolute; z-index: 4; inset-inline-end: max(20px, env(safe-area-inset-right)); inset-block-end: max(20px, env(safe-area-inset-bottom));
+  padding: 9px 15px; border: 1px solid #bda780; border-radius: 999px; color: #fffaf0; background: #5b493be8; font: .8rem "Lora", Georgia, serif; cursor: pointer;
+}
+body.layla-zaid-invitation .envelope-intro.is-opening .envelope-intro__open { display: none; }
+body.layla-zaid-invitation .envelope-intro.is-hidden { opacity: 0; visibility: hidden; pointer-events: none; }
+body.layla-zaid-invitation .site-content { position: relative; z-index: 1; width: 100%; max-width: none; margin: 0 auto; padding: 0 clamp(16px, 4vw, 48px) max(34px, env(safe-area-inset-bottom)); }
+body.layla-zaid-invitation .site-content[inert] { visibility: hidden; }
+body.layla-zaid-invitation .site-content > .section { width: min(100%, 940px); margin-inline: auto; padding-block: clamp(24px, 5vw, 56px); }
+body.layla-zaid-invitation .hero.section { width: min(100%, 980px); padding-block: clamp(20px, 4vh, 52px); }
+body.layla-zaid-invitation .hero-paper {
+  position: relative; display: grid; place-items: start center; width: 100%; min-height: min(100svh, 1030px); aspect-ratio: 941/1672; padding: 18% 14% 17%;
+  background: url("./assets/Sculpted Ivory Paper Wedding Invitation.png") center / 100% 100% no-repeat;
+}
+body.layla-zaid-invitation .hero-paper__content { width: min(100%, 690px); margin: 16% auto 0; text-align: center; }
+body.layla-zaid-invitation .section-kicker { margin: 0 0 12px; color: #81674c; font: 600 .76rem "Lora", Georgia, serif; letter-spacing: .22em; text-transform: uppercase; }
+body.layla-zaid-invitation .hero-names { margin: 10px auto 18px; color: var(--mocha-deep); font: normal clamp(4rem, 12vw, 8.5rem)/1.05 "Great Vibes", cursive; overflow-wrap: anywhere; }
+body.layla-zaid-invitation .hero-names__english { display: block; max-width: none; margin: 0 auto; }
+body.layla-zaid-invitation .hero-names__arabic { display: block; font: 400 clamp(3rem, 9vw, 6.3rem)/1.25 "Aref Ruqaa", serif; }
+body.layla-zaid-invitation .hero-divider { display: flex; align-items: center; justify-content: center; gap: 13px; margin: 16px auto 22px; color: #a78a61; font-size: 1.3rem; }
+body.layla-zaid-invitation .hero-divider i { width: clamp(28px, 8vw, 78px); height: 1px; background: linear-gradient(90deg, transparent, #b99d70); }
+body.layla-zaid-invitation .hero-divider i:last-child { transform: rotate(180deg); }
+body.layla-zaid-invitation .hero-copy__english, body.layla-zaid-invitation .hero-copy__arabic { max-width: 46ch; margin: 0 auto 12px; color: #655648; font-size: clamp(.95rem, 1.8vw, 1.12rem); line-height: 1.8; text-align: center; }
+body.layla-zaid-invitation .hero-copy__arabic { font: 1.3rem/1.85 "Amiri", serif; }
+body.layla-zaid-invitation .hero-event-line { margin: 18px auto; color: #725f4b; font: 500 .9rem "Lora", Georgia, serif; letter-spacing: .08em; }
+body.layla-zaid-invitation .luxury-button, body.layla-zaid-invitation .detail-card__action {
+  display: inline-flex; align-items: center; justify-content: center; gap: 9px; min-height: 46px; padding: 11px 22px; border: 1px solid var(--mocha);
+  border-radius: 4px; color: #fffaf1; background: var(--mocha); box-shadow: 0 5px 12px #4c39261a; font: 600 .83rem "Lora", Georgia, serif;
+  letter-spacing: .06em; text-decoration: none; cursor: pointer; transition: transform .2s ease, box-shadow .2s ease, background .2s ease;
+}
+body.layla-zaid-invitation .luxury-button:hover, body.layla-zaid-invitation .detail-card__action:hover { transform: translateY(-2px); box-shadow: 0 8px 18px #4c392629; }
+body.layla-zaid-invitation .luxury-button:active { transform: translateY(1px); }
+body.layla-zaid-invitation .luxury-button--secondary, body.layla-zaid-invitation .luxury-button--ghost { color: var(--mocha); background: #fbf8f0; }
+body.layla-zaid-invitation .hero-down { display: block; width: 38px; margin: 10px auto 0; color: #907552; font-size: 1.65rem; text-decoration: none; animation: layla-arrow 2s ease-in-out infinite; }
+body.layla-zaid-invitation .section-frame { max-width: 100%; margin-inline: auto; padding: clamp(24px, 5vw, 48px); border: 1px solid #d6c4a4; border-radius: 5px; background: #fbf8f0e8; box-shadow: 0 14px 34px #55412a12; text-align: center; }
+body.layla-zaid-invitation .section-heading { margin: 0 auto 24px; text-align: center; }
+body.layla-zaid-invitation .section-heading h2 { margin: 0; color: #574638; font: 500 clamp(2rem, 5vw, 3.2rem)/1.15 "Cormorant Garamond", Georgia, serif; }
+body.layla-zaid-invitation .hero-countdown { display: flex; justify-content: center; gap: clamp(8px, 3vw, 24px); margin: 20px auto 0; }
+body.layla-zaid-invitation .countdown-card { min-width: 68px; padding: 10px 12px; border-inline-end: 1px solid #dfd0b5; }
+body.layla-zaid-invitation .countdown-card:last-child { border: 0; }
+body.layla-zaid-invitation .countdown-card__value { color: #5b493b; font: 500 clamp(1.7rem, 5vw, 2.5rem) "Cormorant Garamond", serif; }
+body.layla-zaid-invitation .countdown-card__label { color: #81705d; font-size: .69rem; letter-spacing: .07em; text-transform: uppercase; }
+body.layla-zaid-invitation .venue-illustration-wrap { width: min(100%, 680px); margin: 0 auto 20px; overflow: hidden; }
+body.layla-zaid-invitation .venue-illustration { display: block; width: 100%; max-height: 320px; object-fit: contain; }
+body.layla-zaid-invitation .details-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 220px), 1fr)); gap: 18px; }
+body.layla-zaid-invitation .detail-card { padding: 18px; border-top: 1px solid #d9c7a7; text-align: center; }
+body.layla-zaid-invitation .detail-card__icon { color: #8b7153; }
+body.layla-zaid-invitation .detail-card__title { margin: 7px 0; color: #766047; font: 600 .77rem "Lora", Georgia, serif; letter-spacing: .14em; text-transform: uppercase; }
+body.layla-zaid-invitation .detail-card__english { margin: 0; color: #574a3e; font: 1rem/1.65 "Lora", Georgia, serif; }
+body.layla-zaid-invitation .venue-actions { display: flex; flex-wrap: wrap; justify-content: center; gap: 10px; margin: 24px auto; }
+body.layla-zaid-invitation .venue-map-card { max-width: 640px; margin: 24px auto 0; padding: 16px; border: 1px solid #d6c4a4; border-radius: 6px; background: #f8f3e9; }
+body.layla-zaid-invitation .venue-map-card__venue { margin: 0 0 10px; font: 500 1.2rem "Cormorant Garamond", serif; }
+body.layla-zaid-invitation .venue-map-preview { height: clamp(190px, 38vw, 290px); overflow: hidden; border: 1px solid #c9ae82; border-radius: 6px; background: #eee7d8; }
+body.layla-zaid-invitation .venue-map-preview iframe { width: 100%; height: 100%; border: 0; pointer-events: none; }
+body.layla-zaid-invitation .venue-map-preview--fallback { display: grid; place-items: center; padding: 18px; color: #766957; background: repeating-linear-gradient(45deg,#f0ebdf,#f0ebdf 16px,#ebe5d8 16px,#ebe5d8 18px); }
+body.layla-zaid-invitation .venue-map-preview--fallback p { max-width: 38ch; margin: 5px auto; }
+body.layla-zaid-invitation .venue-map-card .detail-card__action { margin: 12px auto 0; }
+body.layla-zaid-invitation .schedule-timeline { position: relative; display: grid; gap: 0; max-width: 620px; margin: 0 auto; padding: 0; list-style: none; text-align: start; }
+body.layla-zaid-invitation .schedule-timeline::before { position: absolute; inset-block: 14px 14px; inset-inline-start: 69px; width: 1px; content: ""; background: linear-gradient(#d8c29e,#a98e67,#e2d5bc); }
+body.layla-zaid-invitation .schedule-item { position: relative; display: grid; grid-template-columns: 58px 24px 1fr; align-items: start; gap: 12px; padding: 13px 0; }
+body.layla-zaid-invitation .schedule-item__time { color: #8c7152; font: 600 .82rem "Lora", serif; }
+body.layla-zaid-invitation .schedule-item__marker { z-index: 1; width: 13px; height: 13px; margin: 3px auto 0; border: 2px solid #b49971; border-radius: 50%; background: #fbf8f0; box-shadow: 0 0 0 3px #fbf8f0; }
+body.layla-zaid-invitation .schedule-item h3 { margin: 0; color: #514337; font: 500 1.3rem "Cormorant Garamond", serif; }
+body.layla-zaid-invitation .schedule-item p { margin: 4px 0 0; color: #776957; font: .9rem/1.6 "Lora", serif; }
+body.layla-zaid-invitation .rsvp-card { position: relative; overflow: hidden; }
+body.layla-zaid-invitation .rsvp-pearl { display: block; width: clamp(150px, 28vw, 205px); height: auto; margin: 0 auto 10px; object-fit: contain; animation: pearl-breathe 6s ease-in-out infinite; }
+body.layla-zaid-invitation .firebase-rsvp-status { min-height: 1.5em; color: #776957; }
+body.layla-zaid-invitation .firebase-rsvp-panel, body.layla-zaid-invitation .rsvp-form { max-width: 600px; margin: 0 auto; }
+body.layla-zaid-invitation .rsvp-form__message { display: block; margin: 20px auto; text-align: start; }
+body.layla-zaid-invitation .rsvp-form__message span { display: block; margin-block-end: 7px; color: #6b5947; font-size: .82rem; }
+body.layla-zaid-invitation .rsvp-form__message textarea { width: 100%; min-height: 100px; padding: 12px; border: 1px solid #d1c0a1; border-radius: 4px; color: #514337; background: #fffdf8; font: 1rem/1.55 "Lora", serif; resize: vertical; }
+body.layla-zaid-invitation .rsvp-summary { max-width: 560px; margin-inline: auto; padding: 20px; border: 1px solid #d8c7a9; border-radius: 5px; background: #fffdf7; }
+body.layla-zaid-invitation .rsvp-summary--declined { border-color: #d9c9b8; background: #faf6f0; }
+body.layla-zaid-invitation .rsvp-confirmation-mark { display: grid; width: 44px; height: 44px; place-items: center; margin: 0 auto 10px; border: 1px solid #b99b6e; border-radius: 50%; color: #715b40; animation: confirmation-pop .45s ease-out both; }
+body.layla-zaid-invitation .qd-footer { padding: 22px 10px 10px; color: #897a68; text-align: center; font-size: .75rem; letter-spacing: .08em; }
+body.layla-zaid-invitation .qd-footer a { color: #6f5840; text-underline-offset: 3px; }
+body.layla-zaid-invitation .closing-card { padding-block: 48px; }
+body.layla-zaid-invitation .closing-flourish { display: block; margin-block-start: 16px; color: #ad9167; font-size: 1.5rem; }
+body.layla-zaid-invitation .music-toggle { position: fixed; z-index: 20; inset-inline-start: max(14px,env(safe-area-inset-left)); inset-inline-end: auto; inset-block-start: max(58px,calc(env(safe-area-inset-top) + 48px)); inset-block-end: auto; display: grid; width: 42px; height: 42px; place-items: center; border: 1px solid #bda780; border-radius: 50%; color: #fffaf0; background: var(--mocha); box-shadow: 0 5px 14px #44382b33; cursor: pointer; }
+body.layla-zaid-invitation .sticky-actions { display: none !important; }
+body.layla-zaid-invitation .music-toggle__record-wrap { display: grid; width: 100%; height: 100%; flex: 0 0 100%; place-items: center; border-radius: 50%; box-shadow: none; }
+body.layla-zaid-invitation .music-toggle__record { display: inline; width: auto; height: auto; object-fit: initial; border-radius: 0; transform: none; filter: none; font-size: 1.25rem; }
+body.layla-zaid-invitation .sticky-actions { position: fixed; z-index: 19; inset-inline: 50% auto; inset-block-end: max(14px,env(safe-area-inset-bottom)); transform: translateX(-50%); padding: 6px; border: 1px solid #d4c3a3; border-radius: 4px; background: #fbf7eef0; box-shadow: 0 4px 15px #4535251e; }
+body.layla-zaid-invitation .sticky-actions .luxury-button { min-height: 38px; padding: 8px 14px; font-size: .72rem; }
+body.layla-zaid-invitation .section.reveal { opacity: 0; transform: translateY(16px); transition: opacity .7s ease, transform .7s ease; transition-delay: var(--reveal-delay,0ms); }
+body.layla-zaid-invitation .section.reveal.is-visible { opacity: 1; transform: none; }
+body.layla-zaid-invitation .schedule-item { opacity: 0; transform: translateY(10px); animation: schedule-appear .5s ease forwards; animation-delay: calc(var(--item-index, 0) * 100ms); }
+body.layla-zaid-invitation .page-hidden .rsvp-pearl, body.layla-zaid-invitation .page-hidden .hero-down { animation-play-state: paused; }
+body.layla-zaid-invitation.page-hidden::before { animation-play-state: paused; }
+body.layla-zaid-invitation .invitation-error { display: grid; min-height: 100svh; place-items: center; padding: 24px; background: var(--paper); }
+body.layla-zaid-invitation .invitation-error__card { max-width: 540px; padding: 36px; border: 1px solid #d6c4a4; background: #fcf8ef; text-align: center; }
+@keyframes layla-arrow { 0%,100% { transform: translateY(0); opacity: .7; } 50% { transform: translateY(5px); opacity: 1; } }
+@keyframes paper-glow { from { opacity: .86; } to { opacity: 1; } }
+@keyframes edge-drift { 0%,100% { translate: 0 0; rotate: -3deg; } 50% { translate: 0 -8px; rotate: 3deg; } }
+@keyframes pearl-breathe { 0%,100% { transform: translateY(0) rotate(-1deg); } 50% { transform: translateY(-5px) rotate(1deg); } }
+@keyframes schedule-appear { to { opacity: 1; transform: none; } }
+@keyframes confirmation-pop { from { opacity: 0; transform: scale(.7); } to { opacity: 1; transform: scale(1); } }
+@media (min-width: 900px) {
+  body.layla-zaid-invitation .hero-paper { min-height: 1120px; padding-inline: 17%; }
+  body.layla-zaid-invitation .hero-paper__content { transform: none; }
+}
+@media (max-width: 600px) {
+  body.layla-zaid-invitation .site-content { padding-inline: 10px; }
+  body.layla-zaid-invitation .site-content > .section { padding-block: 16px; }
+  body.layla-zaid-invitation .hero-paper { min-height: 0; aspect-ratio: 941/1672; padding: 18% 12% 17%; }
+  body.layla-zaid-invitation .hero-paper__content { margin-block-start: 4%; }
+  body.layla-zaid-invitation .hero-names { font-size: clamp(3.4rem, 17vw, 5.5rem); }
+  body.layla-zaid-invitation .hero-names__arabic { font-size: clamp(2.7rem, 13vw, 4rem); }
+  body.layla-zaid-invitation .section-frame { padding: 22px 16px; }
+  body.layla-zaid-invitation .details-grid { grid-template-columns: 1fr; gap: 8px; }
+  body.layla-zaid-invitation .hero-countdown { gap: 3px; }
+  body.layla-zaid-invitation .countdown-card { min-width: 0; padding: 8px 9px; }
+  body.layla-zaid-invitation .countdown-card__label { font-size: .58rem; }
+  body.layla-zaid-invitation .envelope-intro__stage { width: min(calc(100vw - 28px), calc((100svh - 80px) * .5625)); }
+  body.layla-zaid-invitation .sticky-actions { max-width: calc(100vw - 94px); }
+  body.layla-zaid-invitation .invitation-flower { font-size: 22px; opacity: .22; }
+  body.layla-zaid-invitation .invitation-flower--lower { display: none; }
+}
+@media (prefers-reduced-motion: reduce) {
+  body.layla-zaid-invitation *, body.layla-zaid-invitation *::before, body.layla-zaid-invitation *::after { scroll-behavior: auto !important; animation-duration: .01ms !important; animation-iteration-count: 1 !important; transition-duration: .01ms !important; }
+  body.layla-zaid-invitation .section.reveal { opacity: 1; transform: none; }
+  body.layla-zaid-invitation .schedule-item { opacity: 1; transform: none; }
+}
+
+/* Small layout refinements from the mobile invitation review. */
+body.layla-zaid-invitation .hero-paper__content { margin-block-start: 20%; }
+body.layla-zaid-invitation .hero-countdown {
+  display: grid;
+  width: min(100%, 680px);
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: clamp(8px, 2.2vw, 22px);
+  justify-content: stretch;
+}
+body.layla-zaid-invitation .countdown-card {
+  display: grid;
+  min-width: 0;
+  min-height: 76px;
+  align-content: center;
+  justify-items: center;
+  padding: 9px 5px;
+  border: 1px solid #e3d8c5;
+  border-radius: 18px;
+  background: #fffdf780;
+  box-shadow: 0 4px 12px #56432c0a;
+  text-align: center;
+}
+body.layla-zaid-invitation .countdown-card:last-child { border: 1px solid #e3d8c5; }
+body.layla-zaid-invitation .countdown-card__label { text-align: center; }
+body.layla-zaid-invitation .details-grid {
+  width: 100%;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  align-items: stretch;
+}
+body.layla-zaid-invitation .detail-card {
+  display: flex;
+  min-width: 0;
+  min-height: 190px;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 22px 16px;
+  border: 1px solid #dfd1ba;
+  border-radius: 18px 18px 28px 18px;
+  background: #fffdf74d;
+  box-shadow: 0 7px 18px #59472c0a;
+  text-align: center;
+}
+body.layla-zaid-invitation .detail-card__icon { flex: 0 0 48px; margin: 0 auto 12px; }
+body.layla-zaid-invitation .detail-card__title { margin: 0 0 9px; }
+body.layla-zaid-invitation .detail-card__english { overflow-wrap: anywhere; }
+body.layla-zaid-invitation .music-toggle {
+  inset-inline-start: auto;
+  inset-inline-end: max(18px, calc(env(safe-area-inset-right) + 12px));
+  inset-block-start: auto;
+  inset-block-end: max(18px, calc(env(safe-area-inset-bottom) + 12px));
+  width: 52px;
+  height: 52px;
+}
+body.layla-zaid-invitation .music-toggle__record { font-size: 1.45rem; }
+body.layla-zaid-invitation .rsvp-form:has(input[type="radio"]:checked) .rsvp-form__submit:not(:disabled) {
+  animation: rsvp-ready-glow 1.8s ease-in-out infinite;
+  box-shadow: 0 0 0 3px #c7a8762b, 0 0 20px #b38c573d, 0 7px 18px #4c392629;
+}
+@keyframes rsvp-ready-glow {
+  0%, 100% { box-shadow: 0 0 0 2px #c7a87622, 0 0 12px #b38c5730, 0 5px 12px #4c39261a; }
+  50% { box-shadow: 0 0 0 4px #c7a87638, 0 0 24px #b38c5752, 0 7px 18px #4c392629; }
+}
+@media (max-width: 600px) {
+  body.layla-zaid-invitation .envelope-intro {
+    padding: 0;
+    place-items: stretch;
+    background: #f5efe4;
+  }
+  body.layla-zaid-invitation .envelope-intro__stage {
+    width: 100%;
+    max-width: none;
+    height: 100%;
+    aspect-ratio: auto;
+  }
+  body.layla-zaid-invitation .envelope-intro__poster,
+  body.layla-zaid-invitation .envelope-intro__video { object-fit: cover; }
+  body.layla-zaid-invitation .envelope-intro__caption {
+    inset-inline: 8%;
+    inset-block-start: 65%;
+    color: #634d3e;
+    font: italic 500 clamp(1.15rem, 4.6vw, 1.45rem)/1.25 "Cormorant Garamond", Georgia, serif;
+    letter-spacing: .075em;
+    text-shadow: 0 1px 4px #fff9ed;
+  }
+  body.layla-zaid-invitation .layla-language-toggle {
+    inset-block-start: max(12px, env(safe-area-inset-top));
+    inset-inline-end: max(12px, env(safe-area-inset-right));
+  }
+  body.layla-zaid-invitation .hero-paper__content { margin-block-start: 20%; }
+  body.layla-zaid-invitation .rsvp-pearl { width: clamp(150px, 38vw, 190px); margin-block: 2px 12px; }
+  body.layla-zaid-invitation .hero-countdown { gap: 7px; }
+  body.layla-zaid-invitation .countdown-card { min-height: 70px; padding-inline: 3px; border-radius: 14px; }
+  body.layla-zaid-invitation .countdown-card__label { font-size: clamp(.52rem, 2.5vw, .65rem); letter-spacing: .04em; }
+  body.layla-zaid-invitation .details-grid {
+    display: flex;
+    gap: 12px;
+    overflow-x: auto;
+    padding: 2px 2px 14px;
+    scroll-snap-type: x mandatory;
+    scroll-padding-inline: 2px;
+    overscroll-behavior-inline: contain;
+    scrollbar-width: none;
+    -webkit-overflow-scrolling: touch;
+  }
+  body.layla-zaid-invitation .details-grid::-webkit-scrollbar { display: none; }
+  body.layla-zaid-invitation .detail-card {
+    flex: 0 0 88%;
+    min-height: 190px;
+    scroll-snap-align: center;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  body.layla-zaid-invitation .rsvp-form:has(input[type="radio"]:checked) .rsvp-form__submit:not(:disabled) { animation: none; }
+}
+@media (max-width: 600px) {
+  body.layla-zaid-invitation .envelope-intro__stage {
+    width: 100vw;
+    height: 100%;
+    max-width: none;
+    aspect-ratio: auto;
   }
 }

@@ -25,3 +25,16 @@
 .event-information-step[hidden], .event-category-step[hidden] { display:none; }
 .event-information-step > .event-identity[hidden] { display:none; }
 @media(max-width:640px){.event-category-step .event-category-grid{grid-template-columns:minmax(0,1fr);gap:10px}.event-category-step .event-category-card{min-height:0;padding:14px}}
+
+.sample-invitation { display:grid; gap:10px; min-width:0; padding:15px; border:1px solid #e5dac6; border-radius:14px; background:linear-gradient(135deg,#fffdf8,#f7f1e6); }
+.sample-invitation__heading { display:flex; align-items:flex-start; gap:10px; }
+.sample-invitation__seal { display:grid; flex:0 0 28px; width:28px; height:28px; place-items:center; border:1px solid #d9c29b; border-radius:50%; color:#9d7a46; font-size:13px; }
+.sample-invitation__heading h3 { margin:0; color:#594a36; font:600 1.04rem/1.2 Fraunces,serif; }
+.sample-invitation__heading p { margin:4px 0 0; color:var(--muted); font-size:11px; line-height:1.5; }
+.sample-invitation__url { width:100%; min-width:0; padding:9px 10px; border:1px solid #e6dfd2; border-radius:9px; background:#fff; color:#526159; font:11px/1.4 ui-monospace,SFMono-Regular,Consolas,monospace; }
+.sample-invitation__actions { display:grid; grid-template-columns:minmax(0,1fr) auto; gap:8px; }
+.sample-invitation__actions button { min-height:40px; padding:8px 12px; border:1px solid #d9c9ad; border-radius:10px; background:#fff; color:#43584f; font-size:12px; font-weight:800; }
+.sample-invitation__actions button:first-child { border-color:var(--green); background:var(--green); color:#fff; }
+.sample-invitation__actions button:hover { filter:brightness(.97); }
+.sample-invitation__feedback { min-height:1.1em; margin:0; color:#486659; font-size:11px; }
+@media(max-width:640px){ .sample-invitation { padding:13px; } .sample-invitation__url { font-size:10px; } }

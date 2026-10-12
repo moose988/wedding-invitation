@@ -25,9 +25,14 @@ import { eventUsesGuestSides, getDefaultGuestSide, getEventDisplayTitle, isCeleb
 import { createSenderPayload, encodeSenderPayload } from "./sender-codec.js";
 import {
   assignmentsForGuest,
+  defaultTableHeight,
+  defaultTableWidth,
+  generateTableChairs,
+  getContrastingTextColor,
+  normalizeTableShape,
   resolveTableName,
   summarizePartySeating,
-} from "./seating-utils.js";
+} from "./seating-utils.js?v=20261012-seating-refresh-2";
 
 const params = new URLSearchParams(window.location.search);
 const secureSeatingEditorMode = params.get("seatingEditor") === "1";
@@ -788,6 +793,7 @@ const state = {
   plannerZoom: 1,
   plannerViewCenter: null,
   plannerMapWidth: 0,
+  plannerMapHeight: 900,
   mobileSeatingMode: "assign",
   mobileSeatingView: "tables",
   mobileMapOpen: false,
@@ -797,6 +803,7 @@ const state = {
   mobileAssignmentFilter: "unassigned",
   renderedMobileSeatingLayout: null,
   dragState: null,
+  layoutPositionSavePending: false,
   guestFilters: {
     search: "",
     rsvp: "all",
@@ -1814,15 +1821,17 @@ function startListeners() {
     collection(state.services.db, "weddings", state.weddingId, "tables"),
     (snapshot) => {
       if (generation !== state.listenerGeneration) return;
-      state.tables = hydrateTables(
+      const nextTables = hydrateTables(
         uniqueRowsById(snapshot.docs.map((docSnapshot) => ({
           ...docSnapshot.data(),
           id: docSnapshot.id,
         })), "Firestore table"),
       );
+      state.tables = nextTables;
       state.selectedTableId =
         state.selectedTableId || state.tables[0]?.id || "";
       state.loadingTables = false;
+      if (state.layoutPositionSavePending) return;
       renderAll();
       void syncPublicStats();
     },
@@ -2219,8 +2228,12 @@ function refreshPlannerAfterSidebarChange() {
   requestAnimationFrame(() => {
     const viewport = document.getElementById("plannerViewport");
     if (!viewport || state.activeView !== "seating") return;
-    const nextWidth = Math.max(viewport.clientWidth, 820);
+    const nextWidth = getPlannerMapWidth(viewport.clientWidth);
     if (Math.abs(nextWidth - state.plannerMapWidth) >= 2) {
+      if (state.plannerViewCenter && state.plannerMapWidth) {
+        state.plannerViewCenter.x *= nextWidth / state.plannerMapWidth;
+      }
+      state.plannerMapWidth = nextWidth;
       renderActiveView();
       return;
     }
@@ -2616,9 +2629,8 @@ function renderSeatingPage() {
   state.renderedMobileSeatingLayout = mobileLayout;
   if (mobileLayout) {
     const currentViewport = document.getElementById("plannerViewport");
-    state.plannerMapWidth = Math.max(
+    state.plannerMapWidth = getPlannerMapWidth(
       currentViewport?.clientWidth || window.innerWidth - 24,
-      820,
     );
     renderMobileSeatingPage({ selectedTable, selectedHallObject, seatingStats, sideStats, isSaving });
     return;
@@ -2627,7 +2639,7 @@ function renderSeatingPage() {
   const oldViewport = document.getElementById("plannerViewport");
   const viewportWidth = oldViewport?.clientWidth ||
     document.querySelector(".planner-canvas-shell")?.clientWidth || 900;
-  const mapWidth = Math.max(viewportWidth, 820);
+  const mapWidth = getPlannerMapWidth(viewportWidth);
   state.plannerMapWidth = mapWidth;
   if (
     state.activePartyGuestId &&
@@ -2659,7 +2671,7 @@ function renderSeatingPage() {
           <div class="planner-canvas-controls">
             <div class="planner-canvas-controls__actions">
               <div class="planner-zoom-controls" aria-label="Planner zoom controls">
-                ${actionButton("Zoom out", "planner-zoom-out", state.plannerZoom <= 0.7)}
+                ${actionButton("Zoom out", "planner-zoom-out", state.plannerZoom <= 0.25)}
                 <span class="pill" data-zoom-percentage aria-live="polite">${Math.round(state.plannerZoom * 100)}%</span>
                 ${actionButton("Zoom in", "planner-zoom-in", state.plannerZoom >= 1.6)}
                 ${actionButton("Reset view", "planner-zoom-reset", false, "secondary")}
@@ -2670,7 +2682,7 @@ function renderSeatingPage() {
           </div>
           <div class="planner-canvas-viewport" id="plannerViewport" aria-label="Venue map. Drag empty space to pan." tabindex="0">
             <div class="planner-map-extent">
-              <div class="planner-canvas" id="plannerCanvas" style="width:${mapWidth}px;height:720px;--planner-zoom:${state.plannerZoom}">
+              <div class="planner-canvas" id="plannerCanvas" style="width:${mapWidth}px;height:${state.plannerMapHeight}px;--planner-zoom:${state.plannerZoom}">
                 <div class="planner-canvas__floor"></div>
                 ${state.hallObjects.map((item) => renderHallObject(item)).join("")}
                 ${state.tables.length ? state.tables.map((table) => renderPlannerTable(table)).join("") : `<div class="da3wa-empty">No tables yet. Create your first table to start mapping the hall.</div>`}
@@ -2712,7 +2724,13 @@ function renderSeatingPage() {
     ?.addEventListener("pointerdown", handlePlannerPointerDown, {
       once: false,
     });
+  const viewport = document.getElementById("plannerViewport");
+  viewport?.addEventListener("wheel", handlePlannerWheel, { passive: false });
   restorePlannerViewport();
+}
+
+function getPlannerMapWidth(viewportWidth) {
+  return Math.max(Math.round(Math.max(1, viewportWidth) * 1.18), 1000);
 }
 
 function refreshMobileSeatingLayout() {
@@ -2735,8 +2753,8 @@ function renderMobileSeatingPage({ seatingStats, sideStats, isSaving }) {
   const editing = state.mobileSeatingMode === "edit";
   const seatedPeople = state.tables.reduce((sum, table) => sum + getTableAssignments(table.id).length, 0);
   const peopleNeedingSeats = state.guests.reduce((sum, guest) => sum + getGuestRemainingSeats(guest), 0);
-  const controls = `<div class="mobile-seating-map-tools">${actionButton("Zoom out", "planner-zoom-out", state.plannerZoom <= 0.35)}<span class="pill" data-zoom-percentage>${Math.round(state.plannerZoom * 100)}%</span>${actionButton("Zoom in", "planner-zoom-in", state.plannerZoom >= 1.6)}${actionButton("Fit all", "planner-zoom-reset", false, "secondary")}</div>`;
-  const canvas = `<div class="planner-canvas-viewport mobile-seating-map ${editing ? "is-editing" : ""}" id="plannerViewport" aria-label="Venue map" tabindex="0"><div class="planner-map-extent"><div class="planner-canvas" id="plannerCanvas" style="width:${state.plannerMapWidth}px;height:720px;--planner-zoom:${state.plannerZoom}"><div class="planner-canvas__floor"></div>${state.hallObjects.map(renderHallObject).join("")}${state.tables.length ? state.tables.map(renderPlannerTable).join("") : `<div class="da3wa-empty">No tables yet. Edit the floor plan to add one.</div>`}</div></div></div>`;
+  const controls = `<div class="mobile-seating-map-tools">${actionButton("Zoom out", "planner-zoom-out", state.plannerZoom <= 0.25)}<span class="pill" data-zoom-percentage>${Math.round(state.plannerZoom * 100)}%</span>${actionButton("Zoom in", "planner-zoom-in", state.plannerZoom >= 1.6)}${actionButton("Fit all", "planner-zoom-reset", false, "secondary")}</div>`;
+  const canvas = `<div class="planner-canvas-viewport mobile-seating-map ${editing ? "is-editing" : ""}" id="plannerViewport" aria-label="Venue map" tabindex="0"><div class="planner-map-extent"><div class="planner-canvas" id="plannerCanvas" style="width:${state.plannerMapWidth}px;height:${state.plannerMapHeight}px;--planner-zoom:${state.plannerZoom}"><div class="planner-canvas__floor"></div>${state.hallObjects.map(renderHallObject).join("")}${state.tables.length ? state.tables.map(renderPlannerTable).join("") : `<div class="da3wa-empty">No tables yet. Edit the floor plan to add one.</div>`}</div></div></div>`;
   const tables = state.tables.length ? state.tables.map((table) => {
     const occupied = getTableAssignments(table.id).length;
     const capacity = Number(table.seatCount || table.capacity || table.chairs?.length || 0);
@@ -2764,6 +2782,7 @@ function renderMobileSeatingPage({ seatingStats, sideStats, isSaving }) {
     document.getElementById("mobileMapPortal")?.remove();
   }
   if (mobileViewport && (state.mobileMapOpen || state.mobileSeatingMode === "edit")) {
+    mobileViewport.addEventListener("wheel", handlePlannerWheel, { passive: false });
     mobileViewport.addEventListener("touchstart", handleMobileMapTouchStart, { passive: false });
     mobileViewport.addEventListener("touchmove", handleMobileMapTouchMove, { passive: false });
     mobileViewport.addEventListener("touchend", handleMobileMapTouchEnd, { passive: false });
@@ -2774,15 +2793,64 @@ function renderMobileSeatingPage({ seatingStats, sideStats, isSaving }) {
 }
 
 function fitMobilePlannerView() {
+  const fit = calculatePlannerFit();
+  if (!fit) return;
+  state.plannerZoom = fit.zoom;
+  state.plannerViewCenter = fit.center;
+  document.getElementById("plannerCanvas")?.style.setProperty("--planner-zoom", String(fit.zoom));
+  restorePlannerViewport();
+}
+
+function getPlannerContentBounds() {
+  const canvas = document.getElementById("plannerCanvas");
+  if (!canvas) return { minX: 0, minY: 0, maxX: state.plannerMapWidth, maxY: state.plannerMapHeight };
+  const canvasRect = canvas.getBoundingClientRect();
+  const zoom = Math.max(0.001, state.plannerZoom);
+  const nodes = canvas.querySelectorAll(".planner-table, .planner-chair, .hall-object, .planner-floor-marker");
+  const bounds = { minX: Infinity, minY: Infinity, maxX: -Infinity, maxY: -Infinity };
+  nodes.forEach((node) => {
+    const rect = node.getBoundingClientRect();
+    const left = (rect.left - canvasRect.left) / zoom;
+    const top = (rect.top - canvasRect.top) / zoom;
+    bounds.minX = Math.min(bounds.minX, left);
+    bounds.minY = Math.min(bounds.minY, top);
+    bounds.maxX = Math.max(bounds.maxX, left + rect.width / zoom);
+    bounds.maxY = Math.max(bounds.maxY, top + rect.height / zoom);
+  });
+  if (!Number.isFinite(bounds.minX)) return { minX: 0, minY: 0, maxX: state.plannerMapWidth, maxY: state.plannerMapHeight };
+  return bounds;
+}
+
+function calculatePlannerFit() {
   const viewport = document.getElementById("plannerViewport");
-  if (!viewport || !state.plannerMapWidth) return;
-  const canvasHeight = 720;
-  const horizontalPadding = 32;
-  const verticalPadding = state.mobileMapOpen ? 180 : 28;
-  const widthZoom = (viewport.clientWidth - horizontalPadding) / state.plannerMapWidth;
-  const heightZoom = (viewport.clientHeight - verticalPadding) / canvasHeight;
-  state.plannerZoom = clamp(Math.min(widthZoom, heightZoom), 0.35, 1.6);
-  state.plannerViewCenter = { x: state.plannerMapWidth / 2, y: canvasHeight / 2 };
+  if (!viewport || !state.plannerMapWidth || !state.plannerMapHeight) return null;
+  const bounds = getPlannerContentBounds();
+  const margin = 54;
+  const width = Math.max(1, bounds.maxX - bounds.minX + margin * 2);
+  const height = Math.max(1, bounds.maxY - bounds.minY + margin * 2);
+  const zoom = clamp(Math.min((viewport.clientWidth - 20) / width, (viewport.clientHeight - 20) / height), 0.25, 1.6);
+  return { zoom, center: { x: (bounds.minX + bounds.maxX) / 2, y: (bounds.minY + bounds.maxY) / 2 } };
+}
+
+function handlePlannerWheel(event) {
+  const viewport = event.currentTarget;
+  const canvas = document.getElementById("plannerCanvas");
+  if (!viewport || !canvas) return;
+  event.preventDefault();
+  const rect = viewport.getBoundingClientRect();
+  const focalX = (event.clientX - rect.left - (viewport.clientWidth / 2 - state.plannerViewCenter.x * state.plannerZoom)) / state.plannerZoom;
+  const focalY = (event.clientY - rect.top - (viewport.clientHeight / 2 - state.plannerViewCenter.y * state.plannerZoom)) / state.plannerZoom;
+  const wheelDelta = Math.sign(event.deltaY) * Math.min(
+    Math.abs(event.deltaY) * (event.deltaMode === 1 ? 16 : 1),
+    240,
+  );
+  const nextZoom = clamp(state.plannerZoom * Math.exp(-wheelDelta * 0.001), 0.25, 1.6);
+  const offsetX = event.clientX - rect.left - viewport.clientWidth / 2;
+  const offsetY = event.clientY - rect.top - viewport.clientHeight / 2;
+  state.plannerZoom = nextZoom;
+  state.plannerViewCenter = { x: focalX - offsetX / nextZoom, y: focalY - offsetY / nextZoom };
+  canvas.style.setProperty("--planner-zoom", String(nextZoom));
+  document.querySelectorAll("[data-zoom-percentage]").forEach((node) => { node.textContent = `${Math.round(nextZoom * 100)}%`; });
   restorePlannerViewport();
 }
 
@@ -2802,7 +2870,7 @@ function handleMobileMapTouchStart(event) {
     startY: event.touches[0].clientY,
     lastX: event.touches[0].clientX,
     lastY: event.touches[0].clientY,
-    center: { ...(state.plannerViewCenter || { x: state.plannerMapWidth / 2, y: 360 }) },
+    center: { ...(state.plannerViewCenter || { x: state.plannerMapWidth / 2, y: state.plannerMapHeight / 2 }) },
     zoom: state.plannerZoom,
     distance: mobileTouchDistance(event.touches),
     moved: false,
@@ -2833,7 +2901,7 @@ function handleMobileMapTouchMove(event) {
     }
     const distance = mobileTouchDistance(event.touches);
     if (gesture.distance > 0 && distance > 0) {
-      const nextZoom = clamp(gesture.zoom * distance / gesture.distance, 0.35, 1.6);
+    const nextZoom = clamp(gesture.zoom * distance / gesture.distance, 0.25, 1.6);
       const midpointX = (event.touches[0].clientX + event.touches[1].clientX) / 2 - gesture.rect.left;
       const midpointY = (event.touches[0].clientY + event.touches[1].clientY) / 2 - gesture.rect.top;
       const focalX = gesture.center.x + (midpointX - viewport.clientWidth / 2) / gesture.zoom;
@@ -2881,13 +2949,42 @@ function restorePlannerViewport() {
   const viewport = document.getElementById("plannerViewport");
   const canvas = document.getElementById("plannerCanvas");
   if (!viewport || !canvas) return;
-  const center = state.plannerViewCenter || {
-    x: state.plannerMapWidth / 2,
-    y: Math.min(360, viewport.clientHeight / (2 * state.plannerZoom)),
+  if (!state.plannerViewCenter) {
+    const fit = calculatePlannerFit();
+    if (fit) {
+      state.plannerZoom = fit.zoom;
+      canvas.style.setProperty("--planner-zoom", String(fit.zoom));
+      state.plannerViewCenter = fit.center;
+    } else {
+      state.plannerViewCenter = { x: state.plannerMapWidth / 2, y: state.plannerMapHeight / 2 };
+    }
+  }
+  const bounds = getPlannerContentBounds();
+  const margin = 42;
+  const halfWidth = viewport.clientWidth / (2 * state.plannerZoom);
+  const halfHeight = viewport.clientHeight / (2 * state.plannerZoom);
+  const minX = bounds.maxX - halfWidth + margin;
+  const maxX = bounds.minX + halfWidth - margin;
+  const minY = bounds.maxY - halfHeight + margin;
+  const maxY = bounds.minY + halfHeight - margin;
+  const panMinX = bounds.minX + halfWidth - margin;
+  const panMaxX = bounds.maxX - halfWidth + margin;
+  const panMinY = bounds.minY + halfHeight - margin;
+  const panMaxY = bounds.maxY - halfHeight + margin;
+  const center = {
+    x: minX > maxX
+      ? (panMinX > panMaxX ? (bounds.minX + bounds.maxX) / 2 : clamp(state.plannerViewCenter.x, panMinX, panMaxX))
+      : clamp(state.plannerViewCenter.x, minX, maxX),
+    y: minY > maxY
+      ? (panMinY > panMaxY ? (bounds.minY + bounds.maxY) / 2 : clamp(state.plannerViewCenter.y, panMinY, panMaxY))
+      : clamp(state.plannerViewCenter.y, minY, maxY),
   };
   state.plannerViewCenter = center;
   canvas.style.left = `${viewport.clientWidth / 2 - center.x * state.plannerZoom}px`;
   canvas.style.top = `${viewport.clientHeight / 2 - center.y * state.plannerZoom}px`;
+  document.querySelectorAll("[data-zoom-percentage]").forEach((node) => {
+    node.textContent = `${Math.round(state.plannerZoom * 100)}%`;
+  });
 }
 
 function renderCheckinPage() {
@@ -3714,14 +3811,15 @@ function renderGuestRsvpSelect(guest) {
 function renderPlannerTable(table) {
   const isSelected = table.id === state.selectedTableId;
   const occupied = getTableAssignments(table.id).length;
-  const width = Number(table.width || defaultWidthForShape(table.shape));
-  const height = Number(table.height || defaultHeightForShape(table.shape));
+  const shape = normalizeTableShape(table.shape);
+  const width = Number(table.width || defaultTableWidth(shape));
+  const height = Number(table.height || defaultTableHeight(shape));
   const transform = `translate(-50%, -50%) rotate(${Number(table.rotation || 0)}deg)`;
-  const shapeClass = `planner-table__surface--${escapeAttribute(table.shape || "round")}`;
+  const shapeClass = `planner-table__surface--${shape}`;
   return `
     <div
-      class="planner-table ${isSelected ? "is-selected" : ""}"
-      style="left:${Number(table.x || 0)}%; top:${Number(table.y || 0)}%; width:${width}px; height:${height}px; transform:${transform};"
+      class="planner-table planner-table--${shape} ${isSelected ? "is-selected" : ""}"
+      style="left:${Number(table.x || 0)}%; top:${Number(table.y || 0)}%; width:${width}px; height:${height}px; transform:${transform}; --table-fill:${escapeAttribute(table.tableColor || plannerPalette.tableColor)}; --table-border:${escapeAttribute(table.borderColor || plannerPalette.borderColor)}; --chair-color:${escapeAttribute(table.chairColor || plannerPalette.chairColor)};"
       data-table-drag-id="${table.id}"
       data-table-id="${table.id}"
       data-action="select-table"
@@ -3731,7 +3829,6 @@ function renderPlannerTable(table) {
         <button
           class="planner-table__surface ${shapeClass}"
           type="button"
-          style="--table-fill:${escapeAttribute(table.tableColor || plannerPalette.tableColor)}; --table-border:${escapeAttribute(table.borderColor || plannerPalette.borderColor)};"
           data-action="select-table"
           data-table-id="${table.id}"
         >
@@ -3753,19 +3850,17 @@ function renderPlannerChair(table, chair) {
   const statusClass = chairStatusClass(chair, guest, assignment);
   const isSelected = state.selectedSeatId === buildSeatKey(table.id, chair.id);
   const isTemporary = isChairTemporarilySelected(table.id, chair.id);
+  const isOccupied = Boolean(assignment);
   const isPartyHighlighted =
     assignment?.guestId && assignment.guestId === state.activePartyGuestId;
-  const label = assignment
-    ? assignment.partyMemberIndex === 0
-      ? getInitials(guest?.fullName) || "M"
-      : `+${assignment.partyMemberIndex}`
-    : String(chair.seatNumber);
+  const label = String(chair.seatNumber);
   return `
     <button
-      class="planner-chair planner-chair--${escapeAttribute(statusClass)} ${isSelected ? "is-selected" : ""} ${isTemporary ? "is-temporary" : ""} ${isPartyHighlighted ? "is-party-highlighted" : ""}"
+      class="planner-chair planner-chair--${escapeAttribute(statusClass)} ${isOccupied ? "is-occupied" : "is-empty"} ${isSelected ? "is-selected" : ""} ${isTemporary ? "is-temporary" : ""} ${isPartyHighlighted ? "is-party-highlighted" : ""}"
       type="button"
-      style="left:${chair.x}%; top:${chair.y}%; --chair-color:${escapeAttribute(resolveChairColor(statusClass, table))};"
+      style="left:${chair.x}%; top:${chair.y}%; --chair-rotation:${Number(chair.rotation || 0)}deg; --chair-color:${escapeAttribute(resolveChairColor(statusClass, table))}; --chair-ink:${getContrastingTextColor(resolveChairColor(statusClass, table))};"
       title="${escapeAttribute(assignment ? `${partyMemberLabel(guest, assignment.partyMemberIndex)} - ${table.name} chair ${chair.seatNumber}` : `Available chair ${chair.seatNumber}`)}"
+      aria-label="${escapeAttribute(assignment ? `Chair ${chair.seatNumber}, assigned to ${partyMemberLabel(guest, assignment.partyMemberIndex)}` : `Available chair ${chair.seatNumber}`)}"
       data-action="select-seat"
       data-table-id="${table.id}"
       data-chair-id="${chair.id}"
@@ -4753,6 +4848,7 @@ async function handleAction(action, dataset, event = null) {
       state.mobileSavedScrollY = window.scrollY;
       state.mobileMapOpen = true;
       state.plannerViewCenter = null;
+      state.plannerZoom = Math.max(state.plannerZoom, 0.55);
       document.body.classList.add("is-mobile-map-open");
       renderActiveView();
       document.querySelector(".mobile-map-overlay [data-action='mobile-close-map']")?.focus({ preventScroll: true });
@@ -4786,14 +4882,14 @@ async function handleAction(action, dataset, event = null) {
       loadSeatingTestGuests();
       return;
     case "select-table":
-      state.selectedTableId = dataset.tableId;
-      state.selectedHallObjectId = "";
-      state.activePartyGuestId = "";
       if (window.matchMedia("(max-width: 700px)").matches && state.mobileSeatingMode !== "edit") {
+        state.selectedTableId = dataset.tableId;
+        state.selectedHallObjectId = "";
+        state.activePartyGuestId = "";
         openMobileTableSeatBrowser(dataset.tableId);
         return;
       }
-      renderActiveView();
+      selectPlannerTable(dataset.tableId);
       return;
     case "set-seating-panel-tab":
       if (["guests", "venue"].includes(dataset.tab)) {
@@ -6026,9 +6122,8 @@ function openTableModal(table = null) {
   }
   elements.tableForm.reset();
   elements.tableForm.name.value = table ? resolveTableName(table) : "";
-  elements.tableForm.shape.value = table?.shape || "round";
+  elements.tableForm.shape.value = normalizeTableShape(table?.shape);
   elements.tableForm.seatCount.value = table?.seatCount || table?.capacity || 8;
-  elements.tableForm.floorZone.value = table?.floorZone || "";
   elements.tableForm.tableColor.value =
     table?.tableColor || plannerPalette.tableColor;
   elements.tableForm.borderColor.value =
@@ -6093,12 +6188,15 @@ async function saveTable(event) {
     capacity: Number(elements.tableForm.seatCount.value || 0),
     seatCount: Number(elements.tableForm.seatCount.value || 0),
     shape: elements.tableForm.shape.value,
-    floorZone: elements.tableForm.floorZone.value.trim(),
+    ...(existingTable && Object.prototype.hasOwnProperty.call(existingTable, "floorZone")
+      ? { floorZone: existingTable.floorZone }
+      : {}),
     tableColor: elements.tableForm.tableColor.value,
     borderColor: elements.tableForm.borderColor.value,
     chairColor: elements.tableForm.chairColor.value,
     width: Number(elements.tableForm.width.value || 180),
     height: Number(elements.tableForm.height.value || 180),
+    rotation: Number(existingTable?.rotation || 0),
     x: Number(existingTable?.x ?? 20),
     y: Number(existingTable?.y ?? 20),
     chairs: existingTable?.chairs || [],
@@ -6480,22 +6578,13 @@ async function deleteTable(tableId) {
 }
 
 function setPlannerZoom(nextZoom) {
-  const minimumZoom = window.matchMedia("(max-width: 700px)").matches ? 0.35 : 0.7;
+  const minimumZoom = 0.25;
   state.plannerZoom = clamp(nextZoom, minimumZoom, 1.6);
   renderActiveView();
 }
 
 function resetPlannerView() {
-  if (window.matchMedia("(max-width: 700px)").matches) {
-    state.plannerViewCenter = null;
-    renderActiveView();
-    return;
-  }
-  state.plannerZoom = 1;
-  state.plannerViewCenter = {
-    x: state.plannerMapWidth / 2,
-    y: 360,
-  };
+  state.plannerViewCenter = null;
   renderActiveView();
 }
 
@@ -6520,6 +6609,33 @@ function loadSeatingTestGuests() {
   persistDemoDashboardState();
   renderAll();
   showToast("Loaded 12 unassigned seating test guests.", "success");
+}
+
+function selectPlannerTable(tableId) {
+  if (!state.tables.some((table) => table.id === tableId)) return;
+  const changed = state.selectedTableId !== tableId || Boolean(state.selectedHallObjectId || state.activePartyGuestId);
+  state.selectedTableId = tableId;
+  state.selectedHallObjectId = "";
+  state.activePartyGuestId = "";
+  if (!changed) return;
+  if (window.matchMedia("(max-width: 700px)").matches) {
+    renderActiveView();
+    return;
+  }
+
+  document.querySelectorAll(".planner-table[data-table-id]").forEach((node) => {
+    node.classList.toggle("is-selected", node.dataset.tableId === tableId);
+  });
+  document.querySelectorAll(".planner-table-list__button[data-table-id]").forEach((node) => {
+    const selected = node.dataset.tableId === tableId;
+    node.classList.toggle("is-selected", selected);
+    node.setAttribute("aria-pressed", String(selected));
+  });
+  const table = state.tables.find((item) => item.id === tableId);
+  const header = document.querySelector(".seating-side-panel__header");
+  if (header) header.innerHTML = renderTableInspector(table);
+  const body = document.querySelector(".seating-side-panel__body");
+  if (body && state.seatingPanelTab === "guests") body.innerHTML = renderSeatingGuestsTab(table);
 }
 
 function handlePlannerPointerDown(event) {
@@ -6596,11 +6712,8 @@ function handlePlannerPointerDown(event) {
     return;
   }
 
-  state.selectedTableId = tableId;
-  state.selectedHallObjectId = "";
-  state.activePartyGuestId = "";
+  selectPlannerTable(tableId);
   if (!canManageSeatingLayout()) {
-    renderActiveView();
     return;
   }
   state.dragState = {
@@ -6661,22 +6774,29 @@ function handlePlannerPointerMove(event) {
     isHallObject ? 5 : 12,
     isHallObject ? 95 : 88,
   );
-  if (isHallObject) {
-    state.hallObjects = state.hallObjects.map((item) =>
-      item.id === state.dragState.objectId
-        ? { ...item, x: nextX, y: nextY }
-        : item,
-    );
-  } else {
-    state.tables = state.tables.map((table) =>
-      table.id === state.dragState.tableId
-        ? { ...table, x: nextX, y: nextY }
-        : table,
-    );
+  const drag = state.dragState;
+  drag.pendingX = nextX;
+  drag.pendingY = nextY;
+  if (drag.frameId) return;
+  drag.frameId = requestAnimationFrame(() => {
+    if (state.dragState !== drag) return;
+    drag.frameId = 0;
+    applyPlannerDragPosition(drag);
+  });
+}
+
+function applyPlannerDragPosition(drag) {
+  if (!Number.isFinite(drag.pendingX) || !Number.isFinite(drag.pendingY)) return;
+  if (drag.type === "hall-object") {
+    const item = state.hallObjects.find((row) => row.id === drag.objectId);
+    if (item) { item.x = drag.pendingX; item.y = drag.pendingY; }
+  } else if (drag.type === "table") {
+    const table = state.tables.find((row) => row.id === drag.tableId);
+    if (table) { table.x = drag.pendingX; table.y = drag.pendingY; }
   }
-  if (state.dragState.node?.isConnected) {
-    state.dragState.node.style.left = `${nextX}%`;
-    state.dragState.node.style.top = `${nextY}%`;
+  if (drag.node?.isConnected) {
+    drag.node.style.left = `${drag.pendingX}%`;
+    drag.node.style.top = `${drag.pendingY}%`;
   }
 }
 
@@ -6687,6 +6807,12 @@ async function handlePlannerPointerUp(event) {
 
   if (event?.pointerId != null && state.dragState.pointerId !== event.pointerId) return;
 
+  const drag = state.dragState;
+  if (drag.frameId) {
+    cancelAnimationFrame(drag.frameId);
+    drag.frameId = 0;
+    applyPlannerDragPosition(drag);
+  }
   const { type, tableId, objectId, moved, originalX, originalY, pointerId, node } =
     state.dragState;
   state.dragState = null;
@@ -6738,25 +6864,23 @@ async function handlePlannerPointerUp(event) {
     (Math.abs(Number(table.x || 0) - originalX) < 0.01 &&
       Math.abs(Number(table.y || 0) - originalY) < 0.01)
   ) {
-    renderActiveView();
     return;
   }
 
   if (state.mode === "demo") {
     persistDemoDashboardState();
-    renderActiveView();
     return;
   }
 
   if (!canManageSeatingLayout()) {
-    state.tables = state.tables.map((item) =>
-      item.id === tableId ? { ...item, x: originalX, y: originalY } : item,
-    );
-    renderActiveView();
+    table.x = originalX;
+    table.y = originalY;
+    if (node?.isConnected) { node.style.left = `${originalX}%`; node.style.top = `${originalY}%`; }
     showToast("Your role does not allow table layout edits.", "error");
     return;
   }
 
+  state.layoutPositionSavePending = true;
   setSaveState("saving");
   try {
     await updateDoc(
@@ -6768,11 +6892,15 @@ async function handlePlannerPointerUp(event) {
       },
     );
     setSaveState("saved");
-    renderActiveView();
   } catch (error) {
     console.error(error);
+    table.x = originalX;
+    table.y = originalY;
+    if (node?.isConnected) { node.style.left = `${originalX}%`; node.style.top = `${originalY}%`; }
     setSaveState("saved");
-    renderActiveView();
+    showToast("Table position could not be saved. Its original position was restored.", "error");
+  } finally {
+    state.layoutPositionSavePending = false;
   }
 }
 
@@ -8270,11 +8398,12 @@ function findGuestAssignmentForChair(table, chair, guests = state.guests) {
 
 function createPlannerTable(table) {
   const tableId = table.id || createId("table");
+  const shape = normalizeTableShape(table.shape);
   const seatCount = Number(table.seatCount || table.capacity || 8);
-  const width = Number(table.width || defaultWidthForShape(table.shape));
-  const height = Number(table.height || defaultHeightForShape(table.shape));
-  const chairs = generateChairs(
-    table.shape || "round",
+  const width = Number(table.width || defaultTableWidth(shape));
+  const height = Number(table.height || defaultTableHeight(shape));
+  const chairs = generateTableChairs(
+    shape,
     seatCount,
     width,
     height,
@@ -8287,8 +8416,8 @@ function createPlannerTable(table) {
     name: resolveTableName(table, "New Table"),
     capacity: seatCount,
     seatCount,
-    shape: table.shape || "round",
-    floorZone: table.floorZone || "Grand Hall",
+    shape,
+    ...(Object.prototype.hasOwnProperty.call(table, "floorZone") ? { floorZone: table.floorZone } : {}),
     x: Number(table.x ?? 20),
     y: Number(table.y ?? 20),
     width,
@@ -8301,91 +8430,6 @@ function createPlannerTable(table) {
     guestIds: table.guestIds || [],
     locked: Boolean(table.locked),
   };
-}
-
-function generateChairs(
-  shape,
-  seatCount,
-  width,
-  height,
-  previousChairs,
-  tableId = "table",
-) {
-  const existing = Array.isArray(previousChairs) ? previousChairs : [];
-  const positions = buildChairPositions(shape, seatCount, width, height);
-  return positions.map((position, index) => {
-    const previous =
-      existing[index] ||
-      existing.find((chair) => Number(chair.seatNumber) === index + 1) ||
-      {};
-    return {
-      // Legacy table documents did not store chair IDs.  IDs must be stable
-      // across every hydration so the chair selected in the UI is the same
-      // chair the live transaction validates and writes.
-      id: previous.id || `${tableId}-chair-${index + 1}`,
-      seatNumber: index + 1,
-      guestId: previous.guestId || "",
-      assignment: previous.assignment || null,
-      status: previous.status || "available",
-      x: position.x,
-      y: position.y,
-      notes: previous.notes || "",
-      vip: Boolean(previous.vip),
-    };
-  });
-}
-
-function buildChairPositions(shape, seatCount) {
-  if (shape === "round") {
-    return Array.from({ length: seatCount }, (_, index) => {
-      const angle = -Math.PI / 2 + (index / seatCount) * Math.PI * 2;
-      return {
-        x: 50 + Math.cos(angle) * 42,
-        y: 50 + Math.sin(angle) * 42,
-      };
-    });
-  }
-
-  if (shape === "horseshoe" || shape === "u-shape" || shape === "open-u") {
-    const spread = Math.max(seatCount, 6);
-    return Array.from({ length: seatCount }, (_, index) => {
-      const angle = Math.PI + (index / Math.max(1, spread - 1)) * Math.PI;
-      return {
-        x: 50 + Math.cos(angle) * 42,
-        y: 58 + Math.sin(angle) * 34,
-      };
-    });
-  }
-
-  const sides = distributePerimeterSeats(seatCount);
-  const points = [];
-  const pushRange = (count, x1, y1, x2, y2) => {
-    for (let i = 0; i < count; i += 1) {
-      const t = count === 1 ? 0.5 : i / (count - 1);
-      points.push({ x: x1 + (x2 - x1) * t, y: y1 + (y2 - y1) * t });
-    }
-  };
-  pushRange(sides.top, 24, 8, 76, 8);
-  pushRange(sides.right, 92, 20, 92, 80);
-  pushRange(sides.bottom, 76, 92, 24, 92);
-  pushRange(sides.left, 8, 80, 8, 20);
-  return points.slice(0, seatCount);
-}
-
-function distributePerimeterSeats(seatCount) {
-  const base = Math.floor(seatCount / 4);
-  let remainder = seatCount % 4;
-  const result = { top: base, right: base, bottom: base, left: base };
-  ["top", "right", "bottom", "left"].forEach((key) => {
-    if (remainder > 0) {
-      result[key] += 1;
-      remainder -= 1;
-    }
-  });
-  Object.keys(result).forEach((key) => {
-    result[key] = Math.max(result[key], 1);
-  });
-  return result;
 }
 
 function getTableGuests(tableId) {
@@ -8512,18 +8556,7 @@ function buildSeatKey(tableId, chairId) {
 }
 
 function resolveChairColor(status, table) {
-  switch (status) {
-    case "assigned":
-      return "#2E6D61";
-    case "vip":
-      return "#B89156";
-    case "warning":
-      return "#BE8741";
-    case "conflict":
-      return "#B25B54";
-    default:
-      return "#F8FAF6";
-  }
+  return table?.chairColor || plannerPalette.chairColor;
 }
 
 function createHallObjects() {
@@ -8542,16 +8575,19 @@ function createHallObjects() {
 function handlePlannerPointerCancel(event) {
   if (!state.dragState || state.dragState.pointerId !== event.pointerId) return;
   const dragState = state.dragState;
+  if (dragState.frameId) cancelAnimationFrame(dragState.frameId);
   if (dragState.type === "pan") {
     state.plannerViewCenter = dragState.startCenter;
     restorePlannerViewport();
     dragState.node?.classList.remove("is-panning");
     document.body.classList.remove("is-planner-panning");
   } else if (dragState.type === "table") {
-    state.tables = state.tables.map((table) => table.id === dragState.tableId
-      ? { ...table, x: dragState.originalX, y: dragState.originalY }
-      : table);
-    renderActiveView();
+    const table = state.tables.find((item) => item.id === dragState.tableId);
+    if (table) { table.x = dragState.originalX; table.y = dragState.originalY; }
+    if (dragState.node?.isConnected) {
+      dragState.node.style.left = `${dragState.originalX}%`;
+      dragState.node.style.top = `${dragState.originalY}%`;
+    }
   } else if (dragState.type === "hall-object") {
     state.hallObjects = state.hallObjects.map((item) => item.id === dragState.objectId
       ? { ...item, x: dragState.originalX, y: dragState.originalY }
@@ -8814,37 +8850,11 @@ function materializeDemoPayload(payload, existingGuest = null) {
 }
 
 function defaultWidthForShape(shape) {
-  switch (shape) {
-    case "rectangle":
-    case "conference":
-    case "long-banquet":
-      return 230;
-    case "horseshoe":
-    case "u-shape":
-    case "open-u":
-      return 220;
-    case "square":
-      return 170;
-    default:
-      return 180;
-  }
+  return defaultTableWidth(shape);
 }
 
 function defaultHeightForShape(shape) {
-  switch (shape) {
-    case "rectangle":
-    case "conference":
-    case "long-banquet":
-      return 140;
-    case "horseshoe":
-    case "u-shape":
-    case "open-u":
-      return 170;
-    case "square":
-      return 170;
-    default:
-      return 180;
-  }
+  return defaultTableHeight(shape);
 }
 
 function prettifyShape(shape) {
@@ -8871,9 +8881,13 @@ function signedInUserName() {
 
 function setSaveState(value) {
   state.saveState = value;
-  if (state.activeView === "seating") {
-    renderActiveView();
-  }
+  const saving = value === "saving";
+  document.querySelectorAll(".planner-save-status").forEach((status) => {
+    status.classList.toggle("is-saving", saving);
+    status.classList.toggle("is-saved", !saving);
+    status.setAttribute("aria-label", saving ? "Saving seating changes" : "All seating changes saved");
+    status.innerHTML = `<span aria-hidden="true">${saving ? "↻" : "✓"}</span>${saving ? "Saving…" : "Saved"}`;
+  });
 }
 
 async function copyText(text) {

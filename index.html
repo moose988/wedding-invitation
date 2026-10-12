@@ -15,7 +15,7 @@
       href="https://fonts.googleapis.com/css2?family=Amiri:wght@400;700&family=Cinzel:wght@400;500;600&family=Cormorant+Garamond:wght@400;500;600;700&family=Noto+Naskh+Arabic:wght@400;500;600;700&display=swap"
       rel="stylesheet"
     />
-    <link rel="stylesheet" href="./styles.css" />
+    <link rel="stylesheet" href="./styles.css?v=20261012-seating-refresh-2" />
     <script>
       const homeParams = new URLSearchParams(window.location.search);
       const isHomePath = ["/", "/index.html"].includes(
@@ -25,7 +25,7 @@
         Boolean(homeParams.get("wedding")) || Boolean(homeParams.get("guest"));
       if (
         isHomePath &&
-        !isPersonalInvitation && !hasInvitationParameters &&
+        !hasInvitationParameters &&
         homeParams.get("demo") !== "1"
       ) {
         window.location.replace("./dashboard-login.html");
@@ -214,6 +214,6 @@
 
     <!-- Keeps legacy links stable while routing only registry-mapped weddings. -->
     <script type="module" src="./invitations/router.js"></script>
-    <script type="module" src="./script.js?v=20260929-seating-toggle"></script>
+    <script type="module" src="./script.js?v=20261012-seating-refresh-2"></script>
   </body>
 </html>

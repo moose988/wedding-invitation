@@ -167,7 +167,17 @@ function card(w) {
   const title = getEventDisplayTitle(w);
   const category = isCelebrationEvent(w) ? "Celebration" : "Wedding / Engagement";
   const cardMenu = `<div class="menu-wrap"><button class="card-menu-toggle" data-action="menu" data-id="${w.id}" type="button" aria-label="More actions for ${escape(title)}" aria-expanded="false" aria-controls="menu-${w.id}">⋯</button><div class="action-menu" id="menu-${w.id}" hidden>${ownerActions}</div></div>`;
-  return `<article class="wedding-card"><div class="card-head"><div><p class="workspace-kicker">${escape(w.venueEn || "Venue not set")}</p><h2>${escape(title)}</h2><span class="category-badge">${category}</span></div><div class="card-head__actions"><span class="status-badge status-badge--${escape(w.status || "draft")}">${escape(w.status || "draft")}</span>${cardMenu}</div></div><div class="card-meta">${formatEvent(w.eventDateISO)}${w.location ? ` · ${escape(w.location)}` : ""}</div><div class="card-stats"><span class="stat"><strong>${stats.total || 0}</strong> guests</span><span class="stat"><strong>${stats.confirmed || 0}</strong> confirmed</span><span class="stat"><strong>${stats.pending || 0}</strong> pending</span><span class="stat"><strong>${stats.declined || 0}</strong> declined</span>${active ? `<span class="stat"><strong>${stats.checkedIn || 0}/${stats.total || 0}</strong> checked in</span>` : ""}</div><div class="card-footer"><span>Updated ${formatRelative(w.updatedAt || w.createdAt)}</span></div><div class="card-actions"><button class="open-button" data-action="open" data-id="${w.id}" type="button">Open dashboard</button><button data-action="copy" data-id="${w.id}" type="button" title="Copy invitation base link">Copy link</button></div></article>`;
+  const sampleArea = w.id === "luxury-wedding-demo" ? sampleInvitationControls() : "";
+  return `<article class="wedding-card"><div class="card-head"><div><p class="workspace-kicker">${escape(w.venueEn || "Venue not set")}</p><h2>${escape(title)}</h2><span class="category-badge">${category}</span></div><div class="card-head__actions"><span class="status-badge status-badge--${escape(w.status || "draft")}">${escape(w.status || "draft")}</span>${cardMenu}</div></div><div class="card-meta">${formatEvent(w.eventDateISO)}${w.location ? ` · ${escape(w.location)}` : ""}</div><div class="card-stats"><span class="stat"><strong>${stats.total || 0}</strong> guests</span><span class="stat"><strong>${stats.confirmed || 0}</strong> confirmed</span><span class="stat"><strong>${stats.pending || 0}</strong> pending</span><span class="stat"><strong>${stats.declined || 0}</strong> declined</span>${active ? `<span class="stat"><strong>${stats.checkedIn || 0}/${stats.total || 0}</strong> checked in</span>` : ""}</div>${sampleArea}<div class="card-footer"><span>Updated ${formatRelative(w.updatedAt || w.createdAt)}</span></div><div class="card-actions"><button class="open-button" data-action="open" data-id="${w.id}" type="button">Open dashboard</button><button data-action="copy" data-id="${w.id}" type="button" title="Copy guest invitation link template">Copy guest link</button></div></article>`;
+}
+
+function sampleInvitationUrl() {
+  return new URL("./index.html?wedding=luxury-wedding-demo&sample=1", window.location.href).href;
+}
+
+function sampleInvitationControls() {
+  const url = escape(sampleInvitationUrl());
+  return `<section class="sample-invitation" aria-label="Sample invitation"><div class="sample-invitation__heading"><span class="sample-invitation__seal" aria-hidden="true">✦</span><div><h3>Sample invitation</h3><p>Share the Layla &amp; Zaid design preview. No guest details are included.</p></div></div><label class="sr-only" for="sample-link-luxury-wedding-demo">Public sample invitation URL</label><input id="sample-link-luxury-wedding-demo" class="sample-invitation__url" type="url" readonly value="${url}" /><div class="sample-invitation__actions"><button data-action="copy-sample" data-id="luxury-wedding-demo" type="button">Copy sample link</button><button data-action="preview-sample" data-id="luxury-wedding-demo" type="button">Preview</button></div><p class="sample-invitation__feedback" data-sample-feedback role="status" aria-live="polite"></p></section>`;
 }
 
 async function handleCardAction(event) {
@@ -175,10 +185,37 @@ async function handleCardAction(event) {
   if (button.dataset.action === "menu") { const menu = document.getElementById(`menu-${wedding.id}`); const shouldOpen = menu.hidden; closeActionMenus(menu); menu.hidden = !shouldOpen; button.setAttribute("aria-expanded", String(shouldOpen)); return; }
   if (button.dataset.action === "open") { localStorage.setItem("da3wa:lastDashboardWeddingId", wedding.id); location.href = `./dashboard.html?wedding=${encodeURIComponent(wedding.id)}`; }
   if (button.dataset.action === "copy") { await navigator.clipboard.writeText(new URL(`index.html?wedding=${encodeURIComponent(wedding.id)}&guest={guestToken}`, location.href)); flash("Guest invitation base link copied."); }
+  if (button.dataset.action === "copy-sample" && wedding.id === "luxury-wedding-demo") await copySampleInvitationLink(button);
+  if (button.dataset.action === "preview-sample" && wedding.id === "luxury-wedding-demo") window.open(sampleInvitationUrl(), "_blank", "noopener,noreferrer");
   if (button.dataset.action === "edit") openForm(wedding);
   if (button.dataset.action === "archive") await setArchived(wedding);
   if (button.dataset.action === "duplicate") await duplicate(wedding);
   if (button.dataset.action === "delete") openDelete(wedding);
+}
+
+async function copySampleInvitationLink(button) {
+  const card = button.closest(".wedding-card");
+  const input = card?.querySelector(".sample-invitation__url");
+  const feedback = card?.querySelector("[data-sample-feedback]");
+  if (!input || !feedback) return;
+  try {
+    if (navigator.clipboard?.writeText) {
+      await navigator.clipboard.writeText(input.value);
+    } else {
+      input.focus();
+      input.select();
+      if (!document.execCommand("copy")) throw new Error("Clipboard is unavailable.");
+      input.setSelectionRange(0, 0);
+    }
+    feedback.textContent = "Sample invitation link copied.";
+    button.textContent = "Copied";
+    window.setTimeout(() => { if (button.isConnected) button.textContent = "Copy sample link"; }, 1800);
+  } catch (error) {
+    console.warn("Sample invitation link could not be copied.", error);
+    feedback.textContent = "Copy failed. Select and copy the URL above.";
+    input.focus();
+    input.select();
+  }
 }
 
 function closeActionMenus(except = null) {

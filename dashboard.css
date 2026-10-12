@@ -436,9 +436,7 @@ body.is-seating-view .da3wa-page {
 .share-card:hover,
 .export-card:hover,
 .planner-table-list__button:hover,
-.planner-guest-pill:hover,
-.planner-chair:hover,
-.planner-table:hover {
+.planner-guest-pill:hover {
   transform: translateY(-1px);
 }
 
@@ -2263,19 +2261,14 @@ body.is-seating-view .planner-panel__stack {
 .planner-canvas {
   position: relative;
   min-height: 720px;
-  overflow: hidden;
-  border-radius: 24px;
-  border: 1px solid rgba(205, 187, 151, 0.48);
-  background:
-    radial-gradient(circle, rgba(184, 145, 86, 0.18) 1px, transparent 1px) 0 0 / 20px 20px,
-    linear-gradient(180deg, rgba(255, 251, 245, 0.96), rgba(245, 237, 223, 0.96));
+  overflow: visible;
+  border-radius: 0;
+  border: 0;
+  background: transparent;
 }
 
 .planner-canvas__floor {
-  position: absolute;
-  inset: 18px;
-  border-radius: 20px;
-  border: 1px dashed rgba(184, 145, 86, 0.42);
+  display: none;
 }
 
 .planner-floor-marker,
@@ -2477,9 +2470,9 @@ body.is-seating-view .planner-panel__stack {
 
 .planner-table__surface {
   position: absolute;
-  inset: 14%;
-  width: 72%;
-  height: 72%;
+  inset: 0;
+  width: 100%;
+  height: 100%;
   display: grid;
   place-items: center;
   text-align: center;
@@ -2494,20 +2487,23 @@ body.is-seating-view .planner-panel__stack {
 }
 
 .planner-table__surface--rectangle,
-.planner-table__surface--conference,
-.planner-table__surface--long-banquet {
+.planner-table__surface--square {
   border-radius: 28px;
 }
 
-.planner-table__surface--square {
-  border-radius: 22px;
+.planner-table__surface--u-shape {
+  border-radius: 24px 24px 18px 18px;
+  clip-path: polygon(0 0, 100% 0, 100% 100%, 74% 100%, 74% 34%, 26% 34%, 26% 100%, 0 100%);
+  filter: drop-shadow(0 10px 13px rgba(76, 61, 33, 0.12));
 }
 
-.planner-table__surface--horseshoe,
-.planner-table__surface--u-shape,
-.planner-table__surface--open-u {
-  border-radius: 28px 28px 18px 18px;
-  clip-path: polygon(0 0, 100% 0, 100% 100%, 74% 100%, 74% 34%, 26% 34%, 26% 100%, 0 100%);
+.planner-table__surface--u-shape .planner-table__label {
+  position: absolute;
+  top: 4%;
+  left: 50%;
+  width: 56%;
+  transform: translateX(-50%);
+  padding: 2px;
 }
 
 .planner-table__label {
@@ -2529,15 +2525,15 @@ body.is-seating-view .planner-panel__stack {
 }
 
 .planner-table.is-selected .planner-table__surface {
-  border-color: #1f5a4d;
+  border-color: var(--table-border, var(--da3wa-gold));
   background:
     linear-gradient(180deg, rgba(255, 255, 255, 0.68), rgba(255, 255, 255, 0.12)),
-    #dff0ea;
+    var(--table-fill, var(--da3wa-surface-strong));
   box-shadow:
     inset 0 1px 0 rgba(255, 255, 255, 0.65),
-    0 0 0 4px rgba(31, 90, 77, 0.16),
-    0 0 0 9px rgba(184, 145, 86, 0.18),
-    0 18px 30px rgba(31, 90, 77, 0.22);
+    0 0 0 4px rgba(31, 90, 77, 0.18),
+    0 0 0 9px rgba(184, 145, 86, 0.16),
+    0 18px 30px rgba(31, 90, 77, 0.18);
 }
 
 .planner-table.is-selected .planner-table__label {
@@ -2545,10 +2541,8 @@ body.is-seating-view .planner-panel__stack {
 }
 
 .planner-table.is-selected .planner-chair {
-  border-color: #1f5a4d;
-  box-shadow:
-    0 0 0 3px rgba(31, 90, 77, 0.12),
-    0 8px 16px rgba(31, 90, 77, 0.16);
+  outline: 2px solid rgba(31, 90, 77, 0.48);
+  outline-offset: 3px;
 }
 
 .planner-chair {
@@ -2556,53 +2550,75 @@ body.is-seating-view .planner-panel__stack {
   z-index: 6;
   width: 34px;
   height: 34px;
-  margin-left: -17px;
-  margin-top: -17px;
-  border: 2px solid var(--da3wa-success);
-  border-radius: 50%;
-  background: #f8faf6;
-  color: var(--da3wa-text);
+  margin: 0;
+  transform: translate(-50%, -50%) rotate(var(--chair-rotation, 0deg));
+  border: 2px solid var(--chair-color, var(--da3wa-success));
+  border-radius: 9px;
+  background: var(--chair-color, #f8faf6);
+  color: var(--chair-ink, #fffdf8);
   display: grid;
   place-items: center;
   font-size: 11px;
   font-weight: 800;
   cursor: pointer;
   box-shadow: 0 8px 18px rgba(46, 37, 19, 0.12);
+  transition: none;
+  will-change: auto;
 }
+
+.planner-chair:hover {
+  box-shadow: 0 0 0 3px rgba(211, 155, 59, 0.18), 0 5px 12px rgba(46, 37, 19, 0.16);
+}
+
+.planner-chair::before {
+  position: absolute;
+  content: "";
+  width: 66%;
+  height: 7px;
+  top: -8px;
+  left: 17%;
+  border: 1px solid color-mix(in srgb, var(--chair-color) 78%, #26352f);
+  border-radius: 5px 5px 3px 3px;
+  background: var(--chair-color);
+  box-shadow: 0 2px 3px rgba(46, 37, 19, 0.18);
+  pointer-events: none;
+}
+
+.planner-chair::after { pointer-events: none; }
 
 .planner-chair span {
   display: grid;
   place-items: center;
   width: 100%;
   height: 100%;
+  transform: rotate(calc(0deg - var(--chair-rotation, 0deg)));
 }
 
 .planner-chair--assigned {
   background: var(--chair-color, #2e6d61);
   border-color: #1f5a4d;
-  color: #fff;
 }
 
 .planner-chair--warning {
-  background: #be8741;
-  border-color: #805517;
-  color: #fff;
+  border-color: #93611e;
+  box-shadow: 0 0 0 3px rgba(225, 176, 81, 0.42), 0 8px 18px rgba(46, 37, 19, 0.12);
 }
 
 .planner-chair--conflict {
-  background: #b25b54;
-  border-color: #7c3730;
-  color: #fff;
+  border-color: #a7453c;
+  border-style: dashed;
+  box-shadow: 0 0 0 3px rgba(167, 69, 60, 0.25), 0 8px 18px rgba(46, 37, 19, 0.12);
 }
 
 .planner-chair--vip {
-  background: #b89156;
-  border-color: #87652f;
-  color: #fff;
+  border-color: #a97a36;
+  box-shadow: 0 0 0 3px rgba(184, 145, 86, 0.4), 0 8px 18px rgba(46, 37, 19, 0.12);
 }
 
 .planner-chair.is-selected {
-  box-shadow: 0 0 0 4px rgba(31, 90, 77, 0.16), 0 10px 22px rgba(46, 37, 19, 0.22);
+  outline: 3px solid #1f5a4d;
+  outline-offset: 3px;
+  box-shadow: 0 0 0 1px rgba(255, 253, 248, 0.92), 0 5px 12px rgba(46, 37, 19, 0.16);
 }
 
 .planner-chair.is-temporary {
@@ -3028,6 +3044,21 @@ body.is-seating-view .planner-panel__stack {
   }
 }
 
+/* Seat fill communicates occupancy; table color only colors assigned seats. */
+.planner-chair.is-empty { background:#fff !important; color:#39423d !important; }
+.planner-chair.is-occupied { background:var(--chair-color) !important; color:var(--chair-ink,#fffdf8) !important; border-color:color-mix(in srgb,var(--chair-color) 72%,#24352f); box-shadow:0 0 0 2px color-mix(in srgb,var(--chair-color) 22%,transparent),0 5px 12px rgba(46,37,19,.14); }
+.planner-chair.is-empty::before { background:#fff; border-color:#d9d2c5; }
+.planner-chair.is-occupied::before { background:var(--chair-color); border-color:color-mix(in srgb,var(--chair-color) 78%,#26352f); }
+.planner-chair.is-empty.is-temporary { background:#fff !important; color:#39423d !important; border-color:#c3953e; box-shadow:0 0 0 4px rgba(202,161,86,.24),0 5px 12px rgba(46,37,19,.12); }
+.planner-chair.is-empty.is-selected { background:#fff !important; color:#39423d !important; }
+.planner-chair.is-empty:hover { background:#fff !important; }
+.planner-chair.is-occupied.planner-chair--warning,
+.planner-chair.is-empty.planner-chair--warning { border-color:#93611e; }
+.planner-chair.is-occupied.planner-chair--conflict,
+.planner-chair.is-empty.planner-chair--conflict { border-color:#a7453c; }
+.planner-chair.is-occupied.planner-chair--vip,
+.planner-chair.is-empty.planner-chair--vip { border-color:#a97a36; }
+
 /* Dashboard sidebar controls and map based seating viewport. */
 .da3wa-app,
 .da3wa-main,
@@ -3204,7 +3235,7 @@ body.is-seating-view .planner-save-status {
 
 body.is-seating-view .planner-canvas-shell {
   min-height: 0;
-  padding: 12px;
+  padding: 0;
 }
 
 .planner-canvas-controls {
@@ -3249,6 +3280,16 @@ body.is-seating-view .planner-canvas-shell {
   overflow: hidden;
   overscroll-behavior: contain;
   border-radius: 24px;
+  border: 1px solid rgba(205, 187, 151, 0.62);
+  background-color: #f5efe4;
+  background-image:
+    linear-gradient(90deg, transparent 0, transparent calc(50% - 0.5px), rgba(176, 151, 112, 0.09) 50%, transparent calc(50% + 0.5px)),
+    linear-gradient(0deg, transparent 0, transparent calc(50% - 0.5px), rgba(176, 151, 112, 0.075) 50%, transparent calc(50% + 0.5px)),
+    radial-gradient(ellipse at 18% 14%, rgba(255, 255, 255, 0.74), transparent 56%),
+    radial-gradient(ellipse at 82% 86%, rgba(224, 211, 188, 0.32), transparent 58%),
+    linear-gradient(135deg, #faf7f0, #f0e8d9 54%, #f7f2e9);
+  background-size: 320px 260px, 320px 260px, 100% 100%, 100% 100%, 100% 100%;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.78), inset 0 -18px 32px rgba(166, 139, 97, 0.06);
   scrollbar-color: rgba(184, 145, 86, 0.58) rgba(246, 241, 232, 0.85);
   scrollbar-width: thin;
   cursor: grab;
@@ -3285,7 +3326,7 @@ body.is-seating-view .planner-canvas {
   left: 0;
   top: 0;
   min-height: 0;
-  overflow: hidden;
+  overflow: visible;
   transform: scale(var(--planner-zoom));
   transform-origin: top left;
   touch-action: none;
@@ -3392,11 +3433,7 @@ body.is-seating-view .planner-canvas {
   outline: 4px solid #d39b3b;
   outline-offset: 3px;
   box-shadow: 0 0 0 8px rgba(211, 155, 59, 0.24), 0 12px 22px rgba(58, 42, 15, 0.28);
-  animation: planner-party-pulse 1.2s ease-in-out 2;
-}
-
-@keyframes planner-party-pulse {
-  50% { outline-offset: 7px; }
+  animation: none;
 }
 
 @media (max-width: 1200px) {
@@ -3884,8 +3921,6 @@ body.is-seating-view .planner-canvas {
   .planner-chair {
     width: 30px;
     height: 30px;
-    margin-left: -15px;
-    margin-top: -15px;
     font-size: 10px;
   }
 }
@@ -4056,7 +4091,7 @@ body.is-seating-view .planner-canvas {
   .mobile-seating-empty { padding:20px; text-align:center; border:1px dashed rgba(205,187,151,.7); border-radius:18px; background:rgba(255,253,248,.8); }
   .mobile-seating-empty p { color:var(--da3wa-text-soft); }
   .mobile-seating-canvas-shell { display:grid; gap:10px; min-width:0; min-height:0!important; padding:10px!important; border-radius:18px; }
-  .mobile-seating-map { height:clamp(230px,42vh,340px); min-height:0!important; width:100%; flex:none; border-radius:14px; background:#fcf8ef; touch-action:pan-y; cursor:default; }
+  .mobile-seating-map { height:clamp(230px,42vh,340px); min-height:0!important; width:100%; flex:none; border-radius:14px; background-color:#fcf8ef; touch-action:pan-y; cursor:default; }
   .mobile-seating-map .planner-canvas { touch-action:pan-y; }
   .mobile-seating-map.is-editing,.mobile-seating-map.is-editing .planner-canvas { touch-action:none; }
   .mobile-map-preview-note { color:var(--da3wa-text-soft); font-size:.8rem; }

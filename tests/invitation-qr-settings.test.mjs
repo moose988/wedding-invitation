@@ -85,9 +85,9 @@ test("canvas table and venue selection clear the opposing selection without cent
     dashboard.indexOf('case "edit-dance-floor":'),
   );
 
-  assert.match(pointerDown, /state\.selectedTableId = tableId;\s*state\.selectedHallObjectId = ""/);
+  assert.match(pointerDown, /selectPlannerTable\(tableId\)/);
   assert.match(pointerDown, /state\.selectedHallObjectId = objectId;\s*state\.selectedTableId = ""/);
-  assert.match(clickHandlers, /case "select-table":[\s\S]*?state\.selectedHallObjectId = ""/);
+  assert.match(dashboard, /function selectPlannerTable\(tableId\)[\s\S]*?state\.selectedHallObjectId = ""/);
   assert.match(clickHandlers, /case "select-hall-object":[\s\S]*?state\.selectedTableId = ""/);
   assert.doesNotMatch(clickHandlers, /scrollPlannerToElement/);
   assert.doesNotMatch(dashboard, /function scrollPlannerToElement\(/);

@@ -9,7 +9,8 @@ test("dashboard snapshots replace ID-keyed guest and table collections", async (
   const dashboard = await read("dashboard.js");
 
   assert.match(dashboard, /state\.guests = uniqueRowsById\(snapshot\.docs\.map/);
-  assert.match(dashboard, /state\.tables = hydrateTables\(\s*uniqueRowsById\(snapshot\.docs\.map/s);
+  assert.match(dashboard, /const nextTables = hydrateTables\(\s*uniqueRowsById\(snapshot\.docs\.map/s);
+  assert.match(dashboard, /state\.tables = nextTables;[\s\S]*?if \(state\.layoutPositionSavePending\) return/);
   assert.match(dashboard, /id: docSnapshot\.id/);
   assert.match(dashboard, /const byId = new Map\(\)/);
 });

@@ -12,7 +12,16 @@ import { invitationRefreshIsCurrent, invitationRsvpStorageKey, invitationRsvpVie
 import { buildSatelliteMapEmbedUrl } from "./invitations/shared/map-embed.js";
 import { buildInvitationCalendar } from "./invitations/shared/calendar.js";
 import { renderQrCode } from "./qr.js";
-import { resolveTableName } from "./seating-utils.js";
+import {
+  buildChairPositions,
+  buildSeatAssignmentKeys,
+  defaultTableHeight,
+  defaultTableWidth,
+  getContrastingTextColor,
+  getSeatPlanFrameBounds,
+  normalizeTableShape,
+  resolveTableName,
+} from "./seating-utils.js?v=20261012-seating-refresh-2";
 import { invitationSeatingEnabled } from "./invitations/shared/invitation-data.js";
 import { getEventDisplayTitle, isCelebrationEvent } from "./event-utils.js";
 
@@ -89,8 +98,9 @@ const demoTables = [
 ];
 
 const invitationParams = new URLSearchParams(window.location.search);
-const rsvpStorageKey = invitationRsvpStorageKey(invitationParams.get("wedding"), invitationParams.get("guest"));
 const explicitDemoMode = invitationParams.get("demo") === "1";
+const explicitSampleMode = invitationParams.get("sample") === "1" && invitationParams.get("wedding") === "luxury-wedding-demo";
+const rsvpStorageKey = explicitSampleMode ? "" : invitationRsvpStorageKey(invitationParams.get("wedding"), invitationParams.get("guest"));
 const laylaLanguageStorageKey = "layla-zaid-invitation-language";
 const laylaCopy = {
   heroKicker: { en: "Our Wedding Day", ar: "يوم زفافنا" },
@@ -125,6 +135,10 @@ const laylaCopy = {
   viewLocation: { en: "View Location", ar: "عرض الموقع" },
   openInMaps: { en: "Open in Maps", ar: "افتح في الخرائط" },
   mapUnavailable: { en: "Map preview is unavailable. Use directions for the venue location.", ar: "معاينة الخريطة غير متاحة. استخدم الاتجاهات للوصول إلى موقع القاعة." },
+  sampleInvitation: { en: "Sample invitation", ar: "نموذج دعوة" },
+  sampleNotice: { en: "You’re viewing a sample invitation. Guest names, seating assignments, RSVP, and entrance passes are not included.", ar: "أنتم تشاهدون نموذجاً للدعوة. لا تظهر أسماء الضيوف أو المقاعد المخصصة أو تأكيد الحضور أو بطاقات الدخول." },
+  sampleRsvp: { en: "RSVP is unavailable in this sample invitation.", ar: "تأكيد الحضور غير متاح في نموذج الدعوة." },
+  exploreDetails: { en: "Explore event details", ar: "استكشفوا تفاصيل الحفل" },
   rsvp: { en: "RSVP", ar: "تأكيد الحضور" },
   calendar: { en: "Add to Calendar", ar: "أضف إلى التقويم" },
   attending: { en: "Will you be joining us?", ar: "هل ستشاركوننا؟" },
@@ -152,11 +166,14 @@ const laylaCopy = {
   deadline: { en: "Kindly reply by", ar: "يرجى الرد قبل" },
   dear: { en: "Dear", ar: "عزيزنا" },
   mySeats: { en: "My seats", ar: "مقاعدي" }, fit: { en: "Fit", ar: "ملاءمة" },
+  seatLegend: { en: "Seats assigned to your party are highlighted in gold.", ar: "المقاعد المخصصة لمجموعتكم مميزة باللون الذهبي." },
+  seatsPending: { en: "Your seats have not been assigned yet.", ar: "لم يتم تخصيص مقاعد لكم بعد." },
   yourTable: { en: "Your table", ar: "طاولتك" }, seatingEmpty: { en: "A seating map will appear here once the venue layout is published.", ar: "ستظهر خريطة المقاعد هنا عند نشر مخطط القاعة." },
 };
 
 const state = {
-  mode: explicitDemoMode ? "demo" : "unavailable",
+  mode: explicitSampleMode ? "sample" : (explicitDemoMode ? "demo" : "unavailable"),
+  sampleMode: explicitSampleMode,
   weddingId: "",
   guestToken: "",
   wedding: structuredClone(demoWedding),
@@ -236,6 +253,34 @@ async function boot() {
     elements.weddingAudio.load();
   }
 
+  if (state.sampleMode) {
+    if (weddingId !== "luxury-wedding-demo") {
+      renderInvitationAccessError("This sample invitation is unavailable.");
+      return;
+    }
+    if (!isFirebaseConfigured()) {
+      renderInvitationAccessError("This sample invitation could not load current event details.");
+      return;
+    }
+    try {
+      await initFirebase();
+      state.firebaseReady = true;
+      const wedding = await loadWedding(weddingId);
+      if (!wedding) throw new Error("Event not found.");
+      state.mode = "sample";
+      state.wedding = normaliseWedding(wedding);
+      state.hallObjects = hydrateHallObjects(state.wedding.hallObjects);
+      startSampleWeddingListener(weddingId);
+    } catch (error) {
+      console.error("Public sample invitation could not load.", error);
+      renderInvitationAccessError("This sample invitation could not load current event details.");
+      return;
+    }
+    populateInvitation();
+    setupCountdown();
+    return;
+  }
+
   if (!explicitDemoMode && (!weddingId || !guestToken)) {
     renderInvitationAccessError("This invitation link is incomplete. Please use the personal link shared by the couple.");
     return;
@@ -261,6 +306,24 @@ async function boot() {
 
   populateInvitation();
   setupCountdown();
+}
+
+function startSampleWeddingListener(weddingId) {
+  const db = initFirebase().db;
+  state.unsubWedding?.();
+  state.unsubWedding = onSnapshot(doc(db, "weddings", weddingId), (snapshot) => {
+    if (!snapshot.exists()) {
+      renderInvitationAccessError("This sample invitation is unavailable.");
+      return;
+    }
+    state.wedding = normaliseWedding({ id: snapshot.id, ...snapshot.data() });
+    state.hallObjects = hydrateHallObjects(state.wedding.hallObjects);
+    populateInvitation();
+    setupCountdown();
+  }, (error) => {
+    console.error("Public sample event updates could not be loaded.", error);
+    showToast("Current event details could not be refreshed.", "error");
+  });
 }
 
 function renderInvitationAccessError(message) {
@@ -307,7 +370,7 @@ function getUrlParams() {
   const params = new URLSearchParams(window.location.search);
   return {
     weddingId: params.get("wedding")?.trim() || "",
-    guestToken: params.get("guest")?.trim() || "",
+    guestToken: explicitSampleMode ? "" : (params.get("guest")?.trim() || ""),
   };
 }
 
@@ -434,6 +497,8 @@ function populateInvitation() {
     ? [activeElement.selectionStart, activeElement.selectionEnd]
     : null;
   const wedding = state.wedding;
+  const sampleBanner = document.getElementById("samplePreviewBanner");
+  if (sampleBanner) sampleBanner.hidden = !state.sampleMode;
   const englishNames = isCelebrationEvent(wedding)
     ? getEventDisplayTitle(wedding)
     : `${wedding.brideName} & ${wedding.groomName}`;
@@ -513,6 +578,10 @@ function setLaylaLanguage(language) {
 
 function renderActions() {
   const wedding = state.wedding;
+  if (state.sampleMode) {
+    elements.stickyActions.innerHTML = `<button class="luxury-button luxury-button--primary" type="button" data-scroll-details>${icons.calendar}<span>${laylaText("exploreDetails")}</span></button>`;
+    return;
+  }
   const actionMarkup = `<button class="luxury-button luxury-button--primary" type="button" data-scroll-rsvp>${icons.reply}<span>${isLaylaInvitation() ? laylaText("rsvp") : "RSVP"}</span></button>`;
 
   elements.stickyActions.innerHTML = actionMarkup;
@@ -696,6 +765,10 @@ function safeMapsLink(value) {
 
 function renderRsvp() {
   const mount = document.getElementById("rsvpMount");
+  if (state.sampleMode) {
+    mount.innerHTML = `<p class="sample-preview-notice" role="note" data-layla-text="sampleRsvp">${laylaText("sampleRsvp")}</p>`;
+    return;
+  }
   if (state.mode === "firebase" && state.guest) {
     renderFirebaseRsvp(mount);
     return;
@@ -817,7 +890,7 @@ function renderDemoRsvp(mount) {
 }
 
 function renderSeatSection() {
-  if (state.mode !== "firebase" || !state.guest || !invitationSeatingEnabled(state.wedding)) {
+  if (state.sampleMode || state.mode !== "firebase" || !state.guest || !invitationSeatingEnabled(state.wedding)) {
     elements.seatingSection.hidden = true;
     return;
   }
@@ -885,7 +958,7 @@ function renderSeatingMap(tables, assignments = []) {
 
   state.seatPlanHasFitted = false;
   const assignedTableIds = new Set(assignments.map((assignment) => assignment.tableId));
-  const assignedSeatKeys = new Set(assignments.map((assignment) => `${assignment.tableId}::${assignment.seatNumber}`));
+  const assignedSeatKeys = buildSeatAssignmentKeys(assignments);
   map.innerHTML = `
     <div class="seat-plan-toolbar" aria-label="Seating plan controls">
       <button type="button" data-seat-plan-control="my-seats" ${assignments.length ? "" : "disabled"}>${isLaylaInvitation() ? laylaText("mySeats") : "My seats"}</button>
@@ -900,17 +973,22 @@ function renderSeatingMap(tables, assignments = []) {
         ${tables
     .map((table) => {
       const isAssigned = assignedTableIds.has(table.id);
-      const width = Number(table.width || defaultWidthForShape(table.shape));
-      const height = Number(table.height || defaultHeightForShape(table.shape));
+      const shape = normalizeTableShape(table.shape);
+      const width = Number(table.width || defaultTableWidth(shape));
+      const height = Number(table.height || defaultTableHeight(shape));
+      const positions = buildChairPositions(shape, table.chairs?.length || table.seatCount || table.capacity || 0, width, height);
+      const positionBySeat = new Map(positions.map((position, index) => [String(index + 1), position]));
       return `
         <article
-          class="seat-plan-table ${isAssigned ? "is-assigned" : ""}"
-          style="left:${Number(table.x || 0)}%;top:${Number(table.y || 0)}%;width:${width}px;height:${height}px;"
+          class="seat-plan-table seat-plan-table--${shape} ${isAssigned ? "is-assigned" : ""}"
+          style="left:${Number(table.x || 0)}%;top:${Number(table.y || 0)}%;width:${width}px;height:${height}px;transform:translate(-50%, -50%) rotate(${Number(table.rotation || 0)}deg);--table-fill:${escapeAttribute(table.tableColor || "#f3ebdc")};--table-border:${escapeAttribute(table.borderColor || "#bc9b61")};--chair-color:${escapeAttribute(table.chairColor || "#24554a")};--chair-ink:${getContrastingTextColor(table.chairColor || "#24554a")};"
         >
-          ${(table.chairs || []).map((chair) => renderInvitationChair(table, chair, assignedSeatKeys)).join("")}
-          <div class="seat-plan-table__surface seat-plan-table__surface--${escapeAttribute(table.shape || "round")}">
-            <strong>${escapeHtml(resolveTableName(table))}</strong>
-            ${isAssigned ? `<small>${isLaylaInvitation() ? laylaText("yourTable") : "Your table"}</small>` : ""}
+          ${(table.chairs || []).map((chair, index) => renderInvitationChair(table, chair, assignedSeatKeys, positionBySeat.get(String(chair.seatNumber)) || positions[index])).join("")}
+          <div class="seat-plan-table__surface seat-plan-table__surface--${shape}">
+            <div class="seat-plan-table__label">
+              <strong>${escapeHtml(resolveTableName(table))}</strong>
+              ${isAssigned ? `<small>${isLaylaInvitation() ? laylaText("yourTable") : "Your table"}</small>` : ""}
+            </div>
           </div>
         </article>
       `;
@@ -918,6 +996,7 @@ function renderSeatingMap(tables, assignments = []) {
     .join("")}
       </div>
     </div>
+    <p class="seat-plan-caption" role="status">${assignments.length ? `<span class="seat-plan-caption__swatch" aria-hidden="true"></span>${isLaylaInvitation() ? laylaText("seatLegend") : "Seats assigned to your party are highlighted."}` : (isLaylaInvitation() ? laylaText("seatsPending") : "Your seats have not been assigned yet.")}</p>
   `;
   bindSeatPlanInteractions();
   requestAnimationFrame(() => fitInvitationSeatingPlan(false));
@@ -1012,16 +1091,16 @@ function getTableAuthoritativeSeatAssignments(guest) {
     .sort((a, b) => partyIndexFromKey(a.personKey) - partyIndexFromKey(b.personKey));
 }
 
-function renderInvitationChair(table, chair, assignedSeatKeys) {
+function renderInvitationChair(table, chair, assignedSeatKeys, position = chair) {
   const key = `${table.id}::${chair.seatNumber}`;
   const isAssignedToInvite = assignedSeatKeys.has(key);
-  const assignment = getInvitationSeatAssignments(state.guest).find((item) => item.tableId === table.id && String(item.seatNumber) === String(chair.seatNumber));
   return `
     <span
-      class="seat-plan-chair ${isAssignedToInvite ? "is-yours" : ""} ${chair.assignment || chair.guestId ? "is-occupied" : ""}"
-      style="left:${Number(chair.x || 0)}%;top:${Number(chair.y || 0)}%;"
-      title="${escapeAttribute(isAssignedToInvite ? `${assignment?.label || "Your seat"} - seat ${chair.seatNumber}` : `Seat ${chair.seatNumber}`)}"
-    >${escapeHtml(isAssignedToInvite ? assignment?.label?.replace("Main Guest", "Main").replace("Guest ", "G") || String(chair.seatNumber) : String(chair.seatNumber))}</span>
+      class="seat-plan-chair ${isAssignedToInvite ? "is-yours is-occupied" : "is-empty"}"
+      style="left:${Number(position?.x ?? chair.x ?? 0)}%;top:${Number(position?.y ?? chair.y ?? 0)}%;--chair-rotation:${Number(position?.rotation || 0)}deg;--chair-color:${escapeAttribute(table.chairColor || "#24554a")};--chair-ink:${getContrastingTextColor(table.chairColor || "#24554a")};"
+      title="${escapeAttribute(`${isAssignedToInvite ? "Your party seat" : "Seat"} ${chair.seatNumber}`)}"
+      aria-label="${escapeAttribute(`${isAssignedToInvite ? "Your party seat" : "Seat"} ${chair.seatNumber}`)}"
+    ><span>${escapeHtml(String(chair.seatNumber))}</span></span>
   `;
 }
 
@@ -1163,13 +1242,20 @@ function getInvitationPlanBounds(canvasWidth, canvasHeight) {
     boxes.push({ minX: centerX - width / 2, maxX: centerX + width / 2, minY: centerY - height / 2, maxY: centerY + height / 2 });
   };
   state.tables.forEach((table) => {
-    addBox(
-      (Number(table.x || 50) / 100) * canvasWidth,
-      (Number(table.y || 50) / 100) * canvasHeight,
-      Number(table.width || defaultWidthForShape(table.shape)),
-      Number(table.height || defaultHeightForShape(table.shape)),
-    );
+    if (!table.chairs?.length) {
+      addBox(
+        (Number(table.x ?? 50) / 100) * canvasWidth,
+        (Number(table.y ?? 50) / 100) * canvasHeight,
+        Number(table.width || defaultTableWidth(table.shape)) + 56,
+        Number(table.height || defaultTableHeight(table.shape)) + 56,
+      );
+    }
   });
+  const allChairAssignments = state.tables.flatMap((table) =>
+    (table.chairs || []).map((chair) => ({ tableId: table.id, seatNumber: chair.seatNumber })),
+  );
+  const chairBounds = getSeatPlanFrameBounds(state.tables, allChairAssignments, canvasWidth, canvasHeight, 22);
+  if (chairBounds) boxes.push(chairBounds);
   state.hallObjects.forEach((item) => {
     const isDanceFloor = item.type === "dance-floor";
     addBox(
@@ -1180,24 +1266,27 @@ function getInvitationPlanBounds(canvasWidth, canvasHeight) {
     );
   });
   if (!boxes.length) return { minX: 0, maxX: canvasWidth, minY: 0, maxY: canvasHeight, width: canvasWidth, height: canvasHeight };
-  const minX = Math.max(0, Math.min(...boxes.map((box) => box.minX)) - 48);
-  const maxX = Math.min(canvasWidth, Math.max(...boxes.map((box) => box.maxX)) + 48);
-  const minY = Math.max(0, Math.min(...boxes.map((box) => box.minY)) - 48);
-  const maxY = Math.min(canvasHeight, Math.max(...boxes.map((box) => box.maxY)) + 48);
+  const minX = Math.min(...boxes.map((box) => box.minX)) - 48;
+  const maxX = Math.max(...boxes.map((box) => box.maxX)) + 48;
+  const minY = Math.min(...boxes.map((box) => box.minY)) - 48;
+  const maxY = Math.max(...boxes.map((box) => box.maxY)) + 48;
   return { minX, maxX, minY, maxY, width: maxX - minX, height: maxY - minY };
 }
 
 function centerInvitationSeats() {
   const viewport = document.getElementById("seatPlanViewport");
   const canvas = document.getElementById("seatPlanCanvas");
-  const assignment = getInvitationSeatAssignments(state.guest)[0];
-  const table = state.tables.find((item) => item.id === assignment?.tableId);
-  if (!viewport || !canvas || !table) return;
-  const scale = clamp(Math.max(state.seatPlanTransform.scale, 0.62), 0.45, 1.25);
+  const bounds = getSeatPlanFrameBounds(state.tables, getInvitationSeatAssignments(state.guest));
+  if (!viewport || !canvas || !bounds) return;
+  const boundsWidth = Math.max(1, bounds.maxX - bounds.minX);
+  const boundsHeight = Math.max(1, bounds.maxY - bounds.minY);
+  const scale = clamp(Math.min((viewport.clientWidth - 52) / boundsWidth, (viewport.clientHeight - 72) / boundsHeight), 0.28, 1.25);
+  const centerX = (bounds.minX + bounds.maxX) / 2;
+  const centerY = (bounds.minY + bounds.maxY) / 2;
   state.seatPlanTransform = {
     scale,
-    x: Math.round(viewport.clientWidth / 2 - (Number(table.x || 50) / 100) * 1100 * scale),
-    y: Math.round(viewport.clientHeight / 2 - (Number(table.y || 50) / 100) * 720 * scale),
+    x: Math.round(viewport.clientWidth / 2 - centerX * scale),
+    y: Math.round(viewport.clientHeight / 2 - centerY * scale),
   };
   canvas.style.transform = `translate(${state.seatPlanTransform.x}px, ${state.seatPlanTransform.y}px) scale(${scale})`;
 }
@@ -1227,16 +1316,16 @@ function hydrateHallObjects(savedObjects) {
 }
 
 function defaultWidthForShape(shape) {
-  return ["rectangle", "conference", "long-banquet"].includes(shape) ? 230 : ["horseshoe", "u-shape", "open-u"].includes(shape) ? 220 : 180;
+  return defaultTableWidth(shape);
 }
 
 function defaultHeightForShape(shape) {
-  return ["rectangle", "conference", "long-banquet"].includes(shape) ? 140 : ["horseshoe", "u-shape", "open-u"].includes(shape) ? 180 : 180;
+  return defaultTableHeight(shape);
 }
 
 async function renderGuestQrPass() {
   if (
-    state.mode !== "firebase" ||
+    state.sampleMode || state.mode !== "firebase" ||
     !state.guest ||
     !state.weddingId ||
     !state.guestToken ||
@@ -1263,7 +1352,7 @@ async function renderGuestQrPass() {
 }
 
 async function updateRsvp(status, additionalGuests) {
-  if (state.mode !== "firebase" || state.isRsvpSaving || !state.guest?.guestId || !["confirmed", "declined"].includes(status)) return;
+  if (state.sampleMode || state.mode !== "firebase" || state.isRsvpSaving || !state.guest?.guestId || !["confirmed", "declined"].includes(status)) return;
   state.isRsvpSaving = true;
   state.rsvpSaveError = "";
   const liveForm = document.getElementById("firebaseRsvpForm");
@@ -1318,6 +1407,7 @@ function bindBaseEvents() {
 
     const rsvpTrigger = event.target.closest("[data-scroll-rsvp]");
     if (rsvpTrigger) {
+      if (state.sampleMode) return;
       scrollToRsvp();
     }
 
@@ -1441,6 +1531,7 @@ function waitForIntroAnimation() {
 
 function handleDemoRsvpSubmit(event) {
   event.preventDefault();
+  if (state.sampleMode) return;
   const form = event.currentTarget;
   const statusValue = form.elements.status.value;
   if (!["confirmed", "declined"].includes(statusValue)) return;
@@ -1464,6 +1555,7 @@ function handleDemoRsvpSubmit(event) {
 
 async function handleFirebaseRsvpSubmit(event) {
   event.preventDefault();
+  if (state.sampleMode) return;
   const form = event.currentTarget;
   const statusValue = form.elements.status.value;
   if (!["confirmed", "declined"].includes(statusValue)) return;

@@ -7,7 +7,6 @@ import {
   isFirebaseConfigured,
   query,
   signInWithEmailAndPassword,
-  signOut,
   where,
 } from "./firebase-config.js";
 
@@ -36,7 +35,6 @@ const elements = {
 
 let services = null;
 let isRedirecting = false;
-let sessionResetPromise = Promise.resolve(true);
 
 init();
 
@@ -58,18 +56,6 @@ function init() {
 
   services = initFirebase();
   elements.loginForm?.addEventListener("submit", handleLogin);
-  // Login links should always show the credential form. Firebase persists
-  // sessions across visits, so clear any previous session before accepting
-  // an explicit sign-in instead of redirecting on auth-state restoration.
-  sessionResetPromise = signOut(services.auth).then(
-    () => true,
-    (error) => {
-      console.error("Could not clear the previous dashboard session.", error);
-      elements.authStatus.textContent = "Could not prepare sign-in. Please refresh and try again.";
-      return false;
-    },
-  );
-
   const statusMessage = params.get("message");
   if (statusMessage === "signed-out") {
     elements.authStatus.textContent = "You signed out successfully.";
@@ -101,9 +87,6 @@ async function handleLogin(event) {
   setSubmitLoading(true);
 
   try {
-    if (!(await sessionResetPromise)) {
-      return;
-    }
     const credential = await signInWithEmailAndPassword(services.auth, email, password);
     elements.authStatus.textContent = "Redirecting to dashboard...";
     await redirectAfterLogin(credential.user);

@@ -1,5 +1,6 @@
 import {
   initFirebase,
+  initSeatingEditorFirebase,
   isFirebaseConfigured,
   collection,
   doc,
@@ -11,7 +12,7 @@ import {
   serverTimestamp,
   signInWithCustomToken,
   where,
-} from "./firebase-config.js";
+} from "./firebase-config.js?v=20261013-auth-session-isolation-2";
 import { resolveTableName } from "./seating-utils.js";
 import { getEventDisplayTitle, isCelebrationEvent } from "./event-utils.js";
 
@@ -52,9 +53,12 @@ async function init() {
     }
     if (!isFirebaseConfigured())
       throw new Error("Firebase has not been configured.");
-    const services = initFirebase();
+    const services = editorToken
+      ? initSeatingEditorFirebase()
+      : initFirebase();
     state.services = services;
     if (editorToken) {
+      await services.persistenceReady;
       const exchange = httpsCallable(
         services.functions,
         "exchangeSeatingEditorLink",

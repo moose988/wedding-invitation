@@ -9,7 +9,7 @@ import {
   serverTimestamp,
   signInWithEmailAndPassword,
   updateDoc,
-} from "./firebase-config.js";
+} from "./firebase-config.js?v=20261013-auth-session-isolation-2";
 import { getEventDisplayTitle } from "./event-utils.js";
 
 const params = new URLSearchParams(window.location.search);

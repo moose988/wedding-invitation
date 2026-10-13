@@ -3,11 +3,11 @@ import {
   doc,
   getDoc,
   getDocs,
-  initFirebase,
+  initPublicFirebase,
   isFirebaseConfigured,
   onSnapshot,
-} from "./firebase-config.js";
-import { saveInvitationRsvp } from "./invitations/shared/invitation-data.js";
+} from "./firebase-config.js?v=20261013-auth-session-isolation-2";
+import { saveInvitationRsvp } from "./invitations/shared/invitation-data.js?v=20261013-auth-session-isolation-2";
 import { invitationRefreshIsCurrent, invitationRsvpStorageKey, invitationRsvpView } from "./invitations/shared/rsvp-state.js";
 import { buildSatelliteMapEmbedUrl } from "./invitations/shared/map-embed.js";
 import { buildInvitationCalendar } from "./invitations/shared/calendar.js";
@@ -22,7 +22,7 @@ import {
   normalizeTableShape,
   resolveTableName,
 } from "./seating-utils.js?v=20261012-seating-refresh-2";
-import { invitationSeatingEnabled } from "./invitations/shared/invitation-data.js";
+import { invitationSeatingEnabled } from "./invitations/shared/invitation-data.js?v=20261013-auth-session-isolation-2";
 import { getEventDisplayTitle, isCelebrationEvent } from "./event-utils.js";
 
 const demoWedding = {
@@ -265,7 +265,7 @@ async function boot() {
       return;
     }
     try {
-      await initFirebase();
+      await initPublicFirebase();
       state.firebaseReady = true;
       const wedding = await loadWedding(weddingId);
       if (!wedding) throw new Error("Event not found.");
@@ -290,7 +290,7 @@ async function boot() {
 
   if (weddingId && guestToken && isFirebaseConfigured()) {
     try {
-      await initFirebase();
+      await initPublicFirebase();
       state.firebaseReady = true;
       state.mode = "firebase";
       await loadFirebaseInvitation(weddingId, guestToken);
@@ -311,7 +311,7 @@ async function boot() {
 }
 
 function startSampleWeddingListener(weddingId) {
-  const db = initFirebase().db;
+  const db = initPublicFirebase().db;
   state.unsubWedding?.();
   state.unsubWedding = onSnapshot(doc(db, "weddings", weddingId), (snapshot) => {
     if (!snapshot.exists()) {
@@ -346,7 +346,7 @@ function warmEnvelopeAssets() {
 
 function startFirebaseInvitationListeners(weddingId, guestToken) {
   state.unsubWedding?.(); state.unsubGuest?.(); state.unsubTables?.();
-  const db = initFirebase().db;
+  const db = initPublicFirebase().db;
   const refresh = async () => {
     const requestVersion = ++state.invitationRefreshVersion;
     try {
@@ -403,7 +403,7 @@ async function loadFirebaseInvitation(weddingId, guestToken, requestVersion = ++
 }
 
 async function loadWedding(weddingId) {
-  const snapshot = await getDoc(doc(initFirebase().db, "weddings", weddingId));
+  const snapshot = await getDoc(doc(initPublicFirebase().db, "weddings", weddingId));
   if (!snapshot.exists()) {
     return null;
   }
@@ -412,7 +412,7 @@ async function loadWedding(weddingId) {
 
 async function loadGuestByToken(weddingId, guestToken) {
   const snapshot = await getDoc(
-    doc(initFirebase().db, "weddings", weddingId, "publicGuests", guestToken)
+    doc(initPublicFirebase().db, "weddings", weddingId, "publicGuests", guestToken)
   );
   if (!snapshot.exists()) {
     return null;
@@ -421,7 +421,7 @@ async function loadGuestByToken(weddingId, guestToken) {
 }
 
 async function loadTables(weddingId) {
-  const snapshot = await getDocs(collection(initFirebase().db, "weddings", weddingId, "tables"));
+  const snapshot = await getDocs(collection(initPublicFirebase().db, "weddings", weddingId, "tables"));
   // The Firestore document ID is the table identity used by Seating.  Never
   // let an old embedded `id` field override it on the invitation page.
   return snapshot.docs.map((docSnapshot) => ({ ...docSnapshot.data(), id: docSnapshot.id }));
@@ -470,26 +470,49 @@ function normaliseWedding(wedding) {
 }
 
 function repairCorruptedArabicText(wedding) {
-  const isCorrupted = (value) => typeof value === "string" && value.includes("?");
-  const laylaAndZaid = {
-    brideNameAr: "\u0644\u064a\u0644\u0649",
-    groomNameAr: "\u0632\u0627\u064a\u062f",
-    subtitleAr: "\u0628\u0643\u0644 \u0627\u0644\u062d\u0628 \u0646\u062f\u0639\u0648\u0643\u0645 \u0644\u0645\u0634\u0627\u0631\u0643\u062a\u0646\u0627 \u0641\u0631\u062d\u0629 \u0627\u0644\u0639\u0645\u0631.",
-    invitationMessageAr: "\u0641\u064a \u0645\u0633\u0627\u0621 \u064a\u0641\u064a\u0636 \u062d\u0628\u0627\u064b \u0648\u0637\u0645\u0623\u0646\u064a\u0646\u0629\u060c \u0646\u062a\u0634\u0631\u0641 \u0628\u062d\u0636\u0648\u0631\u0643\u0645 \u0644\u062a\u0634\u0647\u062f\u0648\u0627 \u0645\u0639\u0646\u0627 \u0628\u062f\u0627\u064a\u0629 \u0641\u0635\u0644 \u062c\u062f\u064a\u062f \u0645\u0646 \u0627\u0644\u0639\u0645\u0631.",
-    timeAr: "\u0627\u0644\u0633\u0627\u0639\u0629 \u0668:\u0660\u0660 \u0645\u0633\u0627\u0621\u064b",
-    venueAr: "\u0642\u0627\u0639\u0629 \u0627\u0644\u0644\u0624\u0644\u0624\u0629\u060c \u062f\u0628\u064a",
-    locationAr: "\u062f\u0628\u064a\u060c \u0627\u0644\u0625\u0645\u0627\u0631\u0627\u062a \u0627\u0644\u0639\u0631\u0628\u064a\u0629 \u0627\u0644\u0645\u062a\u062d\u062f\u0629",
-    dressCodeAr: "\u0627\u0644\u0632\u064a \u0627\u0644\u0631\u0633\u0645\u064a \u0628\u0623\u0644\u0648\u0627\u0646 \u0627\u0644\u0634\u0627\u0645\u0628\u0627\u0646\u064a\u0627 \u0648\u0627\u0644\u0645\u0648\u0643\u0627 \u0648\u0627\u0644\u0632\u0645\u0631\u062f\u064a \u0648\u0627\u0644\u062f\u0631\u062c\u0627\u062a \u0627\u0644\u0647\u0627\u062f\u0626\u0629.",
-    closingAr: "\u062d\u0636\u0648\u0631\u0643\u0645 \u064a\u0632\u064a\u062f \u0641\u0631\u062d\u062a\u0646\u0627.",
+  const isCorrupted = (value) => typeof value === "string" && /\?{2,}/.test(value);
+  const sampleDefaults = wedding.id === "luxury-wedding-demo" ? {
+    brideNameAr: demoWedding.brideNameAr,
+    groomNameAr: demoWedding.groomNameAr,
+    subtitleAr: demoWedding.subtitleAr,
+    invitationMessageAr: demoWedding.invitationMessageAr,
+    closingAr: demoWedding.closingAr,
+  } : {};
+  const fallbacks = {
+    brideNameAr: wedding.brideName,
+    groomNameAr: wedding.groomName,
+    eventTitleAr: wedding.eventTitle || wedding.coupleName,
+    coupleNameAr: wedding.coupleName || wedding.eventTitle,
+    subtitleAr: wedding.subtitleEn,
+    invitationMessageAr: wedding.invitationMessageEn,
+    timeAr: wedding.timeEn,
+    venueAr: wedding.venueEn || wedding.venueName,
+    venueNameAr: wedding.venueEn || wedding.venueName,
+    hallAr: wedding.hallEn || wedding.hall || wedding.hallName,
+    locationAr: wedding.locationEn || wedding.location,
+    dressCodeAr: wedding.dressCodeEn,
+    closingAr: wedding.closingEn,
   };
+  const repaired = { ...wedding };
 
-  if (`${wedding.brideName} & ${wedding.groomName}` !== "Layla & Zaid") {
-    return wedding;
+  for (const [key, fallback] of Object.entries(fallbacks)) {
+    if (isCorrupted(repaired[key])) repaired[key] = sampleDefaults[key] || fallback || "";
   }
 
-  return Object.fromEntries(
-    Object.entries(wedding).map(([key, value]) => [key, isCorrupted(value) ? (laylaAndZaid[key] || value) : value])
-  );
+  if (Array.isArray(repaired.schedule)) {
+    repaired.schedule = repaired.schedule.map((item, index) => {
+      if (!item || typeof item !== "object") return item;
+      const sampleItem = wedding.id === "luxury-wedding-demo" ? demoWedding.schedule[index] : null;
+      return {
+        ...item,
+        timeAr: isCorrupted(item.timeAr) ? (sampleItem?.timeAr || item.time || "") : item.timeAr,
+        titleAr: isCorrupted(item.titleAr) ? (sampleItem?.titleAr || item.titleEn || "") : item.titleAr,
+        descriptionAr: isCorrupted(item.descriptionAr) ? (sampleItem?.descriptionAr || item.descriptionEn || "") : item.descriptionAr,
+      };
+    });
+  }
+
+  return repaired;
 }
 
 function populateInvitation() {
@@ -783,8 +806,8 @@ function renderFirebaseRsvp(mount) {
   const view = invitationRsvpView(guest);
   const isLayla = isLaylaInvitation();
   const copy = (key, fallback) => isLayla ? laylaText(key) : fallback;
+  const languageAttributes = isLayla && state.laylaLanguage === "ar" ? 'lang="ar" dir="rtl"' : "";
   if (view.showSummary && !state.isRsvpEditing) {
-    const languageAttributes = isLayla && state.laylaLanguage === "ar" ? 'lang="ar" dir="rtl"' : "";
     const confirmationLabel = view.status === "confirmed" ? copy("rsvpConfirmed", "Response saved") : copy("declinedLabel", "Response saved");
     const confirmationHeading = view.status === "confirmed" ? copy("attendanceConfirmed", "Your attendance is confirmed") : copy("attendanceDeclined", "Your response is recorded as not attending.");
     const confirmationMessage = view.status === "confirmed"
@@ -810,8 +833,7 @@ function renderFirebaseRsvp(mount) {
       <p class="firebase-rsvp-status" role="status" aria-live="polite">${state.isRsvpSaving ? savingCopy : (errorCopy || pendingCopy)}</p>
       <div class="rsvp-phases">
         <section class="rsvp-phase" data-rsvp-step="1">
-          <p class="rsvp-phase__number">01</p>
-          <h3>${isLaylaInvitation() ? laylaText("attending") : "Are you attending?"}</h3>
+          ${isLaylaInvitation() ? "" : '<p class="rsvp-phase__number">01</p><h3>Are you attending?</h3>'}
           <div class="rsvp-choice" role="radiogroup" aria-label="${isLaylaInvitation() ? laylaText("attending") : "Attendance"}">
             <label class="rsvp-answer">
               <input type="radio" name="status" value="confirmed" ${state.rsvpSelection === "confirmed" ? "checked" : ""} required ${state.isRsvpSaving ? "disabled" : ""} />
@@ -870,8 +892,7 @@ function renderDemoRsvp(mount, { sample = false } = {}) {
       <p class="firebase-rsvp-status" role="status" aria-live="polite">${escapeHtml(state.rsvpSaveError || laylaText("pendingResponse"))}</p>
       <div class="rsvp-phases">
         <section class="rsvp-phase" data-rsvp-step="1">
-          <p class="rsvp-phase__number">01</p>
-          <h3>${isLaylaInvitation() ? laylaText("attending") : "Are you attending?"}</h3>
+          ${isLaylaInvitation() ? "" : `<p class="rsvp-phase__number">01</p><h3>Are you attending?</h3>`}
           <div class="rsvp-choice" role="radiogroup" aria-label="${escapeAttribute(laylaText("attending"))}">
             <label class="rsvp-answer">
               <input type="radio" name="status" value="confirmed" ${state.rsvpSelection === "confirmed" ? "checked" : ""} required />
@@ -1425,16 +1446,12 @@ function bindBaseEvents() {
       scrollToRsvp();
     }
 
-    const editButton = event.target.closest("[data-edit-rsvp]");
-    if (editButton) {
+    if (event.target.closest("[data-edit-rsvp], [data-change-rsvp]")) {
+      if (event.target.closest("[data-change-rsvp]")) {
+        state.rsvpSelection = state.sampleMode ? (state.sampleRsvpResponse?.status || "") : "";
+        if (state.sampleMode) state.rsvpMessage = state.sampleRsvpResponse?.message || "";
+      }
       state.isRsvpEditing = true;
-      renderRsvp();
-    }
-
-    if (event.target.closest("[data-change-rsvp]")) {
-      state.isRsvpEditing = true;
-      state.rsvpSelection = state.sampleMode ? (state.sampleRsvpResponse?.status || "") : "";
-      if (state.sampleMode) state.rsvpMessage = state.sampleRsvpResponse?.message || "";
       renderRsvp();
     }
 

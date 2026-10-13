@@ -1,11 +1,10 @@
 import {
-  getApp,
   getApps,
   initializeApp,
 } from "https://www.gstatic.com/firebasejs/10.12.5/firebase-app.js";
 import { getAnalytics, isSupported } from "https://www.gstatic.com/firebasejs/10.12.5/firebase-analytics.js";
 import {
-  browserLocalPersistence,
+  browserSessionPersistence,
   getAuth,
   onAuthStateChanged,
   setPersistence,
@@ -44,6 +43,18 @@ const defaultConfig = {
 };
 
 let cachedServices = null;
+let cachedPublicServices = null;
+let cachedSeatingEditorServices = null;
+
+function getConfiguredApp() {
+  if (!isFirebaseConfigured()) {
+    throw new Error("Firebase config is missing. Add window.FIREBASE_CONFIG in firebase-config.js.");
+  }
+
+  const config = { ...defaultConfig, ...(window.FIREBASE_CONFIG || {}) };
+  const app = getApps().find((candidate) => candidate.name === "[DEFAULT]") || initializeApp(config);
+  return { app, config };
+}
 
 export function isFirebaseConfigured() {
   const config = { ...defaultConfig, ...(window.FIREBASE_CONFIG || {}) };
@@ -55,16 +66,16 @@ export function initFirebase() {
     return cachedServices;
   }
 
-  if (!isFirebaseConfigured()) {
-    throw new Error("Firebase config is missing. Add window.FIREBASE_CONFIG in firebase-config.js.");
-  }
-
-  const config = { ...defaultConfig, ...(window.FIREBASE_CONFIG || {}) };
-  const app = getApps().length ? getApp() : initializeApp(config);
+  const { app, config } = getConfiguredApp();
   const auth = getAuth(app);
   const db = getFirestore(app);
   // Match the backend's default Cloud Functions region explicitly.
   const functions = getFunctions(app, "us-central1");
+
+  // Firebase Auth uses local persistence by default in browser apps. Do not
+  // call setPersistence here: every tab has its own Auth object, and rewriting
+  // shared local persistence from a newly opened tab can replace another tab's
+  // restored user with null.
 
   isSupported()
     .then((supported) => {
@@ -76,12 +87,47 @@ export function initFirebase() {
       console.warn("Firebase Analytics could not be started.", error);
     });
 
-  setPersistence(auth, browserLocalPersistence).catch((error) => {
-    console.warn("Auth persistence could not be enabled.", error);
-  });
-
   cachedServices = { app, auth, db, functions, config };
   return cachedServices;
+}
+
+// Public invitations need Firestore's public-data rules, but must not initialize
+// or mutate the dashboard's shared Auth instance as a side effect.
+export function initPublicFirebase() {
+  if (cachedPublicServices) return cachedPublicServices;
+
+  if (!isFirebaseConfigured()) {
+    throw new Error("Firebase config is missing. Add window.FIREBASE_CONFIG in firebase-config.js.");
+  }
+
+  const config = { ...defaultConfig, ...(window.FIREBASE_CONFIG || {}) };
+  const app = getApps().find((candidate) => candidate.name === "public-invitation") || initializeApp(config, "public-invitation");
+  cachedPublicServices = { app, db: getFirestore(app), config };
+  return cachedPublicServices;
+}
+
+// One-time seating links exchange for a narrowly scoped custom token. Keep that
+// identity on its own named app and tab-scoped persistence so it cannot replace
+// the planner owner's default-app session in another tab.
+export function initSeatingEditorFirebase() {
+  if (cachedSeatingEditorServices) return cachedSeatingEditorServices;
+
+  if (!isFirebaseConfigured()) {
+    throw new Error("Firebase config is missing. Add window.FIREBASE_CONFIG in firebase-config.js.");
+  }
+
+  const config = { ...defaultConfig, ...(window.FIREBASE_CONFIG || {}) };
+  const app = getApps().find((candidate) => candidate.name === "seating-editor") || initializeApp(config, "seating-editor");
+  const auth = getAuth(app);
+  const db = getFirestore(app);
+  const functions = getFunctions(app, "us-central1");
+  const persistenceReady = setPersistence(auth, browserSessionPersistence);
+  persistenceReady.catch((error) => {
+    console.warn("Seating editor session persistence could not be enabled.", error);
+  });
+
+  cachedSeatingEditorServices = { app, auth, db, functions, config, persistenceReady };
+  return cachedSeatingEditorServices;
 }
 
 export {

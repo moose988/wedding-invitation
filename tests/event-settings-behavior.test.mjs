@@ -8,8 +8,9 @@ import {
   eventSettingsFeedback,
   eventSettingsHaveChanges,
   isEventSettingsSaveDisabled,
+  bindEventSettingsFieldTracking,
   updateEventSettingsSaveControl,
-} from "../event-settings-state.mjs";
+} from "../event-settings-state.js";
 
 function fakeButton() {
   return {
@@ -50,6 +51,22 @@ test("Event Settings keeps permission checks distinct from seating-only access",
   assert.equal(canEditEventSettings({ isOwner: false, seatingOnly: true, hasEventDetailsPermission: true }), false);
   assert.equal(canEditEventSettings({ isOwner: false, seatingOnly: false, hasEventDetailsPermission: false }), false);
   assert.equal(isEventSettingsSaveDisabled({ dirty: true, saving: true, canEdit: true }), true);
+  assert.equal(isEventSettingsSaveDisabled({ dirty: false, saving: false, canEdit: true }), true);
+  assert.equal(isEventSettingsSaveDisabled({ dirty: true, saving: false, canEdit: false }), true);
+});
+
+test("form input and change events immediately track editable settings fields", () => {
+  const listeners = new Map();
+  const field = { name: "venueEn" };
+  const form = {
+    addEventListener(type, callback) { listeners.set(type, callback); },
+    contains(target) { return target === field; },
+  };
+  const changed = [];
+  bindEventSettingsFieldTracking(form, (target) => changed.push(target.name));
+  listeners.get("input")({ target: { closest: () => field } });
+  listeners.get("change")({ target: { closest: () => field } });
+  assert.deepEqual(changed, ["venueEn", "venueEn"]);
 });
 
 test("the delegated form listener submits once for a submit event and ignores other forms", () => {

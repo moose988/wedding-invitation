@@ -1,8 +1,9 @@
-import { collection, doc, getDoc, getDocs, initFirebase, isFirebaseConfigured, onAuthStateChanged, onSnapshot, query, serverTimestamp, setDoc, signOut, updateDoc, where, writeBatch, httpsCallable } from "./firebase-config.js";
+import { collection, doc, getDoc, getDocs, initFirebase, isFirebaseConfigured, onAuthStateChanged, onSnapshot, query, serverTimestamp, setDoc, signOut, updateDoc, where, writeBatch, httpsCallable } from "./firebase-config.js?v=20261013-auth-session-isolation-2";
 import { EVENT_CATEGORIES, getEventCategory, getEventDisplayTitle, isCelebrationEvent } from "./event-utils.js";
+import { paginateRows } from "./workspace-pagination.js";
 
-const state = { services: null, user: null, weddings: [], filter: "all", editId: "", deleteId: "", unsubscribe: null, unsubscribeAuth: null, initialized: false, snapshotGeneration: 0 };
-const el = Object.fromEntries(["workspace","loadingState","userEmail","signOutButton","createWeddingButton","sampleInvitationPanel","sampleInvitationUrl","searchInput","sortSelect","filterRow","workspaceStatus","weddingGrid","emptyState","weddingDialog","weddingForm","formKicker","formTitle","formError","saveWeddingButton","categoryStep","eventFeaturesStep","eventInformationStep","continueEventButton","continueFeaturesButton","backEventButton","deleteDialog","deleteForm","deletePhrase","deleteConfirmation","deleteError"].map((id) => [id, document.getElementById(id)]));
+const state = { services: null, user: null, weddings: [], filter: "all", currentPage: 1, pageSize: 6, editId: "", deleteId: "", unsubscribe: null, unsubscribeAuth: null, initialized: false, snapshotGeneration: 0 };
+const el = Object.fromEntries(["workspace","loadingState","userEmail","signOutButton","createWeddingButton","sampleInvitationPanel","sampleInvitationUrl","searchInput","sortSelect","filterRow","workspaceStatus","weddingGrid","paginationControls","paginationStatus","emptyState","weddingDialog","weddingForm","formKicker","formTitle","formError","saveWeddingButton","categoryStep","eventFeaturesStep","eventInformationStep","continueEventButton","continueFeaturesButton","backEventButton","deleteDialog","deleteForm","deletePhrase","deleteConfirmation","deleteError"].map((id) => [id, document.getElementById(id)]));
 
 init();
 function init() {
@@ -15,8 +16,15 @@ function init() {
   el.sampleInvitationUrl.value = sampleInvitationUrl();
   el.sampleInvitationPanel.addEventListener("click", handleSamplePanelAction);
   document.querySelectorAll("[data-create-wedding]").forEach((button) => button.addEventListener("click", () => openForm()));
-  el.searchInput.addEventListener("input", render); el.sortSelect.addEventListener("change", render);
-  el.filterRow.addEventListener("click", (event) => { const button = event.target.closest("[data-filter]"); if (!button) return; state.filter = button.dataset.filter; document.querySelectorAll("[data-filter]").forEach((item) => item.classList.toggle("is-active", item === button)); render(); });
+  el.searchInput.addEventListener("input", () => { state.currentPage = 1; render(); }); el.sortSelect.addEventListener("change", () => { state.currentPage = 1; render(); });
+  el.filterRow.addEventListener("click", (event) => { const button = event.target.closest("[data-filter]"); if (!button) return; state.filter = button.dataset.filter; state.currentPage = 1; document.querySelectorAll("[data-filter]").forEach((item) => item.classList.toggle("is-active", item === button)); render(); });
+  el.paginationControls.addEventListener("click", (event) => {
+    const button = event.target.closest("[data-page-direction]");
+    if (!button || button.disabled) return;
+    state.currentPage += button.dataset.pageDirection === "next" ? 1 : -1;
+    render();
+    el.paginationControls.querySelector(`[data-page-direction="${button.dataset.pageDirection}"]`)?.focus();
+  });
   document.querySelectorAll("[data-close]").forEach((button) => button.addEventListener("click", () => document.getElementById(button.dataset.close).close()));
   el.weddingForm.addEventListener("submit", saveWedding); el.deleteForm.addEventListener("submit", deleteWedding);
   el.weddingForm.querySelectorAll('[name="eventCategory"]').forEach((input) => input.addEventListener("change", updateCategoryFields));
@@ -153,9 +161,17 @@ function render() {
   });
   const sortKey = el.sortSelect.value === "event" ? "eventDateISO" : el.sortSelect.value === "updated" ? "updatedAt" : "createdAt";
   rows.sort((a,b) => timestampValue(b[sortKey]) - timestampValue(a[sortKey]));
-  el.workspaceStatus.textContent = state.weddings.length ? `${rows.length} event${rows.length === 1 ? "" : "s"} shown` : "";
+  const page = paginateRows(rows, state.currentPage, state.pageSize);
+  state.currentPage = page.page;
+  el.workspaceStatus.textContent = rows.length > state.pageSize
+    ? `Showing ${page.start + 1}–${Math.min(page.start + state.pageSize, rows.length)} of ${rows.length} events`
+    : state.weddings.length ? `${rows.length} event${rows.length === 1 ? "" : "s"} shown` : "";
   el.emptyState.hidden = Boolean(state.weddings.length || term || state.filter !== "all");
-  el.weddingGrid.innerHTML = rows.map(card).join("");
+  el.weddingGrid.innerHTML = page.items.map(card).join("");
+  el.paginationControls.hidden = page.pageCount <= 1;
+  el.paginationStatus.textContent = `Page ${state.currentPage} of ${page.pageCount}`;
+  el.paginationControls.querySelector('[data-page-direction="previous"]').disabled = state.currentPage <= 1;
+  el.paginationControls.querySelector('[data-page-direction="next"]').disabled = state.currentPage >= page.pageCount;
 }
 
 function isOldEvent(wedding) {

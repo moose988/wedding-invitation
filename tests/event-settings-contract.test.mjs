@@ -15,8 +15,23 @@ test("Event Settings is a routed event-scoped dashboard page with one shared nav
   assert.match(styles, /\.da3wa-app\.is-sidebar-collapsed \.da3wa-nav-icon/);
 });
 
+test("Event Settings omits the extra configuration and section descriptions", async () => {
+  const dashboard = await read("dashboard.js");
+  const settingsPage = dashboard.slice(
+    dashboard.indexOf("function renderEventSettingsPage()"),
+    dashboard.indexOf("function eventSettingsDateParts(", dashboard.indexOf("function renderEventSettingsPage()")),
+  );
+  assert.match(dashboard, /settings:\s*\{\s*eyebrow: "",\s*title: "Event Settings",\s*description: ""/);
+  assert.doesNotMatch(settingsPage, /Event information|These details appear on your event overview and guest invitations\./);
+  assert.doesNotMatch(settingsPage, /Guest experience|These event-specific options save automatically\./);
+  assert.match(settingsPage, /<h2>Event details<\/h2>/);
+  assert.match(settingsPage, /<h2 id="eventOptionsTitle">Invitation and seating options<\/h2>/);
+  assert.ok(settingsPage.indexOf("eventOptionsTitle") < settingsPage.indexOf("<h2>Event details</h2>"));
+  assert.ok(settingsPage.indexOf("<h2>Event details</h2>") < settingsPage.indexOf("id=\"eventStatusTitle\""));
+});
+
 test("event details validate and persist to the selected event and workspace index", async () => {
-  const [dashboard, rules, saveState] = await Promise.all([read("dashboard.js"), read("firestore.rules"), read("event-settings-state.mjs")]);
+  const [dashboard, rules, saveState] = await Promise.all([read("dashboard.js"), read("firestore.rules"), read("event-settings-state.js")]);
   assert.match(dashboard, /function validateEventSettingsDraft\(/);
   assert.match(dashboard, /url\.protocol\) \|\| !url\.hostname/);
   assert.match(dashboard, /eventDateISO,\s*timeEn:/);

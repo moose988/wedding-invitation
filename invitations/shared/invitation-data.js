@@ -3,12 +3,12 @@ import {
   doc,
   getDoc,
   getDocs,
-  initFirebase,
+  initPublicFirebase,
   isFirebaseConfigured,
   onSnapshot,
   serverTimestamp,
   writeBatch,
-} from "../../firebase-config.js";
+} from "../../firebase-config.js?v=20261013-auth-session-isolation-2";
 import { buildInvitationRsvpPatch, commitInvitationRsvpPatch, normalizeInvitationRsvpStatus } from "./rsvp-state.js";
 
 export function getInvitationParams(location = window.location) {
@@ -24,7 +24,7 @@ export function invitationSeatingEnabled(wedding) {
 export async function loadInvitationContext({ weddingId, guestToken } = getInvitationParams()) {
   if (!weddingId || !guestToken) throw new Error("Invitation link is incomplete.");
   if (!isFirebaseConfigured()) throw new Error("Invitation service is not configured.");
-  const { db } = initFirebase();
+  const { db } = initPublicFirebase();
   const [weddingSnapshot, guestSnapshot, tablesSnapshot] = await Promise.all([
     getDoc(doc(db, "weddings", weddingId)),
     getDoc(doc(db, "weddings", weddingId, "publicGuests", guestToken)),
@@ -48,7 +48,7 @@ export async function loadInvitationContext({ weddingId, guestToken } = getInvit
 // Each design owns its rendering, while this shared layer owns live Firebase
 // reads. Return the unsubscribe function from the design's boot sequence.
 export function subscribeToInvitation(context, onChange, onError = console.error) {
-  const { db } = initFirebase();
+  const { db } = initPublicFirebase();
   let requestVersion = 0;
   let active = true;
   const refresh = async () => {
@@ -82,7 +82,7 @@ export async function saveInvitationRsvp(context, status, additionalGuests, mess
   const privatePayload = { ...buildInvitationRsvpPatch(normalizedStatus, additionalGuests, message), updatedAt: serverTimestamp() };
   const publicPayload = { ...privatePayload };
   delete publicPayload.rsvpMessage;
-  const { db } = initFirebase();
+  const { db } = initPublicFirebase();
   // Firestore commits both copies atomically. update() preserves guest identity,
   // seating, check-in, and any party size omitted by this invitation form.
   await commitInvitationRsvpPatch({ db, context, payload: publicPayload, privatePayload, writeBatch, doc });

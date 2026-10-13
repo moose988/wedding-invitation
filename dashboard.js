@@ -6,6 +6,7 @@ import {
   getDoc,
   getDocs,
   initFirebase,
+  initSeatingEditorFirebase,
   isFirebaseConfigured,
   onAuthStateChanged,
   onSnapshot,
@@ -19,10 +20,10 @@ import {
   updateDoc,
   where,
   writeBatch,
-} from "./firebase-config.js";
+} from "./firebase-config.js?v=20261013-overview-rsvp";
 import { exportGuests } from "./export.js";
 import { eventUsesGuestSides, getDefaultGuestSide, getEventDisplayTitle, isCelebrationEvent } from "./event-utils.js";
-import { attemptEventSettingsSave, bindEventSettingsSubmit, canEditEventSettings, commitEventSettingsBatch, eventSettingsFeedback, eventSettingsHaveChanges, isEventSettingsSaveDisabled, updateEventSettingsSaveControl } from "./event-settings-state.mjs";
+import { attemptEventSettingsSave, bindEventSettingsFieldTracking, bindEventSettingsSubmit, canEditEventSettings, commitEventSettingsBatch, eventSettingsFeedback, eventSettingsHaveChanges, isEventSettingsSaveDisabled, updateEventSettingsSaveControl } from "./event-settings-state.js";
 import { createSenderPayload, encodeSenderPayload } from "./sender-codec.js";
 import {
   assignmentsForGuest,
@@ -90,9 +91,9 @@ const pageMeta = {
     description: "",
   },
   settings: {
-    eyebrow: "Event configuration",
+    eyebrow: "",
     title: "Event Settings",
-    description: "Manage event details, guest access, seating, and event status.",
+    description: "",
   },
   exports: {
     eyebrow: "",
@@ -917,12 +918,14 @@ async function init() {
     return;
   }
 
-  state.services = initFirebase();
-
   if (state.secureEditorMode) {
+    state.services = initSeatingEditorFirebase();
+    await state.services.persistenceReady;
     await bootstrapSeatingEditor();
     return;
   }
+
+  state.services = initFirebase();
 
   state.unsubAuth?.();
   state.unsubAuth = onAuthStateChanged(state.services.auth, async (user) => {
@@ -949,7 +952,12 @@ async function init() {
         `./dashboard.html?wedding=${encodeURIComponent(state.weddingId)}`,
       );
     }
-    await bootstrapDashboard();
+    try {
+      await bootstrapDashboard();
+    } catch (error) {
+      console.error("Dashboard event could not be loaded.", error);
+      showDashboardBootstrapError(error);
+    }
   });
 }
 
@@ -1263,12 +1271,6 @@ function handleDialogBackdropClick(event) {
 }
 
 function handleDocumentInput(event) {
-  const settingsField = event.target.closest("[data-event-setting-field]");
-  if (settingsField) {
-    updateEventSettingsDraftState(settingsField);
-    return;
-  }
-
   if (event.target === elements.guestForm?.fullName) {
     event.target.setCustomValidity(
       event.target.value.trim() ? "" : "Enter the guest's full name.",
@@ -1352,6 +1354,7 @@ async function bootstrapSeatingEditor() {
   try {
     let user = state.services.auth.currentUser;
     if (state.editorLinkToken) {
+      await state.services.persistenceReady;
       const exchange = httpsCallable(
         state.services.functions,
         "exchangeSeatingEditorLink",
@@ -1409,13 +1412,28 @@ function showEditorAccessError() {
     '<section class="share-page"><article class="share-card"><h3>Your seating editor link is unavailable</h3><p>Please ask the dashboard owner to generate a new link.</p></article></section>';
 }
 
-function handleDocumentChange(event) {
-  const settingsField = event.target.closest("[data-event-setting-field]");
-  if (settingsField) {
-    updateEventSettingsDraftState(settingsField);
-    return;
-  }
+function showDashboardBootstrapError(error) {
+  const permissionDenied = error?.code === "permission-denied";
+  elements.dashboardApp.hidden = false;
+  elements.pageEyebrow.textContent = "Dashboard";
+  elements.pageTitle.textContent = permissionDenied
+    ? "Event access unavailable"
+    : "Dashboard could not load";
+  elements.pageDescription.textContent = permissionDenied
+    ? "Your signed-in account does not have permission to open this event."
+    : "The event could not be loaded. Check your connection and try again.";
+  elements.globalActions.innerHTML = "";
+  elements.pageContent.innerHTML = `<section class="share-page"><article class="share-card"><h3>${permissionDenied ? "Check event access" : "Try loading again"}</h3><p>${permissionDenied ? "Return to All events and open an event you have access to." : "Refresh this page to retry loading the event."}</p><button class="da3wa-button da3wa-button--primary" type="button" id="dashboardRetryButton">${permissionDenied ? "All events" : "Refresh"}</button></article></section>`;
+  document.getElementById("dashboardRetryButton")?.addEventListener("click", () => {
+    if (permissionDenied) {
+      window.location.href = "./weddings.html";
+      return;
+    }
+    window.location.reload();
+  });
+}
 
+function handleDocumentChange(event) {
   const eventSetting = event.target.closest(
     "[data-action='toggle-event-qr'], [data-action='toggle-event-seating']",
   );
@@ -2406,11 +2424,12 @@ function renderOverviewPage() {
 
   const stats = calculateDashboardStats(state.guests, state.tables);
   const seatingEnabled = isSeatingEnabled();
+  const checkInEnabled = isInvitationQrEnabled();
   const attention = calculateAttention(state.guests, state.tables, seatingEnabled);
   const recentActivity = deriveRecentActivity(state.guests);
   const sideStats = calculateSideStats(state.guests, state.tables);
   const sideDistribution = eventUsesGuestSides(state.wedding)
-    ? `<article class="overview-card overview-distribution"><p class="da3wa-eyebrow">Guest distribution</p><h2>By invitation side</h2><div class="overview-table-wrap"><table class="overview-distribution__table"><thead><tr><th scope="col">Side</th><th scope="col">Invited</th><th scope="col">Confirmed</th><th scope="col">Pending</th><th scope="col">Seating</th></tr></thead><tbody>${renderDistributionRow("Groom", sideStats.groom)}${renderDistributionRow("Bride", sideStats.bride)}${renderDistributionRow("Family", sideStats.other)}</tbody></table></div></article>`
+    ? `<article class="overview-card overview-distribution"><p class="da3wa-eyebrow">Guest distribution</p><h2>By invitation side</h2><div class="overview-table-wrap"><table class="overview-distribution__table"><thead><tr><th scope="col">Side</th><th scope="col">Invited</th><th scope="col">Confirmed</th><th scope="col">Pending</th>${seatingEnabled ? '<th scope="col">Seating</th>' : ""}</tr></thead><tbody>${renderDistributionRow("Groom", sideStats.groom, seatingEnabled)}${renderDistributionRow("Bride", sideStats.bride, seatingEnabled)}${renderDistributionRow("Family", sideStats.other, seatingEnabled)}</tbody></table></div></article>`
     : `<article class="overview-card overview-distribution"><p class="da3wa-eyebrow">Guest summary</p><h2>Overall RSVP totals</h2><div class="overview-seating-summary overview-seating-summary--totals"><div><strong>${stats.total}</strong><span>Guests invited</span></div><div><strong>${stats.confirmed}</strong><span>Confirmed</span></div><div><strong>${stats.pending}</strong><span>Awaiting reply</span></div><div><strong>${stats.declined}</strong><span>Declined</span></div></div></article>`;
 
   elements.pageContent.innerHTML = `
@@ -2433,12 +2452,13 @@ function renderOverviewPage() {
           <strong>${escapeHtml(state.wedding?.venueEn || "Venue not set")}</strong>
         </div>
       </div>
-      <section class="overview-kpis${seatingEnabled ? "" : " overview-kpis--no-seating"}" aria-label="Event summary">
+      <section class="overview-kpis${seatingEnabled ? "" : " overview-kpis--no-seating"}${checkInEnabled ? "" : " overview-kpis--no-check-in"}" aria-label="Event summary">
         ${renderKpiCard("Total invited", stats.total, `${stats.totalPeople} people total`, `${stats.accompanyingGuests} additional`)}
         ${renderKpiCard("Confirmed", stats.confirmed, `${stats.confirmedPct}% of parties`, "RSVP accepted")}
+        ${renderKpiCard("Declined", stats.declined, `${stats.declinedPct}% of parties`, "Unable to attend")}
         ${renderKpiCard("Pending", stats.pending, `${stats.pendingPct}% of parties`, "Awaiting reply")}
         ${seatingEnabled ? renderKpiCard("Seating attention", stats.withoutSeat, `${stats.withoutSeatPct}% of confirmed`, "Parties need seats") : ""}
-        ${renderKpiCard("Checked in", stats.checkedIn, `${stats.checkinPct}% arrived`, "Venue arrivals")}
+        ${checkInEnabled ? renderKpiCard("Checked in", stats.checkedIn, `${stats.checkinPct}% arrived`, "Venue arrivals") : ""}
       </section>
 
       <section class="overview-operational${seatingEnabled ? "" : " overview-operational--no-seating"}" aria-label="Event operations">
@@ -3159,18 +3179,22 @@ function validateEventSettingsDraft(draft) {
         throw new Error("Unsupported Google Maps embed URL.");
       }
     } catch {
-      errors.venueMapEmbedUrl = "Paste the src URL from a Google Maps embed iframe.";
+      errors.venueMapEmbedUrl = "Paste only the https://www.google.com/maps/embed?... URL from src=, not the full <iframe> tag.";
     }
   }
   try {
-    const schedule = JSON.parse(String(draft.schedule || "[]"));
+    const scheduleText = String(draft.schedule || "[]").trim();
+    if (/<iframe\b/i.test(scheduleText) || /google\.com\/maps\/embed/i.test(scheduleText)) {
+      errors.schedule = "This is map embed code. Paste only the URL from its src=\"…\" into Google Maps embed URL above. Leave this schedule as [] if you do not need a schedule.";
+    }
+    const schedule = JSON.parse(scheduleText);
     if (!Array.isArray(schedule) || schedule.length > 12 || schedule.some((item) =>
       !item || typeof item !== "object" || Array.isArray(item) ||
       ["time", "timeAr", "titleEn", "titleAr", "descriptionEn", "descriptionAr"].some((key) => item[key] !== undefined && (typeof item[key] !== "string" || item[key].length > 240)) ||
       !(String(item.titleEn || "").trim() || String(item.titleAr || "").trim())
     )) errors.schedule = "Use a JSON list of up to 12 items. Each item needs titleEn or titleAr; text values can be up to 240 characters.";
   } catch {
-    errors.schedule = "Enter a valid JSON list for the schedule, or leave it as [].";
+    errors.schedule ||= "Enter a valid JSON list for the schedule, or leave it as [].";
   }
   return errors;
 }
@@ -3439,31 +3463,8 @@ function renderEventSettingsPage() {
 
   elements.pageContent.innerHTML = `
     <section class="event-settings-page">
-      <form class="event-settings-section share-card" id="eventSettingsForm" novalidate>
-        <header class="event-settings-section__header">
-          <div><p class="da3wa-eyebrow">Event information</p><h2>Event details</h2><p>These details appear on your event overview and guest invitations.</p></div>
-        </header>
-        <div class="event-settings-fields">
-          ${field("eventTitle", isCelebrationEvent(wedding) ? "Event name" : "Event title", "text", true, true)}
-          ${isCelebrationEvent(wedding) ? "" : `${field("brideName", "Bride name", "text", false, false, "given-name")}${field("groomName", "Groom name", "text", false, false, "given-name")}`}
-          ${field("eventDate", "Event date", "date", false, true)}
-          ${field("eventTime", "Event time", "time", false, true)}
-          ${field("venueEn", "Venue name", "text", false, true)}
-          ${field("location", "Location / address", "text", false, false, "street-address")}
-          ${field("mapsUrl", "Maps link", "url", true, false)}
-          ${field("venueMapEmbedUrl", "Google Maps embed URL", "url", true, false)}
-          <p class="event-settings-timezone">Paste the src URL from the Google Maps iframe. It is saved for this event only.</p>
-          <label class="event-settings-field is-full"><span>Invitation schedule (JSON, optional)</span><textarea class="da3wa-input" name="schedule" rows="8" data-event-setting-field ${canEditDetails ? "" : "disabled aria-disabled=\"true\""}>${escapeHtml(draft.schedule || "[]")}</textarea><small class="event-setting-error" role="alert">${escapeHtml(errors.schedule || "")}</small><small class="event-settings-timezone">Use up to 12 items with time, timeAr, titleEn, titleAr, descriptionEn, and descriptionAr. Leave [] to hide the schedule.</small></label>
-          <p class="event-settings-timezone">Date and time use the same local time display as the rest of the dashboard.</p>
-        </div>
-        <div class="event-settings-actions">
-          <p class="event-settings-feedback ${state.eventSettingsMessage.includes("could not") || state.eventSettingsMessage.includes("denied") || !canEditDetails ? "is-error" : ""}" id="eventSettingsFeedback" role="status">${escapeHtml(eventSettingsFeedback({ message: state.eventSettingsMessage, canEdit: canEditDetails, dirty: state.dirtyEventSettings, saving: state.savingEventSettings }))}</p>
-          <button class="da3wa-button da3wa-button--primary" type="submit" data-action="save-event-settings" ${saveDisabled ? "disabled aria-disabled=\"true\"" : "aria-disabled=\"false\""}>${state.savingEventSettings ? "Saving…" : "Save changes"}</button>
-        </div>
-      </form>
-
       <section class="event-settings-section share-card" aria-labelledby="eventOptionsTitle">
-        <header class="event-settings-section__header"><div><p class="da3wa-eyebrow">Guest experience</p><h2 id="eventOptionsTitle">Invitation and seating options</h2><p>These event-specific options save automatically.</p></div></header>
+        <header class="event-settings-section__header"><div><h2 id="eventOptionsTitle">Invitation and seating options</h2></div></header>
         <label class="invitation-setting-toggle">
           <span><strong>Show QR code on invitation</strong><small>Show the guest’s existing entrance pass on their invitation.</small><small class="event-setting-option-status" role="status">${escapeHtml(settingStatus("showInvitationQr"))}</small></span>
           <input type="checkbox" data-action="toggle-event-qr" ${showQr ? "checked" : ""} ${canChangeOptions ? "" : "disabled aria-disabled=\"true\""} aria-label="Show QR code on invitation" />
@@ -3474,6 +3475,29 @@ function renderEventSettingsPage() {
         </label>
       </section>
 
+      <form class="event-settings-section share-card" id="eventSettingsForm" novalidate>
+        <header class="event-settings-section__header">
+          <div><h2>Event details</h2></div>
+        </header>
+        <div class="event-settings-fields">
+          ${field("eventTitle", isCelebrationEvent(wedding) ? "Event name" : "Event title", "text", true, true)}
+          ${isCelebrationEvent(wedding) ? "" : `${field("brideName", "Bride name", "text", false, false, "given-name")}${field("groomName", "Groom name", "text", false, false, "given-name")}`}
+          ${field("eventDate", "Event date", "date", false, true)}
+          ${field("eventTime", "Event time", "time", false, true)}
+          ${field("venueEn", "Venue name", "text", false, true)}
+          ${field("location", "Location / address", "text", false, false, "street-address")}
+          ${field("mapsUrl", "Maps link", "url", true, false)}
+          ${field("venueMapEmbedUrl", "Google Maps embed URL", "url", true, false)}
+          <p class="event-settings-timezone">Paste only the URL inside the Google Maps iframe's src="…" attribute, not the full iframe code. It is saved for this event only.</p>
+          <label class="event-settings-field is-full"><span>Invitation schedule (JSON, optional)</span><textarea class="da3wa-input" name="schedule" rows="8" data-event-setting-field ${canEditDetails ? "" : "disabled aria-disabled=\"true\""}>${escapeHtml(draft.schedule || "[]")}</textarea><small class="event-setting-error" role="alert">${escapeHtml(errors.schedule || "")}</small><small class="event-settings-timezone">Use up to 12 JSON items with time, timeAr, titleEn, titleAr, descriptionEn, and descriptionAr. Leave [] to hide the schedule. The map URL belongs in Google Maps embed URL above.</small></label>
+          <p class="event-settings-timezone">Date and time use the same local time display as the rest of the dashboard.</p>
+        </div>
+        <div class="event-settings-actions">
+          <p class="event-settings-feedback ${state.eventSettingsMessage.includes("could not") || state.eventSettingsMessage.includes("denied") || !canEditDetails ? "is-error" : ""}" id="eventSettingsFeedback" role="status">${escapeHtml(eventSettingsFeedback({ message: state.eventSettingsMessage, canEdit: canEditDetails, dirty: state.dirtyEventSettings, saving: state.savingEventSettings }))}</p>
+          <button class="da3wa-button da3wa-button--primary" type="submit" data-action="save-event-settings" ${saveDisabled ? "disabled aria-disabled=\"true\"" : "aria-disabled=\"false\""}>${state.savingEventSettings ? "Saving…" : "Save changes"}</button>
+        </div>
+      </form>
+
       <section class="event-settings-section event-settings-status share-card" aria-labelledby="eventStatusTitle">
         <header class="event-settings-section__header"><div><p class="da3wa-eyebrow">Lifecycle</p><h2 id="eventStatusTitle">Event status</h2><p>Current status: <strong class="event-settings-status__value">${escapeHtml(prettifyShape(wedding.status || "active"))}</strong></p></div></header>
         ${wedding.status === "archived" ? `<p class="event-settings-feedback is-error">Archived events cannot be completed or reopened here.</p>` : `<div class="event-settings-actions"><p class="event-settings-feedback ${state.eventLifecycleMessage.startsWith("We could not") ? "is-error" : ""}" role="status" id="eventStatusFeedback">${escapeHtml(state.eventLifecycleMessage)}</p><button class="da3wa-button ${isCompleted ? "da3wa-button--secondary" : "da3wa-button--primary"}" type="button" data-action="${statusAction}" ${!canEditDetails || state.eventStatusPending ? "disabled aria-disabled=\"true\"" : ""}>${state.eventStatusPending ? "Updating status…" : statusLabel}</button></div>`}
@@ -3481,6 +3505,10 @@ function renderEventSettingsPage() {
     </section>
   `;
   updateEventSettingsFormState();
+  const eventSettingsForm = document.getElementById("eventSettingsForm");
+  if (eventSettingsForm) {
+    bindEventSettingsFieldTracking(eventSettingsForm, updateEventSettingsDraftState);
+  }
   if (focusedFieldName) {
     const nextField = elements.pageContent.querySelector(
       `#eventSettingsForm [name="${CSS.escape(focusedFieldName)}"]`,
@@ -3616,7 +3644,7 @@ function renderKpiCard(title, value, meta, note) {
   `;
 }
 
-function renderDistributionRow(label, bucket) {
+function renderDistributionRow(label, bucket, seatingEnabled = true) {
   const seatingLabel = bucket.confirmed
     ? `${bucket.seated}/${bucket.confirmed} ready`
     : "No confirmed parties";
@@ -3626,7 +3654,7 @@ function renderDistributionRow(label, bucket) {
       <td data-label="Invited">${escapeHtml(String(bucket.guestCount))}</td>
       <td data-label="Confirmed">${escapeHtml(String(bucket.confirmed))}</td>
       <td data-label="Pending">${escapeHtml(String(bucket.pending))}</td>
-      <td data-label="Seating"><span class="overview-seating-status">${escapeHtml(seatingLabel)}</span></td>
+      ${seatingEnabled ? `<td data-label="Seating"><span class="overview-seating-status">${escapeHtml(seatingLabel)}</span></td>` : ""}
     </tr>
   `;
 }
@@ -5138,27 +5166,27 @@ function calculateDashboardStats(guests, tables) {
   };
 }
 
-function calculateAttention(guests, tables) {
-  const confirmedWithoutTables = guests.filter(
+function calculateAttention(guests, tables, seatingEnabled = true) {
+  const confirmedWithoutTables = seatingEnabled ? guests.filter(
     (guest) =>
       guest.rsvpStatus === "confirmed" && getGuestRemainingSeats(guest) > 0,
-  ).length;
+  ).length : 0;
   const pendingGuests = guests.filter(
     (guest) => guest.rsvpStatus === "pending",
   ).length;
   const incompleteInfo = guests.filter(
     (guest) => !guest.phone || !guest.fullName,
   ).length;
-  const overCapacity = tables.filter(
+  const overCapacity = seatingEnabled ? tables.filter(
     (table) =>
       getTableAssignments(table.id).length >
       Number(table.seatCount || table.capacity || 0),
-  ).length;
-  const conflicts = guests.filter(
+  ).length : 0;
+  const conflicts = seatingEnabled ? guests.filter(
     (guest) =>
       guest.rsvpStatus === "declined" &&
       getGuestAssignedSeats(guest.id).length > 0,
-  ).length;
+  ).length : 0;
 
   return [
     {

@@ -16,7 +16,17 @@ export function updateEventSettingsSaveControl(button, state) {
   const disabled = isEventSettingsSaveDisabled(state);
   button.disabled = disabled;
   button.setAttribute("aria-disabled", String(disabled));
+  button.classList?.toggle("is-ready-to-save", !disabled);
   return disabled;
+}
+
+export function bindEventSettingsFieldTracking(form, onChange) {
+  const update = (event) => {
+    const field = event.target?.closest?.("[data-event-setting-field]");
+    if (field && form.contains(field)) onChange(field);
+  };
+  form.addEventListener("input", update);
+  form.addEventListener("change", update);
 }
 
 export function eventSettingsFeedback({ message, canEdit, dirty, saving }) {

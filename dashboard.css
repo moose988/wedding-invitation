@@ -184,6 +184,10 @@ a {
   min-height: 100vh;
 }
 
+.da3wa-app[hidden] {
+  display: none;
+}
+
 .da3wa-sidebar {
   position: sticky;
   top: 0;
@@ -776,11 +780,16 @@ body.is-overview-view .da3wa-topbar__actions {
 
 .overview-page .overview-kpis {
   display: grid;
-  grid-template-columns: repeat(5, minmax(0, 1fr));
+  grid-template-columns: repeat(6, minmax(0, 1fr));
   gap: 12px;
 }
 
-.overview-page .overview-kpis--no-seating {
+.overview-page .overview-kpis--no-seating,
+.overview-page .overview-kpis--no-check-in {
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+}
+
+.overview-page .overview-kpis--no-seating.overview-kpis--no-check-in {
   grid-template-columns: repeat(4, minmax(0, 1fr));
 }
 
@@ -3795,6 +3804,7 @@ body.is-seating-view .planner-canvas {
 .event-settings-feedback.is-error { color: #a9443d; }
 .event-settings-actions .da3wa-button { flex: 0 0 auto; }
 .event-settings-actions .da3wa-button:disabled { cursor: not-allowed; opacity: .55; }
+.event-settings-actions .da3wa-button.is-ready-to-save { box-shadow: 0 0 0 3px rgba(31, 90, 77, .15), 0 8px 20px rgba(31, 90, 77, .28); }
 .event-settings-status__value { color: var(--da3wa-primary); }
 .event-setting-option-status { display: block; min-height: 1em; }
 

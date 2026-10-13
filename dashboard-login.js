@@ -8,7 +8,7 @@ import {
   query,
   signInWithEmailAndPassword,
   where,
-} from "./firebase-config.js";
+} from "./firebase-config.js?v=20261013-auth-session-isolation-2";
 
 const params = new URLSearchParams(window.location.search);
 const lastWeddingStorageKey = "da3wa:lastDashboardWeddingId";

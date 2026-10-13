@@ -147,7 +147,8 @@ service cloud.firestore {
     // the explicit per-event permission before editing event details/status.
     function canEditEventDetails(weddingId) {
       return isDashboardMember(weddingId) &&
-        dashboardUser(weddingId).data.get("canEditEventDetails", false) == true;
+        dashboardUser(weddingId).data.get("canEditEventDetails", false) == true &&
+        dashboardUser(weddingId).data.get("seatingOnly", false) == false;
     }
 
     function isInvitationQrSettingsUpdate(weddingId) {

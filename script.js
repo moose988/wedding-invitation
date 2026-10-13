@@ -89,6 +89,7 @@ const demoGuest = {
   checkedIn: false,
   notes: "",
 };
+const sampleRsvpGuestName = "Avery Morgan";
 
 const demoTables = [
   { id: "table-a", name: "Moonlight", capacity: 8, x: 20, y: 24, shape: "round", floorZone: "Grand Hall" },
@@ -137,7 +138,7 @@ const laylaCopy = {
   mapUnavailable: { en: "Map preview is unavailable. Use directions for the venue location.", ar: "معاينة الخريطة غير متاحة. استخدم الاتجاهات للوصول إلى موقع القاعة." },
   sampleInvitation: { en: "Sample invitation", ar: "نموذج دعوة" },
   sampleNotice: { en: "You’re viewing a sample invitation. Guest names, seating assignments, RSVP, and entrance passes are not included.", ar: "أنتم تشاهدون نموذجاً للدعوة. لا تظهر أسماء الضيوف أو المقاعد المخصصة أو تأكيد الحضور أو بطاقات الدخول." },
-  sampleRsvp: { en: "RSVP is unavailable in this sample invitation.", ar: "تأكيد الحضور غير متاح في نموذج الدعوة." },
+  sampleRsvpNote: { en: "Sample invitation — try the RSVP experience. No real response will be sent.", ar: "نموذج دعوة — جرّبوا تجربة تأكيد الحضور. لن يتم إرسال أي رد حقيقي." },
   exploreDetails: { en: "Explore event details", ar: "استكشفوا تفاصيل الحفل" },
   rsvp: { en: "RSVP", ar: "تأكيد الحضور" },
   calendar: { en: "Add to Calendar", ar: "أضف إلى التقويم" },
@@ -195,6 +196,7 @@ const state = {
   isRsvpSaving: false,
   rsvpSaveError: "",
   rsvpSelection: "",
+  sampleRsvpResponse: null,
   labelIndex: 0,
   activeIntroLabelSlot: 0,
   countdownTimer: null,
@@ -766,7 +768,7 @@ function safeMapsLink(value) {
 function renderRsvp() {
   const mount = document.getElementById("rsvpMount");
   if (state.sampleMode) {
-    mount.innerHTML = `<p class="sample-preview-notice" role="note" data-layla-text="sampleRsvp">${laylaText("sampleRsvp")}</p>`;
+    renderDemoRsvp(mount, { sample: true });
     return;
   }
   if (state.mode === "firebase" && state.guest) {
@@ -839,31 +841,38 @@ function renderFirebaseRsvp(mount) {
   setupRsvpPhases(form);
 }
 
-function renderDemoRsvp(mount) {
-  const saved = readSavedRsvp();
+function renderDemoRsvp(mount, { sample = false } = {}) {
+  const saved = sample ? state.sampleRsvpResponse : readSavedRsvp();
   if (saved && ["confirmed", "declined"].includes(saved.status) && !state.isRsvpEditing) {
     const confirmed = saved.status === "confirmed";
+    const name = sample ? sampleRsvpGuestName : demoGuest.fullName;
+    const languageAttributes = isLaylaInvitation() && state.laylaLanguage === "ar" ? 'lang="ar" dir="rtl"' : "";
     mount.innerHTML = `
-      <div class="rsvp-summary rsvp-summary--${confirmed ? "confirmed" : "declined"}" aria-live="polite">
+      <div class="rsvp-summary rsvp-summary--${confirmed ? "confirmed" : "declined"}" aria-live="polite" ${sample ? languageAttributes : ""}>
         <span class="rsvp-confirmation-mark" aria-hidden="true">${confirmed ? "✓" : "♡"}</span>
         <p class="rsvp-summary__eyebrow">${escapeHtml(confirmed ? laylaText("rsvpConfirmed") : laylaText("declinedLabel"))}</p>
         <h3>${escapeHtml(confirmed ? laylaText("attendanceConfirmed") : laylaText("attendanceDeclined"))}</h3>
-        <p>${escapeHtml(confirmed ? laylaText("attendanceConfirmedThanks").replace("{name}", demoGuest.fullName) : laylaText("attendanceDeclinedThanks"))}</p>
-        <button class="luxury-button luxury-button--secondary" type="button" data-edit-rsvp><span>${escapeHtml(laylaText("changeResponse"))}</span></button>
+        <p>${escapeHtml(confirmed ? laylaText("attendanceConfirmedThanks").replace("{name}", name) : laylaText("attendanceDeclinedThanks"))}</p>
+        ${saved.message ? `<p class="rsvp-summary__message">${escapeHtml(saved.message)}</p>` : ""}
+        ${sample ? `<p class="sample-rsvp-note" role="note">${escapeHtml(laylaText("sampleRsvpNote"))}</p>` : ""}
+        <button class="luxury-button luxury-button--secondary" type="button" data-${sample ? "change" : "edit"}-rsvp><span>${escapeHtml(laylaText("changeResponse"))}</span></button>
       </div>
     `;
     return;
   }
 
+  const guestName = sample ? sampleRsvpGuestName : demoGuest.fullName;
+  const languageAttributes = isLaylaInvitation() && state.laylaLanguage === "ar" ? 'lang="ar" dir="rtl"' : "";
   mount.innerHTML = `
-    <form class="rsvp-form" id="rsvpForm">
-      <p class="rsvp-demo-greeting">${escapeHtml(laylaText("dear"))} ${escapeHtml(demoGuest.fullName)}</p>
+    <form class="rsvp-form" id="${sample ? "sampleRsvpForm" : "rsvpForm"}" ${sample ? languageAttributes : ""}>
+      ${sample ? `<p class="sample-rsvp-note" role="note">${escapeHtml(laylaText("sampleRsvpNote"))}</p>` : ""}
+      <p class="rsvp-demo-greeting">${escapeHtml(laylaText("dear"))} ${escapeHtml(guestName)}</p>
       <p class="firebase-rsvp-status" role="status" aria-live="polite">${escapeHtml(state.rsvpSaveError || laylaText("pendingResponse"))}</p>
       <div class="rsvp-phases">
         <section class="rsvp-phase" data-rsvp-step="1">
           <p class="rsvp-phase__number">01</p>
           <h3>${isLaylaInvitation() ? laylaText("attending") : "Are you attending?"}</h3>
-          <div class="rsvp-choice" role="radiogroup" aria-label="Attendance">
+          <div class="rsvp-choice" role="radiogroup" aria-label="${escapeAttribute(laylaText("attending"))}">
             <label class="rsvp-answer">
               <input type="radio" name="status" value="confirmed" ${state.rsvpSelection === "confirmed" ? "checked" : ""} required />
               <span>${isLaylaInvitation() ? laylaText("yes") : "Yes"}</span>
@@ -883,8 +892,8 @@ function renderDemoRsvp(mount) {
     </form>
   `;
 
-  const form = document.getElementById("rsvpForm");
-  form?.addEventListener("submit", handleDemoRsvpSubmit);
+  const form = document.getElementById(sample ? "sampleRsvpForm" : "rsvpForm");
+  form?.addEventListener("submit", sample ? handleSampleRsvpSubmit : handleDemoRsvpSubmit);
   form?.querySelector('[name="message"]')?.addEventListener("input", (event) => { state.rsvpMessage = event.target.value.slice(0, 1000); });
   setupRsvpPhases(form);
 }
@@ -1223,7 +1232,7 @@ function fitInvitationSeatingPlan(reset = true) {
   const bounds = getInvitationPlanBounds(canvasWidth, canvasHeight);
   const scale = clamp(
     Math.min((viewport.clientWidth - padding * 2) / bounds.width, (viewport.clientHeight - padding * 2) / bounds.height),
-    0.38,
+    0.05,
     1.1,
   );
   state.seatPlanTransform = {
@@ -1242,14 +1251,14 @@ function getInvitationPlanBounds(canvasWidth, canvasHeight) {
     boxes.push({ minX: centerX - width / 2, maxX: centerX + width / 2, minY: centerY - height / 2, maxY: centerY + height / 2 });
   };
   state.tables.forEach((table) => {
-    if (!table.chairs?.length) {
-      addBox(
-        (Number(table.x ?? 50) / 100) * canvasWidth,
-        (Number(table.y ?? 50) / 100) * canvasHeight,
-        Number(table.width || defaultTableWidth(table.shape)) + 56,
-        Number(table.height || defaultTableHeight(table.shape)) + 56,
-      );
-    }
+    const width = Number(table.width || defaultTableWidth(table.shape));
+    const height = Number(table.height || defaultTableHeight(table.shape));
+    const radians = (Number(table.rotation || 0) * Math.PI) / 180;
+    const halfWidth = (Math.abs(Math.cos(radians)) * width + Math.abs(Math.sin(radians)) * height) / 2;
+    const halfHeight = (Math.abs(Math.sin(radians)) * width + Math.abs(Math.cos(radians)) * height) / 2;
+    const centerX = (Number(table.x ?? 50) / 100) * canvasWidth;
+    const centerY = (Number(table.y ?? 50) / 100) * canvasHeight;
+    addBox(centerX, centerY, halfWidth * 2 + 112, halfHeight * 2 + 112);
   });
   const allChairAssignments = state.tables.flatMap((table) =>
     (table.chairs || []).map((chair) => ({ tableId: table.id, seatNumber: chair.seatNumber })),
@@ -1258,11 +1267,16 @@ function getInvitationPlanBounds(canvasWidth, canvasHeight) {
   if (chairBounds) boxes.push(chairBounds);
   state.hallObjects.forEach((item) => {
     const isDanceFloor = item.type === "dance-floor";
+    const width = isDanceFloor ? clamp(Number(item.width) || 280, 120, 700) : 160;
+    const height = isDanceFloor ? clamp(Number(item.height) || 280, 120, 700) : 54;
+    const radians = isDanceFloor ? (Number(item.rotation || 0) * Math.PI) / 180 : 0;
+    const halfWidth = (Math.abs(Math.cos(radians)) * width + Math.abs(Math.sin(radians)) * height) / 2;
+    const halfHeight = (Math.abs(Math.sin(radians)) * width + Math.abs(Math.cos(radians)) * height) / 2;
     addBox(
       (Number(item.x || 50) / 100) * canvasWidth,
       (Number(item.y || 50) / 100) * canvasHeight,
-      isDanceFloor ? clamp(Number(item.width) || 280, 120, 700) : 160,
-      isDanceFloor ? clamp(Number(item.height) || 280, 120, 700) : 54,
+      halfWidth * 2 + 24,
+      halfHeight * 2 + 24,
     );
   });
   if (!boxes.length) return { minX: 0, maxX: canvasWidth, minY: 0, maxY: canvasHeight, width: canvasWidth, height: canvasHeight };
@@ -1419,7 +1433,8 @@ function bindBaseEvents() {
 
     if (event.target.closest("[data-change-rsvp]")) {
       state.isRsvpEditing = true;
-      state.rsvpSelection = "";
+      state.rsvpSelection = state.sampleMode ? (state.sampleRsvpResponse?.status || "") : "";
+      if (state.sampleMode) state.rsvpMessage = state.sampleRsvpResponse?.message || "";
       renderRsvp();
     }
 
@@ -1551,6 +1566,21 @@ function handleDemoRsvpSubmit(event) {
   state.isRsvpEditing = false;
   renderRsvp();
   showToast(laylaText("responseSaved"), "success");
+}
+
+function handleSampleRsvpSubmit(event) {
+  event.preventDefault();
+  if (!state.sampleMode) return;
+  const form = event.currentTarget;
+  const status = String(form.elements.status.value || "");
+  if (!["confirmed", "declined"].includes(status)) return;
+  const message = String(form.elements.message?.value || "").trim().slice(0, 1000);
+  state.sampleRsvpResponse = { status, message };
+  state.rsvpSelection = status;
+  state.rsvpMessage = message;
+  state.rsvpSaveError = "";
+  state.isRsvpEditing = false;
+  renderRsvp();
 }
 
 async function handleFirebaseRsvpSubmit(event) {

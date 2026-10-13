@@ -2,7 +2,7 @@ import { collection, doc, getDoc, getDocs, initFirebase, isFirebaseConfigured, o
 import { EVENT_CATEGORIES, getEventCategory, getEventDisplayTitle, isCelebrationEvent } from "./event-utils.js";
 
 const state = { services: null, user: null, weddings: [], filter: "all", editId: "", deleteId: "", unsubscribe: null, unsubscribeAuth: null, initialized: false, snapshotGeneration: 0 };
-const el = Object.fromEntries(["workspace","loadingState","userEmail","signOutButton","createWeddingButton","searchInput","sortSelect","filterRow","workspaceStatus","weddingGrid","emptyState","weddingDialog","weddingForm","formKicker","formTitle","formError","saveWeddingButton","categoryStep","eventInformationStep","continueEventButton","backEventButton","deleteDialog","deleteForm","deletePhrase","deleteConfirmation","deleteError"].map((id) => [id, document.getElementById(id)]));
+const el = Object.fromEntries(["workspace","loadingState","userEmail","signOutButton","createWeddingButton","sampleInvitationPanel","sampleInvitationUrl","searchInput","sortSelect","filterRow","workspaceStatus","weddingGrid","emptyState","weddingDialog","weddingForm","formKicker","formTitle","formError","saveWeddingButton","categoryStep","eventFeaturesStep","eventInformationStep","continueEventButton","continueFeaturesButton","backEventButton","deleteDialog","deleteForm","deletePhrase","deleteConfirmation","deleteError"].map((id) => [id, document.getElementById(id)]));
 
 init();
 function init() {
@@ -12,6 +12,8 @@ function init() {
   state.services = initFirebase();
   el.signOutButton.addEventListener("click", async () => { await signOut(state.services.auth); location.replace("./dashboard-login.html?message=signed-out"); });
   el.createWeddingButton.addEventListener("click", () => openForm());
+  el.sampleInvitationUrl.value = sampleInvitationUrl();
+  el.sampleInvitationPanel.addEventListener("click", handleSamplePanelAction);
   document.querySelectorAll("[data-create-wedding]").forEach((button) => button.addEventListener("click", () => openForm()));
   el.searchInput.addEventListener("input", render); el.sortSelect.addEventListener("change", render);
   el.filterRow.addEventListener("click", (event) => { const button = event.target.closest("[data-filter]"); if (!button) return; state.filter = button.dataset.filter; document.querySelectorAll("[data-filter]").forEach((item) => item.classList.toggle("is-active", item === button)); render(); });
@@ -19,7 +21,8 @@ function init() {
   el.weddingForm.addEventListener("submit", saveWedding); el.deleteForm.addEventListener("submit", deleteWedding);
   el.weddingForm.querySelectorAll('[name="eventCategory"]').forEach((input) => input.addEventListener("change", updateCategoryFields));
   el.continueEventButton.addEventListener("click", continueToEventInformation);
-  el.backEventButton.addEventListener("click", () => { el.eventInformationStep.hidden = true; el.categoryStep.hidden = false; });
+  el.continueFeaturesButton.addEventListener("click", continueToEventInformation);
+  el.backEventButton.addEventListener("click", backEventStep);
   el.weddingGrid.addEventListener("click", handleCardAction);
   document.addEventListener("click", (event) => { if (!event.target.closest(".menu-wrap")) closeActionMenus(); });
   document.addEventListener("keydown", (event) => { if (event.key === "Escape") closeActionMenus(); });
@@ -167,17 +170,11 @@ function card(w) {
   const title = getEventDisplayTitle(w);
   const category = isCelebrationEvent(w) ? "Celebration" : "Wedding / Engagement";
   const cardMenu = `<div class="menu-wrap"><button class="card-menu-toggle" data-action="menu" data-id="${w.id}" type="button" aria-label="More actions for ${escape(title)}" aria-expanded="false" aria-controls="menu-${w.id}">⋯</button><div class="action-menu" id="menu-${w.id}" hidden>${ownerActions}</div></div>`;
-  const sampleArea = w.id === "luxury-wedding-demo" ? sampleInvitationControls() : "";
-  return `<article class="wedding-card"><div class="card-head"><div><p class="workspace-kicker">${escape(w.venueEn || "Venue not set")}</p><h2>${escape(title)}</h2><span class="category-badge">${category}</span></div><div class="card-head__actions"><span class="status-badge status-badge--${escape(w.status || "draft")}">${escape(w.status || "draft")}</span>${cardMenu}</div></div><div class="card-meta">${formatEvent(w.eventDateISO)}${w.location ? ` · ${escape(w.location)}` : ""}</div><div class="card-stats"><span class="stat"><strong>${stats.total || 0}</strong> guests</span><span class="stat"><strong>${stats.confirmed || 0}</strong> confirmed</span><span class="stat"><strong>${stats.pending || 0}</strong> pending</span><span class="stat"><strong>${stats.declined || 0}</strong> declined</span>${active ? `<span class="stat"><strong>${stats.checkedIn || 0}/${stats.total || 0}</strong> checked in</span>` : ""}</div>${sampleArea}<div class="card-footer"><span>Updated ${formatRelative(w.updatedAt || w.createdAt)}</span></div><div class="card-actions"><button class="open-button" data-action="open" data-id="${w.id}" type="button">Open dashboard</button><button data-action="copy" data-id="${w.id}" type="button" title="Copy guest invitation link template">Copy guest link</button></div></article>`;
+  return `<article class="wedding-card"><div class="card-head"><div><p class="workspace-kicker">${escape(w.venueEn || "Venue not set")}</p><h2>${escape(title)}</h2><span class="category-badge">${category}</span></div><div class="card-head__actions"><span class="status-badge status-badge--${escape(w.status || "draft")}">${escape(w.status || "draft")}</span>${cardMenu}</div></div><div class="card-meta">${formatEvent(w.eventDateISO)}${w.location ? ` · ${escape(w.location)}` : ""}</div><div class="card-stats"><span class="stat"><strong>${stats.total || 0}</strong> guests</span><span class="stat"><strong>${stats.confirmed || 0}</strong> confirmed</span><span class="stat"><strong>${stats.pending || 0}</strong> pending</span><span class="stat"><strong>${stats.declined || 0}</strong> declined</span>${active ? `<span class="stat"><strong>${stats.checkedIn || 0}/${stats.total || 0}</strong> checked in</span>` : ""}</div><div class="card-footer"><span>Updated ${formatRelative(w.updatedAt || w.createdAt)}</span></div><div class="card-actions"><button class="open-button" data-action="open" data-id="${w.id}" type="button">Open dashboard</button><button data-action="copy" data-id="${w.id}" type="button" title="Copy guest invitation link template">Copy guest link</button></div></article>`;
 }
 
 function sampleInvitationUrl() {
   return new URL("./index.html?wedding=luxury-wedding-demo&sample=1", window.location.href).href;
-}
-
-function sampleInvitationControls() {
-  const url = escape(sampleInvitationUrl());
-  return `<section class="sample-invitation" aria-label="Sample invitation"><div class="sample-invitation__heading"><span class="sample-invitation__seal" aria-hidden="true">✦</span><div><h3>Sample invitation</h3><p>Share the Layla &amp; Zaid design preview. No guest details are included.</p></div></div><label class="sr-only" for="sample-link-luxury-wedding-demo">Public sample invitation URL</label><input id="sample-link-luxury-wedding-demo" class="sample-invitation__url" type="url" readonly value="${url}" /><div class="sample-invitation__actions"><button data-action="copy-sample" data-id="luxury-wedding-demo" type="button">Copy sample link</button><button data-action="preview-sample" data-id="luxury-wedding-demo" type="button">Preview</button></div><p class="sample-invitation__feedback" data-sample-feedback role="status" aria-live="polite"></p></section>`;
 }
 
 async function handleCardAction(event) {
@@ -185,18 +182,25 @@ async function handleCardAction(event) {
   if (button.dataset.action === "menu") { const menu = document.getElementById(`menu-${wedding.id}`); const shouldOpen = menu.hidden; closeActionMenus(menu); menu.hidden = !shouldOpen; button.setAttribute("aria-expanded", String(shouldOpen)); return; }
   if (button.dataset.action === "open") { localStorage.setItem("da3wa:lastDashboardWeddingId", wedding.id); location.href = `./dashboard.html?wedding=${encodeURIComponent(wedding.id)}`; }
   if (button.dataset.action === "copy") { await navigator.clipboard.writeText(new URL(`index.html?wedding=${encodeURIComponent(wedding.id)}&guest={guestToken}`, location.href)); flash("Guest invitation base link copied."); }
-  if (button.dataset.action === "copy-sample" && wedding.id === "luxury-wedding-demo") await copySampleInvitationLink(button);
-  if (button.dataset.action === "preview-sample" && wedding.id === "luxury-wedding-demo") window.open(sampleInvitationUrl(), "_blank", "noopener,noreferrer");
   if (button.dataset.action === "edit") openForm(wedding);
   if (button.dataset.action === "archive") await setArchived(wedding);
   if (button.dataset.action === "duplicate") await duplicate(wedding);
   if (button.dataset.action === "delete") openDelete(wedding);
 }
 
+async function handleSamplePanelAction(event) {
+  const button = event.target.closest("[data-action]");
+  if (!button) return;
+  if (button.dataset.action === "preview-sample") {
+    window.open(sampleInvitationUrl(), "_blank", "noopener,noreferrer");
+    return;
+  }
+  if (button.dataset.action === "copy-sample") await copySampleInvitationLink(button);
+}
+
 async function copySampleInvitationLink(button) {
-  const card = button.closest(".wedding-card");
-  const input = card?.querySelector(".sample-invitation__url");
-  const feedback = card?.querySelector("[data-sample-feedback]");
+  const input = el.sampleInvitationUrl;
+  const feedback = el.sampleInvitationPanel.querySelector("[data-sample-feedback]");
   if (!input || !feedback) return;
   try {
     if (navigator.clipboard?.writeText) {
@@ -208,11 +212,11 @@ async function copySampleInvitationLink(button) {
       input.setSelectionRange(0, 0);
     }
     feedback.textContent = "Sample invitation link copied.";
-    button.textContent = "Copied";
-    window.setTimeout(() => { if (button.isConnected) button.textContent = "Copy sample link"; }, 1800);
+    feedback.dataset.state = "success";
   } catch (error) {
     console.warn("Sample invitation link could not be copied.", error);
     feedback.textContent = "Copy failed. Select and copy the URL above.";
+    feedback.dataset.state = "error";
     input.focus();
     input.select();
   }
@@ -227,11 +231,12 @@ function closeActionMenus(except = null) {
 }
 
 function getSelectedEventCategory() { return el.weddingForm.querySelector('[name="eventCategory"]:checked')?.value || ""; }
-function openForm(wedding) { state.editId = wedding?.id || ""; el.weddingForm.reset(); el.formError.textContent = ""; el.formKicker.textContent = wedding ? "Event details" : "New event"; el.formTitle.textContent = wedding ? "Edit event" : "Create an event"; el.saveWeddingButton.textContent = wedding ? "Save changes" : "Create event"; el.categoryStep.hidden = false; el.eventInformationStep.hidden = true; el.backEventButton.hidden = true; el.saveWeddingButton.hidden = true; const f = el.weddingForm.elements; if (wedding) { el.weddingForm.querySelectorAll('[name="eventCategory"]').forEach((input) => { input.checked = input.value === getEventCategory(wedding); }); ["brideName","groomName","eventTitle","venueEn","location","mapsUrl","whatsAppCountryCode","invitationLanguage","status","plannerNotes"].forEach((key) => f[key].value = wedding[key] || ""); const date = new Date(wedding.eventDateISO); if (!Number.isNaN(+date)) { f.eventDate.value = date.toISOString().slice(0,10); f.eventTime.value = date.toTimeString().slice(0,5); } } updateCategoryFields(); el.weddingDialog.showModal(); }
+function openForm(wedding) { state.editId = wedding?.id || ""; el.weddingForm.reset(); el.formError.textContent = ""; el.formKicker.textContent = wedding ? "Event details" : "New event"; el.formTitle.textContent = wedding ? "Edit event" : "Create an event"; el.saveWeddingButton.textContent = wedding ? "Save changes" : "Create event"; el.categoryStep.hidden = false; el.eventFeaturesStep.hidden = true; el.eventInformationStep.hidden = true; el.backEventButton.hidden = true; el.saveWeddingButton.hidden = true; const f = el.weddingForm.elements; if (wedding) { el.weddingForm.querySelectorAll('[name="eventCategory"]').forEach((input) => { input.checked = input.value === getEventCategory(wedding); }); ["brideName","groomName","eventTitle","venueEn","location","mapsUrl","whatsAppCountryCode","invitationLanguage","status","plannerNotes"].forEach((key) => f[key].value = wedding[key] || ""); const date = new Date(wedding.eventDateISO); if (!Number.isNaN(+date)) { f.eventDate.value = date.toISOString().slice(0,10); f.eventTime.value = date.toTimeString().slice(0,5); } } updateCategoryFields(); el.weddingDialog.showModal(); }
 function updateCategoryFields() { const category = getSelectedEventCategory(); el.continueEventButton.disabled = !category; const wedding = category !== EVENT_CATEGORIES.CELEBRATION; el.weddingForm.querySelectorAll(".wedding-identity").forEach((label) => { label.hidden = !wedding; label.querySelector("input").disabled = !wedding; label.querySelector("input").required = wedding; }); const celebration = el.weddingForm.querySelector(".celebration-identity"); celebration.hidden = wedding; celebration.querySelector("input").disabled = wedding; celebration.querySelector("input").required = !wedding && Boolean(category); }
-function continueToEventInformation() { if (!getSelectedEventCategory()) return; el.categoryStep.hidden = true; el.eventInformationStep.hidden = false; el.backEventButton.hidden = false; el.saveWeddingButton.hidden = false; }
+function continueToEventInformation() { if (!getSelectedEventCategory()) return; if (!state.editId && !el.eventFeaturesStep.hidden) { el.eventFeaturesStep.hidden = true; el.eventInformationStep.hidden = false; el.saveWeddingButton.hidden = false; return; } el.categoryStep.hidden = true; if (state.editId) { el.eventInformationStep.hidden = false; el.saveWeddingButton.hidden = false; } else { el.eventFeaturesStep.hidden = false; } el.backEventButton.hidden = false; }
+function backEventStep() { if (!state.editId && !el.eventInformationStep.hidden) { el.eventInformationStep.hidden = true; el.eventFeaturesStep.hidden = false; el.saveWeddingButton.hidden = true; return; } if (!state.editId && !el.eventFeaturesStep.hidden) { el.eventFeaturesStep.hidden = true; } el.eventInformationStep.hidden = true; el.categoryStep.hidden = false; el.backEventButton.hidden = true; el.saveWeddingButton.hidden = true; }
 async function saveWedding(event) { event.preventDefault(); const f = el.weddingForm.elements; const category = getSelectedEventCategory(); if (![EVENT_CATEGORIES.WEDDING_ENGAGEMENT, EVENT_CATEGORIES.CELEBRATION].includes(category)) return; const oldEvent = state.weddings.find((item) => item.id === state.editId); if (oldEvent && getEventCategory(oldEvent) !== category && !window.confirm("Changing this event category changes the dashboard experience. Existing guest side values will be preserved. Continue?")) return; const brideName = f.brideName.value.trim(), groomName = f.groomName.value.trim(); const eventDateISO = new Date(`${f.eventDate.value}T${f.eventTime.value}`).toISOString(); const data = { eventCategory: category, eventDateISO, venueEn: f.venueEn.value.trim(), location: f.location.value.trim(), mapsUrl: f.mapsUrl.value.trim(), whatsAppCountryCode: f.whatsAppCountryCode.value.trim(), invitationLanguage: f.invitationLanguage.value, plannerNotes: f.plannerNotes.value.trim(), status: f.status.value, updatedAt: serverTimestamp() }; if (category === EVENT_CATEGORIES.CELEBRATION) data.eventTitle = f.eventTitle.value.trim(); else Object.assign(data, { brideName, groomName, coupleName: `${brideName} & ${groomName}`, eventTitle: `${brideName} & ${groomName}` }); el.formError.textContent = ""; el.saveWeddingButton.disabled = true;
-  try { if (state.editId) { await updateDoc(doc(state.services.db,"weddings",state.editId), data); await setDoc(doc(state.services.db,"users",state.user.uid,"weddingAccess",state.editId), { ...indexData(data), weddingId: state.editId }, { merge:true }); } else { const weddingRef = doc(collection(state.services.db,"weddings")); const batch = writeBatch(state.services.db); batch.set(weddingRef, { ...data, seatingEnabled:true, ownerUserId:state.user.uid, createdAt:serverTimestamp() }); batch.set(doc(state.services.db,"weddings",weddingRef.id,"dashboardUsers",state.user.uid), { email:state.user.email || "", canViewDashboard:true, canEditGuests:true, canEditSeating:true, canCheckIn:true, canManageUsers:true, role:"owner", createdAt:serverTimestamp(), updatedAt:serverTimestamp() }); batch.set(doc(state.services.db,"users",state.user.uid,"weddingAccess",weddingRef.id), { ...indexData(data), weddingId:weddingRef.id, ownerUserId:state.user.uid, createdAt:serverTimestamp(), updatedAt:serverTimestamp() }); await batch.commit(); } el.weddingDialog.close(); } catch (error) { console.error(error); el.formError.textContent = "We could not save this event. Please check your access and try again."; } finally { el.saveWeddingButton.disabled=false; } }
+  try { if (state.editId) { await updateDoc(doc(state.services.db,"weddings",state.editId), data); await setDoc(doc(state.services.db,"users",state.user.uid,"weddingAccess",state.editId), { ...indexData(data), weddingId: state.editId }, { merge:true }); } else { const weddingRef = doc(collection(state.services.db,"weddings")); const batch = writeBatch(state.services.db); batch.set(weddingRef, { ...data, seatingEnabled:f.seatingEnabled.checked, showInvitationQr:f.showInvitationQr.checked, ownerUserId:state.user.uid, createdAt:serverTimestamp() }); batch.set(doc(state.services.db,"weddings",weddingRef.id,"dashboardUsers",state.user.uid), { email:state.user.email || "", canViewDashboard:true, canEditGuests:true, canEditSeating:true, canCheckIn:true, canManageUsers:true, role:"owner", createdAt:serverTimestamp(), updatedAt:serverTimestamp() }); batch.set(doc(state.services.db,"users",state.user.uid,"weddingAccess",weddingRef.id), { ...indexData(data), weddingId:weddingRef.id, ownerUserId:state.user.uid, createdAt:serverTimestamp(), updatedAt:serverTimestamp() }); await batch.commit(); } el.weddingDialog.close(); } catch (error) { console.error(error); el.formError.textContent = "We could not save this event. Please check your access and try again."; } finally { el.saveWeddingButton.disabled=false; } }
 function indexData(data) { return Object.fromEntries(Object.entries({ eventCategory:data.eventCategory, eventTitle:data.eventTitle, coupleName:data.coupleName, brideName:data.brideName, groomName:data.groomName, eventDateISO:data.eventDateISO, venueEn:data.venueEn, location:data.location, status:data.status, updatedAt:data.updatedAt }).filter(([, value]) => value !== undefined)); }
 async function setArchived(wedding) { const status = wedding.status === "archived" ? "draft" : "archived"; try { await updateDoc(doc(state.services.db,"weddings",wedding.id), { status, updatedAt:serverTimestamp() }); await setDoc(doc(state.services.db,"users",state.user.uid,"weddingAccess",wedding.id), { status, updatedAt:serverTimestamp() }, {merge:true}); } catch (_) { flash("We could not update this event. Please try again."); } }
 async function duplicate(wedding) { const { id, stats, legacy, createdAt, updatedAt, completedAt, statusBeforeCompletion, ...source } = wedding; const title = `${getEventDisplayTitle(wedding)} (Copy)`; const copy = { ...source, seatingEnabled:wedding.seatingEnabled !== false, eventTitle:title, status:"draft", ownerUserId:state.user.uid, createdAt:serverTimestamp(), updatedAt:serverTimestamp() }; if (!isCelebrationEvent(wedding)) copy.coupleName = title; try { const ref = doc(collection(state.services.db,"weddings")); const batch = writeBatch(state.services.db); batch.set(ref, copy); batch.set(doc(state.services.db,"weddings",ref.id,"dashboardUsers",state.user.uid), { email:state.user.email || "", canViewDashboard:true, canEditGuests:true, canEditSeating:true, canCheckIn:true, canManageUsers:true, role:"owner", createdAt:serverTimestamp(), updatedAt:serverTimestamp() }); batch.set(doc(state.services.db,"users",state.user.uid,"weddingAccess",ref.id), { ...indexData(copy), weddingId:ref.id, ownerUserId:state.user.uid, createdAt:serverTimestamp(), updatedAt:serverTimestamp() }); await batch.commit(); flash("Event setup duplicated as a draft."); } catch (e) { console.error(e); flash("We could not duplicate this event."); } }

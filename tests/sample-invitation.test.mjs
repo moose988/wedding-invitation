@@ -4,16 +4,25 @@ import test from "node:test";
 
 const read = (file) => readFile(new URL(`../${file}`, import.meta.url), "utf8");
 
-test("only Layla & Zaid gets a public sample URL and controls distinct from guest links", async () => {
-  const [workspace, styles] = await Promise.all([read("weddings.js"), read("weddings.css")]);
-  assert.match(workspace, /w\.id === "luxury-wedding-demo" \? sampleInvitationControls\(\) : ""/);
+test("Layla & Zaid sample panel lives once at workspace level with distinct preview and copy actions", async () => {
+  const [workspace, html, styles] = await Promise.all([read("weddings.js"), read("weddings.html"), read("weddings.css")]);
+  const panel = html.slice(html.indexOf('id="sampleInvitationPanel"'), html.indexOf('<section class="workspace-controls"'));
+  assert.ok(panel.length > 0, "sample panel appears before workspace controls");
+  assert.equal((html.match(/id="sampleInvitationPanel"/g) || []).length, 1);
+  assert.doesNotMatch(workspace, /sampleInvitationControls|sampleArea/);
   assert.match(workspace, /index\.html\?wedding=luxury-wedding-demo&sample=1/);
-  assert.match(workspace, /Copy sample link/);
-  assert.match(workspace, /data-action="preview-sample"/);
+  assert.match(html, /Preview invitation/);
+  assert.match(html, /Copy sample link/);
+  assert.match(html, /data-action="preview-sample"/);
+  assert.match(workspace, /sampleInvitationPanel\.addEventListener\("click", handleSamplePanelAction\)/);
+  assert.match(workspace, /handleSamplePanelAction[\s\S]*?window\.open\(sampleInvitationUrl\(\)/);
   assert.match(workspace, /Copy guest link/);
   assert.match(workspace, /Copy failed\. Select and copy the URL above\./);
+  assert.match(workspace, /el\.sampleInvitationPanel\.querySelector\("\[data-sample-feedback\]"\)/);
   assert.match(styles, /\.sample-invitation__url/);
-  assert.match(styles, /@media\(max-width:640px\).*sample-invitation/s);
+  assert.match(styles, /\.sample-invitation__button--preview/);
+  assert.match(styles, /\.sample-invitation__button--copy/);
+  assert.match(styles, /@media\(max-width:640px\)\s*\{[^}]*sample-invitation/s);
 });
 
 test("sample route reads current public event only and never resolves a guest token or private seating", async () => {
@@ -27,21 +36,31 @@ test("sample route reads current public event only and never resolves a guest to
   assert.match(sampleBoot, /loadWedding\(weddingId\)/);
   assert.doesNotMatch(sampleBoot, /loadGuestByToken|loadTables|guestToken/);
   const rsvp = script.slice(script.indexOf("function renderRsvp()"), script.indexOf("function renderFirebaseRsvp("));
-  assert.match(rsvp, /if \(state\.sampleMode\) \{[\s\S]*?return;[\s\S]*?renderDemoRsvp/);
+  assert.match(rsvp, /if \(state\.sampleMode\) \{\s*renderDemoRsvp\(mount, \{ sample: true \}\);\s*return;/);
   assert.match(script, /state\.sampleMode \|\| state\.mode !== "firebase" \|\| !state\.guest/);
   assert.match(script, /state\.sampleMode \|\| state\.mode !== "firebase"/);
   assert.match(script, /function startSampleWeddingListener\(weddingId\)[\s\S]*?onSnapshot\(doc\(db, "weddings", weddingId\)/);
-  assert.match(script, /if \(state\.sampleMode\) \{[\s\S]*?sampleRsvp/);
   assert.match(html, /id="samplePreviewBanner" hidden/);
   assert.match(router, /destination\.search = window\.location\.search/);
   assert.match(router, /window\.location\.replace\(destination\.href\)/);
 });
 
-test("sample mode cannot submit RSVP or create a guest QR pass; regular guest URLs remain supported", async () => {
+test("sample RSVP uses fictional in-memory state and never writes to Firebase or demo storage", async () => {
   const script = await read("script.js");
+  assert.match(script, /const sampleRsvpGuestName = "Avery Morgan"/);
+  assert.match(script, /sampleRsvpResponse: null/);
+  assert.match(script, /id="\$\{sample \? "sampleRsvpForm" : "rsvpForm"\}"/);
+  assert.match(script, /form\?\.addEventListener\("submit", sample \? handleSampleRsvpSubmit : handleDemoRsvpSubmit\)/);
+  const sampleSubmit = script.slice(script.indexOf("function handleSampleRsvpSubmit("), script.indexOf("async function handleFirebaseRsvpSubmit("));
+  assert.match(sampleSubmit, /if \(!state\.sampleMode\) return/);
+  assert.match(sampleSubmit, /state\.sampleRsvpResponse = \{ status, message \}/);
+  assert.doesNotMatch(sampleSubmit, /localStorage|saveInvitationRsvp|commitInvitationRsvpPatch|updateDoc|writeBatch|httpsCallable/);
+  assert.match(script, /sampleRsvpNote: \{ en: "Sample invitation — try the RSVP experience\. No real response will be sent\./);
+  assert.match(script, /state\.sampleMode \? \(state\.sampleRsvpResponse\?\.status \|\| ""\)/);
   assert.match(script, /if \(state\.sampleMode\) return;\s*const form = event\.currentTarget;/);
   assert.match(script, /function handleDemoRsvpSubmit\(event\) \{\s*event\.preventDefault\(\);\s*if \(state\.sampleMode\) return;/);
   assert.match(script, /state\.sampleMode \|\| state\.mode !== "firebase" \|\| state\.isRsvpSaving/);
+  assert.match(script, /await saveInvitationRsvp\(/);
   assert.match(script, /const checkinUrl = buildAbsoluteUrl\(`checkin\.html\?wedding=/);
   assert.match(script, /guestToken: explicitSampleMode \? "" : \(params\.get\("guest"\)\?\.trim\(\)/);
   assert.match(script, /if \(weddingId && guestToken && isFirebaseConfigured\(\)\)/);

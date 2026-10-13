@@ -70,7 +70,8 @@ test("seating is enabled for old events, persists per event, and gates seating U
   assert.match(rules, /hasOnly\(\["seatingEnabled", "updatedAt"\]\)/);
   assert.match(rules, /request\.resource\.data\.seatingEnabled is bool/);
   assert.match(rules, /\|\| isInvitationSeatingSettingsUpdate\(weddingId\)/);
-  assert.match(weddings, /seatingEnabled:true/);
+  assert.match(weddings, /seatingEnabled:f\.seatingEnabled\.checked/);
+  assert.match(weddings, /showInvitationQr:f\.showInvitationQr\.checked/);
   assert.match(weddings, /seatingEnabled:wedding\.seatingEnabled !== false/);
 });
 

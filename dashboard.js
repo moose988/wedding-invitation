@@ -22,6 +22,7 @@ import {
 } from "./firebase-config.js";
 import { exportGuests } from "./export.js";
 import { eventUsesGuestSides, getDefaultGuestSide, getEventDisplayTitle, isCelebrationEvent } from "./event-utils.js";
+import { attemptEventSettingsSave, bindEventSettingsSubmit, canEditEventSettings, commitEventSettingsBatch, eventSettingsFeedback, eventSettingsHaveChanges, isEventSettingsSaveDisabled, updateEventSettingsSaveControl } from "./event-settings-state.mjs";
 import { createSenderPayload, encodeSenderPayload } from "./sender-codec.js";
 import {
   assignmentsForGuest,
@@ -1043,9 +1044,9 @@ function bindEvents() {
   document.addEventListener("input", handleDocumentInput);
   document.addEventListener("change", handleDocumentChange);
   document.addEventListener("keydown", handleDocumentKeydown);
-  elements.pageContent?.addEventListener("submit", (event) => {
-    if (event.target?.id === "eventSettingsForm") void saveEventSettings(event);
-  });
+  if (elements.pageContent) {
+    bindEventSettingsSubmit(elements.pageContent, (event) => void saveEventSettings(event));
+  }
   elements.guestModal?.addEventListener("click", handleDialogBackdropClick);
   elements.bulkAddModal?.addEventListener("click", handleDialogBackdropClick);
   elements.tableModal?.addEventListener("click", handleDialogBackdropClick);
@@ -1264,16 +1265,7 @@ function handleDialogBackdropClick(event) {
 function handleDocumentInput(event) {
   const settingsField = event.target.closest("[data-event-setting-field]");
   if (settingsField) {
-    syncEventSettingsDraftFromForm();
-    state.dirtyEventSettings = Object.keys(state.eventSettingsOriginal || {}).some(
-      (key) => state.eventSettingsDraft?.[key] !== state.eventSettingsOriginal?.[key],
-    );
-    state.eventSettingsMessage = "";
-    if (state.eventSettingsErrors) delete state.eventSettingsErrors[settingsField.name];
-    updateEventSettingsFormState();
-    settingsField.removeAttribute("aria-invalid");
-    const error = settingsField.closest("label")?.querySelector(".event-setting-error");
-    if (error) error.textContent = "";
+    updateEventSettingsDraftState(settingsField);
     return;
   }
 
@@ -1342,6 +1334,20 @@ function handleDocumentInput(event) {
   }
 }
 
+function updateEventSettingsDraftState(settingsField) {
+  syncEventSettingsDraftFromForm();
+  state.dirtyEventSettings = eventSettingsHaveChanges(
+    state.eventSettingsDraft,
+    state.eventSettingsOriginal,
+  );
+  state.eventSettingsMessage = "";
+  if (state.eventSettingsErrors) delete state.eventSettingsErrors[settingsField.name];
+  updateEventSettingsFormState();
+  settingsField.removeAttribute("aria-invalid");
+  const error = settingsField.closest("label")?.querySelector(".event-setting-error");
+  if (error) error.textContent = "";
+}
+
 async function bootstrapSeatingEditor() {
   try {
     let user = state.services.auth.currentUser;
@@ -1404,6 +1410,12 @@ function showEditorAccessError() {
 }
 
 function handleDocumentChange(event) {
+  const settingsField = event.target.closest("[data-event-setting-field]");
+  if (settingsField) {
+    updateEventSettingsDraftState(settingsField);
+    return;
+  }
+
   const eventSetting = event.target.closest(
     "[data-action='toggle-event-qr'], [data-action='toggle-event-seating']",
   );
@@ -1740,7 +1752,11 @@ function isWeddingOwner() {
 }
 
 function canEditEventDetails() {
-  return isWeddingOwner() || can("canEditEventDetails");
+  return canEditEventSettings({
+    isOwner: isWeddingOwner(),
+    seatingOnly: state.permissions?.seatingOnly === true,
+    hasEventDetailsPermission: can("canEditEventDetails"),
+  });
 }
 
 function canManageSeatingAccess() {
@@ -3091,8 +3107,21 @@ function syncEventSettingsDraftFromForm() {
 function updateEventSettingsFormState() {
   const form = document.getElementById("eventSettingsForm");
   const saveButton = form?.querySelector("[data-action='save-event-settings']");
-  if (saveButton) {
-    saveButton.disabled = !state.dirtyEventSettings || state.savingEventSettings || !canEditEventDetails();
+  const canEdit = canEditEventDetails();
+  if (saveButton) updateEventSettingsSaveControl(saveButton, {
+    dirty: state.dirtyEventSettings,
+    saving: state.savingEventSettings,
+    canEdit,
+  });
+  const feedback = form?.querySelector("#eventSettingsFeedback");
+  if (feedback) {
+    feedback.textContent = eventSettingsFeedback({
+      message: state.eventSettingsMessage,
+      canEdit,
+      dirty: state.dirtyEventSettings,
+      saving: state.savingEventSettings,
+    });
+    feedback.classList.toggle("is-error", Boolean(state.eventSettingsMessage.includes("could not") || state.eventSettingsMessage.includes("denied") || !canEdit));
   }
 }
 
@@ -3186,25 +3215,41 @@ async function saveEventSettings(event) {
   state.eventSettingsMessage = "Saving event details…";
   renderActiveView();
   try {
-    const batch = writeBatch(state.services.db);
-    batch.update(doc(state.services.db, "weddings", state.weddingId), data);
-    batch.set(
-      doc(state.services.db, "users", state.currentUser.uid, "weddingAccess", state.weddingId),
-      eventWorkspaceIndexData({ ...state.wedding, ...data }),
-      { merge: true },
+    await attemptEventSettingsSave(
+      () => commitEventSettingsBatch({
+        db: state.services.db,
+        writeBatch,
+        eventRef: doc(state.services.db, "weddings", state.weddingId),
+        indexRef: doc(state.services.db, "users", state.currentUser.uid, "weddingAccess", state.weddingId),
+        eventData: data,
+        indexData: eventWorkspaceIndexData({ ...state.wedding, ...data }),
+      }),
+      {
+        onSuccess: () => {
+          state.wedding = { ...state.wedding, ...data };
+          state.eventSettingsDraft = null;
+          state.eventSettingsOriginal = null;
+          state.dirtyEventSettings = false;
+          state.eventSettingsErrors = {};
+          state.eventSettingsMessage = "Event details saved.";
+          showToast("Event details saved.", "success");
+        },
+        onFailure: (error) => {
+          const errorCode = String(error?.code || "");
+          console.error("Could not save event settings.", {
+            code: errorCode || "unknown",
+            documents: [
+              `weddings/${state.weddingId}`,
+              `users/${state.currentUser.uid}/weddingAccess/${state.weddingId}`,
+            ],
+          });
+          state.eventSettingsMessage = errorCode === "permission-denied"
+            ? "Firestore denied this save. Sign in as the event owner or ask them to grant Event Details permission."
+            : `Could not save event details${errorCode ? ` (${errorCode})` : ""}. Your changes are still here.`;
+          showToast(state.eventSettingsMessage, "error");
+        },
+      },
     );
-    await batch.commit();
-    state.wedding = { ...state.wedding, ...data };
-    state.eventSettingsDraft = null;
-    state.eventSettingsOriginal = null;
-    state.dirtyEventSettings = false;
-    state.eventSettingsErrors = {};
-    state.eventSettingsMessage = "Event details saved.";
-    showToast("Event details saved.", "success");
-  } catch (error) {
-    console.error("Could not save event details.", error);
-    state.eventSettingsMessage = "We could not save event details. Your changes are still here; check your access and try again.";
-    showToast("We could not save event details. Your changes are still here.", "error");
   } finally {
     state.savingEventSettings = false;
     renderAll();
@@ -3364,6 +3409,22 @@ function renderEventSettingsPage() {
   const statusAction = isCompleted ? "reopen-event" : "complete-event";
   const statusLabel = isCompleted ? "Reopen event" : "Mark event as completed";
   const title = getEventDisplayTitle(wedding);
+  const saveDisabled = isEventSettingsSaveDisabled({
+    dirty: state.dirtyEventSettings,
+    saving: state.savingEventSettings,
+    canEdit: canEditDetails,
+  });
+  const focusedField = document.activeElement?.closest?.("#eventSettingsForm [data-event-setting-field]");
+  const focusedFieldName = focusedField?.name || "";
+  let selectionStart = null;
+  let selectionEnd = null;
+  try {
+    selectionStart = focusedField?.selectionStart ?? null;
+    selectionEnd = focusedField?.selectionEnd ?? null;
+  } catch {
+    // Date and time inputs do not expose a text selection range.
+  }
+  const pageScroll = { x: window.scrollX, y: window.scrollY };
   const settingStatus = (key) => {
     const mutation = state.eventSettingWrites[key];
     if (mutation?.pending) return "Saving automatically…";
@@ -3396,8 +3457,8 @@ function renderEventSettingsPage() {
           <p class="event-settings-timezone">Date and time use the same local time display as the rest of the dashboard.</p>
         </div>
         <div class="event-settings-actions">
-          <p class="event-settings-feedback ${state.eventSettingsMessage.startsWith("We could not") ? "is-error" : ""}" role="status">${escapeHtml(state.eventSettingsMessage || (state.dirtyEventSettings ? "Unsaved changes" : ""))}</p>
-          <button class="da3wa-button da3wa-button--primary" type="submit" data-action="save-event-settings" ${!state.dirtyEventSettings || state.savingEventSettings || !canEditDetails ? "disabled aria-disabled=\"true\"" : ""}>${state.savingEventSettings ? "Saving…" : "Save changes"}</button>
+          <p class="event-settings-feedback ${state.eventSettingsMessage.includes("could not") || state.eventSettingsMessage.includes("denied") || !canEditDetails ? "is-error" : ""}" id="eventSettingsFeedback" role="status">${escapeHtml(eventSettingsFeedback({ message: state.eventSettingsMessage, canEdit: canEditDetails, dirty: state.dirtyEventSettings, saving: state.savingEventSettings }))}</p>
+          <button class="da3wa-button da3wa-button--primary" type="submit" data-action="save-event-settings" ${saveDisabled ? "disabled aria-disabled=\"true\"" : "aria-disabled=\"false\""}>${state.savingEventSettings ? "Saving…" : "Save changes"}</button>
         </div>
       </form>
 
@@ -3419,6 +3480,21 @@ function renderEventSettingsPage() {
       </section>
     </section>
   `;
+  updateEventSettingsFormState();
+  if (focusedFieldName) {
+    const nextField = elements.pageContent.querySelector(
+      `#eventSettingsForm [name="${CSS.escape(focusedFieldName)}"]`,
+    );
+    nextField?.focus({ preventScroll: true });
+    try {
+      if (Number.isInteger(selectionStart) && Number.isInteger(selectionEnd)) {
+        nextField?.setSelectionRange(selectionStart, selectionEnd);
+      }
+    } catch {
+      // Date and time inputs do not expose a text selection range.
+    }
+    window.scrollTo(pageScroll.x, pageScroll.y);
+  }
 }
 
 function renderSideViewCard() {
@@ -3851,16 +3927,21 @@ function renderPlannerChair(table, chair) {
   const isSelected = state.selectedSeatId === buildSeatKey(table.id, chair.id);
   const isTemporary = isChairTemporarilySelected(table.id, chair.id);
   const isOccupied = Boolean(assignment);
+  const assignmentSelectionActive = Boolean(state.assignmentSession && state.assignmentSession.mode !== "mobile-table");
   const isPartyHighlighted =
     assignment?.guestId && assignment.guestId === state.activePartyGuestId;
   const label = String(chair.seatNumber);
+  const chairLabel = assignment
+    ? `Chair ${chair.seatNumber}, assigned to ${partyMemberLabel(guest, assignment.partyMemberIndex)}`
+    : `Available chair ${chair.seatNumber}${isTemporary ? ", selected for this assignment" : ""}`;
   return `
     <button
       class="planner-chair planner-chair--${escapeAttribute(statusClass)} ${isOccupied ? "is-occupied" : "is-empty"} ${isSelected ? "is-selected" : ""} ${isTemporary ? "is-temporary" : ""} ${isPartyHighlighted ? "is-party-highlighted" : ""}"
       type="button"
       style="left:${chair.x}%; top:${chair.y}%; --chair-rotation:${Number(chair.rotation || 0)}deg; --chair-color:${escapeAttribute(resolveChairColor(statusClass, table))}; --chair-ink:${getContrastingTextColor(resolveChairColor(statusClass, table))};"
-      title="${escapeAttribute(assignment ? `${partyMemberLabel(guest, assignment.partyMemberIndex)} - ${table.name} chair ${chair.seatNumber}` : `Available chair ${chair.seatNumber}`)}"
-      aria-label="${escapeAttribute(assignment ? `Chair ${chair.seatNumber}, assigned to ${partyMemberLabel(guest, assignment.partyMemberIndex)}` : `Available chair ${chair.seatNumber}`)}"
+      title="${escapeAttribute(assignment ? `${partyMemberLabel(guest, assignment.partyMemberIndex)} - ${table.name} chair ${chair.seatNumber}` : `${table.name} chair ${chair.seatNumber}${isTemporary ? " - selected for this assignment" : ""}`)}"
+      aria-label="${escapeAttribute(chairLabel)}"
+      ${assignmentSelectionActive ? `aria-pressed="${isTemporary}"` : ""}
       data-action="select-seat"
       data-table-id="${table.id}"
       data-chair-id="${chair.id}"
@@ -7042,6 +7123,7 @@ function renderAssignmentModal() {
         ${session.mobileDirectAssignment ? `<p class="planner-note">This assigns one unseated person from ${escapeHtml(guest.fullName || "this party")} to the selected seat. Remaining party members stay unassigned.</p>` : `<p class="planner-note">Use the canvas behind this modal to add or remove empty chairs. You can save a partial party assignment and finish the remaining seats later.</p>`}
       `
           : `
+        ${selectedCount ? `<div class="assignment-progress" role="status"><strong>${selectedCount} chair${selectedCount === 1 ? "" : "s"} selected</strong><span>${escapeHtml(getSelectedChairSummary(session.selectedChairs))}</span></div>` : ""}
         ${session.mobileDirectAssignment ? `<div class="mobile-assignment-filters"><button type="button" data-action="mobile-assignment-filter" data-filter="unassigned" class="${state.mobileAssignmentFilter === "unassigned" ? "is-active" : ""}">Needs seats</button><button type="button" data-action="mobile-assignment-filter" data-filter="all" class="${state.mobileAssignmentFilter === "all" ? "is-active" : ""}">All eligible</button></div>` : ""}
         <label class="planner-drawer__search">
           <span>Search by guest name or phone</span>
@@ -7120,7 +7202,8 @@ function toggleTemporaryChair(tableId, chairId) {
   if (existingIndex >= 0) {
     session.selectedChairs.splice(existingIndex, 1);
     state.modalError = "";
-    renderActiveView();
+    updateTemporaryChairSelection(table, chair);
+    refreshAssignmentSelectionUI();
     return;
   }
   if (getChairAssignment(tableId, chair)) {
@@ -7146,7 +7229,29 @@ function toggleTemporaryChair(tableId, chairId) {
   }
   session.selectedChairs.push({ tableId, chairId });
   state.modalError = "";
-  renderActiveView();
+  updateTemporaryChairSelection(table, chair);
+  refreshAssignmentSelectionUI();
+}
+
+function updateTemporaryChairSelection(table, chair) {
+  const selected = isChairTemporarilySelected(table.id, chair.id);
+  const node = document.querySelector(
+    `[data-action="select-seat"][data-table-id="${CSS.escape(table.id)}"][data-chair-id="${CSS.escape(chair.id)}"]`,
+  );
+  if (!node) return;
+  node.classList.toggle("is-temporary", selected);
+  if (state.assignmentSession && state.assignmentSession.mode !== "mobile-table") {
+    node.setAttribute("aria-pressed", String(selected));
+  }
+  const label = `Available chair ${chair.seatNumber}${selected ? ", selected for this assignment" : ""}`;
+  node.setAttribute("aria-label", label);
+  node.title = `${table.name} chair ${chair.seatNumber}${selected ? " - selected for this assignment" : ""}`;
+}
+
+function refreshAssignmentSelectionUI() {
+  const bar = document.querySelector(".assignment-bar");
+  if (bar && state.assignmentSession) bar.outerHTML = renderAssignmentControls();
+  if (elements.assignmentModal?.open) renderAssignmentModal();
 }
 
 function isChairTemporarilySelected(tableId, chairId) {

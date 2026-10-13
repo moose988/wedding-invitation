@@ -16,15 +16,21 @@ test("Event Settings is a routed event-scoped dashboard page with one shared nav
 });
 
 test("event details validate and persist to the selected event and workspace index", async () => {
-  const [dashboard, rules] = await Promise.all([read("dashboard.js"), read("firestore.rules")]);
+  const [dashboard, rules, saveState] = await Promise.all([read("dashboard.js"), read("firestore.rules"), read("event-settings-state.mjs")]);
   assert.match(dashboard, /function validateEventSettingsDraft\(/);
   assert.match(dashboard, /url\.protocol\) \|\| !url\.hostname/);
   assert.match(dashboard, /eventDateISO,\s*timeEn:/);
-  assert.match(dashboard, /batch\.update\(doc\(state\.services\.db, "weddings", state\.weddingId\), data\)/);
+  assert.match(dashboard, /commitEventSettingsBatch\(/);
+  assert.match(saveState, /batch\.update\(eventRef, eventData\)/);
+  assert.match(saveState, /batch\.set\(indexRef, indexData, \{ merge: true \}\)/);
+  assert.match(saveState, /await batch\.commit\(\)/);
   assert.match(dashboard, /"users", state\.currentUser\.uid, "weddingAccess", state\.weddingId/);
+  assert.match(dashboard, /"dashboardUsers",\s*state\.currentUser\.uid/);
   assert.match(dashboard, /state\.dirtyEventSettings && view !== state\.activeView/);
   assert.match(rules, /function validEventDetails\(data\)/);
   assert.match(rules, /function isOwnerEventDetailsUpdate\(weddingId\)/);
+  assert.match(rules, /function canEditEventDetails\(weddingId\)[\s\S]*?data\.get\("seatingOnly", false\) == false/);
+  assert.match(rules, /"mapsUrl", "venueMapEmbedUrl", "schedule"/);
   assert.match(rules, /data\.eventDateISO\.matches/);
   assert.match(rules, /mapsUrl\.matches/);
   assert.match(dashboard, /venueMapEmbedUrl/);

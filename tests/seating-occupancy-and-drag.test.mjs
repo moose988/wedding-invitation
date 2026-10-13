@@ -4,7 +4,7 @@ import test from "node:test";
 
 const read = (file) => readFile(new URL(`../${file}`, import.meta.url), "utf8");
 
-test("dashboard and guest map use white empty chairs and table-colored occupied chairs", async () => {
+test("dashboard and guest map use white empty chairs, configured-color occupied chairs, and configured-color temporary selections", async () => {
   const [dashboard, script, dashboardCss, invitationCss] = await Promise.all([
     read("dashboard.js"), read("script.js"), read("dashboard.css"), read("styles.css"),
   ]);
@@ -16,7 +16,21 @@ test("dashboard and guest map use white empty chairs and table-colored occupied 
   assert.match(invitationCss, /\.seat-plan-chair\.is-occupied\s*\{\s*background:var\(--chair-color\) !important/);
   assert.match(script, /isAssignedToInvite \? "is-yours is-occupied" : "is-empty"/);
   assert.match(script, /--chair-color:\$\{escapeAttribute\(table\.chairColor/);
-  assert.match(dashboardCss, /\.planner-chair\.is-empty\.is-temporary\s*\{\s*background:#fff !important/);
+  assert.match(dashboardCss, /\.planner-chair\.is-empty\.is-temporary\s*\{[^}]*background:var\(--chair-color\) !important; color:var\(--chair-ink,#fffdf8\) !important;[^}]*outline:3px dashed color-mix\(in srgb,var\(--chair-color\)/);
+  assert.match(dashboardCss, /\.planner-chair\.is-empty\.is-temporary::before\s*\{\s*background:var\(--chair-color\)/);
+  assert.match(dashboardCss, /\.planner-chair\.is-empty\.is-selected:not\(\.is-temporary\)/);
+  assert.doesNotMatch(dashboardCss, /\.planner-chair\.is-empty\.is-temporary\s*\{[^}]*background:#fff !important/);
+  assert.doesNotMatch(dashboardCss, /\.planner-table\.is-selected\s+\.planner-chair\s*\{/);
+  const chair = dashboard.slice(dashboard.indexOf("function renderPlannerChair("), dashboard.indexOf("function renderHallObject("));
+  assert.match(chair, /aria-pressed="\$\{isTemporary\}"/);
+  assert.match(chair, /selected for this assignment/);
+  const selection = dashboard.slice(dashboard.indexOf("function toggleTemporaryChair("), dashboard.indexOf("function isChairTemporarilySelected("));
+  assert.match(selection, /session\.selectedChairs\.splice\(existingIndex, 1\)/);
+  assert.match(selection, /session\.selectedChairs\.push\(\{ tableId, chairId \}\)/);
+  assert.match(selection, /updateTemporaryChairSelection\(table, chair\)/);
+  assert.match(selection, /refreshAssignmentSelectionUI\(\)/);
+  assert.doesNotMatch(selection, /renderActiveView\(\)/);
+  assert.match(dashboard, /function refreshAssignmentSelectionUI\(\)[\s\S]*?renderAssignmentControls\(\)[\s\S]*?renderAssignmentModal\(\)/);
 });
 
 test("table selection updates the existing planner DOM without rebuilding the venue", async () => {

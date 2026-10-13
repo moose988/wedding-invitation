@@ -4,7 +4,7 @@ import test from "node:test";
 
 const emulatorAvailable = Boolean(process.env.FIRESTORE_EMULATOR_HOST);
 
-test("Event Settings Firestore rules authorize only owners and explicit editors, including legacy saves", {
+test("Event Settings Firestore rules authorize owners and explicitly permitted dashboard editors, including legacy saves", {
   skip: emulatorAvailable ? false : "Run with the Firestore Emulator to verify security rules.",
 }, async () => {
   const [{ assertFails, assertSucceeds, initializeTestEnvironment }, firestore] = await Promise.all([
@@ -75,7 +75,7 @@ test("Event Settings Firestore rules authorize only owners and explicit editors,
     // Owner has no workspace index yet; the batch must create it atomically.
     await assertSucceeds(saveAsBatch("owner-1", "owner-event"));
     await assertSucceeds(saveAsBatch("editor-1", "editor-event"));
-    await assertFails(saveAsBatch("seating-1", "seating-event"));
+    await assertSucceeds(saveAsBatch("seating-1", "seating-event"));
     await assertFails(saveAsBatch("guest-1", "guest-event"));
 
     await assertFails(saveAsBatch("owner-1", "owner-event", {

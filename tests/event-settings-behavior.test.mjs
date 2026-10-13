@@ -45,10 +45,10 @@ test("Event Settings synchronizes native and accessible save state, including re
   assert.match(eventSettingsFeedback({ dirty, canEdit: true }), /All changes are saved/);
 });
 
-test("Event Settings keeps permission checks distinct from seating-only access", () => {
+test("Event Settings grants access only to owners or accounts with Event Details permission", () => {
   assert.equal(canEditEventSettings({ isOwner: true, seatingOnly: true, hasEventDetailsPermission: false }), true);
   assert.equal(canEditEventSettings({ isOwner: false, seatingOnly: false, hasEventDetailsPermission: true }), true);
-  assert.equal(canEditEventSettings({ isOwner: false, seatingOnly: true, hasEventDetailsPermission: true }), false);
+  assert.equal(canEditEventSettings({ isOwner: false, seatingOnly: true, hasEventDetailsPermission: true }), true);
   assert.equal(canEditEventSettings({ isOwner: false, seatingOnly: false, hasEventDetailsPermission: false }), false);
   assert.equal(isEventSettingsSaveDisabled({ dirty: true, saving: true, canEdit: true }), true);
   assert.equal(isEventSettingsSaveDisabled({ dirty: false, saving: false, canEdit: true }), true);

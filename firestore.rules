@@ -147,13 +147,12 @@ service cloud.firestore {
     // the explicit per-event permission before editing event details/status.
     function canEditEventDetails(weddingId) {
       return isDashboardMember(weddingId) &&
-        dashboardUser(weddingId).data.get("canEditEventDetails", false) == true &&
-        dashboardUser(weddingId).data.get("seatingOnly", false) == false;
+        dashboardUser(weddingId).data.get("canEditEventDetails", false) == true;
     }
 
     function isInvitationQrSettingsUpdate(weddingId) {
       return isSignedIn()
-        && (request.auth.uid == resource.data.ownerUserId || canManageUsers(weddingId))
+        && (request.auth.uid == resource.data.ownerUserId || canManageUsers(weddingId) || canEditEventDetails(weddingId))
         && request.resource.data.diff(resource.data).affectedKeys()
           .hasOnly(["showInvitationQr", "updatedAt"])
         && request.resource.data.showInvitationQr is bool
@@ -162,7 +161,7 @@ service cloud.firestore {
 
     function isInvitationSeatingSettingsUpdate(weddingId) {
       return isSignedIn()
-        && (request.auth.uid == resource.data.ownerUserId || canManageUsers(weddingId))
+        && (request.auth.uid == resource.data.ownerUserId || canManageUsers(weddingId) || canEditEventDetails(weddingId))
         && request.resource.data.diff(resource.data).affectedKeys()
           .hasOnly(["seatingEnabled", "updatedAt"])
         && request.resource.data.seatingEnabled is bool

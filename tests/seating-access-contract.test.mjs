@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import test from "node:test";
+import { buildAuthRouteUrl } from "../firebase-service-scopes.js";
 
 const root = new URL("../", import.meta.url);
 const read = (name) => readFile(new URL(name, root), "utf8");
@@ -13,7 +14,12 @@ test("Groom and Bride side links require authenticated, side-scoped seating acce
   assert.match(dashboard, /dashboard-login\.html\?\$\{managerParams\.toString\(\)\}/);
   assert.match(dashboard, /seatingOnly: "1"/);
   assert.match(dashboard, /requestedSeatingSide && allowedSide !== "all" && requestedSeatingSide !== allowedSide/);
-  assert.match(login, /nextParams\.set\("side", requestedSeatingSide\)/);
+  assert.match(login, /buildAuthRouteUrl\("\.\/dashboard\.html", \{[\s\S]*?side: requestedSeatingSide/);
+  assert.equal(buildAuthRouteUrl("./dashboard.html", {
+    weddingId: "event-42",
+    seatingOnly: true,
+    side: "bride",
+  }), "./dashboard.html?wedding=event-42&seatingOnly=1&side=bride");
 });
 
 test("seat-only guest writes are restricted to seating fields and the allowed side", async () => {

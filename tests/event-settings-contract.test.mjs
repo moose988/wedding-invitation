@@ -44,7 +44,7 @@ test("event details validate and persist to the selected event and workspace ind
   assert.match(dashboard, /state\.dirtyEventSettings && view !== state\.activeView/);
   assert.match(rules, /function validEventDetails\(data\)/);
   assert.match(rules, /function isOwnerEventDetailsUpdate\(weddingId\)/);
-  assert.match(rules, /function canEditEventDetails\(weddingId\)[\s\S]*?data\.get\("seatingOnly", false\) == false/);
+  assert.match(rules, /function canEditEventDetails\(weddingId\)[\s\S]*?data\.get\("canEditEventDetails", false\) == true/);
   assert.match(rules, /"mapsUrl", "venueMapEmbedUrl", "schedule"/);
   assert.match(rules, /data\.eventDateISO\.matches/);
   assert.match(rules, /mapsUrl\.matches/);

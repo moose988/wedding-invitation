@@ -20,8 +20,14 @@ import {
   updateDoc,
   where,
   writeBatch,
-} from "./firebase-config.js?v=20261013-overview-rsvp";
+} from "./firebase-config.js?v=20261014-seating-workspace-1";
+import {
+  buildAuthRouteUrl,
+  initializeFirebaseServicesForRoute,
+  waitForFirebaseSessionPersistence,
+} from "./firebase-service-scopes.js";
 import { exportGuests } from "./export.js";
+import { canViewSeatingAccountPage, resolveSeatingAccountPage } from "./dashboard-access.js";
 import { eventUsesGuestSides, getDefaultGuestSide, getEventDisplayTitle, isCelebrationEvent } from "./event-utils.js";
 import { attemptEventSettingsSave, bindEventSettingsFieldTracking, bindEventSettingsSubmit, canEditEventSettings, commitEventSettingsBatch, eventSettingsFeedback, eventSettingsHaveChanges, isEventSettingsSaveDisabled, updateEventSettingsSaveControl } from "./event-settings-state.js";
 import { createSenderPayload, encodeSenderPayload } from "./sender-codec.js";
@@ -761,7 +767,7 @@ const demoSeedGuests = [...demoGuests, ...seatingTestGuests];
 
 const state = {
   weddingId: params.get("wedding") || "",
-  editorMode: seatingEditorMode,
+  editorMode: seatingEditorMode || accountSeatingEditorMode,
   secureEditorMode: secureSeatingEditorMode,
   editorLinkToken: params.get("token") || "",
   editorRole: "",
@@ -918,14 +924,25 @@ async function init() {
     return;
   }
 
-  if (state.secureEditorMode) {
-    state.services = initSeatingEditorFirebase();
-    await state.services.persistenceReady;
-    await bootstrapSeatingEditor();
+  state.services = initializeFirebaseServicesForRoute(
+    {
+      seatingOnly: accountSeatingEditorMode,
+      seatingEditor: state.secureEditorMode,
+    },
+    { dashboard: initFirebase, seating: initSeatingEditorFirebase },
+  );
+  try {
+    await waitForFirebaseSessionPersistence(state.services);
+  } catch (error) {
+    console.error("Firebase session persistence could not be prepared.", error);
+    redirectToLogin("session-unavailable");
     return;
   }
 
-  state.services = initFirebase();
+  if (state.secureEditorMode) {
+    await bootstrapSeatingEditor();
+    return;
+  }
 
   state.unsubAuth?.();
   state.unsubAuth = onAuthStateChanged(state.services.auth, async (user) => {
@@ -949,7 +966,11 @@ async function init() {
       window.history.replaceState(
         null,
         "",
-        `./dashboard.html?wedding=${encodeURIComponent(state.weddingId)}`,
+        buildAuthRouteUrl("./dashboard.html", {
+          weddingId: state.weddingId,
+          seatingOnly: accountSeatingEditorMode,
+          side: requestedSeatingSide,
+        }),
       );
     }
     try {
@@ -1671,9 +1692,10 @@ async function bootstrapDashboard() {
     state.editorMode = true;
     state.secureEditorMode = false;
   } else if (accountSeatingEditorMode) {
-    // Owners and regular dashboard users can use the seating sign-in URL as a
-    // shortcut to the Seating view without being mistaken for restricted staff.
-    state.activeView = "seating";
+    // A restricted seating URL must never turn an owner login into the full
+    // dashboard. Require a real seating-only membership on this isolated Auth.
+    redirectToLogin("access-denied");
+    return;
   }
   if (state.editorMode) {
     const allowedSide = String(state.permissions.allowedSide || "")
@@ -1690,7 +1712,10 @@ async function bootstrapDashboard() {
     // `allowedSide` is a permission, not a URL preference.  The URL may only
     // repeat it; Firestore applies the same restriction for every write.
     state.editorRole = allowedSide;
-    state.activeView = "seating";
+    state.activeView = resolveSeatingAccountPage(
+      params.get("view"),
+      state.permissions,
+    );
   }
   rememberWeddingId(state.weddingId);
   const weddingDoc = await getDoc(
@@ -1812,7 +1837,9 @@ function startListeners() {
   state.loadingTables = true;
   renderActiveView();
 
-  const guestSource = state.editorMode && state.editorRole !== "all"
+  const scopeGuestsToEditorSide = state.editorMode && state.editorRole !== "all" &&
+    (!state.permissions?.seatingOnly || state.activeView === "seating");
+  const guestSource = scopeGuestsToEditorSide
     ? query(
         collection(state.services.db, "weddings", state.weddingId, "guests"),
         where("side", "in", editorGuestSideValues(state.editorRole)),
@@ -2125,6 +2152,8 @@ function renderChrome() {
   const meta = pageMeta[state.activeView];
   const isSeatingView = state.activeView === "seating";
   const isOverviewView = state.activeView === "overview";
+  const isSeatingEditorView = state.editorMode && state.activeView === "seating";
+  const isAccountSeatingWorkspace = state.permissions?.seatingOnly === true;
   document.body.classList.toggle("is-seating-view", isSeatingView);
   document.body.classList.toggle("is-overview-view", isOverviewView);
   document.body.classList.toggle("is-guests-view", state.activeView === "guests");
@@ -2135,7 +2164,7 @@ function renderChrome() {
     state.editorMode && !state.secureEditorMode,
   );
   if (elements.allEventsNavLink) {
-    elements.allEventsNavLink.hidden = state.editorMode;
+    elements.allEventsNavLink.hidden = isAccountSeatingWorkspace || state.secureEditorMode;
   }
   elements.signOutButton.textContent = state.editorMode
     ? "End session"
@@ -2143,17 +2172,17 @@ function renderChrome() {
   if (elements.signedInUserName) {
     elements.signedInUserName.textContent = signedInUserName();
   }
-  elements.pageEyebrow.textContent = state.editorMode
+  elements.pageEyebrow.textContent = isSeatingEditorView
     ? "Secure shared workspace"
     : isSeatingView
       ? ""
       : meta.eyebrow;
-  elements.pageTitle.textContent = state.editorMode
+  elements.pageTitle.textContent = isSeatingEditorView
     ? `${state.editorRole === "all" ? "All sides" : `${state.editorRole[0].toUpperCase()}${state.editorRole.slice(1)}`} — Seating Editor`
     : isSeatingView
       ? ""
       : meta.title;
-  elements.pageDescription.textContent = state.editorMode
+  elements.pageDescription.textContent = isSeatingEditorView
     ? "Changes are synchronized live with the event dashboard."
     : isSeatingView
       ? ""
@@ -2172,12 +2201,16 @@ function renderChrome() {
       "is-active",
       button.dataset.navView === state.activeView,
     );
-    if (button.dataset.navView === "seating") button.hidden = !isSeatingEnabled();
-    if (button.dataset.navView === "checkin") {
-      button.hidden = !isInvitationQrEnabled();
-    }
-    if (button.dataset.navView === "guestSummary") {
-      button.hidden = !canViewGuestSummary() || state.editorMode;
+    if (isAccountSeatingWorkspace) {
+      button.hidden = !canViewSeatingAccountPage(button.dataset.navView, state.permissions);
+    } else {
+      if (button.dataset.navView === "seating") button.hidden = !isSeatingEnabled();
+      if (button.dataset.navView === "checkin") {
+        button.hidden = !isInvitationQrEnabled();
+      }
+      if (button.dataset.navView === "guestSummary") {
+        button.hidden = !canViewGuestSummary() || state.editorMode;
+      }
     }
   });
 
@@ -2325,7 +2358,8 @@ function switchView(view) {
     state.dirtyEventSettings = false;
     state.eventSettingsMessage = "";
   }
-  if (state.editorMode && view !== "seating") return;
+  if (state.permissions?.seatingOnly === true && !canViewSeatingAccountPage(view, state.permissions)) return;
+  if (state.editorMode && !state.permissions?.seatingOnly && view !== "seating") return;
   if (view === "guestSummary" && !canViewGuestSummary()) return;
   if (view === "checkin" && !isInvitationQrEnabled()) return;
   if (view === "seating" && !isSeatingEnabled()) {
@@ -2339,7 +2373,7 @@ function switchView(view) {
   state.activeView = view;
   const closeDrawer = state.sidebarOpen;
   state.sidebarOpen = false;
-  if (!state.editorMode) {
+  if (!state.secureEditorMode) {
     const nextUrl = new URL(window.location.href);
     if (view === "overview") {
       nextUrl.searchParams.delete("view");
@@ -2348,6 +2382,7 @@ function switchView(view) {
     }
     window.history.replaceState(null, "", nextUrl);
   }
+  if (state.permissions?.seatingOnly === true) startListeners();
   renderAll();
   if (closeDrawer && window.matchMedia("(max-width: 1180px)").matches) {
     (view === "seating"
@@ -4011,7 +4046,7 @@ function renderHallObject(item) {
 }
 
 function canManageInvitationSettings() {
-  return isWeddingOwner() || can("canManageUsers");
+  return canEditEventDetails();
 }
 
 function isSeatingEnabled() {
@@ -8948,21 +8983,13 @@ function rememberWeddingId(weddingId) {
 }
 
 function buildLoginUrl(message) {
-  const nextParams = new URLSearchParams();
-  if (state.weddingId) {
-    nextParams.set("wedding", state.weddingId);
-  }
-  if (state.mode === "demo") {
-    nextParams.set("demo", "1");
-  }
-  if (state.editorMode && !state.secureEditorMode) {
-    nextParams.set("seatingOnly", "1");
-  }
-  if (message) {
-    nextParams.set("message", message);
-  }
-  const query = nextParams.toString();
-  return query ? `./dashboard-login.html?${query}` : "./dashboard-login.html";
+  return buildAuthRouteUrl("./dashboard-login.html", {
+    weddingId: state.weddingId,
+    demo: state.mode === "demo",
+    seatingOnly: (state.editorMode || accountSeatingEditorMode) && !state.secureEditorMode,
+    side: requestedSeatingSide,
+    message,
+  });
 }
 
 function materializeDemoPayload(payload, existingGuest = null) {

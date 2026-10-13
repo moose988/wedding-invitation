@@ -5,7 +5,7 @@ export function eventSettingsHaveChanges(draft, original) {
 }
 
 export function canEditEventSettings({ isOwner, seatingOnly, hasEventDetailsPermission }) {
-  return Boolean(isOwner || (!seatingOnly && hasEventDetailsPermission));
+  return Boolean(isOwner || hasEventDetailsPermission);
 }
 
 export function isEventSettingsSaveDisabled({ dirty, saving, canEdit }) {

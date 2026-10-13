@@ -299,11 +299,9 @@ a {
   text-decoration: none;
 }
 
-/* Account-based seating editors retain only the one navigation destination
-   they are allowed to use, plus their signed-in identity and sign-out. */
-.da3wa-sidebar.is-seating-only .da3wa-nav-group__label,
-.da3wa-sidebar.is-seating-only [data-nav-view]:not([data-nav-view="seating"]) {
-  display: none;
+/* Keep native hidden state effective even where dashboard links set display:flex. */
+.da3wa-sidebar [hidden] {
+  display: none !important;
 }
 
 .da3wa-signed-in-user {

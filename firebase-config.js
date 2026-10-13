@@ -32,6 +32,11 @@ import {
   writeBatch,
 } from "https://www.gstatic.com/firebasejs/10.12.5/firebase-firestore.js";
 import { getFirestore } from "https://www.gstatic.com/firebasejs/10.12.5/firebase-firestore.js";
+import {
+  createScopedServiceCache,
+  DEFAULT_FIREBASE_APP_NAME,
+  resolveFirebaseApp,
+} from "./firebase-service-scopes.js";
 
 const defaultConfig = {
   apiKey: "",
@@ -42,17 +47,15 @@ const defaultConfig = {
   appId: "",
 };
 
-let cachedServices = null;
-let cachedPublicServices = null;
-let cachedSeatingEditorServices = null;
+const serviceCache = createScopedServiceCache();
 
-function getConfiguredApp() {
+function getConfiguredApp(name = DEFAULT_FIREBASE_APP_NAME) {
   if (!isFirebaseConfigured()) {
     throw new Error("Firebase config is missing. Add window.FIREBASE_CONFIG in firebase-config.js.");
   }
 
   const config = { ...defaultConfig, ...(window.FIREBASE_CONFIG || {}) };
-  const app = getApps().find((candidate) => candidate.name === "[DEFAULT]") || initializeApp(config);
+  const app = resolveFirebaseApp({ getApps, initializeApp }, config, name);
   return { app, config };
 }
 
@@ -62,72 +65,62 @@ export function isFirebaseConfigured() {
 }
 
 export function initFirebase() {
-  if (cachedServices) {
-    return cachedServices;
-  }
+  return serviceCache.get("dashboard", () => {
+    const { app, config } = getConfiguredApp();
+    const auth = getAuth(app);
+    const db = getFirestore(app);
+    // Match the backend's default Cloud Functions region explicitly.
+    const functions = getFunctions(app, "us-central1");
 
-  const { app, config } = getConfiguredApp();
-  const auth = getAuth(app);
-  const db = getFirestore(app);
-  // Match the backend's default Cloud Functions region explicitly.
-  const functions = getFunctions(app, "us-central1");
+    // Firebase Auth uses local persistence by default in browser apps. Do not
+    // rewrite it while initializing the dashboard's shared local session.
+    isSupported()
+      .then((supported) => {
+        if (supported) getAnalytics(app);
+      })
+      .catch((error) => {
+        console.warn("Firebase Analytics could not be started.", error);
+      });
 
-  // Firebase Auth uses local persistence by default in browser apps. Do not
-  // call setPersistence here: every tab has its own Auth object, and rewriting
-  // shared local persistence from a newly opened tab can replace another tab's
-  // restored user with null.
-
-  isSupported()
-    .then((supported) => {
-      if (supported) {
-        getAnalytics(app);
-      }
-    })
-    .catch((error) => {
-      console.warn("Firebase Analytics could not be started.", error);
-    });
-
-  cachedServices = { app, auth, db, functions, config };
-  return cachedServices;
+    return { app, auth, db, functions, config };
+  });
 }
 
 // Public invitations need Firestore's public-data rules, but must not initialize
 // or mutate the dashboard's shared Auth instance as a side effect.
 export function initPublicFirebase() {
-  if (cachedPublicServices) return cachedPublicServices;
+  return serviceCache.get("public-invitation", () => {
+    if (!isFirebaseConfigured()) {
+      throw new Error("Firebase config is missing. Add window.FIREBASE_CONFIG in firebase-config.js.");
+    }
 
-  if (!isFirebaseConfigured()) {
-    throw new Error("Firebase config is missing. Add window.FIREBASE_CONFIG in firebase-config.js.");
-  }
-
-  const config = { ...defaultConfig, ...(window.FIREBASE_CONFIG || {}) };
-  const app = getApps().find((candidate) => candidate.name === "public-invitation") || initializeApp(config, "public-invitation");
-  cachedPublicServices = { app, db: getFirestore(app), config };
-  return cachedPublicServices;
+    const config = { ...defaultConfig, ...(window.FIREBASE_CONFIG || {}) };
+    const app = resolveFirebaseApp({ getApps, initializeApp }, config, "public-invitation");
+    return { app, db: getFirestore(app), config };
+  });
 }
 
 // One-time seating links exchange for a narrowly scoped custom token. Keep that
 // identity on its own named app and tab-scoped persistence so it cannot replace
 // the planner owner's default-app session in another tab.
 export function initSeatingEditorFirebase() {
-  if (cachedSeatingEditorServices) return cachedSeatingEditorServices;
+  return serviceCache.get("seating-editor", () => {
+    if (!isFirebaseConfigured()) {
+      throw new Error("Firebase config is missing. Add window.FIREBASE_CONFIG in firebase-config.js.");
+    }
 
-  if (!isFirebaseConfigured()) {
-    throw new Error("Firebase config is missing. Add window.FIREBASE_CONFIG in firebase-config.js.");
-  }
+    const config = { ...defaultConfig, ...(window.FIREBASE_CONFIG || {}) };
+    const app = resolveFirebaseApp({ getApps, initializeApp }, config, "seating-editor");
+    const auth = getAuth(app);
+    const db = getFirestore(app);
+    const functions = getFunctions(app, "us-central1");
+    const persistenceReady = setPersistence(auth, browserSessionPersistence);
+    persistenceReady.catch((error) => {
+      console.warn("Seating editor session persistence could not be enabled.", error);
+    });
 
-  const config = { ...defaultConfig, ...(window.FIREBASE_CONFIG || {}) };
-  const app = getApps().find((candidate) => candidate.name === "seating-editor") || initializeApp(config, "seating-editor");
-  const auth = getAuth(app);
-  const db = getFirestore(app);
-  const functions = getFunctions(app, "us-central1");
-  const persistenceReady = setPersistence(auth, browserSessionPersistence);
-  persistenceReady.catch((error) => {
-    console.warn("Seating editor session persistence could not be enabled.", error);
+    return { app, auth, db, functions, config, persistenceReady };
   });
-
-  cachedSeatingEditorServices = { app, auth, db, functions, config, persistenceReady };
-  return cachedSeatingEditorServices;
 }
 
 export {

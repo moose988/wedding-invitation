@@ -4,11 +4,17 @@ import {
   getDoc,
   getDocs,
   initFirebase,
+  initSeatingEditorFirebase,
   isFirebaseConfigured,
   query,
   signInWithEmailAndPassword,
   where,
-} from "./firebase-config.js?v=20261013-auth-session-isolation-2";
+} from "./firebase-config.js?v=20261013-auth-session-isolation-3";
+import {
+  buildAuthRouteUrl,
+  initializeFirebaseServicesForRoute,
+  waitForFirebaseSessionPersistence,
+} from "./firebase-service-scopes.js";
 
 const params = new URLSearchParams(window.location.search);
 const lastWeddingStorageKey = "da3wa:lastDashboardWeddingId";
@@ -34,6 +40,7 @@ const elements = {
 };
 
 let services = null;
+let servicesReady = Promise.resolve(false);
 let isRedirecting = false;
 
 init();
@@ -48,14 +55,32 @@ function init() {
   }
 
   elements.passwordToggle?.addEventListener("click", togglePasswordVisibility);
+  elements.loginForm?.addEventListener("submit", handleLogin);
 
   if (!isFirebaseConfigured()) {
     elements.authStatus.textContent = "Firebase is not configured yet. Dashboard access is unavailable.";
     return;
   }
 
-  services = initFirebase();
-  elements.loginForm?.addEventListener("submit", handleLogin);
+  try {
+    services = initializeFirebaseServicesForRoute(
+      { seatingOnly: seatingOnlyMode },
+      { dashboard: initFirebase, seating: initSeatingEditorFirebase },
+    );
+    servicesReady = waitForFirebaseSessionPersistence(services)
+      .then(() => true)
+      .catch((error) => {
+        console.error("Firebase session could not be prepared.", error);
+        elements.authStatus.textContent = seatingOnlyMode
+          ? "The seating session could not be prepared. Please refresh and try again."
+          : "Dashboard sign-in could not be prepared. Please refresh and try again.";
+        return false;
+      });
+  } catch (error) {
+    console.error("Firebase session could not be initialized.", error);
+    elements.authStatus.textContent = "Firebase sign-in could not be initialized.";
+    return;
+  }
   const statusMessage = params.get("message");
   if (statusMessage === "signed-out") {
     elements.authStatus.textContent = "You signed out successfully.";
@@ -87,6 +112,7 @@ async function handleLogin(event) {
   setSubmitLoading(true);
 
   try {
+    if (!(await servicesReady)) return;
     const credential = await signInWithEmailAndPassword(services.auth, email, password);
     elements.authStatus.textContent = "Redirecting to dashboard...";
     await redirectAfterLogin(credential.user);
@@ -184,11 +210,12 @@ async function canViewWedding(user, weddingId) {
   }
 
   const permission = permissionDoc.data();
-  if (!seatingOnlyMode || permission.seatingOnly !== true) {
+  if (!seatingOnlyMode) {
     return true;
   }
 
   if (
+    permission.seatingOnly !== true ||
     permission.canEditSeating !== true ||
     !["bride", "groom", "all"].includes(permission.allowedSide) ||
     (requestedSeatingSide && permission.allowedSide !== "all" && requestedSeatingSide !== permission.allowedSide)
@@ -211,18 +238,9 @@ function redirectToDashboard(weddingId) {
 }
 
 function buildDashboardUrl(weddingId) {
-  const nextParams = new URLSearchParams();
-
-  if (weddingId) {
-    nextParams.set("wedding", weddingId);
-  }
-  if (seatingOnlyMode) {
-    nextParams.set("seatingOnly", "1");
-  }
-  if (requestedSeatingSide) {
-    nextParams.set("side", requestedSeatingSide);
-  }
-
-  const query = nextParams.toString();
-  return query ? `./dashboard.html?${query}` : "./dashboard.html";
+  return buildAuthRouteUrl("./dashboard.html", {
+    weddingId,
+    seatingOnly: seatingOnlyMode,
+    side: requestedSeatingSide,
+  });
 }

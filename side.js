@@ -12,9 +12,13 @@ import {
   serverTimestamp,
   signInWithCustomToken,
   where,
-} from "./firebase-config.js?v=20261013-auth-session-isolation-2";
+} from "./firebase-config.js?v=20261013-auth-session-isolation-3";
 import { resolveTableName } from "./seating-utils.js";
 import { getEventDisplayTitle, isCelebrationEvent } from "./event-utils.js";
+import {
+  initializeFirebaseServicesForRoute,
+  waitForFirebaseSessionPersistence,
+} from "./firebase-service-scopes.js";
 
 const shell = document.querySelector("#sideShell");
 const modalRoot = document.querySelector("#modalRoot");
@@ -53,10 +57,12 @@ async function init() {
     }
     if (!isFirebaseConfigured())
       throw new Error("Firebase has not been configured.");
-    const services = editorToken
-      ? initSeatingEditorFirebase()
-      : initFirebase();
+    const services = initializeFirebaseServicesForRoute(
+      { seatingEditor: Boolean(editorToken) },
+      { dashboard: initFirebase, seating: initSeatingEditorFirebase },
+    );
     state.services = services;
+    if (editorToken) await waitForFirebaseSessionPersistence(services);
     if (editorToken) {
       await services.persistenceReady;
       const exchange = httpsCallable(

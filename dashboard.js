@@ -2594,9 +2594,7 @@ function renderGuestPage() {
             ]) : ""}
           </div>
           <div class="guest-directory-counts" aria-live="polite">
-            <strong>${hasGuestFilters ? "Matching guests" : "Event guests"}</strong>
-            <span>Guests: ${hasGuestFilters ? filteredCounts.primary : directoryCounts.primary}</span>
-            <span>Including additional guests: ${hasGuestFilters ? filteredCounts.people : directoryCounts.people}</span>
+            ${renderGuestDirectoryCounts(hasGuestFilters ? "Matching guests" : "Guest totals", hasGuestFilters ? filteredCounts : directoryCounts)}
           </div>
         </div>
       </article>
@@ -2630,6 +2628,24 @@ function renderGuestPage() {
       </div>
       ${renderGuestDirectoryPagination(pageStart, guests.length, totalGuestPages)}
     </section>
+  `;
+}
+
+function renderGuestDirectoryCounts(heading, counts) {
+  return `
+    <p class="guest-directory-counts__heading">${heading}</p>
+    <div class="guest-directory-counts__grid">
+      <div class="guest-directory-counts__item">
+        <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M16 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2M10 11a4 4 0 1 0 0-8 4 4 0 0 0 0 8Zm10 10v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75"/></svg>
+        <span>Event guests</span>
+        <strong>${counts.primary}</strong>
+      </div>
+      <div class="guest-directory-counts__item guest-directory-counts__item--people">
+        <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M12 12a4 4 0 1 0 0-8 4 4 0 0 0 0 8Zm-8 9v-1a8 8 0 0 1 16 0v1M19 8a3 3 0 0 1 0 6m1 2a5 5 0 0 1 2 4v1"/></svg>
+        <span>People, including additional guests</span>
+        <strong>${counts.people}</strong>
+      </div>
+    </div>
   `;
 }
 
@@ -2683,7 +2699,7 @@ function renderGuestDirectoryResults() {
   const matching = Boolean(state.guestFilters.search.trim() || state.guestFilters.rsvp !== "all" || state.guestFilters.side !== "all");
   const counts = calculateGuestDirectoryCounts(matching ? guests : state.guests);
   const countNode = elements.pageContent.querySelector(".guest-directory-counts");
-  if (countNode) countNode.innerHTML = `<strong>${matching ? "Matching guests" : "Event guests"}</strong><span>Guests: ${counts.primary}</span><span>Including additional guests: ${counts.people}</span>`;
+  if (countNode) countNode.innerHTML = renderGuestDirectoryCounts(matching ? "Matching guests" : "Guest totals", counts);
   elements.pageContent.querySelector("[data-guest-directory-list]").innerHTML = renderGuestDirectoryList(visibleGuests, usesSides, guests);
   const controls = elements.pageContent.querySelector(".guest-page-controls");
   if (controls) controls.outerHTML = renderGuestDirectoryPagination(pageStart, guests.length, totalPages);
@@ -4579,7 +4595,7 @@ function renderGuestActionMenu(guest, trigger) {
   menu.setAttribute("aria-label", `Actions for ${guest.fullName || "guest"}`);
   menu.innerHTML = `
     ${menuItem("WhatsApp", "open-reminder", guest.id, !buildWhatsAppReminderLink(guest))}
-    ${menuItem("Copy QR link", "copy-guest-qr", guest.id)}
+    ${isInvitationQrEnabled() ? menuItem("Copy QR link", "copy-guest-qr", guest.id) : ""}
     ${menuItem("Delete guest", "delete-guest", guest.id, !can("canEditGuests"))}
   `;
   document.body.appendChild(menu);
@@ -4926,6 +4942,10 @@ async function handleAction(action, dataset, event = null) {
       return;
     }
     case "copy-guest-qr": {
+      if (!isInvitationQrEnabled()) {
+        showToast("QR links are disabled for this event.", "info");
+        return;
+      }
       const guest = state.guests.find((item) => item.id === dataset.guestId);
       if (guest) {
         await copyText(guest.qrCodeValue || buildCheckinLink(guest.guestToken));

@@ -3826,21 +3826,78 @@ body.is-seating-view .planner-canvas {
 
 /* Mobile directory, assignment dialog, and stable search result regions. */
 .guest-directory-counts {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 4px 12px;
-  width: fit-content;
+  display: grid;
+  gap: 8px;
+  width: min(100%, 540px);
   max-width: 100%;
-  padding: 9px 12px;
-  border-radius: 14px;
-  background: rgba(239, 227, 207, 0.72);
+  padding: 12px;
+  border: 1px solid rgba(205, 187, 151, 0.48);
+  border-radius: 16px;
+  background: linear-gradient(140deg, rgba(255, 253, 248, 0.96), rgba(246, 241, 232, 0.88));
+  box-shadow: 0 6px 18px rgba(76, 61, 33, 0.06);
   color: var(--da3wa-text-soft);
-  font-size: 12px;
-  line-height: 1.35;
 }
 
-.guest-directory-counts strong { color: #7a5a27; }
+.guest-directory-counts__heading {
+  margin: 0;
+  color: var(--da3wa-text-muted);
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 0.11em;
+  line-height: 1.2;
+  text-transform: uppercase;
+}
+
+.guest-directory-counts__grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.guest-directory-counts__item {
+  display: grid;
+  grid-template-columns: 22px minmax(0, 1fr);
+  grid-template-rows: auto auto;
+  align-items: center;
+  gap: 3px 8px;
+  min-width: 0;
+  padding: 9px;
+  border: 1px solid rgba(205, 187, 151, 0.34);
+  border-radius: 12px;
+  background: rgba(246, 241, 232, 0.76);
+}
+
+.guest-directory-counts__item--people {
+  background: rgba(219, 233, 228, 0.54);
+  border-color: rgba(31, 90, 77, 0.18);
+}
+
+.guest-directory-counts__item svg {
+  grid-row: 1 / 3;
+  width: 20px;
+  height: 20px;
+  fill: none;
+  stroke: var(--da3wa-primary);
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  stroke-width: 1.7;
+}
+
+.guest-directory-counts__item span {
+  min-width: 0;
+  color: var(--da3wa-text-soft);
+  font-size: 10px;
+  font-weight: 700;
+  line-height: 1.25;
+  overflow-wrap: anywhere;
+}
+
+.guest-directory-counts__item strong {
+  color: var(--da3wa-text);
+  font-size: 19px;
+  line-height: 1;
+}
+
 .guest-directory-list { display: grid; min-width: 0; gap: 10px; }
 .guest-page-controls { margin-top: 8px; }
 
@@ -3877,7 +3934,7 @@ body.is-seating-view .planner-canvas {
 .da3wa-dialog--modal#assignmentModal .assignment-seat-summary strong { font-size: 14px; }
 .da3wa-dialog--modal#assignmentModal .assignment-search { display: block; }
 .da3wa-dialog--modal#assignmentModal .assignment-search input { min-height: 46px; width: 100%; }
-.da3wa-dialog--modal#assignmentModal .assignment-guest-list { min-height: 72px; max-height: none; flex: 1; overflow: auto; padding: 0 2px 2px 0; overscroll-behavior: contain; }
+.da3wa-dialog--modal#assignmentModal .assignment-guest-list { min-height: 72px; max-height: none; flex: 1; align-content: start; grid-auto-rows: max-content; overflow: auto; padding: 0 2px 2px 0; overscroll-behavior: contain; }
 .da3wa-dialog--modal#assignmentModal .assignment-guest-option { gap: 3px; padding: 10px 12px; color: var(--da3wa-text); text-align: start; }
 .da3wa-dialog--modal#assignmentModal .assignment-guest-option strong { color: var(--da3wa-text); }
 .da3wa-dialog--modal#assignmentModal .assignment-guest-option span,
@@ -3889,8 +3946,11 @@ body.is-seating-view .planner-canvas {
 .da3wa-dialog--modal#assignmentModal .da3wa-sheet__footer .da3wa-button { min-height: 46px; justify-content: center; }
 
 @media (max-width: 700px) {
-  .guest-directory-counts { gap: 3px 8px; padding: 8px 10px; font-size: 11px; }
-  .guest-directory-counts > span:last-child { flex-basis: 100%; }
+  .guest-directory-counts { gap: 7px; padding: 10px; }
+  .guest-directory-counts__grid { gap: 6px; }
+  .guest-directory-counts__item { grid-template-columns: 18px minmax(0, 1fr); gap: 3px 6px; padding: 8px; }
+  .guest-directory-counts__item svg { width: 17px; height: 17px; }
+  .guest-directory-counts__item span { font-size: 9px; }
   .guest-card {
     display: grid;
     grid-template-columns: minmax(0, 1fr) 44px;
@@ -4242,7 +4302,7 @@ body.is-seating-view .planner-canvas {
   .da3wa-dialog--modal#assignmentModal .da3wa-sheet--assignment { display:grid; grid-template-rows:auto minmax(0,1fr) auto; width:min(100%,620px); height:min(84dvh,760px); max-height:calc(100dvh - env(safe-area-inset-top) - env(safe-area-inset-bottom) - 24px); margin:auto; border-radius:20px; overflow:hidden; }
   .da3wa-dialog--modal#assignmentModal .da3wa-sheet__header,.da3wa-dialog--modal#assignmentModal .da3wa-sheet__footer { padding:12px 14px; }
   .da3wa-dialog--modal#assignmentModal .da3wa-sheet__body { min-height:0; padding:12px 14px; gap:12px; overscroll-behavior:contain; }
-  .da3wa-dialog--modal#assignmentModal .assignment-guest-list { min-height:0; max-height:none; flex:1; overflow:auto; }
+  .da3wa-dialog--modal#assignmentModal .assignment-guest-list { min-height:0; max-height:none; flex:1; align-content:start; grid-auto-rows:max-content; overflow:auto; }
   .da3wa-dialog--modal#assignmentModal .da3wa-sheet__footer { padding-bottom:max(12px,env(safe-area-inset-bottom)); }
   .da3wa-dialog--modal#assignmentModal .da3wa-sheet__footer .da3wa-button { min-height:46px; }
 }
@@ -4558,7 +4618,7 @@ body.is-seating-view .planner-canvas {
   }
 
   .guest-page-actions {
-    order: 1;
+    order: 0;
     display: flex;
     width: 100%;
     justify-content: flex-start;
@@ -4573,7 +4633,7 @@ body.is-seating-view .planner-canvas {
   }
 
   .guest-toolbar {
-    order: 2;
+    order: 1;
     width: 100%;
     padding: 12px;
     border-radius: 18px;
@@ -4598,6 +4658,11 @@ body.is-seating-view .planner-canvas {
     grid-column: 1 / -1;
   }
 
+  .guest-directory-counts {
+    grid-column: 1 / -1;
+    width: 100%;
+  }
+
   .guest-toolbar__filters .da3wa-input {
     width: 100%;
     min-width: 0;
@@ -4614,7 +4679,7 @@ body.is-seating-view .planner-canvas {
   }
 
   .guest-bulkbar {
-    order: 3;
+    order: 2;
     width: 100%;
     gap: 10px;
     padding: 12px;
@@ -4627,6 +4692,10 @@ body.is-seating-view .planner-canvas {
     gap: 8px;
     padding: 0;
     font-size: 12px;
+  }
+
+  .guest-directory-list {
+    order: 3;
   }
 
   .guest-page-controls > span {

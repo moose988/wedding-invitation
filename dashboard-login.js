@@ -1,27 +1,14 @@
 import {
-  collection,
-  doc,
-  getDoc,
-  getDocs,
   initFirebase,
-  initSeatingEditorFirebase,
   isFirebaseConfigured,
-  query,
   signInWithEmailAndPassword,
-  where,
-} from "./firebase-config.js?v=20261013-auth-session-isolation-3";
+} from "./firebase-config.js?v=20261016-tab-session-isolation-1";
 import {
-  buildAuthRouteUrl,
   initializeFirebaseServicesForRoute,
   waitForFirebaseSessionPersistence,
 } from "./firebase-service-scopes.js";
 
 const params = new URLSearchParams(window.location.search);
-const lastWeddingStorageKey = "da3wa:lastDashboardWeddingId";
-const seatingOnlyMode = params.get("seatingOnly") === "1";
-const requestedSeatingSide = ["bride", "groom"].includes(params.get("side"))
-  ? params.get("side")
-  : "";
 
 const elements = {
   loginForm: document.getElementById("loginForm"),
@@ -46,14 +33,6 @@ let isRedirecting = false;
 init();
 
 function init() {
-  if (seatingOnlyMode) {
-    document.title = "qdsystems Seating Editor";
-    elements.loginEyebrow.textContent = "Seating Access";
-    elements.loginTitle.textContent = "Event Seating Editor";
-    elements.loginDescription.textContent = "Sign in to view and update the seating plan.";
-    elements.loginSubmitLabel.textContent = "Open seating editor";
-  }
-
   elements.passwordToggle?.addEventListener("click", togglePasswordVisibility);
   elements.loginForm?.addEventListener("submit", handleLogin);
 
@@ -64,16 +43,14 @@ function init() {
 
   try {
     services = initializeFirebaseServicesForRoute(
-      { seatingOnly: seatingOnlyMode },
-      { dashboard: initFirebase, seating: initSeatingEditorFirebase },
+      {},
+      { dashboard: initFirebase },
     );
     servicesReady = waitForFirebaseSessionPersistence(services)
       .then(() => true)
       .catch((error) => {
         console.error("Firebase session could not be prepared.", error);
-        elements.authStatus.textContent = seatingOnlyMode
-          ? "The seating session could not be prepared. Please refresh and try again."
-          : "Dashboard sign-in could not be prepared. Please refresh and try again.";
+        elements.authStatus.textContent = "Dashboard sign-in could not be prepared. Please refresh and try again.";
         return false;
       });
   } catch (error) {
@@ -113,9 +90,9 @@ async function handleLogin(event) {
 
   try {
     if (!(await servicesReady)) return;
-    const credential = await signInWithEmailAndPassword(services.auth, email, password);
-    elements.authStatus.textContent = "Redirecting to dashboard...";
-    await redirectAfterLogin(credential.user);
+    await signInWithEmailAndPassword(services.auth, email, password);
+    elements.authStatus.textContent = "Opening All Events...";
+    redirectAfterLogin();
   } catch (error) {
     console.error(error);
     elements.authStatus.textContent = "Sign-in failed. Please check your email and password.";
@@ -140,107 +117,14 @@ function setSubmitLoading(isLoading) {
   elements.loginSubmitButton.setAttribute("aria-busy", String(isLoading));
   elements.loginSubmitLabel.textContent = isLoading
     ? "Signing in..."
-    : seatingOnlyMode ? "Open seating editor" : "Sign in";
+    : "Sign in";
   elements.spinner.hidden = !isLoading;
   elements.submitArrow.hidden = isLoading;
 }
 
-async function redirectAfterLogin(user) {
-  // Preserve an explicitly requested wedding across preview-domain sign-in.
-  // Each Firebase Hosting preview is a separate browser origin, so a user may
-  // need to authenticate again even when another preview channel is signed in.
-  const requestedWeddingId = params.get("wedding");
-  if (requestedWeddingId) {
-    if (await canViewWedding(user, requestedWeddingId)) {
-      rememberWeddingId(requestedWeddingId);
-      redirectToDashboard(requestedWeddingId);
-      return;
-    }
-    elements.authStatus.textContent =
-      "This account does not have dashboard access for that event.";
-    return;
-  }
-
-  // Seating-only accounts remain event-specific. Normal planners without an
-  // explicit wedding land in the workspace.
-  if (seatingOnlyMode) {
-    const weddingId = await resolveAccessibleWeddingId(user);
-    if (!weddingId) {
-      elements.authStatus.textContent = "No seating access was found for this account.";
-      return;
-    }
-    redirectToDashboard(weddingId);
-    return;
-  }
-
+function redirectAfterLogin() {
+  // Every password sign-in starts in the workspace. Opening an event is a
+  // separate choice made from All Events after the account's access is loaded.
   isRedirecting = true;
-  window.location.replace("./weddings.html");
-}
-
-async function resolveAccessibleWeddingId(user) {
-  const requestedWeddingId = params.get("wedding");
-  if (requestedWeddingId && (await canViewWedding(user, requestedWeddingId))) {
-    rememberWeddingId(requestedWeddingId);
-    return requestedWeddingId;
-  }
-
-  const rememberedWeddingId = localStorage.getItem(lastWeddingStorageKey);
-  if (rememberedWeddingId && (await canViewWedding(user, rememberedWeddingId))) {
-    return rememberedWeddingId;
-  }
-
-  return findFirstAccessibleWeddingId(user);
-}
-
-async function findFirstAccessibleWeddingId(user) {
-  const snapshot = await getDocs(query(collection(services.db, "weddings"), where("status", "==", "active")));
-  for (const weddingDoc of snapshot.docs) {
-    if (await canViewWedding(user, weddingDoc.id)) {
-      rememberWeddingId(weddingDoc.id);
-      return weddingDoc.id;
-    }
-  }
-  return "";
-}
-
-async function canViewWedding(user, weddingId) {
-  const permissionDoc = await getDoc(doc(services.db, "weddings", weddingId, "dashboardUsers", user.uid));
-  if (!permissionDoc.exists() || permissionDoc.data().canViewDashboard !== true) {
-    return false;
-  }
-
-  const permission = permissionDoc.data();
-  if (!seatingOnlyMode) {
-    return true;
-  }
-
-  if (
-    permission.seatingOnly !== true ||
-    permission.canEditSeating !== true ||
-    !["bride", "groom", "all"].includes(permission.allowedSide) ||
-    (requestedSeatingSide && permission.allowedSide !== "all" && requestedSeatingSide !== permission.allowedSide)
-  ) {
-    return false;
-  }
-
-  const weddingSnapshot = await getDoc(doc(services.db, "weddings", weddingId));
-  return weddingSnapshot.exists() &&
-    weddingSnapshot.data().eventCategory !== "celebration";
-}
-
-function rememberWeddingId(weddingId) {
-  localStorage.setItem(lastWeddingStorageKey, weddingId);
-}
-
-function redirectToDashboard(weddingId) {
-  isRedirecting = true;
-  window.location.replace(buildDashboardUrl(weddingId));
-}
-
-function buildDashboardUrl(weddingId) {
-  return buildAuthRouteUrl("./dashboard.html", {
-    weddingId,
-    seatingOnly: seatingOnlyMode,
-    side: requestedSeatingSide,
-  });
+  window.location.replace("./all-events.html");
 }

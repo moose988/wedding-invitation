@@ -3,21 +3,21 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>My Events · qdsystems</title>
+    <title>All Events · qdsystems</title>
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,500;9..144,600&family=Manrope:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
     <link rel="stylesheet" href="./styles.css" />
-    <link rel="stylesheet" href="./weddings.css?v=20261016-mobile-order" />
+    <link rel="stylesheet" href="./weddings.css?v=20261016-account-controls-hide" />
   </head>
   <body class="weddings-body">
     <main class="weddings-shell" id="workspace" hidden>
       <header class="workspace-header">
-        <a class="workspace-brand" href="./weddings.html" aria-label="qdsystems, all events">qdsystems</a>
+        <a class="workspace-brand" href="./all-events.html" aria-label="qdsystems, All Events">qdsystems</a>
         <div class="workspace-account"><span id="userEmail"></span><button class="text-button" id="signOutButton" type="button">Sign out</button></div>
       </header>
       <section class="workspace-hero">
-        <div><h1>My Events</h1></div>
+        <div><h1>All Events</h1></div>
         <button class="primary-button" id="createWeddingButton" type="button">Create event</button>
       </section>
       <section class="sample-invitation" id="sampleInvitationPanel" aria-labelledby="sampleInvitationTitle">
@@ -43,7 +43,7 @@
         </div>
         <p class="sample-invitation__feedback" data-sample-feedback role="status" aria-live="polite"></p>
       </section>
-      <section class="workspace-controls" aria-label="Event controls">
+      <section class="workspace-controls" id="workspaceControls" aria-label="Event controls">
         <label class="search-field"><span class="sr-only">Search events</span><input id="searchInput" type="search" placeholder="Search event, people, venue, or location" /></label>
         <label class="sort-field">Sort <select id="sortSelect"><option value="event">Event date</option><option value="updated">Recently updated</option><option value="created">Recently created</option></select></label>
       </section>
@@ -102,6 +102,6 @@
       </form>
     </dialog>
     <dialog class="workspace-dialog" id="deleteDialog"><form class="workspace-modal workspace-modal--small" id="deleteForm"><header><div><p class="workspace-kicker">Permanent action</p><h2>Delete event?</h2></div><button class="icon-close" type="button" data-close="deleteDialog" aria-label="Close">×</button></header><div class="workspace-modal__body"><p>This permanently removes the event and all of its guests, invitations, seating, and check-in data. Type <strong id="deletePhrase"></strong> to continue.</p><label>Confirmation<input id="deleteConfirmation" autocomplete="off" /></label><p class="form-error" id="deleteError" role="alert"></p></div><footer><button class="secondary-button" type="button" data-close="deleteDialog">Cancel</button><button class="danger-button" type="submit">Delete permanently</button></footer></form></dialog>
-    <script type="module" src="./weddings.js?v=20261013-workspace-pagination"></script>
+    <script type="module" src="./weddings.js?v=20261016-account-create-hide"></script>
   </body>
 </html>

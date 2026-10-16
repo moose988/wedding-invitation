@@ -5,7 +5,7 @@ import test from "node:test";
 const read = (file) => readFile(new URL(`../${file}`, import.meta.url), "utf8");
 
 test("Layla & Zaid sample panel lives once at workspace level with distinct preview and copy actions", async () => {
-  const [workspace, html, styles] = await Promise.all([read("weddings.js"), read("weddings.html"), read("weddings.css")]);
+  const [workspace, html, styles] = await Promise.all([read("weddings.js"), read("all-events.html"), read("weddings.css")]);
   const panel = html.slice(html.indexOf('id="sampleInvitationPanel"'), html.indexOf('<section class="workspace-controls"'));
   assert.ok(panel.length > 0, "sample panel appears before workspace controls");
   assert.equal((html.match(/id="sampleInvitationPanel"/g) || []).length, 1);
@@ -15,6 +15,12 @@ test("Layla & Zaid sample panel lives once at workspace level with distinct prev
   assert.match(html, /Copy sample link/);
   assert.match(html, /data-action="preview-sample"/);
   assert.match(workspace, /sampleInvitationPanel\.addEventListener\("click", handleSamplePanelAction\)/);
+  assert.match(workspace, /const isRestrictedAccount = user\.email\?\.trim\(\)\.toLowerCase\(\) === "girl@gmail\.com"/);
+  assert.match(workspace, /el\.createWeddingButton\.hidden = isRestrictedAccount/);
+  assert.match(workspace, /el\.sampleInvitationPanel\.hidden = isRestrictedAccount/);
+  assert.match(workspace, /el\.workspaceControls\.hidden = isRestrictedAccount/);
+  assert.match(workspace, /el\.filterRow\.hidden = isRestrictedAccount/);
+  assert.match(styles, /\.workspace-controls\[hidden\], \.filter-row\[hidden\]\s*\{\s*display:none !important;\s*\}/);
   assert.match(workspace, /handleSamplePanelAction[\s\S]*?window\.open\(sampleInvitationUrl\(\)/);
   assert.match(workspace, /Copy guest link/);
   assert.match(workspace, /Copy failed\. Select and copy the URL above\./);

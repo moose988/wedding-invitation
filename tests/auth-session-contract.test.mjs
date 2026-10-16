@@ -33,8 +33,9 @@ test("public invitation initialization cannot mutate Firebase Auth persistence",
 
   const dashboardInitializer = firebase.match(/export function initFirebase\(\) \{[\s\S]*?\n\}/)?.[0];
   assert.ok(dashboardInitializer, "dashboard initializer exists");
-  assert.match(dashboardInitializer, /getAuth\(app\)/);
-  assert.doesNotMatch(dashboardInitializer, /setPersistence\(/);
+  assert.match(dashboardInitializer, /getConfiguredApp\("planner-session"\)/);
+  assert.match(dashboardInitializer, /initializeAuth\(app, \{ persistence: browserSessionPersistence \}\)/);
+  assert.match(dashboardInitializer, /auth\.authStateReady\(\)/);
 });
 
 test("each custom invitation design routes through the public data initializer", async () => {
@@ -52,18 +53,22 @@ test("each custom invitation design routes through the public data initializer",
   }
 });
 
-test("restricted seating-link token auth is isolated from dashboard owner auth", () => {
+test("planner sessions are isolated by tab while token editors and invitations stay separate", () => {
   assert.match(firebase, /resolveFirebaseApp\(\{ getApps, initializeApp \}, config, "seating-editor"\)/);
-  assert.match(firebase, /setPersistence\(auth, browserSessionPersistence\)/);
-  assert.match(dashboard, /initializeFirebaseServicesForRoute\([\s\S]*?seatingOnly: accountSeatingEditorMode[\s\S]*?seatingEditor: state\.secureEditorMode/);
+  assert.match(firebase, /getConfiguredApp\("planner-session"\)/);
+  assert.match(firebase, /initializeAuth\(app, \{ persistence: browserSessionPersistence \}\)/);
+  assert.match(firebase, /resolveFirebaseApp\(\{ getApps, initializeApp \}, config, "public-invitation"\)/);
+  assert.match(dashboard, /initializeFirebaseServicesForRoute\([\s\S]*?seatingEditor: state\.secureEditorMode/);
   assert.match(dashboard, /await waitForFirebaseSessionPersistence\(state\.services\)/);
-  assert.match(login, /initializeFirebaseServicesForRoute\([\s\S]*?seatingOnly: seatingOnlyMode/);
+  assert.match(login, /initializeFirebaseServicesForRoute\([\s\S]*?\{ dashboard: initFirebase \}/);
   assert.match(login, /servicesReady = waitForFirebaseSessionPersistence\(services\)/);
-  assert.match(login, /permission\.seatingOnly !== true/);
+  assert.match(dashboard, /state\.permissions\.seatingOnly === true/);
+  assert.match(dashboard, /requestedSeatingSide && allowedSide !== "all" && requestedSeatingSide !== allowedSide/);
   assert.match(side, /initializeFirebaseServicesForRoute\([\s\S]*?seatingEditor: Boolean\(editorToken\)/);
   assert.match(side, /signInWithCustomToken\(services\.auth/);
   assert.match(dashboard, /signOut\(state\.services\.auth\)/);
-  assert.match(dashboard, /else if \(accountSeatingEditorMode\)[\s\S]*?redirectToLogin\("access-denied"\)/);
+  assert.doesNotMatch(dashboard, /accountSeatingEditorMode/);
+  assert.doesNotMatch(login, /seatingOnlyMode/);
 });
 
 test("only explicit dashboard action signs out and login preserves restored sessions", () => {
@@ -126,9 +131,9 @@ test("service caches and route selection keep dashboard and seating Auth, Firest
     seating: () => cachedSeating,
   });
   assert.equal(select({}).auth.app, dashboardApp);
-  assert.equal(select({ seatingOnly: true }).auth.app, seatingApp);
+  assert.equal(select({ seatingOnly: true }).auth.app, dashboardApp);
   assert.equal(select({ seatingEditor: true }).db.app, seatingApp);
-  assert.equal(select({ seatingOnly: true }).functions.app, seatingApp);
+  assert.equal(select({ seatingOnly: true }).functions.app, dashboardApp);
 });
 
 test("seating service readiness blocks until session persistence has completed", async () => {
@@ -149,20 +154,20 @@ test("seating service readiness blocks until session persistence has completed",
   assert.equal(resolved, true);
 });
 
-test("login and failure redirects preserve the event, seating mode, side, and message", () => {
+test("successful login always opens All Events, regardless of event-link context", () => {
   const dashboardUrl = buildAuthRouteUrl("./dashboard.html", {
     weddingId: "event-42",
-    seatingOnly: true,
     side: "bride",
   });
   const loginUrl = buildAuthRouteUrl("./dashboard-login.html", {
     weddingId: "event-42",
-    seatingOnly: true,
     side: "groom",
     message: "access-denied",
   });
-  assert.equal(dashboardUrl, "./dashboard.html?wedding=event-42&seatingOnly=1&side=bride");
-  assert.equal(loginUrl, "./dashboard-login.html?wedding=event-42&seatingOnly=1&side=groom&message=access-denied");
+  assert.equal(dashboardUrl, "./dashboard.html?wedding=event-42&side=bride");
+  assert.equal(loginUrl, "./dashboard-login.html?wedding=event-42&side=groom&message=access-denied");
   assert.equal(buildAuthRouteUrl("./dashboard.html", { weddingId: "event-42", side: "admin" }), "./dashboard.html?wedding=event-42");
-  assert.match(dashboard, /window\.history\.replaceState\([\s\S]*?buildAuthRouteUrl\("\.\/dashboard\.html", \{[\s\S]*?seatingOnly: accountSeatingEditorMode[\s\S]*?side: requestedSeatingSide/);
+  assert.match(login, /window\.location\.replace\("\.\/all-events\.html"\)/);
+  assert.doesNotMatch(login, /redirectToDashboard|params\.get\("wedding"\)/);
+  assert.doesNotMatch(dashboard, /seatingOnly: accountSeatingEditorMode/);
 });

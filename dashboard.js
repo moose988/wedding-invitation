@@ -20,7 +20,7 @@ import {
   updateDoc,
   where,
   writeBatch,
-} from "./firebase-config.js?v=20261014-seating-workspace-1";
+} from "./firebase-config.js?v=20261016-tab-session-isolation-1";
 import {
   buildAuthRouteUrl,
   initializeFirebaseServicesForRoute,
@@ -44,7 +44,6 @@ import {
 
 const params = new URLSearchParams(window.location.search);
 const secureSeatingEditorMode = params.get("seatingEditor") === "1";
-const accountSeatingEditorMode = params.get("seatingOnly") === "1";
 const requestedSeatingSide = ["bride", "groom", "family"].includes(
   params.get("side"),
 )
@@ -767,7 +766,7 @@ const demoSeedGuests = [...demoGuests, ...seatingTestGuests];
 
 const state = {
   weddingId: params.get("wedding") || "",
-  editorMode: seatingEditorMode || accountSeatingEditorMode,
+  editorMode: seatingEditorMode,
   secureEditorMode: secureSeatingEditorMode,
   editorLinkToken: params.get("token") || "",
   editorRole: "",
@@ -926,7 +925,6 @@ async function init() {
 
   state.services = initializeFirebaseServicesForRoute(
     {
-      seatingOnly: accountSeatingEditorMode,
       seatingEditor: state.secureEditorMode,
     },
     { dashboard: initFirebase, seating: initSeatingEditorFirebase },
@@ -955,7 +953,7 @@ async function init() {
     }
     if (!state.weddingId) {
       if (!state.editorMode) {
-        window.location.replace("./weddings.html");
+        window.location.replace("./all-events.html");
         return;
       }
       state.weddingId = await resolveAccessibleWeddingId(user);
@@ -968,7 +966,6 @@ async function init() {
         "",
         buildAuthRouteUrl("./dashboard.html", {
           weddingId: state.weddingId,
-          seatingOnly: accountSeatingEditorMode,
           side: requestedSeatingSide,
         }),
       );
@@ -1428,10 +1425,10 @@ function showDashboardBootstrapError(error) {
     ? "Your signed-in account does not have permission to open this event."
     : "The event could not be loaded. Check your connection and try again.";
   elements.globalActions.innerHTML = "";
-  elements.pageContent.innerHTML = `<section class="share-page"><article class="share-card"><h3>${permissionDenied ? "Check event access" : "Try loading again"}</h3><p>${permissionDenied ? "Return to All events and open an event you have access to." : "Refresh this page to retry loading the event."}</p><button class="da3wa-button da3wa-button--primary" type="button" id="dashboardRetryButton">${permissionDenied ? "All events" : "Refresh"}</button></article></section>`;
+  elements.pageContent.innerHTML = `<section class="share-page"><article class="share-card"><h3>${permissionDenied ? "Check event access" : "Try loading again"}</h3><p>${permissionDenied ? "Return to All Events and open an event you have access to." : "Refresh this page to retry loading the event."}</p><button class="da3wa-button da3wa-button--primary" type="button" id="dashboardRetryButton">${permissionDenied ? "All Events" : "Refresh"}</button></article></section>`;
   document.getElementById("dashboardRetryButton")?.addEventListener("click", () => {
     if (permissionDenied) {
-      window.location.href = "./weddings.html";
+      window.location.href = "./all-events.html";
       return;
     }
     window.location.reload();
@@ -1675,11 +1672,6 @@ async function bootstrapDashboard() {
   if (state.permissions.seatingOnly === true) {
     state.editorMode = true;
     state.secureEditorMode = false;
-  } else if (accountSeatingEditorMode) {
-    // A restricted seating URL must never turn an owner login into the full
-    // dashboard. Require a real seating-only membership on this isolated Auth.
-    redirectToLogin("access-denied");
-    return;
   }
   if (state.editorMode) {
     const allowedSide = String(state.permissions.allowedSide || "")
@@ -3509,6 +3501,8 @@ function renderEventSettingsPage() {
     return;
   }
   const wedding = state.wedding || {};
+  const hideOptionsAndLifecycle = state.currentUser?.email?.trim().toLowerCase() === "girl@gmail.com";
+  const hideInvitationScheduleAndMapEmbed = hideOptionsAndLifecycle;
   if (!state.eventSettingsDraft || !state.dirtyEventSettings) {
     state.eventSettingsDraft = eventSettingsDraftFromWedding(wedding);
     state.eventSettingsOriginal = { ...state.eventSettingsDraft };
@@ -3557,6 +3551,7 @@ function renderEventSettingsPage() {
 
   elements.pageContent.innerHTML = `
     <section class="event-settings-page">
+      ${hideOptionsAndLifecycle ? "" : `
       <section class="event-settings-section share-card" aria-labelledby="eventOptionsTitle">
         <header class="event-settings-section__header"><div><h2 id="eventOptionsTitle">Invitation and seating options</h2></div></header>
         <label class="invitation-setting-toggle">
@@ -3568,6 +3563,7 @@ function renderEventSettingsPage() {
           <input type="checkbox" role="switch" data-action="toggle-event-seating" ${seatingEnabled ? "checked" : ""} ${canChangeOptions ? "" : "disabled aria-disabled=\"true\""} aria-label="Enable seating" />
         </label>
       </section>
+      `}
 
       <form class="event-settings-section share-card" id="eventSettingsForm" novalidate>
         <header class="event-settings-section__header">
@@ -3581,10 +3577,10 @@ function renderEventSettingsPage() {
           ${field("venueEn", "Venue name", "text", false, true)}
           ${field("location", "Location / address", "text", false, false, "street-address")}
           ${field("mapsUrl", "Maps link", "url", true, false)}
-          ${field("venueMapEmbedUrl", "Google Maps embed URL", "url", true, false)}
+          ${hideInvitationScheduleAndMapEmbed ? "" : `${field("venueMapEmbedUrl", "Google Maps embed URL", "url", true, false)}
           <p class="event-settings-timezone">Paste only the URL inside the Google Maps iframe's src="…" attribute, not the full iframe code. It is saved for this event only.</p>
-          <label class="event-settings-field is-full"><span>Invitation schedule (JSON, optional)</span><textarea class="da3wa-input" name="schedule" rows="8" data-event-setting-field ${canEditDetails ? "" : "disabled aria-disabled=\"true\""}>${escapeHtml(draft.schedule || "[]")}</textarea><small class="event-setting-error" role="alert">${escapeHtml(errors.schedule || "")}</small><small class="event-settings-timezone">Use up to 12 JSON items with time, timeAr, titleEn, titleAr, descriptionEn, and descriptionAr. Leave [] to hide the schedule. The map URL belongs in Google Maps embed URL above.</small></label>
-          <p class="event-settings-timezone">Date and time use the same local time display as the rest of the dashboard.</p>
+          <label class="event-settings-field is-full"><span>Invitation schedule (JSON, optional)</span><textarea class="da3wa-input" name="schedule" rows="8" data-event-setting-field ${canEditDetails ? "" : "disabled aria-disabled=\"true\""}>${escapeHtml(draft.schedule || "[]")}</textarea><small class="event-setting-error" role="alert">${escapeHtml(errors.schedule || "")}</small><small class="event-settings-timezone">Use up to 12 JSON items with time, timeAr, titleEn, titleAr, descriptionEn, and descriptionAr. Leave [] to hide the schedule. The map URL belongs in Google Maps embed URL above.</small></label>`}
+          ${hideInvitationScheduleAndMapEmbed ? "" : `<p class="event-settings-timezone">Date and time use the same local time display as the rest of the dashboard.</p>`}
         </div>
         <div class="event-settings-actions">
           <p class="event-settings-feedback ${state.eventSettingsMessage.includes("could not") || state.eventSettingsMessage.includes("denied") || !canEditDetails ? "is-error" : ""}" id="eventSettingsFeedback" role="status">${escapeHtml(eventSettingsFeedback({ message: state.eventSettingsMessage, canEdit: canEditDetails, dirty: state.dirtyEventSettings, saving: state.savingEventSettings }))}</p>
@@ -3592,10 +3588,12 @@ function renderEventSettingsPage() {
         </div>
       </form>
 
+      ${hideOptionsAndLifecycle ? "" : `
       <section class="event-settings-section event-settings-status share-card" aria-labelledby="eventStatusTitle">
         <header class="event-settings-section__header"><div><p class="da3wa-eyebrow">Lifecycle</p><h2 id="eventStatusTitle">Event status</h2><p>Current status: <strong class="event-settings-status__value">${escapeHtml(prettifyShape(wedding.status || "active"))}</strong></p></div></header>
         ${wedding.status === "archived" ? `<p class="event-settings-feedback is-error">Archived events cannot be completed or reopened here.</p>` : `<div class="event-settings-actions"><p class="event-settings-feedback ${state.eventLifecycleMessage.startsWith("We could not") ? "is-error" : ""}" role="status" id="eventStatusFeedback">${escapeHtml(state.eventLifecycleMessage)}</p><button class="da3wa-button ${isCompleted ? "da3wa-button--secondary" : "da3wa-button--primary"}" type="button" data-action="${statusAction}" ${!canEditDetails || state.eventStatusPending ? "disabled aria-disabled=\"true\"" : ""}>${state.eventStatusPending ? "Updating status…" : statusLabel}</button></div>`}
       </section>
+      `}
     </section>
   `;
   updateEventSettingsFormState();
@@ -3893,7 +3891,6 @@ function renderSeatingAccessCard() {
 function seatingAccountLoginLink() {
   const params = new URLSearchParams({
     wedding: state.weddingId,
-    seatingOnly: "1",
     linkRevision: "all-sides-20261001",
   });
   return new URL(`dashboard-login.html?${params.toString()}`, window.location.href).toString();
@@ -9189,7 +9186,6 @@ function buildLoginUrl(message) {
   return buildAuthRouteUrl("./dashboard-login.html", {
     weddingId: state.weddingId,
     demo: state.mode === "demo",
-    seatingOnly: (state.editorMode || accountSeatingEditorMode) && !state.secureEditorMode,
     side: requestedSeatingSide,
     message,
   });
@@ -9231,7 +9227,8 @@ function can(permission) {
 }
 
 function canManageSeatingLayout() {
-  return can("canEditSeating") && !state.editorMode;
+  const hasAccountLayoutAccess = state.currentUser?.email?.trim().toLowerCase() === "girl@gmail.com";
+  return can("canEditSeating") && (!state.editorMode || hasAccountLayoutAccess);
 }
 
 function signedInUserName() {
@@ -9525,11 +9522,7 @@ function buildSideViewLink(side) {
   // used for the managers, and the dashboard repeats the wedding + side
   // context after sign-in.
   if (["bride", "groom"].includes(side) && state.mode !== "demo") {
-    const managerParams = new URLSearchParams({
-      wedding: state.weddingId,
-      seatingOnly: "1",
-      side,
-    });
+    const managerParams = new URLSearchParams({ wedding: state.weddingId, side });
     return new URL(
       `dashboard-login.html?${managerParams.toString()}`,
       window.location.href,

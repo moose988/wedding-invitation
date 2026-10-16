@@ -42,6 +42,15 @@ service cloud.firestore {
         || isSeatingManager(weddingId);
     }
 
+    // The girl account keeps the restricted dashboard, but its existing
+    // seating permission also includes full table-layout controls.
+    function canManageSeatingLayout(weddingId) {
+      return isDashboardMember(weddingId) &&
+        dashboardUser(weddingId).data.canEditSeating == true &&
+        (!isSeatingOnlyDashboardAccount(weddingId) ||
+          request.auth.token.get("email", "") == "girl@gmail.com");
+    }
+
     // Seating-only dashboard accounts are deliberately tied to one side.  The
     // client uses this value to filter the editor, but this check is here so a
     // changed URL or a hand-written Firestore request cannot escape that side.
@@ -324,14 +333,11 @@ service cloud.firestore {
 
       match /tables/{tableId} {
         allow read: if canReadSeating(weddingId) || isPublicWedding(weddingId);
-        allow create, delete: if isDashboardMember(weddingId) &&
-          dashboardUser(weddingId).data.canEditSeating == true &&
-          !isSeatingOnlyDashboardAccount(weddingId);
+        allow create, delete: if canManageSeatingLayout(weddingId);
         // Secure link managers can only change occupancy; table geometry,
-        // names, capacity, and chair positions stay dashboard-only.
-        allow update: if (isDashboardMember(weddingId) &&
-            dashboardUser(weddingId).data.canEditSeating == true &&
-            !isSeatingOnlyDashboardAccount(weddingId))
+        // names, capacity, and chair positions stay dashboard-only, except
+        // for the explicitly enabled girl dashboard account.
+        allow update: if canManageSeatingLayout(weddingId)
           || (isSeatingOnlyDashboardAccount(weddingId) &&
             get(/databases/$(database)/documents/weddings/$(weddingId)).data.get("eventCategory", "wedding_engagement") == "wedding_engagement" &&
             request.resource.data.diff(resource.data).affectedKeys()

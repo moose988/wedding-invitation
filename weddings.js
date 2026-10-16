@@ -1,9 +1,9 @@
-import { collection, doc, getDoc, getDocs, initFirebase, isFirebaseConfigured, onAuthStateChanged, onSnapshot, query, serverTimestamp, setDoc, signOut, updateDoc, where, writeBatch, httpsCallable } from "./firebase-config.js?v=20261013-auth-session-isolation-2";
+import { collection, doc, getDoc, getDocs, initFirebase, isFirebaseConfigured, onAuthStateChanged, onSnapshot, query, serverTimestamp, setDoc, signOut, updateDoc, where, writeBatch, httpsCallable } from "./firebase-config.js?v=20261016-tab-session-isolation-1";
 import { EVENT_CATEGORIES, getEventCategory, getEventDisplayTitle, isCelebrationEvent } from "./event-utils.js";
 import { paginateRows } from "./workspace-pagination.js";
 
 const state = { services: null, user: null, weddings: [], filter: "all", currentPage: 1, pageSize: 6, editId: "", deleteId: "", unsubscribe: null, unsubscribeAuth: null, initialized: false, snapshotGeneration: 0 };
-const el = Object.fromEntries(["workspace","loadingState","userEmail","signOutButton","createWeddingButton","sampleInvitationPanel","sampleInvitationUrl","searchInput","sortSelect","filterRow","workspaceStatus","weddingGrid","paginationControls","paginationStatus","emptyState","weddingDialog","weddingForm","formKicker","formTitle","formError","saveWeddingButton","categoryStep","eventFeaturesStep","eventInformationStep","continueEventButton","continueFeaturesButton","backEventButton","deleteDialog","deleteForm","deletePhrase","deleteConfirmation","deleteError"].map((id) => [id, document.getElementById(id)]));
+const el = Object.fromEntries(["workspace","loadingState","userEmail","signOutButton","createWeddingButton","sampleInvitationPanel","workspaceControls","sampleInvitationUrl","searchInput","sortSelect","filterRow","workspaceStatus","weddingGrid","paginationControls","paginationStatus","emptyState","weddingDialog","weddingForm","formKicker","formTitle","formError","saveWeddingButton","categoryStep","eventFeaturesStep","eventInformationStep","continueEventButton","continueFeaturesButton","backEventButton","deleteDialog","deleteForm","deletePhrase","deleteConfirmation","deleteError"].map((id) => [id, document.getElementById(id)]));
 
 init();
 function init() {
@@ -35,7 +35,19 @@ function init() {
   document.addEventListener("click", (event) => { if (!event.target.closest(".menu-wrap")) closeActionMenus(); });
   document.addEventListener("keydown", (event) => { if (event.key === "Escape") closeActionMenus(); });
   state.unsubscribeAuth?.();
-  state.unsubscribeAuth = onAuthStateChanged(state.services.auth, (user) => { if (!user) return location.replace("./dashboard-login.html?message=session-required"); state.user = user; el.userEmail.textContent = user.email || "Planner"; el.loadingState.hidden = true; el.workspace.hidden = false; watchWorkspace(); });
+  state.unsubscribeAuth = onAuthStateChanged(state.services.auth, (user) => {
+    if (!user) return location.replace("./dashboard-login.html?message=session-required");
+    state.user = user;
+    el.userEmail.textContent = user.email || "Planner";
+    const isRestrictedAccount = user.email?.trim().toLowerCase() === "girl@gmail.com";
+    el.createWeddingButton.hidden = isRestrictedAccount;
+    el.sampleInvitationPanel.hidden = isRestrictedAccount;
+    el.workspaceControls.hidden = isRestrictedAccount;
+    el.filterRow.hidden = isRestrictedAccount;
+    el.loadingState.hidden = true;
+    el.workspace.hidden = false;
+    watchWorkspace();
+  });
   window.addEventListener("pagehide", disposeListeners, { once: true });
 }
 

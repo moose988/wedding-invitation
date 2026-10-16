@@ -30,6 +30,19 @@ test("Event Settings omits the extra configuration and section descriptions", as
   assert.ok(settingsPage.indexOf("<h2>Event details</h2>") < settingsPage.indexOf("id=\"eventStatusTitle\""));
 });
 
+test("restricted girl account does not render invitation schedule or map embed fields", async () => {
+  const dashboard = await read("dashboard.js");
+  const settingsPage = dashboard.slice(
+    dashboard.indexOf("function renderEventSettingsPage()"),
+    dashboard.indexOf("function eventSettingsDateParts(", dashboard.indexOf("function renderEventSettingsPage()")),
+  );
+  assert.match(settingsPage, /const hideOptionsAndLifecycle = state\.currentUser\?\.email\?\.trim\(\)\.toLowerCase\(\) === "girl@gmail\.com"/);
+  assert.match(settingsPage, /const hideInvitationScheduleAndMapEmbed = hideOptionsAndLifecycle/);
+  assert.match(settingsPage, /\$\{hideInvitationScheduleAndMapEmbed \? "" : `\$\{field\("venueMapEmbedUrl", "Google Maps embed URL"/);
+  assert.match(settingsPage, /\$\{hideInvitationScheduleAndMapEmbed \? "" : `[^`]*Invitation schedule \(JSON, optional\)/);
+  assert.match(settingsPage, /\$\{hideInvitationScheduleAndMapEmbed \? "" : `<p class="event-settings-timezone">Date and time use the same local time display as the rest of the dashboard/);
+});
+
 test("event details validate and persist to the selected event and workspace index", async () => {
   const [dashboard, rules, saveState] = await Promise.all([read("dashboard.js"), read("firestore.rules"), read("event-settings-state.js")]);
   assert.match(dashboard, /function validateEventSettingsDraft\(/);
@@ -69,7 +82,7 @@ test("completion is an owner lifecycle write and old-event grouping preserves da
   const [dashboard, workspace, workspaceHtml, rules] = await Promise.all([
     read("dashboard.js"),
     read("weddings.js"),
-    read("weddings.html"),
+    read("all-events.html"),
     read("firestore.rules"),
   ]);
   assert.match(dashboard, /Mark event as completed/);

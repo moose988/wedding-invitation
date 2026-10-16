@@ -19,14 +19,15 @@ export function createScopedServiceCache() {
 }
 
 export function initializeFirebaseServicesForRoute(route, initializers) {
-  const restrictedSeatingRoute = route.seatingOnly === true || route.seatingEditor === true;
-  return restrictedSeatingRoute ? initializers.seating() : initializers.dashboard();
+  // Password-authenticated dashboard accounts all share the planner session.
+  // Their per-event permissions determine which dashboard views they can use.
+  // Only custom-token seating editors need an isolated Firebase Auth session.
+  return route.seatingEditor === true ? initializers.seating() : initializers.dashboard();
 }
 
-export function buildAuthRouteUrl(base, { weddingId = "", seatingOnly = false, side = "", message = "", demo = false } = {}) {
+export function buildAuthRouteUrl(base, { weddingId = "", side = "", message = "", demo = false } = {}) {
   const params = new URLSearchParams();
   if (weddingId) params.set("wedding", weddingId);
-  if (seatingOnly) params.set("seatingOnly", "1");
   if (["bride", "groom", "family"].includes(side)) params.set("side", side);
   if (demo) params.set("demo", "1");
   if (message) params.set("message", message);

@@ -12,7 +12,7 @@ import {
   serverTimestamp,
   signInWithCustomToken,
   where,
-} from "./firebase-config.js?v=20261013-auth-session-isolation-3";
+} from "./firebase-config.js?v=20261016-tab-session-isolation-1";
 import { resolveTableName } from "./seating-utils.js";
 import { getEventDisplayTitle, isCelebrationEvent } from "./event-utils.js";
 import {

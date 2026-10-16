@@ -5,7 +5,7 @@ import { paginateRows } from "../workspace-pagination.js";
 
 test("All Events hides its full-screen loading placeholder after workspace initialization", async () => {
   const [html, script, styles] = await Promise.all([
-    readFile(new URL("../weddings.html", import.meta.url), "utf8"),
+    readFile(new URL("../all-events.html", import.meta.url), "utf8"),
     readFile(new URL("../weddings.js", import.meta.url), "utf8"),
     readFile(new URL("../weddings.css", import.meta.url), "utf8"),
   ]);
@@ -13,7 +13,10 @@ test("All Events hides its full-screen loading placeholder after workspace initi
   assert.match(html, /id="loadingState"[^>]*class="workspace-loading"|class="workspace-loading"[^>]*id="loadingState"/);
   assert.match(script, /el\.loadingState\.hidden = true/);
   assert.match(styles, /\.workspace-loading\[hidden\]\s*\{\s*display:\s*none\s*!important;?\s*\}/);
-  assert.match(html, /weddings\.css\?v=20261016-mobile-order/);
+  assert.match(html, /<title>All Events · qdsystems<\/title>/);
+  assert.match(html, /<h1>All Events<\/h1>/);
+  assert.doesNotMatch(html, /My Events/);
+  assert.match(html, /weddings\.css\?v=20261016-account-controls-hide/);
 });
 
 test("All Events displays six events per page and clamps navigation after filtering", () => {

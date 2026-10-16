@@ -43,6 +43,8 @@
 @media(max-width:640px){.event-category-step .event-category-grid{grid-template-columns:minmax(0,1fr);gap:10px}.event-category-step .event-category-card{min-height:0;padding:14px}}
 
 .sample-invitation { display:grid; grid-template-columns:minmax(0,1fr) auto; grid-template-areas:"intro intro" "link actions" "feedback feedback"; align-items:center; gap:12px 20px; min-width:0; margin:0 0 26px; padding:20px 22px 13px; border:1px solid #e2d5bf; border-radius:18px; background:linear-gradient(115deg,#fffdf8,#f7f3e9 72%,#f3f5ef); box-shadow:0 10px 28px rgba(52,46,34,.055); }
+.sample-invitation[hidden] { display:none !important; }
+.workspace-controls[hidden], .filter-row[hidden] { display:none !important; }
 .sample-invitation__intro { grid-area:intro; display:flex; align-items:flex-start; gap:13px; min-width:0; }
 .sample-invitation__seal { display:grid; flex:0 0 38px; width:38px; height:38px; place-items:center; border:1px solid #d9c29b; border-radius:50%; color:#9d7a46; background:#fffaf0; font-size:16px; }
 .sample-invitation__heading { min-width:0; }

@@ -104,12 +104,12 @@ test("wedding action menus obey hidden state and close consistently", async () =
   assert.match(weddings, /closeActionMenus\(menu\); menu\.hidden = !shouldOpen/);
 });
 
-test("preview-domain login preserves an explicitly requested wedding", async () => {
+test("successful password login starts at All Events even from an event link", async () => {
   const login = await read("dashboard-login.js");
 
-  assert.match(login, /const requestedWeddingId = params\.get\("wedding"\)/);
-  assert.match(login, /await canViewWedding\(user, requestedWeddingId\)/);
-  assert.match(login, /redirectToDashboard\(requestedWeddingId\)/);
+  assert.match(login, /window\.location\.replace\("\.\/all-events\.html"\)/);
+  assert.doesNotMatch(login, /params\.get\("wedding"\)|redirectToDashboard/);
+  assert.doesNotMatch(login, /seatingOnlyMode/);
 });
 
 test("secondary seating and check-in views dispose live listeners", async () => {

@@ -12,18 +12,18 @@ test("Groom and Bride side links require authenticated, side-scoped seating acce
 
   assert.match(dashboard, /\["bride", "groom"\]\.includes\(side\)/);
   assert.match(dashboard, /dashboard-login\.html\?\$\{managerParams\.toString\(\)\}/);
-  assert.match(dashboard, /seatingOnly: "1"/);
+  assert.doesNotMatch(dashboard, /seatingOnly: "1"/);
   assert.match(dashboard, /requestedSeatingSide && allowedSide !== "all" && requestedSeatingSide !== allowedSide/);
-  assert.match(login, /buildAuthRouteUrl\("\.\/dashboard\.html", \{[\s\S]*?side: requestedSeatingSide/);
+  assert.match(login, /window\.location\.replace\("\.\/all-events\.html"\)/);
+  assert.doesNotMatch(login, /Event Seating Editor|Open seating editor|seatingOnlyMode/);
   assert.equal(buildAuthRouteUrl("./dashboard.html", {
     weddingId: "event-42",
-    seatingOnly: true,
     side: "bride",
-  }), "./dashboard.html?wedding=event-42&seatingOnly=1&side=bride");
+  }), "./dashboard.html?wedding=event-42&side=bride");
 });
 
 test("seat-only guest writes are restricted to seating fields and the allowed side", async () => {
-  const rules = await read("firestore.rules");
+  const [rules, dashboard] = await Promise.all([read("firestore.rules"), read("dashboard.js")]);
 
   assert.match(rules, /function isSeatingOnlyDashboardAccount/);
   assert.match(rules, /request\.auth\.token\.get\("seatingEditor", false\) == true/);
@@ -37,6 +37,9 @@ test("seat-only guest writes are restricted to seating fields and the allowed si
   assert.match(rules, /eventCategory", "wedding_engagement"\) == "wedding_engagement"/);
   assert.match(rules, /function seatingAccountMayReadGuest/);
   assert.match(rules, /category == "celebration"\s*\? \(side == "general" \|\| unchangedSide\)/);
+  assert.match(rules, /function canManageSeatingLayout\(weddingId\)[\s\S]*?request\.auth\.token\.get\("email", ""\) == "girl@gmail\.com"/);
+  assert.match(rules, /match \/tables\/\{tableId\}[\s\S]*?allow create, delete: if canManageSeatingLayout\(weddingId\);[\s\S]*?allow update: if canManageSeatingLayout\(weddingId\)/);
+  assert.match(dashboard, /function canManageSeatingLayout\(\)\s*\{\s*const hasAccountLayoutAccess = state\.currentUser\?\.email\?\.trim\(\)\.toLowerCase\(\) === "girl@gmail\.com";\s*return can\("canEditSeating"\) && \(!state\.editorMode \|\| hasAccountLayoutAccess\);/);
 });
 
 test("Family remains a public status page and cannot receive a manager link", async () => {

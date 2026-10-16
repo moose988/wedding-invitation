@@ -5,7 +5,7 @@ import test from "node:test";
 const read = (path) => readFile(new URL(`../${path}`, import.meta.url), "utf8");
 
 test("event creation collects a category and disables hidden identity fields", async () => {
-  const [html, js] = await Promise.all([read("weddings.html"), read("weddings.js")]);
+  const [html, js] = await Promise.all([read("all-events.html"), read("weddings.js")]);
   assert.match(html, /value="wedding_engagement"/);
   assert.match(html, /value="celebration"/);
   assert.match(html, /name="eventTitle" placeholder="Ahmed’s Graduation"/);

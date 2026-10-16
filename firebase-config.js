@@ -5,9 +5,8 @@ import {
 import { getAnalytics, isSupported } from "https://www.gstatic.com/firebasejs/10.12.5/firebase-analytics.js";
 import {
   browserSessionPersistence,
-  getAuth,
+  initializeAuth,
   onAuthStateChanged,
-  setPersistence,
   signInWithEmailAndPassword,
   signInWithCustomToken,
   signOut,
@@ -66,14 +65,15 @@ export function isFirebaseConfigured() {
 
 export function initFirebase() {
   return serviceCache.get("dashboard", () => {
-    const { app, config } = getConfiguredApp();
-    const auth = getAuth(app);
+    // Planner sign-ins are tab-scoped so signing into another account in a
+    // different tab cannot replace this tab's active user.
+    const { app, config } = getConfiguredApp("planner-session");
+    const auth = initializeAuth(app, { persistence: browserSessionPersistence });
     const db = getFirestore(app);
     // Match the backend's default Cloud Functions region explicitly.
     const functions = getFunctions(app, "us-central1");
+    const persistenceReady = auth.authStateReady();
 
-    // Firebase Auth uses local persistence by default in browser apps. Do not
-    // rewrite it while initializing the dashboard's shared local session.
     isSupported()
       .then((supported) => {
         if (supported) getAnalytics(app);
@@ -82,12 +82,12 @@ export function initFirebase() {
         console.warn("Firebase Analytics could not be started.", error);
       });
 
-    return { app, auth, db, functions, config };
+    return { app, auth, db, functions, config, persistenceReady };
   });
 }
 
 // Public invitations need Firestore's public-data rules, but must not initialize
-// or mutate the dashboard's shared Auth instance as a side effect.
+// or mutate the planner's tab-scoped Auth session as a side effect.
 export function initPublicFirebase() {
   return serviceCache.get("public-invitation", () => {
     if (!isFirebaseConfigured()) {
@@ -101,8 +101,7 @@ export function initPublicFirebase() {
 }
 
 // One-time seating links exchange for a narrowly scoped custom token. Keep that
-// identity on its own named app and tab-scoped persistence so it cannot replace
-// the planner owner's default-app session in another tab.
+// identity on its own named app so it cannot replace a planner session.
 export function initSeatingEditorFirebase() {
   return serviceCache.get("seating-editor", () => {
     if (!isFirebaseConfigured()) {
@@ -111,13 +110,10 @@ export function initSeatingEditorFirebase() {
 
     const config = { ...defaultConfig, ...(window.FIREBASE_CONFIG || {}) };
     const app = resolveFirebaseApp({ getApps, initializeApp }, config, "seating-editor");
-    const auth = getAuth(app);
+    const auth = initializeAuth(app, { persistence: browserSessionPersistence });
     const db = getFirestore(app);
     const functions = getFunctions(app, "us-central1");
-    const persistenceReady = setPersistence(auth, browserSessionPersistence);
-    persistenceReady.catch((error) => {
-      console.warn("Seating editor session persistence could not be enabled.", error);
-    });
+    const persistenceReady = auth.authStateReady();
 
     return { app, auth, db, functions, config, persistenceReady };
   });

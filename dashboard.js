@@ -1708,6 +1708,12 @@ async function bootstrapDashboard() {
   state.wedding = weddingDoc.exists()
     ? { ...weddingDoc.data(), id: weddingDoc.id }
     : null;
+  if (state.activeView === "settings" && !canViewEventSettings()) {
+    state.activeView = "overview";
+    const nextUrl = new URL(window.location.href);
+    nextUrl.searchParams.delete("view");
+    window.history.replaceState(null, "", nextUrl);
+  }
   if (state.activeView === "guestSummary" && !canViewGuestSummary()) {
     state.activeView = "overview";
   }
@@ -1784,6 +1790,10 @@ function canEditEventDetails() {
     seatingOnly: state.permissions?.seatingOnly === true,
     hasEventDetailsPermission: can("canEditEventDetails"),
   });
+}
+
+function canViewEventSettings() {
+  return state.mode === "demo" || canEditEventDetails();
 }
 
 function canManageSeatingAccess() {
@@ -2198,6 +2208,9 @@ function renderChrome() {
         button.hidden = !canViewGuestSummary() || state.editorMode;
       }
     }
+    if (button.dataset.navView === "settings") {
+      button.hidden = !canViewEventSettings();
+    }
   });
 
   updateSidebarState();
@@ -2337,6 +2350,7 @@ function overviewMenuButton(label, action, disabled = false) {
 }
 
 function switchView(view) {
+  if (view === "settings" && !canViewEventSettings()) return;
   if (state.dirtyEventSettings && view !== state.activeView) {
     if (!window.confirm("Discard unsaved event detail changes and leave Event Settings?")) {
       return;
@@ -3490,6 +3504,10 @@ async function updateEventLifecycle(action) {
 }
 
 function renderEventSettingsPage() {
+  if (!canViewEventSettings()) {
+    elements.pageContent.innerHTML = "";
+    return;
+  }
   const wedding = state.wedding || {};
   if (!state.eventSettingsDraft || !state.dirtyEventSettings) {
     state.eventSettingsDraft = eventSettingsDraftFromWedding(wedding);

@@ -2778,7 +2778,7 @@ function renderSeatingPage() {
           </div>
           <div class="planner-canvas-viewport" id="plannerViewport" aria-label="Venue map. Drag empty space to pan." tabindex="0">
             <div class="planner-map-extent">
-              <div class="planner-canvas" id="plannerCanvas" style="width:${mapWidth}px;height:${state.plannerMapHeight}px;--planner-zoom:${state.plannerZoom}">
+              <div class="planner-canvas" id="plannerCanvas" style="width:${mapWidth}px;height:${state.plannerMapHeight}px;--planner-zoom:${state.plannerZoom};--planner-object-scale:${1 / state.plannerZoom}">
                 <div class="planner-canvas__floor"></div>
                 ${state.hallObjects.map((item) => renderHallObject(item)).join("")}
                 ${state.tables.length ? state.tables.map((table) => renderPlannerTable(table)).join("") : `<div class="da3wa-empty">No tables yet. Create your first table to start mapping the hall.</div>`}
@@ -2849,8 +2849,8 @@ function renderMobileSeatingPage({ seatingStats, sideStats, isSaving }) {
   const editing = state.mobileSeatingMode === "edit";
   const seatedPeople = state.tables.reduce((sum, table) => sum + getTableAssignments(table.id).length, 0);
   const peopleNeedingSeats = state.guests.reduce((sum, guest) => sum + getGuestRemainingSeats(guest), 0);
-  const controls = `<div class="mobile-seating-map-tools">${actionButton("Zoom out", "planner-zoom-out", state.plannerZoom <= 0.25)}<span class="pill" data-zoom-percentage>${Math.round(state.plannerZoom * 100)}%</span>${actionButton("Zoom in", "planner-zoom-in", state.plannerZoom >= 1.6)}${actionButton("Fit all", "planner-zoom-reset", false, "secondary")}</div>`;
-  const canvas = `<div class="planner-canvas-viewport mobile-seating-map ${editing ? "is-editing" : ""}" id="plannerViewport" aria-label="Venue map" tabindex="0"><div class="planner-map-extent"><div class="planner-canvas" id="plannerCanvas" style="width:${state.plannerMapWidth}px;height:${state.plannerMapHeight}px;--planner-zoom:${state.plannerZoom}"><div class="planner-canvas__floor"></div>${state.hallObjects.map(renderHallObject).join("")}${state.tables.length ? state.tables.map(renderPlannerTable).join("") : `<div class="da3wa-empty">No tables yet. Edit the floor plan to add one.</div>`}</div></div></div>`;
+  const controls = `<div class="mobile-seating-map-tools" aria-label="Map zoom controls"><button class="da3wa-button da3wa-button--secondary" type="button" data-action="planner-zoom-out" ${state.plannerZoom <= 0.25 ? "disabled" : ""} aria-label="Zoom out">−</button><span class="pill" data-zoom-percentage aria-live="polite">${Math.round(state.plannerZoom * 100)}%</span><button class="da3wa-button da3wa-button--secondary" type="button" data-action="planner-zoom-in" ${state.plannerZoom >= 1.6 ? "disabled" : ""} aria-label="Zoom in">+</button><button class="da3wa-button da3wa-button--secondary" type="button" data-action="planner-zoom-reset">Fit all</button></div>`;
+  const canvas = `<div class="planner-canvas-viewport mobile-seating-map ${editing ? "is-editing" : ""}" id="plannerViewport" aria-label="Venue map" tabindex="0"><div class="planner-map-extent"><div class="planner-canvas" id="plannerCanvas" style="width:${state.plannerMapWidth}px;height:${state.plannerMapHeight}px;--planner-zoom:${state.plannerZoom};--planner-object-scale:${1 / state.plannerZoom}"><div class="planner-canvas__floor"></div>${state.hallObjects.map(renderHallObject).join("")}${state.tables.length ? state.tables.map(renderPlannerTable).join("") : `<div class="da3wa-empty">No tables yet. Edit the floor plan to add one.</div>`}</div></div></div>`;
   const tables = state.tables.length ? state.tables.map((table) => {
     const occupied = getTableAssignments(table.id).length;
     const capacity = Number(table.seatCount || table.capacity || table.chairs?.length || 0);
@@ -2893,7 +2893,7 @@ function fitMobilePlannerView() {
   if (!fit) return;
   state.plannerZoom = fit.zoom;
   state.plannerViewCenter = fit.center;
-  document.getElementById("plannerCanvas")?.style.setProperty("--planner-zoom", String(fit.zoom));
+  setPlannerCanvasZoom(document.getElementById("plannerCanvas"), fit.zoom);
   restorePlannerViewport();
 }
 
@@ -2906,12 +2906,17 @@ function getPlannerContentBounds() {
   const bounds = { minX: Infinity, minY: Infinity, maxX: -Infinity, maxY: -Infinity };
   nodes.forEach((node) => {
     const rect = node.getBoundingClientRect();
-    const left = (rect.left - canvasRect.left) / zoom;
-    const top = (rect.top - canvasRect.top) / zoom;
-    bounds.minX = Math.min(bounds.minX, left);
-    bounds.minY = Math.min(bounds.minY, top);
-    bounds.maxX = Math.max(bounds.maxX, left + rect.width / zoom);
-    bounds.maxY = Math.max(bounds.maxY, top + rect.height / zoom);
+    const centerX = (rect.left + rect.width / 2 - canvasRect.left) / zoom;
+    const centerY = (rect.top + rect.height / 2 - canvasRect.top) / zoom;
+    const radians = Number(node.dataset.rotation || node.style.getPropertyValue("--dance-rotation").replace("deg", "") || 0) * Math.PI / 180;
+    const width = node.offsetWidth || rect.width;
+    const height = node.offsetHeight || rect.height;
+    const logicalWidth = Math.abs(width * Math.cos(radians)) + Math.abs(height * Math.sin(radians));
+    const logicalHeight = Math.abs(width * Math.sin(radians)) + Math.abs(height * Math.cos(radians));
+    bounds.minX = Math.min(bounds.minX, centerX - logicalWidth / 2);
+    bounds.minY = Math.min(bounds.minY, centerY - logicalHeight / 2);
+    bounds.maxX = Math.max(bounds.maxX, centerX + logicalWidth / 2);
+    bounds.maxY = Math.max(bounds.maxY, centerY + logicalHeight / 2);
   });
   if (!Number.isFinite(bounds.minX)) return { minX: 0, minY: 0, maxX: state.plannerMapWidth, maxY: state.plannerMapHeight };
   return bounds;
@@ -2945,7 +2950,7 @@ function handlePlannerWheel(event) {
   const offsetY = event.clientY - rect.top - viewport.clientHeight / 2;
   state.plannerZoom = nextZoom;
   state.plannerViewCenter = { x: focalX - offsetX / nextZoom, y: focalY - offsetY / nextZoom };
-  canvas.style.setProperty("--planner-zoom", String(nextZoom));
+  setPlannerCanvasZoom(canvas, nextZoom);
   document.querySelectorAll("[data-zoom-percentage]").forEach((node) => { node.textContent = `${Math.round(nextZoom * 100)}%`; });
   restorePlannerViewport();
 }
@@ -3004,7 +3009,7 @@ function handleMobileMapTouchMove(event) {
       const focalY = gesture.center.y + (midpointY - viewport.clientHeight / 2) / gesture.zoom;
       state.plannerZoom = nextZoom;
       state.plannerViewCenter = { x: focalX - (midpointX - viewport.clientWidth / 2) / nextZoom, y: focalY - (midpointY - viewport.clientHeight / 2) / nextZoom };
-      canvas.style.setProperty("--planner-zoom", String(nextZoom));
+      setPlannerCanvasZoom(canvas, nextZoom);
       restorePlannerViewport();
     }
     return;
@@ -3049,7 +3054,7 @@ function restorePlannerViewport() {
     const fit = calculatePlannerFit();
     if (fit) {
       state.plannerZoom = fit.zoom;
-      canvas.style.setProperty("--planner-zoom", String(fit.zoom));
+      setPlannerCanvasZoom(canvas, fit.zoom);
       state.plannerViewCenter = fit.center;
     } else {
       state.plannerViewCenter = { x: state.plannerMapWidth / 2, y: state.plannerMapHeight / 2 };
@@ -3998,6 +4003,7 @@ function renderPlannerTable(table) {
       style="left:${Number(table.x || 0)}%; top:${Number(table.y || 0)}%; width:${width}px; height:${height}px; transform:${transform}; --table-fill:${escapeAttribute(table.tableColor || plannerPalette.tableColor)}; --table-border:${escapeAttribute(table.borderColor || plannerPalette.borderColor)}; --chair-color:${escapeAttribute(table.chairColor || plannerPalette.chairColor)};"
       data-table-drag-id="${table.id}"
       data-table-id="${table.id}"
+      data-rotation="${Number(table.rotation || 0)}"
       data-action="select-table"
     >
       <div class="planner-table__inner">
@@ -4061,6 +4067,7 @@ function renderHallObject(item) {
         aria-label="${escapeAttribute(`${item.label}, dance floor${item.locked ? ", locked" : ""}`)}"
         title="${escapeAttribute(item.label)}"
         data-hall-object-id="${escapeAttribute(item.id)}"
+        data-rotation="${Number(item.rotation || 0)}"
         data-action="select-hall-object"
       ><span>${escapeHtml(item.label)}</span></button>
     `;
@@ -4100,7 +4107,7 @@ function renderHallObjectInspector(item) {
   const isDanceFloor = item.type === "dance-floor";
   const compactEdit = window.matchMedia("(max-width: 700px)").matches && state.mobileSeatingMode === "edit";
   return `
-    <div class="planner-table-summary">
+    <div class="planner-table-summary${compactEdit ? " mobile-object-summary" : ""}">
       <div><span>${isDanceFloor ? "Dance floor" : "Venue object"}</span><strong>${escapeHtml(item.label)}</strong></div>
       <div><span>Zone</span><strong>${escapeHtml(item.floorZone || "Not set")}</strong></div>
     </div>
@@ -4146,7 +4153,7 @@ function renderTableInspector(table) {
   const capacity = Number(table.seatCount || table.capacity || 0);
   const compactEdit = window.matchMedia("(max-width: 700px)").matches && state.mobileSeatingMode === "edit";
   return `
-    <div class="planner-table-summary">
+    <div class="planner-table-summary${compactEdit ? " mobile-object-summary" : ""}">
       <div>
         <span>Table</span>
         <strong>${escapeHtml(table.name || "Table")}</strong>
@@ -6778,6 +6785,12 @@ function setPlannerZoom(nextZoom) {
   const minimumZoom = 0.25;
   state.plannerZoom = clamp(nextZoom, minimumZoom, 1.6);
   renderActiveView();
+}
+
+function setPlannerCanvasZoom(canvas, zoom) {
+  if (!canvas) return;
+  canvas.style.setProperty("--planner-zoom", String(zoom));
+  canvas.style.setProperty("--planner-object-scale", String(1 / zoom));
 }
 
 function resetPlannerView() {

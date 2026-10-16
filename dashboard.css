@@ -3361,6 +3361,7 @@ body.is-seating-view .planner-canvas {
 .hall-object {
   user-select: none;
   touch-action: none;
+  scale: var(--planner-object-scale, 1);
 }
 
 .hall-object.is-selected {
@@ -4832,5 +4833,90 @@ body.is-seating-view .planner-canvas {
   .guest-toolbar__search,
   .guest-toolbar__filters .pill {
     grid-column: auto;
+  }
+}
+
+@media (max-width: 700px) {
+  .mobile-seating-map-tools {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr) minmax(0, 1fr);
+    align-items: center;
+    gap: 5px;
+    padding: 5px;
+  }
+
+  .mobile-seating-map-tools .da3wa-button {
+    min-height: 36px;
+    padding: 4px 7px;
+    font-size: 0.76rem;
+    font-weight: 700;
+  }
+
+  .mobile-seating-map-tools .da3wa-button[aria-label="Zoom in"],
+  .mobile-seating-map-tools .da3wa-button[aria-label="Zoom out"] {
+    font-size: 1.15rem;
+    line-height: 1;
+  }
+
+  .mobile-seating-map-tools .pill {
+    min-width: 52px;
+    min-height: 34px;
+    padding: 4px 7px;
+    font-size: 0.78rem;
+  }
+
+  .mobile-selected-object .mobile-object-summary {
+    grid-template-columns: minmax(0, 1fr) auto;
+    gap: 7px;
+  }
+
+  .mobile-selected-object .mobile-object-summary > div {
+    min-width: 0;
+    min-height: 42px;
+    padding: 7px 10px;
+    border-radius: 11px;
+  }
+
+  .mobile-selected-object .mobile-object-summary > div:first-child {
+    justify-content: flex-start;
+    gap: 8px;
+  }
+
+  .mobile-selected-object .mobile-object-summary span {
+    font-size: 0.66rem;
+    letter-spacing: 0.06em;
+  }
+
+  .mobile-selected-object .mobile-object-summary strong {
+    max-width: 48vw;
+    overflow: hidden;
+    font-size: 0.91rem;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .mobile-selected-object .guest-toolbar__summary {
+    display: flex;
+    align-items: center;
+    gap: 7px;
+  }
+
+  .mobile-selected-object .guest-toolbar__summary > .da3wa-button {
+    flex: 1 1 auto;
+    min-height: 40px;
+    padding: 7px 12px;
+  }
+
+  .mobile-selected-object .mobile-object-actions {
+    flex: 0 0 auto;
+    min-width: 138px;
+    padding: 0 10px;
+    background: #fffdf8;
+  }
+
+  .mobile-selected-object .mobile-object-actions summary {
+    min-height: 40px;
+    justify-content: center;
+    font-size: 0.82rem;
   }
 }

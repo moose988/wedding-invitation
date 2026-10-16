@@ -55,14 +55,14 @@ test("directory counts use the complete matching dataset and clarify filtered to
 test("mobile guest directory stacks totals, filters, action buttons, guests, then pagination", async () => {
   const [dashboard, css] = await Promise.all([read("dashboard.js"), read("dashboard.css")]);
   const render = extractFunction(dashboard, "renderGuestPage", "renderGuestDirectoryCounts");
-  const mobileRules = css.slice(css.indexOf("  .guest-page-actions {"));
-  assert.match(mobileRules, /\.guest-toolbar \{\s*order: 0;/);
-  assert.match(mobileRules, /\.guest-bulkbar \{\s*order: 1;/);
-  assert.match(mobileRules, /\.guest-page-actions \{\s*order: 2;/);
-  assert.match(mobileRules, /\.guest-directory-list \{\s*order: 3;/);
-  assert.match(mobileRules, /\.guest-page-controls \{\s*order: 4;/);
+  const mobileRules = css.slice(css.indexOf("/* Guests directory mobile refinement"));
+  assert.doesNotMatch(mobileRules, /^\s{4}order\s*:\s*[0-9]/m);
+  assert.match(mobileRules, /\.guest-toolbar__filters \{[\s\S]*?grid-template-columns: minmax\(0, 1\.35fr\) repeat\(2, minmax\(0, 1fr\)\)/);
+  assert.match(mobileRules, /\.guest-toolbar__search \{[\s\S]*?grid-column: auto/);
   assert.ok(render.indexOf("guest-directory-counts") < render.indexOf("guest-toolbar__search"));
   assert.ok(render.indexOf("guest-toolbar__search") < render.indexOf('selectInput("rsvp"'));
+  assert.ok(render.indexOf('data-action="open-add-guest"') < render.indexOf("data-guest-directory-list"));
+  assert.ok(render.indexOf("data-guest-directory-list") < render.indexOf("renderGuestDirectoryPagination("));
 });
 
 test("assignment and seating searches update result regions without replacing or refocusing the input", async () => {
@@ -109,17 +109,45 @@ test("sender introduction scrolls naturally and progress updates do not rebuild 
   assert.doesNotMatch(script, /setTimeout\(render, 300\)|undoButton[\s\S]{0,180}render\(\)/);
 });
 
-test("mobile cards retain all actions and fit the compact right action rail", async () => {
+test("mobile guest cards omit secondary guest details and keep footer actions for scanning", async () => {
   const [dashboard, css] = await Promise.all([read("dashboard.js"), read("dashboard.css")]);
   const card = extractFunction(dashboard, "renderGuestCard", "renderGuestCardActions");
   const actions = extractFunction(dashboard, "renderGuestCardActions", "renderSeatingAccessCard");
+  const menu = extractFunction(dashboard, "renderGuestMenuToggle", "renderGuestRsvpSelect");
+  const reservationBadge = extractFunction(dashboard, "renderReservationReadinessBadge", "handleAction");
 
   assert.match(card, /renderGuestRsvpSelect\(guest\)/);
+  assert.match(card, /normalizeAdditionalGuests\(guest\.additionalGuests\)/);
+  assert.match(card, /guest-card__additional-count">\+\$\{escapeHtml\(String\(additionalGuestCount\)\)\} \$\{additionalGuestCount === 1 \? "guest" : "guests"\}/);
   assert.match(card, /renderReservationReadinessBadge\(guest\)/);
+  assert.match(reservationBadge, /data-action="nav-seating"/);
+  assert.match(reservationBadge, /Seat Assignment Missing/);
+  assert.match(reservationBadge, /Invitation Ready/);
   assert.match(card, /Message for the couple/);
-  assert.match(card, /renderGuestMenuToggle\(guest, "card"/);
+  assert.match(card, /guest-card__header[\s\S]*?renderGuestRsvpSelect\(guest\)[\s\S]*?renderGuestMenuToggle\(guest, "card"/);
+  assert.doesNotMatch(card, /guest-card__meta|guest-card__phone|guest-card__secondary-meta|guest-card__detail/);
+  assert.match(card, /<footer class="guest-card__actions">/);
+  assert.match(card, /<footer class="guest-card__actions">\s*\$\{isSeatingEnabled\(\)[\s\S]*?guest-card__reservation[\s\S]*?guest-inline-actions/);
+  assert.match(card, /guest-inline-actions/);
+  assert.doesNotMatch(card.slice(card.indexOf("<footer")), /renderGuestMenuToggle/);
   assert.match(actions, /copy-guest-invite/);
   assert.match(actions, /data-action="edit-guest"/);
-  assert.match(css, /grid-template-columns: minmax\(0, 1fr\) 44px/);
-  assert.match(css, /\.guest-card__actions \.guest-row__menu-toggle[\s\S]{0,180}width: 44px/);
+  assert.match(actions, />Copy<\/span>/);
+  assert.match(actions, />Edit<\/span>/);
+  assert.match(menu, /More actions for/);
+  assert.match(menu, /aria-haspopup="menu"/);
+  const mobileRules = css.slice(css.indexOf("/* Guests directory mobile refinement"));
+  assert.match(mobileRules, /\.guest-card__main \{[\s\S]*?width: 100%;[\s\S]*?min-width: 0/);
+  assert.match(mobileRules, /\.guest-card__header \{[\s\S]*?display: grid;[\s\S]*?grid-template-columns: minmax\(0, 1fr\) auto;[\s\S]*?gap: 8px;[\s\S]*?width: 100%;[\s\S]*?min-width: 0/);
+  assert.match(mobileRules, /\.guest-card__identity,[\s\S]*?\.guest-card__identity \.guest-name-button \{\s*min-width: 0/);
+  assert.match(mobileRules, /\.guest-card__identity \{[\s\S]*?display: grid;[\s\S]*?gap: 0/);
+  assert.match(mobileRules, /\.guest-card__additional-count \{[\s\S]*?font-size: 12px;[\s\S]*?line-height: 1/);
+  assert.match(mobileRules, /\.guest-card__header-actions \{[\s\S]*?gap: 8px;[\s\S]*?flex-shrink: 0;[\s\S]*?justify-self: end/);
+  assert.match(mobileRules, /\.guest-card__header \.guest-row__menu-toggle \{[\s\S]*?width: 36px;[\s\S]*?height: 36px/);
+  assert.match(mobileRules, /\.guest-card__header \.guest-rsvp-select \{[\s\S]*?min-height: 36px/);
+  assert.match(mobileRules, /\.guest-card__meta \{[\s\S]*?grid-template-columns: repeat\(3, minmax\(0, 1fr\)\)/);
+  assert.match(mobileRules, /@media \(max-width: 340px\)[\s\S]*?\.guest-card__phone \{\s*grid-column: 1 \/ -1/);
+  assert.match(mobileRules, /\.guest-card__actions \{[\s\S]*?justify-content: space-between/);
+  assert.match(mobileRules, /\.guest-card__actions \.guest-inline-actions \{[\s\S]*?display: flex/);
+  assert.match(mobileRules, /\.guest-card__actions \.guest-quick-button \{[\s\S]*?min-height: 36px/);
 });

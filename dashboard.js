@@ -793,6 +793,7 @@ const state = {
   guestAssignmentSearch: "",
   assignmentSession: null,
   activePartyGuestId: "",
+  pendingSeatUnassign: null,
   pendingPartyUnassignId: "",
   pendingPartyUnassignSignature: "",
   activeModalOperation: "",
@@ -1163,9 +1164,13 @@ function bindEvents() {
       }
       if (modal === elements.chairDetailsModal && !state.assignmentSession) {
         state.activePartyGuestId = "";
+        state.pendingSeatUnassign = null;
         state.pendingPartyUnassignId = "";
         state.pendingPartyUnassignSignature = "";
         renderActiveView();
+      }
+      if (modal === elements.assignmentModal && !state.activeModalOperation) {
+        state.pendingSeatUnassign = null;
       }
       restoreModalFocus();
     });
@@ -2576,11 +2581,11 @@ function renderGuestPage() {
 
   elements.pageContent.innerHTML = `
     <section class="guest-page">
+      <div class="guest-directory-counts" aria-live="polite">
+        ${renderGuestDirectoryCounts(hasGuestFilters ? "Matching guests" : "Guest totals", hasGuestFilters ? filteredCounts : directoryCounts)}
+      </div>
       <article class="guest-toolbar">
         <div class="guest-toolbar__filters ${usesSides ? "guest-toolbar__filters--with-sides" : "guest-toolbar__filters--single-filter"}">
-          <div class="guest-directory-counts" aria-live="polite">
-            ${renderGuestDirectoryCounts(hasGuestFilters ? "Matching guests" : "Guest totals", hasGuestFilters ? filteredCounts : directoryCounts)}
-          </div>
           <div class="guest-toolbar__controls">
             <input class="da3wa-input guest-toolbar__search" type="search" placeholder="Search name or phone" value="${escapeAttribute(state.guestFilters.search)}" data-guest-search aria-label="Search guests by name or phone" />
             ${selectInput("rsvp", state.guestFilters.rsvp, [
@@ -2778,7 +2783,7 @@ function renderSeatingPage() {
           </div>
           <div class="planner-canvas-viewport" id="plannerViewport" aria-label="Venue map. Drag empty space to pan." tabindex="0">
             <div class="planner-map-extent">
-              <div class="planner-canvas" id="plannerCanvas" style="width:${mapWidth}px;height:${state.plannerMapHeight}px;--planner-zoom:${state.plannerZoom};--planner-object-scale:${1 / state.plannerZoom}">
+              <div class="planner-canvas" id="plannerCanvas" style="width:${mapWidth}px;height:${state.plannerMapHeight}px;--planner-zoom:${state.plannerZoom};--planner-object-scale:${Math.min(1, 1 / state.plannerZoom)}">
                 <div class="planner-canvas__floor"></div>
                 ${state.hallObjects.map((item) => renderHallObject(item)).join("")}
                 ${state.tables.length ? state.tables.map((table) => renderPlannerTable(table)).join("") : `<div class="da3wa-empty">No tables yet. Create your first table to start mapping the hall.</div>`}
@@ -2850,20 +2855,26 @@ function renderMobileSeatingPage({ seatingStats, sideStats, isSaving }) {
   const seatedPeople = state.tables.reduce((sum, table) => sum + getTableAssignments(table.id).length, 0);
   const peopleNeedingSeats = state.guests.reduce((sum, guest) => sum + getGuestRemainingSeats(guest), 0);
   const controls = `<div class="mobile-seating-map-tools" aria-label="Map zoom controls"><button class="da3wa-button da3wa-button--secondary" type="button" data-action="planner-zoom-out" ${state.plannerZoom <= 0.25 ? "disabled" : ""} aria-label="Zoom out">−</button><span class="pill" data-zoom-percentage aria-live="polite">${Math.round(state.plannerZoom * 100)}%</span><button class="da3wa-button da3wa-button--secondary" type="button" data-action="planner-zoom-in" ${state.plannerZoom >= 1.6 ? "disabled" : ""} aria-label="Zoom in">+</button><button class="da3wa-button da3wa-button--secondary" type="button" data-action="planner-zoom-reset">Fit all</button></div>`;
-  const canvas = `<div class="planner-canvas-viewport mobile-seating-map ${editing ? "is-editing" : ""}" id="plannerViewport" aria-label="Venue map" tabindex="0"><div class="planner-map-extent"><div class="planner-canvas" id="plannerCanvas" style="width:${state.plannerMapWidth}px;height:${state.plannerMapHeight}px;--planner-zoom:${state.plannerZoom};--planner-object-scale:${1 / state.plannerZoom}"><div class="planner-canvas__floor"></div>${state.hallObjects.map(renderHallObject).join("")}${state.tables.length ? state.tables.map(renderPlannerTable).join("") : `<div class="da3wa-empty">No tables yet. Edit the floor plan to add one.</div>`}</div></div></div>`;
+  const canvas = `<div class="planner-canvas-viewport mobile-seating-map ${editing ? "is-editing" : ""}" id="plannerViewport" aria-label="Venue map" tabindex="0"><div class="planner-map-extent"><div class="planner-canvas" id="plannerCanvas" style="width:${state.plannerMapWidth}px;height:${state.plannerMapHeight}px;--planner-zoom:${state.plannerZoom};--planner-object-scale:${Math.min(1, 1 / state.plannerZoom)}"><div class="planner-canvas__floor"></div>${state.hallObjects.map(renderHallObject).join("")}${state.tables.length ? state.tables.map(renderPlannerTable).join("") : `<div class="da3wa-empty">No tables yet. Edit the floor plan to add one.</div>`}</div></div></div>`;
   const tables = state.tables.length ? state.tables.map((table) => {
     const occupied = getTableAssignments(table.id).length;
     const capacity = Number(table.seatCount || table.capacity || table.chairs?.length || 0);
-    return `<article class="mobile-seating-table ${table.id === state.selectedTableId ? "is-selected" : ""}"><div><strong>${escapeHtml(table.name || "Table")}</strong><span>${occupied}/${capacity} seats occupied · ${Math.max(0, capacity - occupied)} available</span></div><button class="da3wa-button da3wa-button--secondary" type="button" data-action="mobile-browse-table" data-table-id="${escapeAttribute(table.id)}">${occupied ? "Manage seats" : "Assign guests"}</button></article>`;
+    const available = Math.max(0, capacity - occupied);
+    const availabilityClass = available === 0 ? "is-unavailable" : "is-available";
+    return `<article class="mobile-seating-table ${table.id === state.selectedTableId ? "is-selected" : ""}"><div><strong>${escapeHtml(table.name || "Table")}</strong><span>${occupied}/${capacity} seats occupied · <strong class="mobile-seating-availability ${availabilityClass}">${available} available</strong></span></div><button class="da3wa-button da3wa-button--secondary" type="button" data-action="mobile-browse-table" data-table-id="${escapeAttribute(table.id)}">${occupied ? "Manage seats" : "Assign guests"}</button></article>`;
   }).join("") : `<div class="mobile-seating-empty"><strong>No tables yet</strong><p>Add tables and venue items to start seating people.</p><button class="da3wa-button da3wa-button--primary" type="button" data-action="mobile-set-seating-mode" data-mode="edit">Edit floor plan</button></div>`;
   elements.pageContent.innerHTML = `<section class="seating-page mobile-seating-page">
     <header class="mobile-seating-header"><div><p class="da3wa-eyebrow">Seating plan</p><h1>Seating</h1></div><span class="mobile-seating-save" aria-live="polite">${isSaving ? "Saving changes…" : "✓ Saved"}</span></header>
+    <article class="mobile-seating-progress"><div class="mobile-seating-stat--seated"><strong>${seatedPeople}</strong><span>People seated</span></div><div class="mobile-seating-stat--needs-seats"><strong>${peopleNeedingSeats}</strong><span>People needing seats</span></div><button type="button" data-action="mobile-toggle-seating-summary" aria-expanded="${state.showFullSeatingSummary}">${state.showFullSeatingSummary ? "Hide seating summary" : "View seating summary"}</button>${state.showFullSeatingSummary ? `<div class="mobile-seating-full-stats">${renderPlannerStatCard(state.tables.length,"Tables","table-count")}${renderPlannerStatCard(seatingStats.totalSeats,"Seat capacity","seat-capacity")}${renderPlannerStatCard(seatingStats.total,"Primary guest records","guest-records")}${renderPlannerStatCard(peopleNeedingSeats,"People needing seats","needs-seats")}${renderPlannerStatCard(seatingStats.unassignedGuests,"Parties needing seats","parties-needing-seats")}${eventUsesGuestSides(state.wedding) ? renderPlannerStatCard(`${sideStats.groom.seated}/${sideStats.groom.confirmed}`,"Groom seated","groom") : ""}${eventUsesGuestSides(state.wedding) ? renderPlannerStatCard(`${sideStats.bride.seated}/${sideStats.bride.confirmed}`,"Bride seated","bride") : ""}</div>` : ""}</article>
     <nav class="mobile-seating-modes" aria-label="Seating mode"><button type="button" data-action="mobile-set-seating-mode" data-mode="assign" aria-pressed="${!editing}" class="${!editing ? "is-active" : ""}">Assign seats</button><button type="button" data-action="mobile-set-seating-mode" data-mode="edit" aria-pressed="${editing}" class="${editing ? "is-active" : ""}">Edit floor plan</button></nav>
     ${editing ? `<div class="mobile-seating-edit-banner"><strong>Editing floor plan</strong><span>Select an object, then drag it to move. Drag the background to pan.</span><button class="da3wa-button da3wa-button--primary" type="button" data-action="mobile-set-seating-mode" data-mode="assign">Done editing</button></div>` : ""}
-    <article class="mobile-seating-progress"><div><strong>${seatedPeople}</strong><span>People seated</span></div><div><strong>${peopleNeedingSeats}</strong><span>People needing seats</span></div><button type="button" data-action="mobile-toggle-seating-summary" aria-expanded="${state.showFullSeatingSummary}">${state.showFullSeatingSummary ? "Hide seating summary" : "View seating summary"}</button>${state.showFullSeatingSummary ? `<div class="mobile-seating-full-stats">${renderPlannerStatCard(state.tables.length,"Tables")}${renderPlannerStatCard(seatingStats.totalSeats,"Seat capacity")}${renderPlannerStatCard(seatingStats.total,"Primary guest records")}${renderPlannerStatCard(peopleNeedingSeats,"People needing seats")}${renderPlannerStatCard(seatingStats.unassignedGuests,"Parties needing seats")}${eventUsesGuestSides(state.wedding) ? renderPlannerStatCard(`${sideStats.groom.seated}/${sideStats.groom.confirmed}`,"Groom seated") : ""}${eventUsesGuestSides(state.wedding) ? renderPlannerStatCard(`${sideStats.bride.seated}/${sideStats.bride.confirmed}`,"Bride seated") : ""}</div>` : ""}</article>
-    ${editing ? `<section class="mobile-floor-tools">${controls}<div>${actionButton("Add table","open-add-table",!canManageSeatingLayout(),"primary")}${actionButton("Add dance floor","open-add-dance-floor",!canManageSeatingLayout(),"secondary")}</div></section><article class="planner-canvas-shell mobile-seating-canvas-shell">${canvas}${getSelectedTable() ? `<div class="mobile-selected-object">${renderTableInspector(getSelectedTable())}</div>` : getSelectedHallObject() ? `<div class="mobile-selected-object">${renderHallObjectInspector(getSelectedHallObject())}</div>` : ""}<p class="mobile-edit-instruction">Drag a selected object to move it · drag open floor to pan</p></article>` : `<nav class="mobile-seating-views" aria-label="Seating view"><button type="button" data-action="mobile-seating-view" data-view="tables" aria-pressed="${state.mobileSeatingView === "tables"}" class="${state.mobileSeatingView === "tables" ? "is-active" : ""}">Tables</button><button type="button" data-action="mobile-seating-view" data-view="map" aria-pressed="${state.mobileSeatingView === "map"}" class="${state.mobileSeatingView === "map" ? "is-active" : ""}">Map</button></nav>${state.mobileSeatingView === "tables" ? `<section class="mobile-seating-table-list" aria-label="Tables">${tables}</section>` : `<article class="planner-canvas-shell mobile-seating-canvas-shell"><div class="mobile-map-preview-note">Map preview · tables are locked</div>${canvas}<button class="da3wa-button da3wa-button--primary mobile-explore-map" type="button" data-action="mobile-explore-map">Explore map</button></article>`}`}
+    ${editing ? `<section class="mobile-floor-tools">${controls}<div>${actionButton("Add table","open-add-table",!canManageSeatingLayout(),"primary")}${actionButton("Add dance floor","open-add-dance-floor",!canManageSeatingLayout(),"secondary")}</div></section><article class="planner-canvas-shell mobile-seating-canvas-shell">${canvas}${getSelectedTable() ? `<div class="mobile-selected-object">${renderTableInspector(getSelectedTable())}</div>` : getSelectedHallObject() ? `<div class="mobile-selected-object">${renderHallObjectInspector(getSelectedHallObject())}</div>` : ""}<p class="mobile-edit-instruction">Drag a selected object to move it · drag open floor to pan</p></article>` : `<section class="mobile-seating-table-list" aria-label="Tables">${tables}</section>`}
     ${state.mobileMapOpen ? `<div class="mobile-map-overlay" role="dialog" aria-modal="true" aria-label="Explore seating map"><header><strong>Explore map</strong><button class="da3wa-button da3wa-button--secondary" type="button" data-action="mobile-close-map">Close map</button></header><p>Drag to explore. Tap a seat to assign.</p>${controls}</div>` : ""}
   </section>`;
+  const mobileSeatingHeader = elements.pageContent.querySelector(".mobile-seating-header");
+  if (mobileSeatingHeader && elements.seatingMobileNavButton) {
+    mobileSeatingHeader.prepend(elements.seatingMobileNavButton);
+  }
   document.getElementById("plannerCanvas")?.addEventListener("pointerdown", handlePlannerPointerDown);
   const mobileViewport = document.getElementById("plannerViewport");
   if (state.mobileMapOpen && mobileViewport) {
@@ -3772,25 +3783,28 @@ function renderGuestRow(guest) {
 }
 
 function renderGuestCard(guest) {
+  const additionalGuestCount = normalizeAdditionalGuests(guest.additionalGuests);
   return `
     <article class="guest-card">
       <div class="guest-card__main">
-        <div class="guest-card__identity">
-          <button class="guest-name-button" type="button" data-action="edit-guest" data-id="${escapeAttribute(guest.id)}">${escapeHtml(guest.fullName || "Guest")}</button>
-        </div>
-        ${renderGuestRsvpSelect(guest)}
-        <div class="guest-card__meta">
-          <span>Phone: <bdi dir="auto">${escapeHtml(guest.phone || "Not set")}</bdi></span>
-          <span>Additional guests: ${escapeHtml(String(normalizeAdditionalGuests(guest.additionalGuests)))}</span>
-          ${eventUsesGuestSides(state.wedding) ? `<span>Side: ${escapeHtml(guest.side || "other")}</span>` : ""}
-          ${isSeatingEnabled() ? `<span>${renderReservationReadinessBadge(guest)}</span>` : ""}
-        </div>
+        <header class="guest-card__header">
+          <div class="guest-card__identity">
+            <button class="guest-name-button" type="button" data-action="edit-guest" data-id="${escapeAttribute(guest.id)}">${escapeHtml(guest.fullName || "Guest")}</button>
+            <span class="guest-card__additional-count">+${escapeHtml(String(additionalGuestCount))} ${additionalGuestCount === 1 ? "guest" : "guests"}</span>
+          </div>
+          <div class="guest-card__header-actions">
+            ${renderGuestRsvpSelect(guest)}
+            ${renderGuestMenuToggle(guest, "card", state.activeGuestMenu?.guestId === guest.id)}
+          </div>
+        </header>
         ${guest.rsvpMessage ? `<details class="guest-rsvp-message"><summary>Message for the couple</summary><p>${escapeHtml(guest.rsvpMessage)}</p></details>` : ""}
       </div>
-      <div class="guest-card__actions">
-        ${renderGuestCardActions(guest)}
-        ${renderGuestMenuToggle(guest, "card", state.activeGuestMenu?.guestId === guest.id)}
-      </div>
+      <footer class="guest-card__actions">
+        ${isSeatingEnabled() ? `<div class="guest-card__reservation">${renderReservationReadinessBadge(guest)}</div>` : ""}
+        <div class="guest-inline-actions">
+          ${renderGuestCardActions(guest)}
+        </div>
+      </footer>
     </article>
   `;
 }
@@ -3800,9 +3814,11 @@ function renderGuestCardActions(guest) {
   return `
     <button class="guest-quick-button guest-quick-button--copy" type="button" data-action="copy-guest-invite" data-guest-id="${escapeAttribute(guest.id)}" aria-label="Copy invitation link for ${escapeAttribute(guest.fullName || "guest")}" title="Copy invitation link">
       <svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="8" y="8" width="12" height="12" rx="2"/><path d="M16 8V5a1 1 0 0 0-1-1H5a1 1 0 0 0-1 1v10a1 1 0 0 0 1 1h3"/></svg>
+      <span class="guest-quick-button__label">Copy</span>
     </button>
     <button class="guest-quick-button guest-quick-button--edit" type="button" data-action="edit-guest" data-id="${escapeAttribute(guest.id)}" aria-label="Edit ${escapeAttribute(guest.fullName || "guest")}" title="Edit guest" ${editDisabled ? 'disabled aria-disabled="true"' : ""}>
       <svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="m14 5 5 5M4 20l4.2-.8L19 8.4a2.1 2.1 0 0 0-3-3L5.2 16.2 4 20Z"/></svg>
+      <span class="guest-quick-button__label">Edit</span>
     </button>
   `;
 }
@@ -3973,7 +3989,7 @@ function renderGuestInlineActions(guest) {
 
 function renderGuestMenuToggle(guest, surface, expanded = false) {
   return `
-    <button class="guest-row__menu-toggle" id="guest-menu-trigger-${escapeAttribute(guest.id)}-${surface}" type="button" data-action="toggle-guest-menu" data-guest-id="${escapeAttribute(guest.id)}" aria-label="Open guest actions for ${escapeAttribute(guest.fullName || "guest")}" aria-haspopup="menu" aria-expanded="${expanded ? "true" : "false"}" aria-controls="guestActionMenu">⋯</button>
+    <button class="guest-row__menu-toggle" id="guest-menu-trigger-${escapeAttribute(guest.id)}-${surface}" type="button" data-action="toggle-guest-menu" data-guest-id="${escapeAttribute(guest.id)}" aria-label="More actions for ${escapeAttribute(guest.fullName || "guest")}" aria-haspopup="menu" aria-expanded="${expanded ? "true" : "false"}" aria-controls="guestActionMenu">⋯</button>
   `;
 }
 
@@ -4601,7 +4617,7 @@ function renderGuestActionMenu(guest, trigger) {
   menu.setAttribute("role", "menu");
   menu.setAttribute("aria-label", `Actions for ${guest.fullName || "guest"}`);
   menu.innerHTML = `
-    ${menuItem("WhatsApp", "open-reminder", guest.id, !buildWhatsAppReminderLink(guest))}
+    ${menuItem("Send on WhatsApp", "open-reminder", guest.id, !buildWhatsAppReminderLink(guest))}
     ${isInvitationQrEnabled() ? menuItem("Copy QR link", "copy-guest-qr", guest.id) : ""}
     ${menuItem("Delete guest", "delete-guest", guest.id, !can("canEditGuests"))}
   `;
@@ -4699,11 +4715,15 @@ function renderReservationReadinessBadge(guest) {
   if (!isSeatingEnabled()) return "";
   const readiness = getGuestSeatReadiness(guest);
   const label = readiness.ready
-    ? "Reservation Ready"
+    ? "Invitation Ready"
     : "Seat Assignment Missing";
   const tone = readiness.ready ? "reservation-ready" : "reservation-missing";
   const detail = `${readiness.assignedCount} of ${readiness.requiredCount} seats assigned`;
-  return `<span class="guest-badge guest-badge--${tone}" title="${escapeAttribute(detail)}" aria-label="${escapeAttribute(`${label}: ${detail}`)}">${escapeHtml(label)}</span>`;
+  const badgeAttributes = `title="${escapeAttribute(detail)}" aria-label="${escapeAttribute(`${label}: ${detail}`)}"`;
+  if (!readiness.ready) {
+    return `<button class="guest-badge guest-badge--${tone} guest-card__reservation-link" type="button" data-action="nav-seating" ${badgeAttributes}>${escapeHtml(label)}</button>`;
+  }
+  return `<span class="guest-badge guest-badge--${tone}" ${badgeAttributes}>${escapeHtml(label)}</span>`;
 }
 
 async function handleAction(action, dataset, event = null) {
@@ -5156,7 +5176,7 @@ async function handleAction(action, dataset, event = null) {
       return;
     case "clear-seat": {
       const [tableId, chairId] = String(dataset.id || "").split("::");
-      await confirmUnassignSeat(tableId, chairId);
+      await confirmUnassignSeat(tableId, chairId, "assignment");
       return;
     }
     case "select-seat":
@@ -5187,6 +5207,17 @@ async function handleAction(action, dataset, event = null) {
       return;
     case "unassign-seat":
       await confirmUnassignSeat(dataset.tableId, dataset.chairId);
+      return;
+    case "confirm-unassign-seat":
+      await performSeatUnassign(dataset.tableId, dataset.chairId);
+      return;
+    case "cancel-unassign-seat":
+      {
+        const sourceModal = state.pendingSeatUnassign?.sourceModal;
+        state.pendingSeatUnassign = null;
+        if (sourceModal === "assignment") renderAssignmentModal();
+        else renderChairDetailsModal(dataset.guestId || state.activePartyGuestId);
+      }
       return;
     case "unassign-party":
       await unassignParty(dataset.guestId || dataset.id);
@@ -6790,7 +6821,7 @@ function setPlannerZoom(nextZoom) {
 function setPlannerCanvasZoom(canvas, zoom) {
   if (!canvas) return;
   canvas.style.setProperty("--planner-zoom", String(zoom));
-  canvas.style.setProperty("--planner-object-scale", String(1 / zoom));
+  canvas.style.setProperty("--planner-object-scale", String(Math.min(1, 1 / zoom)));
 }
 
 function resetPlannerView() {
@@ -7242,11 +7273,14 @@ function renderAssignmentModal() {
       ${
         guest
           ? `
-        <div class="assignment-progress assignment-confirmation">
-          <strong>${escapeHtml(guest.fullName || "Guest")}</strong>
-          <span>${escapeHtml(seatSummary)}</span>
-          <small>Party of ${getPartySize(guest)} · ${getGuestRemainingSeats(guest)} seat${getGuestRemainingSeats(guest) === 1 ? "" : "s"} remaining</small>
-          ${session.mobileDirectAssignment && getGuestRemainingSeats(guest) > 1 ? `<small>Assigns 1 person; ${getGuestRemainingSeats(guest) - 1} will still need seats.</small>` : !session.mobileDirectAssignment ? `<small>${selectedCount} of ${session.requiredSeats} seats selected.</small>` : ""}
+        <div class="assignment-confirmation">
+          <div class="assignment-confirmation__guest"><span>Guest</span><strong>${escapeHtml(guest.fullName || "Guest")}</strong></div>
+          <div class="assignment-confirmation__seat"><span>Selected seat</span><strong>${escapeHtml(seatSummary)}</strong></div>
+          <div class="assignment-confirmation__party">
+            <div><span>Party size</span><strong>${getPartySize(guest)} ${getPartySize(guest) === 1 ? "person" : "people"}</strong></div>
+            <div><span>Seats remaining</span><strong>${getGuestRemainingSeats(guest)}</strong></div>
+          </div>
+          ${session.mobileDirectAssignment && getGuestRemainingSeats(guest) > 1 ? `<p class="assignment-confirmation__note">Assigns 1 person; ${getGuestRemainingSeats(guest) - 1} will still need seats.</p>` : !session.mobileDirectAssignment ? `<p class="assignment-confirmation__note">${selectedCount} of ${session.requiredSeats} seats selected.</p>` : ""}
         </div>
         ${state.modalError ? `<div class="planner-warning-list"><span class="warning-chip">${escapeHtml(state.modalError)}</span></div>` : ""}
       `
@@ -7787,6 +7821,8 @@ function renderChairDetailsModal(guestId) {
   if (!elements.chairDetailsContent || !guest) {
     return;
   }
+  elements.chairDetailsContent.classList.remove("is-party-unassign-confirmation");
+  elements.chairDetailsContent.classList.remove("is-seat-unassign-confirmation");
   const assignments = getGuestAssignedSeats(guestId).sort(
     (a, b) => a.partyMemberIndex - b.partyMemberIndex,
   );
@@ -7911,6 +7947,7 @@ function renderPartyUnassignConfirmation(party) {
   if (!elements.chairDetailsContent || !party) {
     return;
   }
+  elements.chairDetailsContent.classList.add("is-party-unassign-confirmation");
   elements.chairDetailsContent.innerHTML = `
     <div class="da3wa-sheet__header">
       <div>
@@ -7919,13 +7956,13 @@ function renderPartyUnassignConfirmation(party) {
       </div>
       <button class="da3wa-icon-button" type="button" data-close-modal="chairDetailsModal" aria-label="Close unassign confirmation">x</button>
     </div>
-    <div class="da3wa-sheet__body">
-      <div class="delete-summary-grid">
+    <div class="da3wa-sheet__body party-unassign-confirmation__body">
+      <div class="delete-summary-grid party-unassign-summary-grid">
         ${plannerStat("Party size", String(party.partySize))}
         ${plannerStat("Currently assigned", `${party.assignments.length} of ${party.partySize}`)}
         ${plannerStat("Tables affected", party.affectedTables.join(", ") || "None")}
       </div>
-      <div class="planner-warning-list"><span class="warning-chip">Every assigned member of this party will be removed from their chair. Guest records and party size will remain unchanged.</span></div>
+      <div class="planner-warning-list party-unassign-warning"><span class="warning-chip">Every assigned member of this party will be removed from their chair. Guest records and party size will remain unchanged.</span></div>
       ${state.modalError ? `<div class="planner-warning-list"><span class="warning-chip">${escapeHtml(state.modalError)}</span></div>` : ""}
     </div>
     <div class="da3wa-sheet__footer">
@@ -8069,7 +8106,7 @@ async function clearPartyAssignments(guestId, expectedSignature = "") {
   renderAll();
 }
 
-async function confirmUnassignSeat(tableId, chairId) {
+async function confirmUnassignSeat(tableId, chairId, sourceModal = "chairDetails") {
   if (state.activeModalOperation || !can("canEditSeating")) {
     return;
   }
@@ -8084,20 +8121,82 @@ async function confirmUnassignSeat(tableId, chairId) {
     showToast("That chair is already empty.", "info");
     return;
   }
+  state.pendingSeatUnassign = { tableId, chairId, guestId: guest.id, sourceModal };
+  renderSeatUnassignConfirmation(seat, assignment, guest);
+}
+
+function renderSeatUnassignConfirmation(seat, assignment, guest) {
+  const content = state.pendingSeatUnassign?.sourceModal === "assignment"
+    ? elements.assignmentContent
+    : elements.chairDetailsContent;
+  if (!content || !seat || !assignment || !guest) {
+    return;
+  }
+  if (content === elements.chairDetailsContent) {
+    content.classList.remove("is-party-unassign-confirmation");
+    content.classList.add("is-seat-unassign-confirmation");
+  }
   const personLabel =
     assignment.label || partyMemberLabel(guest, assignment.partyMemberIndex);
-  const confirmed = window.confirm(
-    `Unassign ${personLabel} from ${seat.table.name} chair ${seat.chair.seatNumber}?`,
-  );
-  if (!confirmed) {
+  content.innerHTML = `
+    <div class="da3wa-sheet__header">
+      <div>
+        <p class="da3wa-eyebrow">Unassign seat</p>
+        <h2>${escapeHtml(guest.fullName || "Guest")}</h2>
+      </div>
+      <button class="da3wa-icon-button" type="button" data-action="cancel-unassign-seat" data-guest-id="${escapeAttribute(guest.id)}" aria-label="Cancel unassign seat">×</button>
+    </div>
+    <div class="da3wa-sheet__body seat-unassign-confirmation__body">
+      <div class="seat-unassign-confirmation__person">
+        <span>Person to unassign</span>
+        <strong>${escapeHtml(personLabel)}</strong>
+      </div>
+      <div class="seat-unassign-confirmation__seat">
+        <span>Selected seat</span>
+        <strong>${escapeHtml(seat.table.name)} · Chair ${escapeHtml(String(seat.chair.seatNumber))}</strong>
+      </div>
+      <p class="seat-unassign-confirmation__note">Only this chair will be cleared. The guest and their other seat assignments will stay unchanged.</p>
+      ${state.modalError ? `<div class="planner-warning-list"><span class="warning-chip">${escapeHtml(state.modalError)}</span></div>` : ""}
+    </div>
+    <div class="da3wa-sheet__footer">
+      <button class="da3wa-button da3wa-button--secondary" type="button" data-action="cancel-unassign-seat" data-guest-id="${escapeAttribute(guest.id)}" ${state.activeModalOperation ? "disabled" : ""}>Keep seat</button>
+      <button class="da3wa-button da3wa-button--danger" type="button" data-action="confirm-unassign-seat" data-table-id="${escapeAttribute(seat.table.id)}" data-chair-id="${escapeAttribute(seat.chair.id)}" ${state.activeModalOperation ? 'disabled aria-disabled="true"' : ""}>Unassign seat</button>
+    </div>
+  `;
+}
+
+async function performSeatUnassign(tableId, chairId) {
+  const pending = state.pendingSeatUnassign;
+  if (
+    state.activeModalOperation ||
+    !can("canEditSeating") ||
+    !pending ||
+    pending.tableId !== tableId ||
+    pending.chairId !== chairId
+  ) {
+    return;
+  }
+  const seat = getSeatByIds(tableId, chairId);
+  const assignment = seat?.chair ? getChairAssignment(tableId, seat.chair) : null;
+  const guest = assignment?.guestId
+    ? state.guests.find((item) => item.id === assignment.guestId)
+    : null;
+  if (!seat || !assignment || !guest || guest.id !== pending.guestId) {
+    state.pendingSeatUnassign = null;
+    showToast("That chair has changed. Refresh and try again.", "info");
+    if (pending.sourceModal === "assignment") renderAssignmentModal();
+    else if (guest) renderChairDetailsModal(guest.id);
     return;
   }
   state.activeModalOperation = "unassign-seat";
-  renderChairDetailsModal(guest.id);
+  state.pendingSeatUnassign = null;
+  if (pending.sourceModal === "assignment") renderAssignmentModal();
+  else renderChairDetailsModal(guest.id);
   try {
     await unassignSingleSeat(tableId, chairId);
     state.activeModalOperation = "";
-    elements.chairDetailsModal?.close();
+    if (pending.sourceModal === "chairDetails") elements.chairDetailsModal?.close();
+    else renderAssignmentModal();
     showToast("Seat unassigned.", "success");
   } catch (error) {
     const diagnosticError = reportSeatingOperationFailure(
@@ -8111,7 +8210,8 @@ async function confirmUnassignSeat(tableId, chairId) {
     );
     state.activeModalOperation = "";
     state.modalError = diagnosticError.message;
-    renderChairDetailsModal(guest.id);
+    if (pending.sourceModal === "assignment") renderAssignmentModal();
+    else renderChairDetailsModal(guest.id);
   }
 }
 

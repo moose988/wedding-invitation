@@ -1,8 +1,8 @@
-import { collection, doc, getDoc, getDocs, initFirebase, isFirebaseConfigured, onAuthStateChanged, onSnapshot, query, serverTimestamp, setDoc, signOut, updateDoc, where, writeBatch, httpsCallable } from "./firebase-config.js?v=20261016-tab-session-isolation-1";
+import { collection, doc, getDoc, getDocs, initFirebase, isFirebaseConfigured, onAuthStateChanged, serverTimestamp, setDoc, signOut, updateDoc, writeBatch, httpsCallable } from "./firebase-config.js?v=20261016-tab-session-isolation-1";
 import { EVENT_CATEGORIES, getEventCategory, getEventDisplayTitle, isCelebrationEvent } from "./event-utils.js";
 import { paginateRows } from "./workspace-pagination.js";
 
-const state = { services: null, user: null, weddings: [], filter: "all", currentPage: 1, pageSize: 6, editId: "", deleteId: "", unsubscribe: null, unsubscribeAuth: null, initialized: false, snapshotGeneration: 0 };
+const state = { services: null, user: null, weddings: [], filter: "all", currentPage: 1, pageSize: 6, editId: "", deleteId: "", workspaceTimer: null, unsubscribeAuth: null, initialized: false, snapshotGeneration: 0, workspaceRequest: 0 };
 const el = Object.fromEntries(["workspace","loadingState","userEmail","signOutButton","createWeddingButton","sampleInvitationPanel","workspaceControls","sampleInvitationUrl","searchInput","sortSelect","filterRow","workspaceStatus","weddingGrid","paginationControls","paginationStatus","emptyState","weddingDialog","weddingForm","formKicker","formTitle","formError","saveWeddingButton","categoryStep","eventFeaturesStep","eventInformationStep","continueEventButton","continueFeaturesButton","backEventButton","deleteDialog","deleteForm","deletePhrase","deleteConfirmation","deleteError"].map((id) => [id, document.getElementById(id)]));
 
 init();
@@ -36,14 +36,15 @@ function init() {
   document.addEventListener("keydown", (event) => { if (event.key === "Escape") closeActionMenus(); });
   state.unsubscribeAuth?.();
   state.unsubscribeAuth = onAuthStateChanged(state.services.auth, (user) => {
+    if (state.user?.uid !== user?.uid) {
+      state.weddings = [];
+      state.currentPage = 1;
+      state.workspaceRequest += 1;
+      if (user) render();
+    }
     if (!user) return location.replace("./dashboard-login.html?message=session-required");
     state.user = user;
     el.userEmail.textContent = user.email || "Planner";
-    const isRestrictedAccount = user.email?.trim().toLowerCase() === "girl@gmail.com";
-    el.createWeddingButton.hidden = isRestrictedAccount;
-    el.sampleInvitationPanel.hidden = isRestrictedAccount;
-    el.workspaceControls.hidden = isRestrictedAccount;
-    el.filterRow.hidden = isRestrictedAccount;
     el.loadingState.hidden = true;
     el.workspace.hidden = false;
     watchWorkspace();
@@ -53,82 +54,32 @@ function init() {
 
 function showFatal(message) { el.loadingState.textContent = message; }
 function watchWorkspace() {
-  state.unsubscribe?.();
-  state.unsubscribe = null;
+  state.workspaceTimer && clearInterval(state.workspaceTimer);
   const generation = ++state.snapshotGeneration;
-  const access = collection(state.services.db, "users", state.user.uid, "weddingAccess");
-  state.unsubscribe = onSnapshot(access, async (snapshot) => {
-    const accessEntries = snapshot.docs.map((row) => ({ ...row.data(), id: row.id }));
-    // Merge in pre-workspace weddings on every load. An account can already
-    // have newer indexed weddings, so only falling back for an empty index
-    // would hide an older event such as Laila & Zaid.
-    const [indexedWeddings, legacyWeddings] = await Promise.all([
-      loadIndexedWeddings(accessEntries),
-      loadLegacyActiveWeddings()
-    ]);
-    if (generation !== state.snapshotGeneration) return;
-    // Both sources are resolved from top-level wedding documents, then merged
-    // by Firestore ID. The access index can never render stale card metadata.
-    state.weddings = replaceRowsById([...legacyWeddings, ...indexedWeddings]);
-    await enrichStats(); render();
-  }, async (error) => {
-    // Existing deployments may not yet have the new `/users/{uid}/weddingAccess`
-    // rule. Keep established active weddings usable while the rules rollout is
-    // completed, instead of leaving the whole workspace blank.
-    if (error.code === "permission-denied") {
-      const legacyWeddings = await loadLegacyActiveWeddings();
-      if (generation !== state.snapshotGeneration) return;
-      state.weddings = replaceRowsById(legacyWeddings);
-      await enrichStats();
-      render();
-      el.workspaceStatus.textContent = state.weddings.length
-        ? "Showing existing events. Deploy the updated Firestore rules to enable the workspace index."
-        : "No accessible events were found. Deploy the updated Firestore rules, then refresh.";
-      return;
-    }
-    console.error(error);
-    el.workspaceStatus.textContent = "We could not load your event workspace. Please refresh and try again.";
-  });
+  const refresh = () => void refreshWorkspaceEvents(generation);
+  refresh();
+  state.workspaceTimer = setInterval(refresh, 15000);
 }
 
-async function loadIndexedWeddings(accessEntries) {
-  const weddings = await Promise.all(accessEntries.map(async (entry) => {
-    try {
-      const weddingDoc = await getDoc(doc(state.services.db, "weddings", entry.id));
-      return weddingDoc.exists() ? { ...weddingDoc.data(), id: weddingDoc.id } : null;
-    } catch (error) {
-      console.warn(`Wedding access entry ${entry.id} could not be resolved.`, error);
-      return null;
-    }
-  }));
-  return weddings.filter(Boolean);
-}
-
-async function loadLegacyActiveWeddings() {
+async function refreshWorkspaceEvents(generation = state.snapshotGeneration) {
+  const request = ++state.workspaceRequest;
   try {
-    const snapshot = await getDocs(query(collection(state.services.db, "weddings"), where("status", "==", "active")));
-    const candidates = snapshot.docs.map((row) => ({ ...row.data(), id: row.id, legacy: true }));
-    const permissions = await Promise.all(
-      candidates.map((wedding) =>
-        getDoc(
-          doc(
-            state.services.db,
-            "weddings",
-            wedding.id,
-            "dashboardUsers",
-            state.user.uid,
-          ),
-        ),
-      ),
-    );
-    return candidates.filter(
-      (_, index) =>
-        permissions[index].exists() &&
-        permissions[index].data().canViewDashboard === true,
-    );
+    const result = await httpsCallable(state.services.functions, "getAccessibleWorkspaceEvents")({});
+    if (generation !== state.snapshotGeneration || request !== state.workspaceRequest || !state.user) return;
+    state.weddings = replaceRowsById(result.data?.events || []);
+    const onlySeating = state.weddings.length > 0 && state.weddings.every((wedding) => wedding.seatingOnly === true);
+    el.createWeddingButton.hidden = onlySeating;
+    el.sampleInvitationPanel.hidden = onlySeating;
+    el.workspaceControls.hidden = false;
+    el.filterRow.hidden = false;
+    await enrichStats();
+    render();
   } catch (error) {
-    console.error("Accessible weddings could not be loaded.", error);
-    return [];
+    if (generation !== state.snapshotGeneration || request !== state.workspaceRequest) return;
+    console.error("Accessible event list could not be loaded.", error?.code || "unavailable");
+    state.weddings = [];
+    render();
+    el.workspaceStatus.textContent = "We could not load your accessible events. Please refresh and try again.";
   }
 }
 
@@ -143,14 +94,19 @@ function replaceRowsById(rows) {
 
 function disposeListeners() {
   state.snapshotGeneration += 1;
-  state.unsubscribe?.();
+  state.workspaceRequest += 1;
+  if (state.workspaceTimer) clearInterval(state.workspaceTimer);
   state.unsubscribeAuth?.();
-  state.unsubscribe = null;
+  state.workspaceTimer = null;
   state.unsubscribeAuth = null;
 }
 
 async function enrichStats() {
   await Promise.all(state.weddings.map(async (wedding) => {
+    if (wedding.seatingOnly === true) {
+      wedding.stats = null;
+      return;
+    }
     try {
       const guests = await getDocs(collection(state.services.db, "weddings", wedding.id, "guests"));
       const rows = guests.docs.map((row) => row.data());
@@ -193,12 +149,19 @@ function isOldEvent(wedding) {
 }
 
 function card(w) {
-  const stats = w.stats || {}; const active = ["active", "completed"].includes(w.status); const isOwner = w.ownerUserId === state.user?.uid;
-  const ownerActions = isOwner ? `<button data-action="edit" data-id="${w.id}" type="button">Edit details</button><button data-action="duplicate" data-id="${w.id}" type="button">Duplicate setup</button><button data-action="archive" data-id="${w.id}" type="button">${w.status === "archived" ? "Restore event" : "Archive event"}</button><button class="menu-delete" data-action="delete" data-id="${w.id}" type="button">Delete event</button>` : `<p class="action-menu__notice">Only the event owner can manage this event.</p>`;
+  const stats = w.stats || {}; const active = ["active", "completed"].includes(w.status); const isOwner = w.isOwner === true && w.seatingOnly !== true;
+  const eventId = escape(w.id);
+  const eventStatus = ["draft", "active", "completed", "archived"].includes(w.status) ? w.status : "draft";
+  const ownerActions = isOwner ? `<button data-action="edit" data-id="${eventId}" type="button">Edit details</button><button data-action="duplicate" data-id="${eventId}" type="button">Duplicate setup</button><button data-action="archive" data-id="${eventId}" type="button">${w.status === "archived" ? "Restore event" : "Archive event"}</button><button class="menu-delete" data-action="delete" data-id="${eventId}" type="button">Delete event</button>` : `<p class="action-menu__notice">Only the event owner can manage this event.</p>`;
   const title = getEventDisplayTitle(w);
   const category = isCelebrationEvent(w) ? "Celebration" : "Wedding / Engagement";
-  const cardMenu = `<div class="menu-wrap"><button class="card-menu-toggle" data-action="menu" data-id="${w.id}" type="button" aria-label="More actions for ${escape(title)}" aria-expanded="false" aria-controls="menu-${w.id}">⋯</button><div class="action-menu" id="menu-${w.id}" hidden>${ownerActions}</div></div>`;
-  return `<article class="wedding-card"><div class="card-head"><div><p class="workspace-kicker">${escape(w.venueEn || "Venue not set")}</p><h2>${escape(title)}</h2><span class="category-badge">${category}</span></div><div class="card-head__actions"><span class="status-badge status-badge--${escape(w.status || "draft")}">${escape(w.status || "draft")}</span>${cardMenu}</div></div><div class="card-meta">${formatEvent(w.eventDateISO)}${w.location ? ` · ${escape(w.location)}` : ""}</div><div class="card-stats"><span class="stat"><strong>${stats.total || 0}</strong> guests</span><span class="stat"><strong>${stats.confirmed || 0}</strong> confirmed</span><span class="stat"><strong>${stats.pending || 0}</strong> pending</span><span class="stat"><strong>${stats.declined || 0}</strong> declined</span>${active ? `<span class="stat"><strong>${stats.checkedIn || 0}/${stats.total || 0}</strong> checked in</span>` : ""}</div><div class="card-footer"><span>Updated ${formatRelative(w.updatedAt || w.createdAt)}</span></div><div class="card-actions"><button class="open-button" data-action="open" data-id="${w.id}" type="button">Open dashboard</button><button data-action="copy" data-id="${w.id}" type="button" title="Copy guest invitation link template">Copy guest link</button></div></article>`;
+  const cardMenu = isOwner ? `<div class="menu-wrap"><button class="card-menu-toggle" data-action="menu" data-id="${eventId}" type="button" aria-label="More actions for ${escape(title)}" aria-expanded="false" aria-controls="menu-${eventId}">⋯</button><div class="action-menu" id="menu-${eventId}" hidden>${ownerActions}</div></div>` : "";
+  const statsMarkup = w.seatingOnly === true
+    ? `<span class="stat">Seating access · ${escape(w.allowedSide || "restricted")}</span>`
+    : `<span class="stat"><strong>${stats.total || 0}</strong> guests</span><span class="stat"><strong>${stats.confirmed || 0}</strong> confirmed</span><span class="stat"><strong>${stats.pending || 0}</strong> pending</span><span class="stat"><strong>${stats.declined || 0}</strong> declined</span>${active ? `<span class="stat"><strong>${stats.checkedIn || 0}/${stats.total || 0}</strong> checked in</span>` : ""}`;
+  const openLabel = w.seatingOnly === true ? "Open seating" : "Open dashboard";
+  const copyAction = w.seatingOnly === true ? "" : `<button data-action="copy" data-id="${eventId}" type="button" title="Copy guest invitation link template">Copy guest link</button>`;
+  return `<article class="wedding-card"><div class="card-head"><div><p class="workspace-kicker">${escape(w.venueEn || "Venue not set")}</p><h2>${escape(title)}</h2><span class="category-badge">${category}</span></div><div class="card-head__actions"><span class="status-badge status-badge--${eventStatus}">${escape(eventStatus)}</span>${cardMenu}</div></div><div class="card-meta">${formatEvent(w.eventDateISO)}${w.location ? ` · ${escape(w.location)}` : ""}</div><div class="card-stats">${statsMarkup}</div><div class="card-footer"><span>Updated ${formatRelative(w.updatedAt || w.createdAt)}</span></div><div class="card-actions"><button class="open-button" data-action="open" data-id="${eventId}" type="button">${openLabel}</button>${copyAction}</div></article>`;
 }
 
 function sampleInvitationUrl() {
@@ -208,12 +171,36 @@ function sampleInvitationUrl() {
 async function handleCardAction(event) {
   const button = event.target.closest("[data-action]"); if (!button) return; const wedding = state.weddings.find((w) => w.id === button.dataset.id); if (!wedding) return;
   if (button.dataset.action === "menu") { const menu = document.getElementById(`menu-${wedding.id}`); const shouldOpen = menu.hidden; closeActionMenus(menu); menu.hidden = !shouldOpen; button.setAttribute("aria-expanded", String(shouldOpen)); return; }
-  if (button.dataset.action === "open") { localStorage.setItem("da3wa:lastDashboardWeddingId", wedding.id); location.href = `./dashboard.html?wedding=${encodeURIComponent(wedding.id)}`; }
-  if (button.dataset.action === "copy") { await navigator.clipboard.writeText(new URL(`index.html?wedding=${encodeURIComponent(wedding.id)}&guest={guestToken}`, location.href)); flash("Guest invitation base link copied."); }
-  if (button.dataset.action === "edit") openForm(wedding);
+  if (button.dataset.action === "open") {
+    if (wedding.seatingOnly === true) {
+      location.href = `./side.html?wedding=${encodeURIComponent(wedding.id)}`;
+      return;
+    }
+    localStorage.setItem("da3wa:lastDashboardWeddingId", wedding.id);
+    location.href = `./dashboard.html?wedding=${encodeURIComponent(wedding.id)}`;
+  }
+  if (button.dataset.action === "copy") { await navigator.clipboard.writeText(new URL(`index.html?wedding=${encodeURIComponent(wedding.id)}#guest={guestToken}`, location.href)); flash("Guest invitation base link copied."); }
+  if (button.dataset.action === "edit") {
+    const current = await loadFullWedding(wedding.id);
+    if (current) openForm(current);
+  }
   if (button.dataset.action === "archive") await setArchived(wedding);
-  if (button.dataset.action === "duplicate") await duplicate(wedding);
+  if (button.dataset.action === "duplicate") {
+    const current = await loadFullWedding(wedding.id);
+    if (current) await duplicate(current);
+  }
   if (button.dataset.action === "delete") openDelete(wedding);
+}
+
+async function loadFullWedding(weddingId) {
+  try {
+    const snapshot = await getDoc(doc(state.services.db, "weddings", weddingId));
+    return snapshot.exists() ? { ...snapshot.data(), id: snapshot.id } : null;
+  } catch (error) {
+    console.error("Event details could not be loaded.", error?.code || "unavailable");
+    flash("You no longer have access to this event.");
+    return null;
+  }
 }
 
 async function handleSamplePanelAction(event) {
@@ -264,10 +251,10 @@ function updateCategoryFields() { const category = getSelectedEventCategory(); e
 function continueToEventInformation() { if (!getSelectedEventCategory()) return; if (!state.editId && !el.eventFeaturesStep.hidden) { el.eventFeaturesStep.hidden = true; el.eventInformationStep.hidden = false; el.saveWeddingButton.hidden = false; return; } el.categoryStep.hidden = true; if (state.editId) { el.eventInformationStep.hidden = false; el.saveWeddingButton.hidden = false; } else { el.eventFeaturesStep.hidden = false; } el.backEventButton.hidden = false; }
 function backEventStep() { if (!state.editId && !el.eventInformationStep.hidden) { el.eventInformationStep.hidden = true; el.eventFeaturesStep.hidden = false; el.saveWeddingButton.hidden = true; return; } if (!state.editId && !el.eventFeaturesStep.hidden) { el.eventFeaturesStep.hidden = true; } el.eventInformationStep.hidden = true; el.categoryStep.hidden = false; el.backEventButton.hidden = true; el.saveWeddingButton.hidden = true; }
 async function saveWedding(event) { event.preventDefault(); const f = el.weddingForm.elements; const category = getSelectedEventCategory(); if (![EVENT_CATEGORIES.WEDDING_ENGAGEMENT, EVENT_CATEGORIES.CELEBRATION].includes(category)) return; const oldEvent = state.weddings.find((item) => item.id === state.editId); if (oldEvent && getEventCategory(oldEvent) !== category && !window.confirm("Changing this event category changes the dashboard experience. Existing guest side values will be preserved. Continue?")) return; const brideName = f.brideName.value.trim(), groomName = f.groomName.value.trim(); const eventDateISO = new Date(`${f.eventDate.value}T${f.eventTime.value}`).toISOString(); const data = { eventCategory: category, eventDateISO, venueEn: f.venueEn.value.trim(), location: f.location.value.trim(), mapsUrl: f.mapsUrl.value.trim(), whatsAppCountryCode: f.whatsAppCountryCode.value.trim(), invitationLanguage: f.invitationLanguage.value, plannerNotes: f.plannerNotes.value.trim(), status: f.status.value, updatedAt: serverTimestamp() }; if (category === EVENT_CATEGORIES.CELEBRATION) data.eventTitle = f.eventTitle.value.trim(); else Object.assign(data, { brideName, groomName, coupleName: `${brideName} & ${groomName}`, eventTitle: `${brideName} & ${groomName}` }); el.formError.textContent = ""; el.saveWeddingButton.disabled = true;
-  try { if (state.editId) { await updateDoc(doc(state.services.db,"weddings",state.editId), data); await setDoc(doc(state.services.db,"users",state.user.uid,"weddingAccess",state.editId), { ...indexData(data), weddingId: state.editId }, { merge:true }); } else { const weddingRef = doc(collection(state.services.db,"weddings")); const batch = writeBatch(state.services.db); batch.set(weddingRef, { ...data, seatingEnabled:f.seatingEnabled.checked, showInvitationQr:f.showInvitationQr.checked, ownerUserId:state.user.uid, createdAt:serverTimestamp() }); batch.set(doc(state.services.db,"weddings",weddingRef.id,"dashboardUsers",state.user.uid), { email:state.user.email || "", canViewDashboard:true, canEditGuests:true, canEditSeating:true, canCheckIn:true, canManageUsers:true, role:"owner", createdAt:serverTimestamp(), updatedAt:serverTimestamp() }); batch.set(doc(state.services.db,"users",state.user.uid,"weddingAccess",weddingRef.id), { ...indexData(data), weddingId:weddingRef.id, ownerUserId:state.user.uid, createdAt:serverTimestamp(), updatedAt:serverTimestamp() }); await batch.commit(); } el.weddingDialog.close(); } catch (error) { console.error(error); el.formError.textContent = "We could not save this event. Please check your access and try again."; } finally { el.saveWeddingButton.disabled=false; } }
+  try { if (state.editId) { await updateDoc(doc(state.services.db,"weddings",state.editId), data); await setDoc(doc(state.services.db,"users",state.user.uid,"weddingAccess",state.editId), { ...indexData(data), weddingId: state.editId }, { merge:true }); } else { const weddingRef = doc(collection(state.services.db,"weddings")); const batch = writeBatch(state.services.db); batch.set(weddingRef, { ...data, seatingEnabled:f.seatingEnabled.checked, showInvitationQr:f.showInvitationQr.checked, ownerUserId:state.user.uid, createdAt:serverTimestamp() }); batch.set(doc(state.services.db,"weddings",weddingRef.id,"dashboardUsers",state.user.uid), { userId:state.user.uid, email:state.user.email || "", canViewDashboard:true, canEditGuests:true, canEditSeating:true, canCheckIn:true, canManageUsers:true, role:"owner", createdAt:serverTimestamp(), updatedAt:serverTimestamp() }); batch.set(doc(state.services.db,"users",state.user.uid,"weddingAccess",weddingRef.id), { ...indexData(data), weddingId:weddingRef.id, ownerUserId:state.user.uid, createdAt:serverTimestamp(), updatedAt:serverTimestamp() }); await batch.commit(); } el.weddingDialog.close(); void refreshWorkspaceEvents(); } catch (error) { console.error(error); el.formError.textContent = "We could not save this event. Please check your access and try again."; } finally { el.saveWeddingButton.disabled=false; } }
 function indexData(data) { return Object.fromEntries(Object.entries({ eventCategory:data.eventCategory, eventTitle:data.eventTitle, coupleName:data.coupleName, brideName:data.brideName, groomName:data.groomName, eventDateISO:data.eventDateISO, venueEn:data.venueEn, location:data.location, status:data.status, updatedAt:data.updatedAt }).filter(([, value]) => value !== undefined)); }
-async function setArchived(wedding) { const status = wedding.status === "archived" ? "draft" : "archived"; try { await updateDoc(doc(state.services.db,"weddings",wedding.id), { status, updatedAt:serverTimestamp() }); await setDoc(doc(state.services.db,"users",state.user.uid,"weddingAccess",wedding.id), { status, updatedAt:serverTimestamp() }, {merge:true}); } catch (_) { flash("We could not update this event. Please try again."); } }
-async function duplicate(wedding) { const { id, stats, legacy, createdAt, updatedAt, completedAt, statusBeforeCompletion, ...source } = wedding; const title = `${getEventDisplayTitle(wedding)} (Copy)`; const copy = { ...source, seatingEnabled:wedding.seatingEnabled !== false, eventTitle:title, status:"draft", ownerUserId:state.user.uid, createdAt:serverTimestamp(), updatedAt:serverTimestamp() }; if (!isCelebrationEvent(wedding)) copy.coupleName = title; try { const ref = doc(collection(state.services.db,"weddings")); const batch = writeBatch(state.services.db); batch.set(ref, copy); batch.set(doc(state.services.db,"weddings",ref.id,"dashboardUsers",state.user.uid), { email:state.user.email || "", canViewDashboard:true, canEditGuests:true, canEditSeating:true, canCheckIn:true, canManageUsers:true, role:"owner", createdAt:serverTimestamp(), updatedAt:serverTimestamp() }); batch.set(doc(state.services.db,"users",state.user.uid,"weddingAccess",ref.id), { ...indexData(copy), weddingId:ref.id, ownerUserId:state.user.uid, createdAt:serverTimestamp(), updatedAt:serverTimestamp() }); await batch.commit(); flash("Event setup duplicated as a draft."); } catch (e) { console.error(e); flash("We could not duplicate this event."); } }
+async function setArchived(wedding) { const status = wedding.status === "archived" ? "draft" : "archived"; try { await updateDoc(doc(state.services.db,"weddings",wedding.id), { status, updatedAt:serverTimestamp() }); await setDoc(doc(state.services.db,"users",state.user.uid,"weddingAccess",wedding.id), { status, updatedAt:serverTimestamp() }, {merge:true}); void refreshWorkspaceEvents(); } catch (_) { flash("We could not update this event. Please try again."); } }
+async function duplicate(wedding) { const { id, stats, legacy, isOwner, seatingOnly, allowedSide, createdAt, updatedAt, completedAt, statusBeforeCompletion, ...source } = wedding; const title = `${getEventDisplayTitle(wedding)} (Copy)`; const copy = { ...source, seatingEnabled:wedding.seatingEnabled !== false, eventTitle:title, status:"draft", ownerUserId:state.user.uid, createdAt:serverTimestamp(), updatedAt:serverTimestamp() }; if (!isCelebrationEvent(wedding)) copy.coupleName = title; try { const ref = doc(collection(state.services.db,"weddings")); const batch = writeBatch(state.services.db); batch.set(ref, copy); batch.set(doc(state.services.db,"weddings",ref.id,"dashboardUsers",state.user.uid), { userId:state.user.uid, email:state.user.email || "", canViewDashboard:true, canEditGuests:true, canEditSeating:true, canCheckIn:true, canManageUsers:true, role:"owner", createdAt:serverTimestamp(), updatedAt:serverTimestamp() }); batch.set(doc(state.services.db,"users",state.user.uid,"weddingAccess",ref.id), { ...indexData(copy), weddingId:ref.id, ownerUserId:state.user.uid, createdAt:serverTimestamp(), updatedAt:serverTimestamp() }); await batch.commit(); flash("Event setup duplicated as a draft."); void refreshWorkspaceEvents(); } catch (e) { console.error(e); flash("We could not duplicate this event."); } }
 function openDelete(wedding) { state.deleteId=wedding.id; el.deletePhrase.textContent=`DELETE ${wedding.id}`; el.deleteConfirmation.value=""; el.deleteError.textContent=""; el.deleteDialog.showModal(); }
-async function deleteWedding(event) { event.preventDefault(); const phrase=`DELETE ${state.deleteId}`; if (el.deleteConfirmation.value !== phrase) { el.deleteError.textContent=`Type “${phrase}” exactly to delete.`; return; } try { await httpsCallable(state.services.functions,"deleteWedding")({ weddingId:state.deleteId, confirmation:phrase }); el.deleteDialog.close(); } catch (error) { console.error(error); el.deleteError.textContent="We could not delete this event. Only its owner can do this."; } }
+async function deleteWedding(event) { event.preventDefault(); const phrase=`DELETE ${state.deleteId}`; if (el.deleteConfirmation.value !== phrase) { el.deleteError.textContent=`Type “${phrase}” exactly to delete.`; return; } try { await httpsCallable(state.services.functions,"deleteWedding")({ weddingId:state.deleteId, confirmation:phrase }); el.deleteDialog.close(); void refreshWorkspaceEvents(); } catch (error) { console.error(error); el.deleteError.textContent="We could not delete this event. Only its owner can do this."; } }
 function timestampValue(value) { return value?.toMillis?.() || value?.seconds * 1000 || (value ? new Date(value).getTime() : 0); } function formatEvent(value) { const date=new Date(value); return Number.isNaN(+date) ? "Event date to be set" : new Intl.DateTimeFormat(undefined,{dateStyle:"medium",timeStyle:"short"}).format(date); } function formatRelative(value) { const ms=Date.now()-timestampValue(value); if (!ms) return "just now"; const days=Math.floor(ms/86400000); return days <= 0 ? "today" : days === 1 ? "yesterday" : `${days} days ago`; } function escape(value) { const node=document.createElement("span"); node.textContent=value; return node.innerHTML; } function flash(message) { el.workspaceStatus.textContent=message; }

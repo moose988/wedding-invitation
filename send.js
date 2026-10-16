@@ -3,16 +3,75 @@ import {
   decodeSenderPayload,
   senderGuestPresentation,
 } from "./sender-codec.js";
+import { httpsCallable, initPublicFirebase, isFirebaseConfigured } from "./firebase-config.js?v=20261016-tab-session-isolation-1";
 
 const shell = document.getElementById("senderShell");
+const params = new URLSearchParams(window.location.search);
+const demoMode = params.get("demo") === "1";
+const sessionToken = new URLSearchParams(window.location.hash.replace(/^#/, "")).get("session") || "";
+let payload = null;
+let sentStorageKey = "";
+let sentMap = {};
+let senderRefreshTimer = null;
+let senderRequestVersion = 0;
 
-const payload = decodePayload();
-const sentStorageKey = payload ? `da3wa:senderSent:${payload.w || "wedding"}` : "";
-let sentMap = readSentMap();
+initializeSender();
 
-render();
+async function initializeSender() {
+  const version = ++senderRequestVersion;
+  if (demoMode) {
+    payload = decodeDemoPayload();
+  } else if (isFirebaseConfigured() && /^[A-Za-z0-9_-]{43}$/.test(sessionToken)) {
+    try {
+      const { functions } = initPublicFirebase();
+      const result = await httpsCallable(functions, "getSenderSession")({ token: sessionToken });
+      if (version !== senderRequestVersion) return;
+      payload = result.data;
+    } catch {
+      if (version !== senderRequestVersion) return;
+      payload = null;
+    }
+  }
+  if (payload?.sid) sentStorageKey = `da3wa:senderSent:${payload.sid}`;
+  sentMap = readSentMap();
+  if (payload?.w) {
+  // Older sender pages persisted bearer tokens as localStorage keys. Remove
+    // only this event's legacy progress record when it is next opened.
+    try {
+      localStorage.removeItem(`da3wa:senderSent:${payload.w}`);
+    } catch {}
+  }
+  render();
+  if (!demoMode && payload && !senderRefreshTimer) {
+    senderRefreshTimer = window.setInterval(refreshSenderSession, 30_000);
+  }
+}
 
-function decodePayload() {
+async function refreshSenderSession() {
+  const version = ++senderRequestVersion;
+  try {
+    const { functions } = initPublicFirebase();
+    const result = await httpsCallable(functions, "getSenderSession")({ token: sessionToken });
+    if (version !== senderRequestVersion) return;
+    payload = result.data;
+    render();
+  } catch {
+    if (version !== senderRequestVersion) return;
+    payload = null;
+    sentMap = {};
+    window.clearInterval(senderRefreshTimer);
+    senderRefreshTimer = null;
+    render();
+  }
+}
+
+window.addEventListener("pagehide", () => {
+  senderRequestVersion += 1;
+  if (senderRefreshTimer) window.clearInterval(senderRefreshTimer);
+  senderRefreshTimer = null;
+}, { once: true });
+
+function decodeDemoPayload() {
   const hash = new URLSearchParams(window.location.hash.replace(/^#/, ""));
   const data = hash.get("data");
   if (!data) {
@@ -20,8 +79,7 @@ function decodePayload() {
   }
   try {
     return decodeSenderPayload(data);
-  } catch (error) {
-    console.error("Could not read the sender payload.", error);
+  } catch {
     return null;
   }
 }
@@ -31,7 +89,7 @@ function readSentMap() {
     return {};
   }
   try {
-    const parsed = JSON.parse(localStorage.getItem(sentStorageKey) || "{}");
+    const parsed = JSON.parse(sessionStorage.getItem(sentStorageKey) || "{}");
     return parsed && typeof parsed === "object" ? parsed : {};
   } catch {
     return {};
@@ -40,12 +98,12 @@ function readSentMap() {
 
 function persistSentMap() {
   if (sentStorageKey) {
-    localStorage.setItem(sentStorageKey, JSON.stringify(sentMap));
+    sessionStorage.setItem(sentStorageKey, JSON.stringify(sentMap));
   }
 }
 
-function guestKey(guest) {
-  return guest.t || guest.p;
+function guestKey(_guest, index) {
+  return `guest-${index}`;
 }
 
 function buildInviteLink(guest) {
@@ -54,7 +112,7 @@ function buildInviteLink(guest) {
     url.searchParams.set("wedding", payload.w);
   }
   if (guest.t) {
-    url.searchParams.set("guest", guest.t);
+    url.hash = new URLSearchParams({ guest: guest.t }).toString();
   }
   return url.toString();
 }
@@ -96,15 +154,15 @@ function render() {
   if (!payload || !payload.g.length) {
     shell.innerHTML = `
       <div class="sender-empty">
-        <h1>This sender link is empty or invalid</h1>
-        <p>Ask your event planner to generate a fresh WhatsApp sender link from the dashboard's Invitations page and send it to you again.</p>
+        <h1>This sender link is unavailable</h1>
+        <p>This link may have expired or been revoked. Ask your event planner to create a new WhatsApp sender link.</p>
       </div>
     `;
     return;
   }
 
   const guests = payload.g;
-  const sentCount = guests.filter((guest) => sentMap[guestKey(guest)]).length;
+  const sentCount = guests.filter((guest, index) => sentMap[guestKey(guest, index)]).length;
   const sideTitle =
     payload.side === "groom"
       ? "Groom side"
@@ -130,7 +188,7 @@ function render() {
     <section class="sender-list">
       ${guests
         .map((guest, index) => {
-          const isSent = Boolean(sentMap[guestKey(guest)]);
+          const isSent = Boolean(sentMap[guestKey(guest, index)]);
           const names = senderGuestPresentation(guest);
           return `
             <article class="sender-row ${isSent ? "is-sent" : ""}">
@@ -157,13 +215,13 @@ function render() {
         .join("")}
     </section>
 
-    <p class="sender-footnote">Sent progress is saved on this phone only.<br />Made with qdsystems Planner Suite.</p>
+    <p class="sender-footnote">Sent progress is saved in this browser tab only.<br />Made with qdsystems Planner Suite.</p>
   `;
 }
 
 function updateProgress() {
   if (!payload?.g?.length) return;
-  const sentCount = payload.g.filter((guest) => sentMap[guestKey(guest)]).length;
+  const sentCount = payload.g.filter((guest, index) => sentMap[guestKey(guest, index)]).length;
   const progress = shell.querySelector(".sender-progress__track");
   const label = shell.querySelector(".sender-progress__label");
   const bar = shell.querySelector(".sender-progress__bar");
@@ -177,7 +235,7 @@ shell.addEventListener("click", (event) => {
   if (sendLink) {
     const guest = payload.g[Number(sendLink.dataset.sendIndex)];
     if (guest) {
-      sentMap[guestKey(guest)] = Date.now();
+      sentMap[guestKey(guest, Number(sendLink.dataset.sendIndex))] = Date.now();
       persistSentMap();
       const row = sendLink.closest(".sender-row");
       row?.classList.add("is-sent");
@@ -199,7 +257,7 @@ shell.addEventListener("click", (event) => {
   if (undoButton) {
     const guest = payload.g[Number(undoButton.dataset.undoIndex)];
     if (guest) {
-      delete sentMap[guestKey(guest)];
+      delete sentMap[guestKey(guest, Number(undoButton.dataset.undoIndex))];
       persistSentMap();
       const row = undoButton.closest(".sender-row");
       row?.classList.remove("is-sent");

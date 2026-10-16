@@ -55,7 +55,7 @@ test("Event Settings Firestore rules authorize owners and explicitly permitted d
           venueEn: "Old Hall",
           status: "upcoming",
         });
-        await firestore.setDoc(firestore.doc(db, memberPath(weddingId, uid)), permissions);
+        await firestore.setDoc(firestore.doc(db, memberPath(weddingId, uid)), { ...permissions, userId: uid });
       }
     });
 

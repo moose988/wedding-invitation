@@ -15,11 +15,9 @@ test("Layla & Zaid sample panel lives once at workspace level with distinct prev
   assert.match(html, /Copy sample link/);
   assert.match(html, /data-action="preview-sample"/);
   assert.match(workspace, /sampleInvitationPanel\.addEventListener\("click", handleSamplePanelAction\)/);
-  assert.match(workspace, /const isRestrictedAccount = user\.email\?\.trim\(\)\.toLowerCase\(\) === "girl@gmail\.com"/);
-  assert.match(workspace, /el\.createWeddingButton\.hidden = isRestrictedAccount/);
-  assert.match(workspace, /el\.sampleInvitationPanel\.hidden = isRestrictedAccount/);
-  assert.match(workspace, /el\.workspaceControls\.hidden = isRestrictedAccount/);
-  assert.match(workspace, /el\.filterRow\.hidden = isRestrictedAccount/);
+  assert.match(workspace, /getAccessibleWorkspaceEvents/);
+  assert.match(workspace, /wedding\.seatingOnly === true/);
+  assert.doesNotMatch(workspace, /girl@gmail\.com|isRestrictedAccount/);
   assert.match(styles, /\.workspace-controls\[hidden\], \.filter-row\[hidden\]\s*\{\s*display:none !important;\s*\}/);
   assert.match(workspace, /handleSamplePanelAction[\s\S]*?window\.open\(sampleInvitationUrl\(\)/);
   assert.match(workspace, /Copy guest link/);
@@ -51,21 +49,18 @@ test("mobile event workspace places the sample, search, status filters, then cre
 test("sample route reads current public event only and never resolves a guest token or private seating", async () => {
   const [script, router, html] = await Promise.all([
     read("script.js"),
-    read("invitations/router.js"),
+    read("home-route.js"),
     read("invitations/wedding-designs/layla-zaid/index.html"),
   ]);
   const sampleBoot = script.slice(script.indexOf("if (state.sampleMode) {"), script.indexOf("if (!explicitDemoMode && (!weddingId || !guestToken))"));
   assert.match(script, /explicitSampleMode = invitationParams\.get\("sample"\) === "1" && invitationParams\.get\("wedding"\) === "luxury-wedding-demo"/);
-  assert.match(sampleBoot, /loadWedding\(weddingId\)/);
-  assert.doesNotMatch(sampleBoot, /loadGuestByToken|loadTables|guestToken/);
-  const rsvp = script.slice(script.indexOf("function renderRsvp()"), script.indexOf("function renderFirebaseRsvp("));
-  assert.match(rsvp, /if \(state\.sampleMode\) \{\s*renderDemoRsvp\(mount, \{ sample: true \}\);\s*return;/);
+  assert.match(sampleBoot, /normaliseWedding\(\{ \.\.\.demoWedding, id: weddingId \}\)/);
+  assert.doesNotMatch(sampleBoot, /loadGuestInvitation|loadFirebaseInvitation|loadTables|httpsCallable/);
   assert.match(script, /state\.sampleMode \|\| state\.mode !== "firebase" \|\| !state\.guest/);
   assert.match(script, /state\.sampleMode \|\| state\.mode !== "firebase"/);
-  assert.match(script, /function startSampleWeddingListener\(weddingId\)[\s\S]*?onSnapshot\(doc\(db, "weddings", weddingId\)/);
   assert.match(html, /id="samplePreviewBanner" hidden/);
-  assert.match(router, /destination\.search = window\.location\.search/);
-  assert.match(router, /window\.location\.replace\(destination\.href\)/);
+  assert.match(router, /hasInvitationParameters = Boolean\(query\.get\("wedding"\)\) \|\| Boolean\(fragment\.get\("guest"\)\)/);
+  assert.match(router, /window\.location\.replace\("\.\/dashboard-login\.html"\)/);
 });
 
 test("sample RSVP uses fictional in-memory state and never writes to Firebase or demo storage", async () => {
@@ -84,7 +79,7 @@ test("sample RSVP uses fictional in-memory state and never writes to Firebase or
   assert.match(script, /function handleDemoRsvpSubmit\(event\) \{\s*event\.preventDefault\(\);\s*if \(state\.sampleMode\) return;/);
   assert.match(script, /state\.sampleMode \|\| state\.mode !== "firebase" \|\| state\.isRsvpSaving/);
   assert.match(script, /await saveInvitationRsvp\(/);
-  assert.match(script, /const checkinUrl = buildAbsoluteUrl\(`checkin\.html\?wedding=/);
-  assert.match(script, /guestToken: explicitSampleMode \? "" : \(params\.get\("guest"\)\?\.trim\(\)/);
+  assert.match(script, /const checkinUrl = buildAbsoluteUrl\(`checkin\.html\?wedding=.*#guest=\$\{encodeURIComponent\(state\.guestToken\)\}`\)/);
+  assert.match(script, /guestToken: explicitSampleMode \? "" : params\.guestToken/);
   assert.match(script, /if \(weddingId && guestToken && isFirebaseConfigured\(\)\)/);
 });

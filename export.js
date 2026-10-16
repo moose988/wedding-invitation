@@ -11,7 +11,7 @@ function loadSheetJs() {
 
   sheetJsPromise = new Promise((resolve, reject) => {
     const script = document.createElement("script");
-    script.src = "https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js";
+    script.src = new URL("./vendor/xlsx.full.min.js", import.meta.url).toString();
     script.async = true;
     script.onload = () => resolve(window.XLSX);
     script.onerror = () => reject(new Error("SheetJS failed to load."));
@@ -82,8 +82,10 @@ function normaliseAdditionalGuests(value) {
   return Number.isInteger(numberValue) && numberValue >= 0 ? numberValue : 0;
 }
 
-function csvCell(value) {
-  return `"${String(value ?? "").replace(/"/g, '""')}"`;
+export function csvCell(value) {
+  let text = String(value ?? "");
+  if (/^[\s\uFEFF]*[=+\-@\t\r\n＝＋－＠]/u.test(text)) text = `\t${text}`;
+  return `"${text.replace(/"/g, '""')}"`;
 }
 
 function downloadFile(name, type, content) {

@@ -1,8 +1,8 @@
 import {
   getApps,
   initializeApp,
-} from "https://www.gstatic.com/firebasejs/10.12.5/firebase-app.js";
-import { getAnalytics, isSupported } from "https://www.gstatic.com/firebasejs/10.12.5/firebase-analytics.js";
+} from "https://www.gstatic.com/firebasejs/12.19.0/firebase-app.js";
+import { getAnalytics, isSupported } from "https://www.gstatic.com/firebasejs/12.19.0/firebase-analytics.js";
 import {
   browserSessionPersistence,
   initializeAuth,
@@ -10,8 +10,8 @@ import {
   signInWithEmailAndPassword,
   signInWithCustomToken,
   signOut,
-} from "https://www.gstatic.com/firebasejs/10.12.5/firebase-auth.js";
-import { getFunctions, httpsCallable } from "https://www.gstatic.com/firebasejs/10.12.5/firebase-functions.js";
+} from "https://www.gstatic.com/firebasejs/12.19.0/firebase-auth.js";
+import { getFunctions, httpsCallable } from "https://www.gstatic.com/firebasejs/12.19.0/firebase-functions.js";
 import {
   addDoc,
   collection,
@@ -29,8 +29,8 @@ import {
   updateDoc,
   where,
   writeBatch,
-} from "https://www.gstatic.com/firebasejs/10.12.5/firebase-firestore.js";
-import { getFirestore } from "https://www.gstatic.com/firebasejs/10.12.5/firebase-firestore.js";
+} from "https://www.gstatic.com/firebasejs/12.19.0/firebase-firestore.js";
+import { getFirestore } from "https://www.gstatic.com/firebasejs/12.19.0/firebase-firestore.js";
 import {
   createScopedServiceCache,
   DEFAULT_FIREBASE_APP_NAME,
@@ -96,7 +96,7 @@ export function initPublicFirebase() {
 
     const config = { ...defaultConfig, ...(window.FIREBASE_CONFIG || {}) };
     const app = resolveFirebaseApp({ getApps, initializeApp }, config, "public-invitation");
-    return { app, db: getFirestore(app), config };
+    return { app, db: getFirestore(app), functions: getFunctions(app, "us-central1"), config };
   });
 }
 

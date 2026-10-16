@@ -27,9 +27,9 @@ test("public invitation initialization cannot mutate Firebase Auth persistence",
   assert.doesNotMatch(publicInitializer, /getAuth|setPersistence|signIn|signOut|onAuthStateChanged/);
   assert.match(publicData, /initPublicFirebase\(\)/);
   assert.doesNotMatch(publicData, /initFirebase\(\)/);
-  assert.match(invitation, /initPublicFirebase\(\)/);
-  assert.doesNotMatch(invitation, /initFirebase\(\)/);
-  assert.match(invitation, /invitation-data\.js\?v=20261013-auth-session-isolation-2/);
+  assert.match(invitation, /loadInvitationContext\(/);
+  assert.doesNotMatch(invitation, /initFirebase\(\)|signInWithEmailAndPassword|signOut\(/);
+  assert.match(publicData, /getGuestInvitation/);
 
   const dashboardInitializer = firebase.match(/export function initFirebase\(\) \{[\s\S]*?\n\}/)?.[0];
   assert.ok(dashboardInitializer, "dashboard initializer exists");
@@ -46,8 +46,10 @@ test("each custom invitation design routes through the public data initializer",
     read("../invitations/wedding-designs/fallback/index.html"),
   ]);
   assert.match(layla, /\.\.\/\.\.\/\.\.\/script\.js/);
-  assert.match(ali, /\.\.\/\.\.\/shared\/invitation-data\.js\?v=20261013-auth-session-isolation-2/);
-  assert.match(fallbackHtml, /location\.replace/);
+  assert.match(ali, /\.\.\/\.\.\/shared\/invitation-data\.js/);
+  const redirect = await read("../fallback-redirect.js");
+  assert.match(redirect, /target\.hash = window\.location\.hash/);
+  assert.match(redirect, /window\.location\.replace/);
   for (const entry of [layla, ali, fallback, fallbackHtml]) {
     assert.doesNotMatch(entry, /signOut|signInAnonymously|signInWithCustomToken|localStorage\.clear|sessionStorage\.clear/);
   }

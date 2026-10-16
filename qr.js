@@ -11,7 +11,7 @@ function loadQrLibrary() {
 
   qrLibraryPromise = new Promise((resolve, reject) => {
     const script = document.createElement("script");
-    script.src = "https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js";
+    script.src = new URL("./vendor/qrcode.min.js", import.meta.url).toString();
     script.async = true;
     script.onload = () => resolve(window.QRCode);
     script.onerror = () => reject(new Error("QR library failed to load."));
@@ -42,19 +42,13 @@ export async function renderQrCode(container, value, options = {}) {
   } catch (error) {
     const fallback = document.createElement("div");
     fallback.className = "qr-fallback";
-    fallback.innerHTML = `
-      <strong>Check-In Link</strong>
-      <p>${escapeHtml(value)}</p>
-    `;
+    const title = document.createElement("strong");
+    title.textContent = "Check-In Link";
+    const link = document.createElement("p");
+    link.textContent = value;
+    fallback.append(title, link);
     container.appendChild(fallback);
   }
 }
 
-function escapeHtml(value) {
-  return String(value ?? "")
-    .replace(/&/g, "&amp;")
-    .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;")
-    .replace(/"/g, "&quot;")
-    .replace(/'/g, "&#039;");
-}
+\n

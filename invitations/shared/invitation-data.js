@@ -1,19 +1,15 @@
 import {
-  collection,
-  doc,
-  getDoc,
-  getDocs,
+  httpsCallable,
   initPublicFirebase,
   isFirebaseConfigured,
-  onSnapshot,
-  serverTimestamp,
-  writeBatch,
-} from "../../firebase-config.js?v=20261013-auth-session-isolation-2";
-import { buildInvitationRsvpPatch, commitInvitationRsvpPatch, normalizeInvitationRsvpStatus } from "./rsvp-state.js";
+} from "../../firebase-config.js?v=20261016-secure-invitation-1";
+
+const INVITATION_TOKEN_PATTERN = /^[A-Za-z0-9_-]{43}$/;
 
 export function getInvitationParams(location = window.location) {
   const params = new URLSearchParams(location.search);
-  return { weddingId: params.get("wedding")?.trim() || "", guestToken: params.get("guest")?.trim() || "" };
+  const credential = new URLSearchParams(String(location.hash || "").replace(/^#/, ""));
+  return { weddingId: params.get("wedding")?.trim() || "", guestToken: credential.get("guest")?.trim() || "" };
 }
 
 // Existing event documents omit this field; preserve their current seating UI.
@@ -22,77 +18,76 @@ export function invitationSeatingEnabled(wedding) {
 }
 
 export async function loadInvitationContext({ weddingId, guestToken } = getInvitationParams()) {
-  if (!weddingId || !guestToken) throw new Error("Invitation link is incomplete.");
-  if (!isFirebaseConfigured()) throw new Error("Invitation service is not configured.");
-  const { db } = initPublicFirebase();
-  const [weddingSnapshot, guestSnapshot, tablesSnapshot] = await Promise.all([
-    getDoc(doc(db, "weddings", weddingId)),
-    getDoc(doc(db, "weddings", weddingId, "publicGuests", guestToken)),
-    getDocs(collection(db, "weddings", weddingId, "tables")),
-  ]);
-  if (!weddingSnapshot.exists()) throw new Error("Event not found.");
-  if (!guestSnapshot.exists()) throw new Error("Guest not found.");
-  const publicGuest = guestSnapshot.data();
-  if (publicGuest.guestToken !== guestToken || !publicGuest.guestId) {
-    throw new Error("This invitation link is invalid or incomplete.");
+  if (!weddingId || !guestToken || !INVITATION_TOKEN_PATTERN.test(guestToken)) {
+    throw new Error("This invitation is unavailable.");
   }
-  return {
-    weddingId,
-    guestToken,
-    wedding: { id: weddingSnapshot.id, ...weddingSnapshot.data() },
-    guest: { id: guestSnapshot.id, ...publicGuest },
-    tables: tablesSnapshot.docs.map((snapshot) => ({ id: snapshot.id, ...snapshot.data() })),
-  };
+  if (!isFirebaseConfigured()) throw new Error("Invitation service is unavailable.");
+  const { functions } = initPublicFirebase();
+  try {
+    const result = await httpsCallable(functions, "getGuestInvitation")({ weddingId, token: guestToken });
+    const wedding = result.data?.wedding;
+    const guest = result.data?.guest;
+    if (!wedding || !guest) throw new Error("This invitation is unavailable.");
+    return { weddingId, guestToken, wedding, guest };
+  } catch {
+    // Keep missing, malformed, revoked, expired, and wrong-event capabilities indistinguishable.
+    throw new Error("This invitation is unavailable.");
+  }
 }
 
-// Each design owns its rendering, while this shared layer owns live Firebase
-// reads. Return the unsubscribe function from the design's boot sequence.
+// Revalidate periodically so a revoked invitation stops refreshing an already
+// open page. The callable checks the token on every refresh and RSVP request.
 export function subscribeToInvitation(context, onChange, onError = console.error) {
-  const { db } = initPublicFirebase();
-  let requestVersion = 0;
   let active = true;
+  let requestVersion = 0;
   const refresh = async () => {
-    const currentVersion = ++requestVersion;
+    const version = ++requestVersion;
     try {
       const next = await loadInvitationContext(context);
-      if (active && currentVersion === requestVersion) onChange(next);
+      if (active && version === requestVersion) onChange(next);
     } catch (error) {
-      if (active && currentVersion === requestVersion) onError(error);
+      if (active && version === requestVersion) onError(error);
     }
   };
-  const unsubscribers = [
-    onSnapshot(doc(db, "weddings", context.weddingId), refresh, onError),
-    onSnapshot(doc(db, "weddings", context.weddingId, "publicGuests", context.guestToken), refresh, onError),
-    onSnapshot(collection(db, "weddings", context.weddingId, "tables"), refresh, onError),
-  ];
+  const timer = window.setInterval(refresh, 20000);
   return () => {
     active = false;
     requestVersion += 1;
-    unsubscribers.forEach((unsubscribe) => unsubscribe());
+    window.clearInterval(timer);
   };
 }
 
 export async function saveInvitationRsvp(context, status, additionalGuests, message) {
-  const normalizedStatus = normalizeInvitationRsvpStatus(status);
-  if (!context?.weddingId || !context?.guestToken || !context?.guest?.guestId ||
-      context.guest.guestToken !== context.guestToken || !normalizedStatus ||
-      !context.guest.id || context.guest.id !== context.guestToken) {
-    throw new Error("Guest data is unavailable or does not match this invitation link.");
+  const normalizedStatus = status;
+  const count = additionalGuests === undefined || additionalGuests === null ? undefined : Number(additionalGuests);
+  const allowance = Number.isInteger(Number(context?.guest?.additionalGuestAllowance))
+    ? Number(context.guest.additionalGuestAllowance)
+    : Number(context?.guest?.additionalGuests || 0);
+  if (!context?.weddingId || !INVITATION_TOKEN_PATTERN.test(context?.guestToken || "") ||
+      !["confirmed", "declined"].includes(normalizedStatus) || (count !== undefined && (!Number.isInteger(count) || count < 0 || count > allowance || count > 10)) ||
+      (message !== undefined && (typeof message !== "string" || message.length > 1000))) {
+    throw new Error("This invitation is unavailable.");
   }
-  const privatePayload = { ...buildInvitationRsvpPatch(normalizedStatus, additionalGuests, message), updatedAt: serverTimestamp() };
-  const publicPayload = { ...privatePayload };
-  delete publicPayload.rsvpMessage;
-  const { db } = initPublicFirebase();
-  // Firestore commits both copies atomically. update() preserves guest identity,
-  // seating, check-in, and any party size omitted by this invitation form.
-  await commitInvitationRsvpPatch({ db, context, payload: publicPayload, privatePayload, writeBatch, doc });
+  const { functions } = initPublicFirebase();
+  try {
+    const result = await httpsCallable(functions, "submitGuestInvitationRsvp")({
+      weddingId: context.weddingId,
+      token: context.guestToken,
+      rsvpStatus: normalizedStatus,
+      ...(count === undefined ? {} : { additionalGuests: count }),
+      ...(message === undefined ? {} : { rsvpMessage: message.trim() }),
+    });
+    if (!result.data?.guest) throw new Error("This invitation is unavailable.");
+    context.guest = { ...context.guest, ...result.data.guest };
+    return context.guest;
+  } catch {
+    throw new Error("We could not save your response. Please try again.");
+  }
 }
 
 export function invitationCheckinUrl(context) {
-  // This module sits at invitations/shared, so two parent traversals always
-  // resolve to the shared check-in application at the hosting root.
   const url = new URL("../../checkin.html", import.meta.url);
   url.searchParams.set("wedding", context.weddingId);
-  url.searchParams.set("guest", context.guestToken);
+  url.hash = new URLSearchParams({ guest: context.guestToken }).toString();
   return url.toString();
 }

@@ -2,16 +2,11 @@ import {
   initFirebase,
   initSeatingEditorFirebase,
   isFirebaseConfigured,
-  collection,
   doc,
-  getDocs,
+  getDoc,
   httpsCallable,
   onSnapshot,
-  query,
-  runTransaction,
-  serverTimestamp,
   signInWithCustomToken,
-  where,
 } from "./firebase-config.js?v=20261016-tab-session-isolation-1";
 import { resolveTableName } from "./seating-utils.js";
 import { getEventDisplayTitle, isCelebrationEvent } from "./event-utils.js";
@@ -63,8 +58,8 @@ async function init() {
     );
     state.services = services;
     if (editorToken) await waitForFirebaseSessionPersistence(services);
+    await services.persistenceReady;
     if (editorToken) {
-      await services.persistenceReady;
       const exchange = httpsCallable(
         services.functions,
         "exchangeSeatingEditorLink",
@@ -84,6 +79,13 @@ async function init() {
         state.role = claims.seatingRole;
         state.editable = ["bride", "groom"].includes(state.role);
         state.weddingId = claims.seatingWeddingId;
+      } else if (state.weddingId) {
+        const account = await getDoc(doc(services.db, "weddings", state.weddingId, "dashboardUsers", user.uid));
+        const permission = account.exists() ? account.data() : {};
+        if (permission.seatingOnly === true && permission.canEditSeating === true && ["bride", "groom", "all"].includes(permission.allowedSide)) {
+          state.role = permission.allowedSide;
+          state.editable = true;
+        }
       }
     }
     if (!state.weddingId)
@@ -99,49 +101,55 @@ function subscribe() {
   const { db } = state.services;
   const root = `weddings/${state.weddingId}`;
   state.unsubs.forEach((stop) => stop());
-  state.unsubs = [
-    onSnapshot(
-      doc(db, root),
+  state.unsubs = [];
+  if (state.editable) {
+    void refreshSideSeatingData();
+    const timer = setInterval(() => void refreshSideSeatingData(), 10000);
+    state.unsubs.push(() => clearInterval(timer));
+    return;
+  }
+  if (!state.editable) {
+    state.unsubs.push(onSnapshot(
+      doc(db, root, "publicSummary", "summary"),
       (snap) => {
-        state.wedding = snap.exists() ? { ...snap.data(), id: snap.id } : null;
-        if (isCelebrationEvent(state.wedding)) state.editable = false;
+        state.publicStats = snap.exists() ? snap.data() : null;
+        state.wedding = snap.exists() ? {
+          id: state.weddingId,
+          eventTitle: snap.data().eventTitle || "",
+          coupleName: snap.data().coupleName || "",
+          eventCategory: snap.data().eventCategory || "wedding_engagement",
+          seatingEnabled: snap.data().seatingEnabled !== false,
+        } : null;
+        state.tables = [];
+        state.guests = [];
         render();
       },
       fail,
-    ),
-    onSnapshot(
-      collection(db, root, "tables"),
-      (snap) => {
-        state.tables = snap.docs.map((d) =>
-          normalizeTable({ ...d.data(), id: d.id }),
-        );
-        render();
-      },
-      fail,
-    ),
-  ];
-  if (state.editable)
-    state.unsubs.push(
-      onSnapshot(
-        query(collection(db, root, "guests"), where("side", "==", state.role)),
-        (snap) => {
-          state.guests = snap.docs.map((d) => ({ ...d.data(), id: d.id }));
-          render();
-        },
-        fail,
-      ),
-    );
-  else
-    state.unsubs.push(
-      onSnapshot(
-        doc(db, root, "publicStats", "summary"),
-        (snap) => {
-          state.publicStats = snap.exists() ? snap.data() : null;
-          render();
-        },
-        fail,
-      ),
-    );
+    ));
+    return;
+  }
+  state.unsubs = [];
+}
+let seatingRefreshPending = false;
+async function refreshSideSeatingData() {
+  if (seatingRefreshPending || !state.editable) return;
+  seatingRefreshPending = true;
+  try {
+    const load = httpsCallable(state.services.functions, "getSideSeatingState");
+    const result = await load({ weddingId: state.weddingId });
+    state.role = result.data.role;
+    state.wedding = result.data.wedding;
+    state.tables = (result.data.tables || []).map(normalizeTable);
+    state.guests = result.data.guests || [];
+    render();
+  } catch {
+    state.wedding = null;
+    state.tables = [];
+    state.guests = [];
+    renderError("This seating access is unavailable. Refresh or contact the event owner.");
+  } finally {
+    seatingRefreshPending = false;
+  }
 }
 function disposeListeners() {
   state.unsubs.forEach((stop) => stop());
@@ -149,7 +157,11 @@ function disposeListeners() {
 }
 function fail(error) {
   console.error(error);
-  toast("Live update unavailable. Refresh to retry.");
+  state.publicStats = null;
+  state.wedding = null;
+  state.tables = [];
+  state.guests = [];
+  renderError("This event's public seating summary is unavailable.");
 }
 
 function loadDemo() {
@@ -263,10 +275,11 @@ function render() {
     : state.editable
     ? `${cap(state.role)} manager`
     : `Read-only ${cap(state.role)} status`;
-  shell.innerHTML = `<section class="card head"><div><p class="eyebrow">Live event seating</p><h1>${esc(title)}</h1><p class="muted">${isCelebrationEvent(state.wedding) ? "Overall guest and seating status." : state.editable ? "Manage every guest and every chair. Changes sync instantly." : `Complete seating layout and ${state.role} status.`}</p></div><span class="badge ${state.editable ? "" : "readonly"}">${accessLabel}</span></section>
+  const publicSummary = !state.editable;
+  shell.innerHTML = `<section class="card head"><div><p class="eyebrow">Live event seating</p><h1>${esc(title)}</h1><p class="muted">${publicSummary ? "Guest status totals for this event." : "Manage your permitted guest side. Changes sync instantly."}</p></div><span class="badge ${state.editable ? "" : "readonly"}">${accessLabel}</span></section>
   <section class="stats" aria-label="Guest statistics">${stat(s.total, "Guest invitations")}${stat(s.invited, "People invited")}${stat(s.confirmed, "Coming")}${stat(s.declined, "Declined")}${stat(s.pending, "Pending")}${stat(s.sent, "Invitations sent")}${stat(s.seated, "People seated")}${stat(s.unseated, "Unseated people")}</section>
-  <section class="card workspace-card"><h2>Seating layout</h2><p class="muted">Tap a chair to ${state.editable ? "assign, move, swap, or unassign its occupant." : "inspect its occupant."}</p><div class="toolbar"><button class="btn" data-zoom="in" aria-label="Zoom in">Zoom in</button><button class="btn" data-zoom="out" aria-label="Zoom out">Zoom out</button><button class="btn" data-zoom="fit">Fit layout</button><button class="btn" data-zoom="reset">Reset</button></div><div class="map-viewport" id="mapViewport"><div class="map-world" id="mapWorld">${renderTables()}</div></div></section>
-  <section class="card guest-card"><h2>${isCelebrationEvent(state.wedding) ? "All guests" : state.editable ? "Guest list" : "Family guest status"}</h2><p class="muted">${isCelebrationEvent(state.wedding) ? "Overall RSVP and seating status." : state.editable ? "All Bride and Groom guests, including every additional person." : "Your permitted RSVP and seating overview."}</p><div class="roster">${renderRoster()}</div></section>`;
+  ${publicSummary ? `<section class="card guest-card"><h2>Guest status</h2><p class="muted">Names, contact details, and individual seat assignments are available only to authorized event staff.</p></section>` : `<section class="card workspace-card"><h2>Seating layout</h2><p class="muted">Tap a chair to assign, move, swap, or unassign its occupant.</p><div class="toolbar"><button class="btn" data-zoom="in" aria-label="Zoom in">Zoom in</button><button class="btn" data-zoom="out" aria-label="Zoom out">Zoom out</button><button class="btn" data-zoom="fit">Fit layout</button><button class="btn" data-zoom="reset">Reset</button></div><div class="map-viewport" id="mapViewport"><div class="map-world" id="mapWorld">${renderTables()}</div></div></section>
+  <section class="card guest-card"><h2>Guest list</h2><p class="muted">Your permitted guest side, including additional guests.</p><div class="roster">${renderRoster()}</div></section>`}`;
   bindMap();
 }
 function stat(value, label) {
@@ -294,7 +307,9 @@ function renderTables() {
       return `<div class="table ${t.shape === "round" ? "round" : ""}" style="left:${t.x}%;top:${t.y}%;width:${t.width}px;height:${t.height}px;--fill:${esc(t.tableColor || "#f3ebdc")};--border:${esc(t.borderColor || "#bc9b61")}"><span class="table-label">${esc(t.name)}<small>${occupied}/${t.chairs.length}</small></span>${t.chairs
         .map((c) => {
           const a = occupiedBy(t, c);
-          return `<button class="chair ${a ? "occupied" : ""}" style="left:${Number(c.x) || 50}%;top:${Number(c.y) || 50}%" data-chair="1" data-table-id="${esc(t.id)}" data-chair-id="${esc(c.id)}" aria-label="${esc(a ? `${personName(a)}, ${t.name} chair ${c.seatNumber}` : `Empty ${t.name} chair ${c.seatNumber}`)}">${a ? esc(a.partyMemberIndex === 0 ? initials(findGuest(a.guestId)?.fullName) : `+${a.partyMemberIndex}`) : c.seatNumber}</button>`;
+          const occupant = a?.restricted ? "Occupied by another side" : a ? personName(a) : "Empty";
+          const label = a?.restricted ? "•" : a ? (a.partyMemberIndex === 0 ? initials(findGuest(a.guestId)?.fullName) : `+${a.partyMemberIndex}`) : c.seatNumber;
+          return `<button class="chair ${a ? "occupied" : ""}" style="left:${Number(c.x) || 50}%;top:${Number(c.y) || 50}%" data-chair="1" data-table-id="${esc(t.id)}" data-chair-id="${esc(c.id)}" aria-label="${esc(`${occupant}, ${t.name} chair ${c.seatNumber}`)}">${esc(String(label))}</button>`;
         })
         .join("")}</div>`;
     })
@@ -313,17 +328,7 @@ function renderRoster() {
         .join("") || "<div class=empty>No guests yet.</div>"
     );
   }
-  const roster = (isCelebrationEvent(state.wedding)
-    ? state.publicStats?.roster?.all || state.publicStats?.roster?.general
-    : state.publicStats?.roster?.[state.role]) || [];
-  return (
-    roster
-      .map(
-        (g) =>
-          `<div class=row><b>${esc(g.n || "Guest")}</b><small>${esc(g.r || "pending")} · ${(g.seats || []).map((x) => `${x.t} #${x.n}`).join(", ") || "Unseated"}</small></div>`,
-      )
-      .join("") || "<div class=empty>No status is available yet.</div>"
-  );
+  return "<div class=empty>Individual guest records are private in this public view.</div>";
 }
 
 function bindMap() {
@@ -424,6 +429,10 @@ function openChair(tableId, chairId) {
     chair = table?.chairs.find((c) => c.id === chairId);
   if (!table || !chair) return;
   const a = occupiedBy(table, chair);
+  if (a?.restricted) {
+    openSheet(`<h2>${esc(table.name)} · chair ${chair.seatNumber}</h2><p class=muted>This chair is assigned within another guest side.</p><button class=btn data-close>Close</button>`);
+    return;
+  }
   if (!state.editable) {
     openSheet(
       `<h2>${esc(table.name)} · chair ${chair.seatNumber}</h2><p class=muted>${a ? esc(personName(a)) : "This chair is empty."}</p><button class=btn data-close>Close</button>`,
@@ -541,126 +550,24 @@ async function mutate(type, source, destination = {}) {
       mutateDemo(type, source, destination);
       return;
     }
-    const refs = (
-      await getDocs(
-        collection(state.services.db, "weddings", state.weddingId, "tables"),
-      )
-    ).docs.map((d) => d.ref);
-    await runTransaction(state.services.db, async (tx) => {
-      const snaps = await Promise.all(refs.map((r) => tx.get(r)));
-      let tables = snaps
-        .filter((s) => s.exists())
-        .map((s) => normalizeTable({ ...s.data(), id: s.id }));
-      const getChair = (p) => {
-        const t = tables.find((x) => x.id === p.tableId),
-          c = t?.chairs.find((x) => x.id === p.chairId);
-        if (!t || !c) throw Error("This chair no longer exists.");
-        return { t, c };
-      };
-      const src = source.tableId ? getChair(source) : null;
-      const dst = destination.tableId ? getChair(destination) : null;
-      const sourceA = src ? assignment(src.t, src.c) : source;
-      if (!sourceA?.guestId) {
-        throw Error("This seat has changed. Refresh and try again.");
-      }
-      const sourcePersonKey = sourceA.personKey || personKey(sourceA.partyMemberIndex);
-      const duplicate = assignments(tables).some(
-        (item) =>
-          item.guestId === sourceA.guestId &&
-          item.personKey === sourcePersonKey &&
-          (!src || item.chairId !== src.c.id),
-      );
-      if (duplicate) {
-        throw Error("This person already occupies another chair.");
-      }
-      const affected = new Set([sourceA.guestId]);
-      if (type === "assign" && assignment(dst.t, dst.c))
-        throw Error("That chair was just assigned by another editor.");
-      if (type === "move" && assignment(dst.t, dst.c))
-        throw Error("That chair is no longer empty.");
-      if (type === "swap") {
-        const other = assignment(dst.t, dst.c);
-        if (!other) throw Error("Choose an occupied chair to swap with.");
-        affected.add(other.guestId);
-        setAssignment(src.t, src.c, other);
-        setAssignment(dst.t, dst.c, sourceA);
-      } else if (type === "unassign") clearAssignment(src.t, src.c);
-      else {
-        if (type === "move") clearAssignment(src.t, src.c);
-        setAssignment(dst.t, dst.c, sourceA);
-      }
-      const guestSnaps = await Promise.all(
-        [...affected].map((id) =>
-          tx.get(
-            doc(state.services.db, "weddings", state.weddingId, "guests", id),
-          ),
-        ),
-      );
-      const guests = guestSnaps
-        .filter((s) => s.exists())
-        .map((s) => ({ ...s.data(), id: s.id }));
-      // Firestore requires all transaction reads before writes. Read the
-      // public mirrors first so an occupancy update remains atomic.
-      const mirrors = await Promise.all(
-        guests.map(async (guest) => ({
-          guest,
-          snapshot: guest.guestToken
-            ? await tx.get(
-                doc(
-                  state.services.db,
-                  "weddings",
-                  state.weddingId,
-                  "publicGuests",
-                  guest.guestToken,
-                ),
-              )
-            : null,
-        })),
-      );
-      for (const table of tables) {
-        const original = state.tables.find((t) => t.id === table.id);
-        if (JSON.stringify(original?.chairs) !== JSON.stringify(table.chairs))
-          tx.update(
-            doc(
-              state.services.db,
-              "weddings",
-              state.weddingId,
-              "tables",
-              table.id,
-            ),
-            {
-              chairs: table.chairs,
-              guestIds: [
-                ...new Set(
-                  table.chairs
-                    .map((c) => assignment(table, c)?.guestId)
-                    .filter(Boolean),
-                ),
-              ],
-              updatedAt: serverTimestamp(),
-            },
-          );
-      }
-      for (const { guest: g, snapshot: mirror } of mirrors) {
-        const patch = guestPatch(g, tables);
-        tx.update(
-          doc(state.services.db, "weddings", state.weddingId, "guests", g.id),
-          patch,
-        );
-        if (mirror?.exists()) tx.update(mirror.ref, patch);
-      }
+    const change = httpsCallable(state.services.functions, "mutateSideSeating");
+    await change({
+      weddingId: state.weddingId,
+      type,
+      source: type === "assign"
+        ? { guestId: source.guestId, partyMemberIndex: source.partyMemberIndex }
+        : { tableId: source.tableId, chairId: source.chairId },
+      destination: type === "unassign" ? {} : {
+        tableId: destination.tableId,
+        chairId: destination.chairId,
+      },
     });
     state.action = null;
-    toast(
-      type === "swap"
-        ? "Seats swapped."
-        : type === "unassign"
-          ? "Seat unassigned."
-          : "Seating saved.",
-    );
+    await refreshSideSeatingData();
+    toast(type === "swap" ? "Seats swapped." : type === "unassign" ? "Seat unassigned." : "Seating saved.");
   } catch (error) {
-    console.error(error);
-    toast(error.message || "Could not save the seating change.");
+    console.error(error?.code || "seating-unavailable");
+    toast("Could not save the seating change. Refresh and try again.");
   } finally {
     state.pending = false;
     render();
@@ -684,28 +591,6 @@ function clearAssignment(t, c) {
   c.guestId = "";
   c.assignment = null;
   c.status = "available";
-}
-function guestPatch(g, tables) {
-  const rows = assignments(tables)
-    .filter((a) => a.guestId === g.id)
-    .sort((a, b) => a.partyMemberIndex - b.partyMemberIndex);
-  const primary = rows.find((a) => a.partyMemberIndex === 0) || rows[0];
-  return {
-    seatingAssignments: rows.map((a) => ({
-      tableId: a.tableId,
-      tableName: a.tableName,
-      seatNumber: a.seatNumber,
-      guestId: a.guestId,
-      partyMemberIndex: a.partyMemberIndex,
-      personKey: a.personKey,
-      label: a.label,
-      isMainGuest: a.partyMemberIndex === 0,
-    })),
-    tableId: primary?.tableId || "",
-    tableName: primary?.tableName || "",
-    seatNumber: primary ? String(primary.seatNumber) : "",
-    updatedAt: serverTimestamp(),
-  };
 }
 function mutateDemo(type, source, destination) {
   const src = source.tableId ? seat(source.tableId, source.chairId) : null,

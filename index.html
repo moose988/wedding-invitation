@@ -16,21 +16,7 @@
       rel="stylesheet"
     />
     <link rel="stylesheet" href="./styles.css?v=20261012-seating-refresh-2" />
-    <script>
-      const homeParams = new URLSearchParams(window.location.search);
-      const isHomePath = ["/", "/index.html"].includes(
-        window.location.pathname.replace(/\/+$/, "") || "/",
-      );
-      const hasInvitationParameters =
-        Boolean(homeParams.get("wedding")) || Boolean(homeParams.get("guest"));
-      if (
-        isHomePath &&
-        !hasInvitationParameters &&
-        homeParams.get("demo") !== "1"
-      ) {
-        window.location.replace("./dashboard-login.html");
-      }
-    </script>
+    <script type="module" src="./home-route.js"></script>
   </head>
   <body>
     <div class="page-shell">

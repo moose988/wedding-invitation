@@ -24,9 +24,10 @@ service cloud.firestore {
           get(/databases/$(database)/documents/weddings/$(weddingId)).data.get("eventCategory", "wedding_engagement") == "wedding_engagement");
     }
 
-    function canEditGuests(weddingId) {
+    function canManageGuestRecords(weddingId) {
       return isDashboardMember(weddingId) &&
-        dashboardUser(weddingId).data.canEditGuests == true;
+        dashboardUser(weddingId).data.get("canEditGuests", false) == true &&
+        dashboardUser(weddingId).data.get("seatingOnly", false) != true;
     }
 
     function isSeatingManager(weddingId) {
@@ -42,13 +43,13 @@ service cloud.firestore {
         || isSeatingManager(weddingId);
     }
 
-    // The girl account keeps the restricted dashboard, but its existing
-    // seating permission also includes full table-layout controls.
+    // Restricted accounts get full layout controls only through an explicit
+    // event permission; email addresses are not authorization data.
     function canManageSeatingLayout(weddingId) {
       return isDashboardMember(weddingId) &&
         dashboardUser(weddingId).data.canEditSeating == true &&
         (!isSeatingOnlyDashboardAccount(weddingId) ||
-          request.auth.token.get("email", "") == "girl@gmail.com");
+          dashboardUser(weddingId).data.get("canManageSeatingLayout", false) == true);
     }
 
     // Seating-only dashboard accounts are deliberately tied to one side.  The
@@ -62,16 +63,6 @@ service cloud.firestore {
         // Missing must mean false; direct property access makes the rule
         // evaluation error and incorrectly denies legitimate layout writes.
         && dashboardUser(weddingId).data.get("seatingOnly", false) == true;
-    }
-
-    function seatingAccountMayUpdateGuest(weddingId, guest) {
-      // Seating-only accounts may be assigned one side or both sides. A
-      // missing or invalid value remains deny-by-default.
-      return !isSeatingOnlyDashboardAccount(weddingId)
-        || (get(/databases/$(database)/documents/weddings/$(weddingId)).data.get("eventCategory", "wedding_engagement") == "wedding_engagement"
-          && dashboardUser(weddingId).data.allowedSide in ["bride", "groom", "all"]
-          && (dashboardUser(weddingId).data.allowedSide == "all"
-            || normalizedGuestSide(guest) == dashboardUser(weddingId).data.allowedSide));
     }
 
     function seatingAccountMayReadGuest(weddingId, guest) {
@@ -147,6 +138,13 @@ service cloud.firestore {
         dashboardUser(weddingId).data.canCheckIn == true;
     }
 
+    function checkInAccountMayAccessGuest(weddingId, guest) {
+      let allowedSide = dashboardUser(weddingId).data.get("allowedSide", "all");
+      return allowedSide == "all" ||
+        (allowedSide in ["bride", "groom", "family"] &&
+          normalizedGuestSide(guest) == allowedSide);
+    }
+
     function canManageUsers(weddingId) {
       return isDashboardMember(weddingId) &&
         dashboardUser(weddingId).data.canManageUsers == true;
@@ -217,6 +215,10 @@ service cloud.firestore {
         && validEventDetails(request.resource.data);
     }
 
+    function isFullDashboardAccount(weddingId) {
+      return canViewDashboard(weddingId) && !isSeatingOnlyDashboardAccount(weddingId);
+    }
+
     function isOwnerLifecycleUpdate(weddingId) {
       let changes = request.resource.data.diff(resource.data).affectedKeys();
       let nextStatus = request.resource.data.get("status", "");
@@ -251,36 +253,54 @@ service cloud.firestore {
     }
 
     function isGuestRsvpUpdate(weddingId) {
-      return isPublicWedding(weddingId)
-        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(["rsvpStatus", "additionalGuests", "rsvpMessage", "updatedAt"])
-        && request.resource.data.guestToken == resource.data.guestToken
-        && request.resource.data.rsvpStatus in ["pending", "confirmed", "declined"]
-        && request.resource.data.additionalGuests is int
-        && request.resource.data.additionalGuests >= 0
-        && request.resource.data.additionalGuests <= 10
-        && (!request.resource.data.keys().hasAny(["rsvpMessage"])
-          || (request.resource.data.rsvpMessage is string && request.resource.data.rsvpMessage.size() <= 1000))
-        && request.resource.data.updatedAt == request.time;
+      // Anonymous RSVP is authorized by callable Functions after resolving a
+      // per-guest capability token. A stored field comparison is not proof.
+      return false;
     }
 
     function isPublicGuestRsvpUpdate(weddingId) {
-      return isPublicWedding(weddingId)
-        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(["rsvpStatus", "additionalGuests", "updatedAt"])
-        && request.resource.data.guestToken == resource.data.guestToken
-        && request.resource.data.rsvpStatus in ["pending", "confirmed", "declined"]
-        && request.resource.data.additionalGuests is int
-        && request.resource.data.additionalGuests >= 0
-        && request.resource.data.additionalGuests <= 10
-        && request.resource.data.updatedAt == request.time;
+      return false;
+    }
+
+    function validGuestDocument(data) {
+      let extra = data.get("additionalGuests", 0);
+      let allowance = data.get("additionalGuestAllowance", extra);
+      let status = data.get("rsvpStatus", "pending");
+      let message = data.get("rsvpMessage", "");
+      let fullName = data.get("fullName", "");
+      let phone = data.get("phone", "");
+      return data.keys().hasOnly([
+          "fullName", "phone", "side", "additionalGuests", "additionalGuestAllowance",
+          "rsvpStatus", "rsvpMessage", "tableId", "tableName", "seatNumber",
+          "seatingAssignments", "checkedIn", "checkedInAt", "notes", "inviteSentAt",
+          "reminderSentAt", "createdAt", "updatedAt"
+        ])
+        && fullName is string && fullName.size() > 0 && fullName.size() <= 160
+        && phone is string && phone.size() <= 40
+        && extra is int && extra >= 0 && extra <= 10
+        && allowance is int && allowance >= 0 && allowance <= 10
+        && status in ["pending", "confirmed", "declined"]
+        && message is string && message.size() <= 1000
+        && data.get("tableId", "") is string
+        && data.get("tableName", "") is string && data.get("tableName", "").size() <= 100
+        && (data.get("seatNumber", "") is string || data.get("seatNumber", "") is int)
+        && data.get("seatingAssignments", []) is list && data.get("seatingAssignments", []).size() <= 11
+        && data.get("checkedIn", false) is bool
+        && (data.get("checkedInAt", null) == null || data.get("checkedInAt", null) is timestamp)
+        && data.get("notes", "") is string && data.get("notes", "").size() <= 2000
+        && (data.get("inviteSentAt", null) == null || data.get("inviteSentAt", null) is timestamp)
+        && (data.get("reminderSentAt", null) == null || data.get("reminderSentAt", null) is timestamp)
+        && (!data.keys().hasAny(["createdAt"]) || data.createdAt is timestamp)
+        && (!data.keys().hasAny(["updatedAt"]) || data.updatedAt is timestamp);
     }
 
     function isGuestSeatingUpdate(weddingId) {
-      // Dashboard seating accounts can update every guest's seat assignment.
-      // Seating-only accounts additionally remain within their server-side
-      // allowedSide; full dashboard editors retain normal seating access.
+      // Side-scoped seating changes go through Functions, which validates
+      // every affected chair and guest transactionally. Direct client patches
+      // cannot prove nested chair ownership.
       return canEditSeating(weddingId) &&
-        seatingAccountMayUpdateGuest(weddingId, resource.data) &&
-        (!isSeatingEditor(weddingId) || editorMayReadGuest(resource.data))
+        !isSeatingOnlyDashboardAccount(weddingId) &&
+        !isSeatingEditor(weddingId)
         && request.resource.data.diff(resource.data).affectedKeys().hasOnly([
           "tableId",
           "tableName",
@@ -291,7 +311,7 @@ service cloud.firestore {
     }
 
     match /weddings/{weddingId} {
-      allow read: if canViewDashboard(weddingId) || resource.data.status == "active";
+      allow read: if isFullDashboardAccount(weddingId);
 
       allow create: if isSignedIn() &&
         request.auth.uid == request.resource.data.ownerUserId &&
@@ -309,19 +329,24 @@ service cloud.firestore {
         || ((isDashboardMember(weddingId) && dashboardUser(weddingId).data.canEditSeating == true)
           && request.resource.data.diff(resource.data).affectedKeys().hasOnly(["hallObjects", "updatedAt"])));
 
-      allow delete: if isDashboardMember(weddingId) &&
-        request.auth.uid == resource.data.ownerUserId;
+      // Recursive deletion is performed by the owner-only callable so nested
+      // guests, tables, and private invitation records are not orphaned.
+      allow delete: if false;
 
       match /dashboardUsers/{userId} {
-        allow read: if isDashboardMember(weddingId);
+        allow get: if isDashboardMember(weddingId) &&
+          (request.auth.uid == userId || canManageUsers(weddingId));
+        allow list: if canManageUsers(weddingId);
         // Bootstrap the owner record only as part of creating that owner's
         // wedding. Later membership changes remain owner/admin controlled.
-        allow create: if canManageUsers(weddingId) || (isSignedIn()
+        allow create: if (canManageUsers(weddingId) && request.resource.data.get("userId", "") == userId) || (isSignedIn()
           && userId == request.auth.uid
+          && request.resource.data.get("userId", "") == userId
           && getAfter(/databases/$(database)/documents/weddings/$(weddingId)).data.ownerUserId == request.auth.uid
           && request.resource.data.canViewDashboard == true
           && request.resource.data.canManageUsers == true);
-        allow update, delete: if canManageUsers(weddingId);
+        allow update: if canManageUsers(weddingId) && request.resource.data.get("userId", "") == userId;
+        allow delete: if canManageUsers(weddingId);
       }
 
       match /seatingAccess/{role} {
@@ -332,66 +357,60 @@ service cloud.firestore {
       }
 
       match /tables/{tableId} {
-        allow read: if canReadSeating(weddingId) || isPublicWedding(weddingId);
-        allow create, delete: if canManageSeatingLayout(weddingId);
-        // Secure link managers can only change occupancy; table geometry,
-        // names, capacity, and chair positions stay dashboard-only, except
-        // for the explicitly enabled girl dashboard account.
-        allow update: if canManageSeatingLayout(weddingId)
-          || (isSeatingOnlyDashboardAccount(weddingId) &&
-            get(/databases/$(database)/documents/weddings/$(weddingId)).data.get("eventCategory", "wedding_engagement") == "wedding_engagement" &&
-            request.resource.data.diff(resource.data).affectedKeys()
-              .hasOnly(["chairs", "guestIds", "updatedAt"]))
-          || (isSeatingManager(weddingId) &&
-            request.resource.data.diff(resource.data).affectedKeys()
-              .hasOnly(["chairs", "guestIds", "updatedAt"]));
+        allow read: if isFullDashboardAccount(weddingId);
+        allow create, delete: if canManageSeatingLayout(weddingId) &&
+          !isSeatingOnlyDashboardAccount(weddingId);
+        allow update: if canManageSeatingLayout(weddingId) &&
+          !isSeatingOnlyDashboardAccount(weddingId);
       }
 
       match /guests/{guestId} {
         // Editor links may read only the guest documents for their authorized
         // side. Collection queries must include the matching side values.
-        allow get: if canViewDashboard(weddingId) ||
+        allow get: if isFullDashboardAccount(weddingId) ||
           (isSeatingOnlyDashboardAccount(weddingId) && seatingAccountMayReadGuest(weddingId, resource.data)) ||
           (isSeatingEditor(weddingId) && editorMayReadGuest(resource.data));
-        allow list: if canViewDashboard(weddingId) ||
+        allow list: if isFullDashboardAccount(weddingId) ||
           (isSeatingOnlyDashboardAccount(weddingId) && seatingAccountMayReadGuest(weddingId, resource.data)) ||
           (isSeatingEditor(weddingId) && editorMayReadGuest(resource.data));
-        allow create: if canEditGuests(weddingId) && validGuestSide(weddingId, request.resource.data, false);
-        allow delete: if canEditGuests(weddingId);
-        allow update: if (canEditGuests(weddingId) && validGuestSide(weddingId, request.resource.data, resource.data.get("side", "") == request.resource.data.get("side", "")))
-          || (canCheckIn(weddingId) && request.resource.data.diff(resource.data).affectedKeys().hasOnly(["checkedIn", "checkedInAt", "updatedAt"]))
-          || isGuestRsvpUpdate(weddingId)
+        allow create: if canManageGuestRecords(weddingId) &&
+          validGuestDocument(request.resource.data) &&
+          validGuestSide(weddingId, request.resource.data, false) &&
+          (!request.resource.data.keys().hasAny(["createdAt"]) || request.resource.data.createdAt == request.time) &&
+          (!request.resource.data.keys().hasAny(["updatedAt"]) || request.resource.data.updatedAt == request.time);
+        allow delete: if canManageGuestRecords(weddingId);
+        allow update: if (canManageGuestRecords(weddingId) &&
+            validGuestDocument(request.resource.data) &&
+            request.resource.data.diff(resource.data).affectedKeys().hasOnly([
+              "fullName", "phone", "side", "additionalGuests", "additionalGuestAllowance",
+              "rsvpStatus", "rsvpMessage", "tableId", "tableName", "seatNumber",
+              "seatingAssignments", "checkedIn", "checkedInAt", "notes", "inviteSentAt",
+              "reminderSentAt", "updatedAt"
+            ]) && validGuestSide(weddingId, request.resource.data,
+              resource.data.get("side", "") == request.resource.data.get("side", "")))
+           || (canCheckIn(weddingId) && checkInAccountMayAccessGuest(weddingId, resource.data) &&
+            request.resource.data.diff(resource.data).affectedKeys().hasOnly(["checkedIn", "checkedInAt", "updatedAt"]) &&
+            request.resource.data.checkedIn == true && request.resource.data.checkedInAt == request.time &&
+            request.resource.data.updatedAt == request.time)
           || isGuestSeatingUpdate(weddingId);
       }
 
-      // Aggregated side-level stats (counts + seated roster, no phones or
-      // tokens) published by the dashboard for the read-only side.html pages.
+      // Aggregated side-level counts only. Names and seat assignments stay private.
       match /publicStats/{docId} {
-        allow get: if isPublicWedding(weddingId) || canViewDashboard(weddingId);
+        allow get: if isFullDashboardAccount(weddingId) && canManageUsers(weddingId);
         allow list: if false;
-        allow create, update, delete: if isDashboardMember(weddingId);
+        allow create, update, delete: if false;
+      }
+
+      match /publicSummary/{docId} {
+        allow get: if docId == "summary" && isPublicWedding(weddingId);
+        allow list: if false;
+        allow create, update, delete: if false;
       }
 
       match /publicGuests/{guestToken} {
-        // Seating transactions read the matching public mirror before they
-        // update it. Permit the seat-only dashboard accounts to do that even
-        // while an invitation is not publicly active.
-        allow get: if isPublicWedding(weddingId) || canEditSeating(weddingId);
-        allow list: if false;
-        // Dashboard members maintain this token-keyed mirror of guest-facing
-        // fields so invitation/check-in pages can load guests without list access.
-        // Check-in-only and seating-only members may patch exactly the fields
-        // their role owns. Holding the token (it is the doc id) also authorizes
-        // a guest to update their own RSVP answer, mirroring the guests rule.
-        allow create: if canEditGuests(weddingId) && validGuestSide(weddingId, request.resource.data, false);
-        allow delete: if canEditGuests(weddingId);
-        allow update: if (canEditGuests(weddingId) && validGuestSide(weddingId, request.resource.data, resource.data.get("side", "") == request.resource.data.get("side", "")))
-          || (canCheckIn(weddingId)
-            && request.resource.data.diff(resource.data).changedKeys().hasOnly(["checkedIn", "checkedInAt", "updatedAt"]))
-          || (canEditSeating(weddingId) && seatingAccountMayUpdateGuest(weddingId, resource.data)
-            && editorMayUpdatePublicGuest(weddingId, resource.data)
-            && request.resource.data.diff(resource.data).changedKeys().hasOnly(["seatingAssignments", "tableId", "tableName", "seatNumber", "updatedAt"]))
-          || isPublicGuestRsvpUpdate(weddingId);
+        // Deprecated token-keyed mirrors are never a direct authorization path.
+        allow read, write: if false;
       }
     }
 

@@ -20,7 +20,7 @@ import {
   updateDoc,
   where,
   writeBatch,
-} from "./firebase-config.js?v=20261016-tab-session-isolation-1";
+} from "./firebase-config.js?v=20261016-secure-invitation-1";
 import {
   buildAuthRouteUrl,
   initializeFirebaseServicesForRoute,
@@ -778,6 +778,11 @@ const state = {
   permissions: null,
   wedding: null,
   guests: [],
+  invitationTokenCache: new Map(),
+  invitationTokenUnavailable: new Set(),
+  invitationTokenScope: "",
+  invitationTokenRequest: 0,
+  invitationTokenHydrationPromise: null,
   tables: [],
   hallObjects: createHallObjects(),
   selectedHallObjectId: "",
@@ -831,7 +836,6 @@ const state = {
   loadingTables: true,
   firestoreGuestCount: 0,
   firestoreGuestIds: [],
-  publicMirrorsReconciled: false,
   saveState: "saved",
   dirtyGuestForm: false,
   dirtyTableForm: false,
@@ -944,8 +948,21 @@ async function init() {
 
   state.unsubAuth?.();
   state.unsubAuth = onAuthStateChanged(state.services.auth, async (user) => {
+    const previousUserId = state.currentUser?.uid || "";
+    if (previousUserId && user?.uid !== previousUserId) {
+      clearInvitationTokenCache();
+      state.unsubGuests?.(); state.unsubTables?.(); state.unsubWedding?.(); state.unsubSeatingAccess?.();
+      state.listenerGeneration += 1;
+      state.guests = []; state.tables = []; state.wedding = null; state.permissions = null;
+      if (user) {
+        window.location.replace("./all-events.html");
+        return;
+      }
+    }
     state.currentUser = user;
     if (!user) {
+      clearInvitationTokenCache();
+      state.guests = []; state.tables = []; state.wedding = null; state.permissions = null;
       const message = state.authRedirectMessage || "session-required";
       state.authRedirectMessage = "";
       redirectToLogin(message);
@@ -1836,30 +1853,28 @@ function startListeners() {
     (snapshot) => {
       if (generation !== state.listenerGeneration) return;
       state.guests = uniqueRowsById(snapshot.docs.map((docSnapshot) => ({
-        ...docSnapshot.data(),
+        ...stripLegacyInvitationFields(docSnapshot.data()),
         id: docSnapshot.id,
         side: normalizeGuestSide(docSnapshot.data().side),
       })), "Firestore guest");
+      state.guests = state.guests.map((guest) => {
+        const cachedToken = state.invitationTokenCache.get(guest.id);
+        return cachedToken ? { ...guest, guestToken: cachedToken } : guest;
+      });
       state.firestoreGuestCount = snapshot.size;
       state.firestoreGuestIds = snapshot.docs.map(
         (docSnapshot) => docSnapshot.id,
       );
-      console.info("[Dashboard Firestore diagnostics]", {
-        projectId: state.services.config.projectId,
-        weddingId: state.weddingId,
-        demoMode: state.mode === "demo",
+      console.info("[Dashboard Firestore diagnostics] guest snapshot loaded", {
         firestoreGuestCount: state.firestoreGuestCount,
-        firestoreGuestIds: state.firestoreGuestIds,
+        demoMode: state.mode === "demo",
       });
       state.loadingGuests = false;
       renderAll();
       refreshAssignmentCandidatesAfterSnapshot();
       // Cached guest rows can predate a visitor's latest RSVP. Wait for the
       // server-backed snapshot before any one-time mirror repair is allowed.
-      if (!snapshot.metadata.fromCache && !state.publicMirrorsReconciled && can("canEditGuests")) {
-        state.publicMirrorsReconciled = true;
-        void reconcilePublicGuestMirrors(state.guests);
-      }
+      if (!snapshot.metadata.fromCache) void hydrateGuestInvitationTokens(state.guests, generation);
       void syncPublicStats();
     },
     (error) => handleSeatingListenerError(error),
@@ -1886,6 +1901,82 @@ function startListeners() {
     },
     (error) => handleSeatingListenerError(error),
   );
+}
+
+function stripLegacyInvitationFields(data = {}) {
+  const safe = { ...data };
+  delete safe.guestToken;
+  delete safe.inviteLink;
+  delete safe.qrCodeValue;
+  delete safe.invitationTokenHash;
+  delete safe.invitationTokenCiphertext;
+  return safe;
+}
+
+function clearInvitationTokenCache() {
+  state.invitationTokenRequest += 1;
+  state.invitationTokenCache.clear();
+  state.invitationTokenUnavailable.clear();
+  state.invitationTokenScope = "";
+  state.invitationTokenHydrationPromise = null;
+}
+
+async function hydrateGuestInvitationTokens(guests, generation) {
+  if (state.mode !== "live" || !state.services?.functions || !can("canEditGuests") || !state.currentUser?.uid) return;
+  const scope = `${state.currentUser.uid}:${state.weddingId}`;
+  if (state.invitationTokenScope !== scope) {
+    clearInvitationTokenCache();
+    state.invitationTokenScope = scope;
+  }
+  if (state.invitationTokenHydrationPromise) return state.invitationTokenHydrationPromise;
+  const guestIds = [...new Set(guests.map((guest) => guest.id).filter((id) =>
+    !state.invitationTokenCache.has(id) && !state.invitationTokenUnavailable.has(id)))];
+  if (!guestIds.length) return;
+  const requestId = ++state.invitationTokenRequest;
+  const expectedUid = state.currentUser.uid;
+  const expectedWeddingId = state.weddingId;
+  const expectedScope = scope;
+  const hydrate = (async () => {
+    const call = httpsCallable(state.services.functions, "getGuestInvitationTokens");
+    try {
+      for (let offset = 0; offset < guestIds.length; offset += 100) {
+        const batchIds = guestIds.slice(offset, offset + 100);
+        const result = await call({ weddingId: expectedWeddingId, guestIds: batchIds, action: "ensure" });
+        if (requestId !== state.invitationTokenRequest || expectedUid !== state.currentUser?.uid ||
+            expectedWeddingId !== state.weddingId || expectedScope !== state.invitationTokenScope ||
+            generation !== state.listenerGeneration) return;
+        const tokens = result.data?.tokens || {};
+        Object.entries(tokens).forEach(([guestId, token]) => {
+          if (batchIds.includes(guestId) && typeof token === "string" && /^[A-Za-z0-9_-]{43}$/.test(token)) {
+            state.invitationTokenCache.set(guestId, token);
+          }
+        });
+        (result.data?.unavailableGuestIds || []).forEach((guestId) => {
+          if (batchIds.includes(guestId)) state.invitationTokenUnavailable.add(guestId);
+        });
+      }
+      if (requestId !== state.invitationTokenRequest || expectedUid !== state.currentUser?.uid || generation !== state.listenerGeneration) return;
+      state.guests = state.guests.map((guest) => {
+        const guestToken = state.invitationTokenCache.get(guest.id);
+        return guestToken ? { ...guest, guestToken } : guest;
+      });
+      renderAll();
+    } catch (error) {
+      if (requestId === state.invitationTokenRequest && generation === state.listenerGeneration) {
+        console.error("Invitation links could not be loaded.", error?.code || "unavailable");
+      }
+    }
+  })();
+  state.invitationTokenHydrationPromise = hydrate;
+  try { await hydrate; }
+  finally {
+    if (state.invitationTokenHydrationPromise === hydrate) state.invitationTokenHydrationPromise = null;
+    if (expectedUid === state.currentUser?.uid && expectedWeddingId === state.weddingId &&
+        generation === state.listenerGeneration && state.guests.some((guest) =>
+          !state.invitationTokenCache.has(guest.id) && !state.invitationTokenUnavailable.has(guest.id))) {
+      void hydrateGuestInvitationTokens(state.guests, generation);
+    }
+  }
 }
 
 function startWeddingListener() {
@@ -1951,12 +2042,19 @@ function disposeDashboardListeners() {
 
 function handleSeatingListenerError(error) {
   console.error(error);
-  if (state.editorMode && error?.code === "permission-denied") {
-    state.unsubGuests?.();
-    state.unsubTables?.();
-    state.unsubGuests = null;
-    state.unsubTables = null;
-    showEditorAccessError();
+  if (error?.code === "permission-denied") {
+    closeGuestMenu({ restoreFocus: false });
+    clearInvitationTokenCache();
+    state.unsubWedding?.();
+    state.unsubSeatingAccess?.();
+    state.unsubWedding = null;
+    state.unsubSeatingAccess = null;
+    state.guests = [];
+    state.tables = [];
+    state.wedding = null;
+    state.permissions = null;
+    if (state.editorMode) showEditorAccessError();
+    else showDashboardBootstrapError(error);
     return;
   }
   showToast(
@@ -2078,41 +2176,9 @@ let lastPublicStatsJson = "";
 // read. Runs on every snapshot delivery; the JSON compare keeps it from
 // writing unless something actually changed.
 async function syncPublicStats() {
-  if (
-    state.mode !== "live" ||
-    !state.weddingId ||
-    !state.services?.db ||
-    !can("canViewDashboard")
-  ) {
-    return;
-  }
-  if (state.loadingGuests || state.loadingTables) {
-    return;
-  }
-  const payload = buildPublicStatsPayload();
-  const json = JSON.stringify(payload);
-  if (json === lastPublicStatsJson) {
-    return;
-  }
-  lastPublicStatsJson = json;
-  try {
-    await setDoc(
-      doc(
-        state.services.db,
-        "weddings",
-        state.weddingId,
-        "publicStats",
-        "summary",
-      ),
-      {
-        ...payload,
-        updatedAt: serverTimestamp(),
-      },
-    );
-  } catch (error) {
-    lastPublicStatsJson = "";
-    console.error("Side status page sync failed.", error);
-  }
+  // Public aggregates are generated by the Admin SDK trigger. Browser-written
+  // summaries would let any dashboard member publish fabricated guest data.
+  return;
 }
 
 function showDashboard() {
@@ -3501,7 +3567,7 @@ function renderEventSettingsPage() {
     return;
   }
   const wedding = state.wedding || {};
-  const hideOptionsAndLifecycle = state.currentUser?.email?.trim().toLowerCase() === "girl@gmail.com";
+  const hideOptionsAndLifecycle = state.permissions?.seatingOnly === true;
   const hideInvitationScheduleAndMapEmbed = hideOptionsAndLifecycle;
   if (!state.eventSettingsDraft || !state.dirtyEventSettings) {
     state.eventSettingsDraft = eventSettingsDraftFromWedding(wedding);
@@ -3775,7 +3841,7 @@ function renderGuestRow(guest) {
 
   return `
     <tr class="guest-row ${isSelected ? "is-selected" : ""}">
-      <td><input type="checkbox" value="${guest.id}" data-guest-select ${isSelected ? "checked" : ""} aria-label="Select ${escapeAttribute(guest.fullName || "guest")}" /></td>
+      <td><input type="checkbox" value="${escapeAttribute(guest.id)}" data-guest-select ${isSelected ? "checked" : ""} aria-label="Select ${escapeAttribute(guest.fullName || "guest")}" /></td>
       <td>
         <div class="guest-primary">
           <button class="guest-name-button" type="button" data-action="edit-guest" data-id="${escapeAttribute(guest.id)}">${escapeHtml(guest.fullName || "Guest")}</button>
@@ -4032,8 +4098,8 @@ function renderPlannerTable(table) {
     <div
       class="planner-table planner-table--${shape} ${isSelected ? "is-selected" : ""}"
       style="left:${Number(table.x || 0)}%; top:${Number(table.y || 0)}%; width:${width}px; height:${height}px; transform:${transform}; --table-fill:${escapeAttribute(table.tableColor || plannerPalette.tableColor)}; --table-border:${escapeAttribute(table.borderColor || plannerPalette.borderColor)}; --chair-color:${escapeAttribute(table.chairColor || plannerPalette.chairColor)};"
-      data-table-drag-id="${table.id}"
-      data-table-id="${table.id}"
+      data-table-drag-id="${escapeAttribute(table.id)}"
+      data-table-id="${escapeAttribute(table.id)}"
       data-rotation="${Number(table.rotation || 0)}"
       data-action="select-table"
     >
@@ -4043,7 +4109,7 @@ function renderPlannerTable(table) {
           class="planner-table__surface ${shapeClass}"
           type="button"
           data-action="select-table"
-          data-table-id="${table.id}"
+          data-table-id="${escapeAttribute(table.id)}"
         >
           <div class="planner-table__label">
             <strong>${escapeHtml(table.name)}</strong>
@@ -4080,8 +4146,8 @@ function renderPlannerChair(table, chair) {
       aria-label="${escapeAttribute(chairLabel)}"
       ${assignmentSelectionActive ? `aria-pressed="${isTemporary}"` : ""}
       data-action="select-seat"
-      data-table-id="${table.id}"
-      data-chair-id="${chair.id}"
+      data-table-id="${escapeAttribute(table.id)}"
+      data-chair-id="${escapeAttribute(chair.id)}"
     >
       <span>${escapeHtml(label)}</span>
     </button>
@@ -4565,9 +4631,9 @@ function renderSeatAssignment(selectedSeat) {
                     class="seat-assignment__guest ${isCurrent ? "is-selected" : ""}"
                     type="button"
                     data-action="assign-seat"
-                    data-table-id="${selectedSeat.table.id}"
-                    data-chair-id="${selectedSeat.chair.id}"
-                    data-guest-id="${guest.id}"
+                    data-table-id="${escapeAttribute(selectedSeat.table.id)}"
+                    data-chair-id="${escapeAttribute(selectedSeat.chair.id)}"
+                    data-guest-id="${escapeAttribute(guest.id)}"
                     ${state.activeModalOperation ? 'disabled aria-disabled="true"' : ""}
                   >
                     <strong>${escapeHtml(guest.fullName)}</strong>
@@ -4634,6 +4700,8 @@ function renderGuestActionMenu(guest, trigger) {
   menu.innerHTML = `
     ${menuItem("Send on WhatsApp", "open-reminder", guest.id, !buildWhatsAppReminderLink(guest))}
     ${isInvitationQrEnabled() ? menuItem("Copy QR link", "copy-guest-qr", guest.id) : ""}
+    ${state.mode === "live" && can("canEditGuests") ? menuItem("Regenerate invitation link", "regenerate-guest-invite", guest.id) : ""}
+    ${state.mode === "live" && can("canEditGuests") ? menuItem("Revoke invitation link", "revoke-guest-invite", guest.id, !guest.guestToken) : ""}
     ${menuItem("Delete guest", "delete-guest", guest.id, !can("canEditGuests"))}
   `;
   document.body.appendChild(menu);
@@ -4642,6 +4710,52 @@ function renderGuestActionMenu(guest, trigger) {
   state.lastGuestMenuTrigger = trigger;
   trigger.setAttribute("aria-expanded", "true");
   menu.querySelector(".guest-menu__item:not(.is-disabled)")?.focus();
+}
+
+async function manageGuestInvitationLink(guestId, action) {
+  if (state.mode !== "live" || !can("canEditGuests") || !state.services?.functions) {
+    showToast("You do not have permission to manage invitation links.", "error");
+    return;
+  }
+  const guest = state.guests.find((item) => item.id === guestId);
+  if (!guest) return;
+  if (action === "revoke" && !window.confirm(`Revoke the invitation link for ${guest.fullName || "this guest"}? Anyone with the old link will lose access.`)) return;
+  if (action === "regenerate" && !window.confirm(`Create a new invitation link for ${guest.fullName || "this guest"}? The old link will stop working immediately.`)) return;
+  try {
+    const call = httpsCallable(state.services.functions, "manageGuestInvitationAccess");
+    const requestId = action === "regenerate" ? window.crypto?.randomUUID?.() : undefined;
+    if (action === "regenerate" && !requestId) throw new Error("Secure request IDs are not supported in this browser.");
+    const result = await call({
+      weddingId: state.weddingId,
+      guestId,
+      action,
+      ...(requestId ? { requestId } : {}),
+    });
+    if (action === "revoke") {
+      state.invitationTokenCache.delete(guestId);
+      state.invitationTokenUnavailable.add(guestId);
+      state.guests = state.guests.map((item) => {
+        if (item.id !== guestId) return item;
+        const next = { ...item };
+        delete next.guestToken;
+        return next;
+      });
+      showToast("Invitation link revoked.", "success");
+    } else {
+      const token = result.data;
+      if (typeof token !== "string" || !/^[A-Za-z0-9_-]{43}$/.test(token)) throw new Error("The invitation service returned an invalid link.");
+      state.invitationTokenCache.set(guestId, token);
+      state.invitationTokenUnavailable.delete(guestId);
+      state.guests = state.guests.map((item) => item.id === guestId ? { ...item, guestToken: token } : item);
+      await copyText(buildInviteLink(token));
+      showToast("New invitation link created and copied.", "success");
+    }
+    closeGuestMenu({ restoreFocus: false });
+    renderAll();
+  } catch (error) {
+    console.error("Invitation link update failed.", error?.code || "unavailable");
+    showToast("We could not update this invitation link. Please try again.", "error");
+  }
 }
 
 function positionGuestMenu(menu, trigger) {
@@ -4753,35 +4867,24 @@ async function handleAction(action, dataset, event = null) {
       if (!ensureSenderSeatsReady(dataset.id || "all")) {
         return;
       }
-      const senderLink = buildSenderLink(dataset.id || "all");
-      const senderWindow = window.open(senderLink, "_blank", "noopener");
-      if (!senderWindow) {
-        await copyText(senderLink);
-        showToast(
-          "Popup blocked — the sender link was copied instead.",
-          "info",
-        );
-      }
+      await openSenderLink(dataset.id || "all");
       return;
     }
     case "open-sender-anyway": {
-      const senderLink = buildSenderLink(dataset.id || "all");
       elements.missingSeatsModal?.close();
-      const senderWindow = window.open(senderLink, "_blank", "noopener");
-      if (!senderWindow) {
-        await copyText(senderLink);
-        showToast(
-          "Popup blocked — the sender link was copied instead.",
-          "info",
-        );
-      }
+      await openSenderLink(dataset.id || "all");
       return;
     }
     case "copy-sender":
       if (!ensureSenderSeatsReady(dataset.id || "all")) {
         return;
       }
-      await copyText(buildSenderLink(dataset.id || "all"));
+      try {
+        await copyText(await buildSenderLink(dataset.id || "all"));
+      } catch (error) {
+        console.error("Could not create a sender link.", error?.code || "unavailable");
+        showToast("Could not prepare the sender link. Check event access and try again.", "error");
+      }
       return;
     case "open-side-view": {
       const sideViewLink = buildSideViewLink(dataset.id || "groom");
@@ -4850,7 +4953,10 @@ async function handleAction(action, dataset, event = null) {
       return;
     case "open-invitation-preview": {
       const guest = state.guests[0];
-      if (guest && !(await ensurePublicGuestMirror(guest))) return;
+      if (guest && !guest.guestToken) {
+        showToast("The invitation link is still being prepared. Try again shortly.", "info");
+        return;
+      }
       const url = buildInviteLink(guest?.guestToken || "{guestToken}");
       window.open(url, "_blank", "noopener");
       return;
@@ -4858,7 +4964,7 @@ async function handleAction(action, dataset, event = null) {
     case "copy-invitation-base":
       await copyText(
         new URL(
-          `index.html?wedding=${encodeURIComponent(state.weddingId)}&guest={guestToken}`,
+          `index.html?wedding=${encodeURIComponent(state.weddingId)}#guest={guestToken}`,
           window.location.href,
         ).toString(),
       );
@@ -4905,7 +5011,10 @@ async function handleAction(action, dataset, event = null) {
       return;
     case "copy-preview": {
       const guest = state.guests[0];
-      if (guest && !(await ensurePublicGuestMirror(guest))) return;
+      if (guest && !guest.guestToken) {
+        showToast("The invitation link is still being prepared. Try again shortly.", "info");
+        return;
+      }
       await copyText(buildInviteLink(guest?.guestToken || "{guestToken}"));
       return;
     }
@@ -4977,12 +5086,20 @@ async function handleAction(action, dataset, event = null) {
       const guest = state.guests.find(
         (item) => item.id === dataset.id || item.id === dataset.guestId,
       );
-      if (guest && (await ensurePublicGuestMirror(guest))) {
+      if (guest?.guestToken) {
         await copyText(buildInviteLink(guest.guestToken));
         showToast("Invitation link copied and ready to open.", "success");
+      } else if (guest) {
+        showToast("The invitation link is still being prepared. Try again shortly.", "info");
       }
       return;
     }
+    case "regenerate-guest-invite":
+      await manageGuestInvitationLink(dataset.guestId, "regenerate");
+      return;
+    case "revoke-guest-invite":
+      await manageGuestInvitationLink(dataset.guestId, "revoke");
+      return;
     case "copy-guest-qr": {
       if (!isInvitationQrEnabled()) {
         showToast("QR links are disabled for this event.", "info");
@@ -4990,7 +5107,7 @@ async function handleAction(action, dataset, event = null) {
       }
       const guest = state.guests.find((item) => item.id === dataset.guestId);
       if (guest) {
-        await copyText(guest.qrCodeValue || buildCheckinLink(guest.guestToken));
+         await copyText(buildCheckinLink(guest.guestToken));
       }
       return;
     }
@@ -5618,29 +5735,6 @@ async function getLiveTablesInTransaction(transaction, tableRefs) {
   );
 }
 
-async function getPublicGuestMirrorInTransaction(transaction, guest) {
-  if (!guest?.guestToken) return null;
-  return transaction.get(
-    doc(
-      state.services.db,
-      "weddings",
-      state.weddingId,
-      "publicGuests",
-      guest.guestToken,
-    ),
-  );
-}
-
-function updatePublicGuestSeatingMirrorInTransaction(
-  transaction,
-  mirrorSnapshot,
-  guest,
-) {
-  if (mirrorSnapshot?.exists()) {
-    transaction.update(mirrorSnapshot.ref, buildGuestSeatingPatch(guest));
-  }
-}
-
 // A party is represented by one real guest document. Every chair belonging to
 // that party carries that stable guest document ID plus a personKey/index for
 // the main guest or an additional member; there are no separate guest records
@@ -5762,20 +5856,6 @@ async function updateBulkRsvp(status) {
             updatedAt: serverTimestamp(),
           },
         );
-        const guest = state.guests.find((item) => item.id === guestId);
-        if (guest?.guestToken) {
-          batch.set(
-            doc(
-              state.services.db,
-              "weddings",
-              state.weddingId,
-              "publicGuests",
-              guest.guestToken,
-            ),
-            { rsvpStatus: status, updatedAt: serverTimestamp() },
-            { merge: true },
-          );
-        }
       });
       await batch.commit();
     }
@@ -5810,7 +5890,7 @@ async function openGuestModal(guest = null) {
       : getDefaultGuestSide(state.wedding);
   }
   elements.guestForm.additionalGuests.value = String(
-    normalizeAdditionalGuests(guest?.additionalGuests),
+    normalizeAdditionalGuests(guest?.additionalGuestAllowance ?? guest?.additionalGuests),
   );
   document.body.classList.add("is-modal-open");
   elements.guestModal.showModal();
@@ -5827,7 +5907,6 @@ async function saveGuest(event) {
   const existingGuest = guestId
     ? state.guests.find((item) => item.id === guestId)
     : null;
-  const token = existingGuest?.guestToken || generateGuestToken();
   const fullName = elements.guestForm.fullName.value.trim();
   if (!fullName) {
     elements.guestForm.fullName.setCustomValidity(
@@ -5858,24 +5937,26 @@ async function saveGuest(event) {
   }
   elements.guestForm.additionalGuests.setCustomValidity("");
 
+  const allowance = additionalGuests;
   const ownedPayload = {
     fullName,
     phone: elements.guestForm.phone.value.trim(),
     side: eventUsesGuestSides(state.wedding)
       ? normalizeGuestSide(elements.guestForm.side.value)
       : existingGuest?.side || "general",
-    additionalGuests,
+    additionalGuestAllowance: allowance,
+    additionalGuests: Math.min(
+      normalizeAdditionalGuests(existingGuest?.additionalGuests ?? allowance),
+      allowance,
+    ),
     updatedAt: serverTimestamp(),
   };
   const createPayload = {
     ...ownedPayload,
     rsvpStatus: "pending",
-    guestToken: token,
-    inviteLink: buildInviteLink(token),
     tableId: "",
     tableName: "",
     seatNumber: "",
-    qrCodeValue: buildCheckinLink(token),
     checkedIn: false,
     checkedInAt: null,
     notes: "",
@@ -5884,6 +5965,11 @@ async function saveGuest(event) {
   };
 
   if (state.mode === "demo") {
+    if (!guestId) {
+      createPayload.guestToken = generateGuestToken();
+      createPayload.inviteLink = buildInviteLink(createPayload.guestToken);
+      createPayload.qrCodeValue = buildCheckinLink(createPayload.guestToken);
+    }
     const demoPayload = materializeDemoPayload(
       guestId ? ownedPayload : createPayload,
       existingGuest,
@@ -5917,21 +6003,14 @@ async function saveGuest(event) {
         doc(state.services.db, "weddings", state.weddingId, "guests", guestId),
         ownedPayload,
       );
-      await syncPublicGuest(guestId, { ...existingGuest, ...ownedPayload }, [
-        "fullName",
-        "phone",
-        "side",
-        "additionalGuests",
-      ]);
     } else {
-      const guestRef = await addDoc(
+      await addDoc(
         collection(state.services.db, "weddings", state.weddingId, "guests"),
         {
           ...createPayload,
           createdAt: serverTimestamp(),
         },
       );
-      await syncPublicGuest(guestRef.id, createPayload);
     }
     state.dirtyGuestForm = false;
     elements.guestModal.close();
@@ -5940,140 +6019,6 @@ async function saveGuest(event) {
   } catch (error) {
     console.error(error);
     showToast("We could not save this guest.", "error");
-  }
-}
-
-function buildPublicGuestPayload(guestId, guest) {
-  return {
-    guestId,
-    guestToken: guest.guestToken || "",
-    fullName: guest.fullName || "",
-    side: String(guest.side || getDefaultGuestSide(state.wedding)).toLowerCase() === "general"
-      ? "general"
-      : normalizeGuestSide(guest.side),
-    additionalGuests: normalizeAdditionalGuests(guest.additionalGuests),
-    rsvpStatus: guest.rsvpStatus || "pending",
-    seatingAssignments: Array.isArray(guest.seatingAssignments)
-      ? guest.seatingAssignments
-      : [],
-    tableId: guest.tableId || "",
-    tableName: guest.tableName || "",
-    seatNumber: guest.seatNumber || "",
-    updatedAt: serverTimestamp(),
-  };
-}
-
-const publicGuestMirrorKeys = [
-  "fullName",
-  "side",
-  "additionalGuests",
-  "rsvpStatus",
-  "seatingAssignments",
-  "tableId",
-  "tableName",
-  "seatNumber",
-];
-
-async function reconcilePublicGuestMirrors(guests) {
-  if (state.mode !== "live" || !can("canEditGuests")) return;
-  const eligibleGuests = guests.filter((guest) => Boolean(guest.guestToken));
-  try {
-    // Existing public documents keep their RSVP and party-size fields. The
-    // dashboard may have received those rows from cache before the server
-    // snapshot; reconciliation must never roll a visitor's newer response back.
-    for (let offset = 0; offset < eligibleGuests.length; offset += 400) {
-      const batch = writeBatch(state.services.db);
-      const chunk = eligibleGuests.slice(offset, offset + 400);
-      const mirrorSnapshots = await Promise.all(chunk.map((guest) => getDoc(
-        doc(
-            state.services.db,
-            "weddings",
-            state.weddingId,
-            "publicGuests",
-            guest.guestToken,
-          ),
-      )));
-      chunk.forEach((guest, index) => {
-        const mirrorRef = doc(state.services.db, "weddings", state.weddingId, "publicGuests", guest.guestToken);
-        const payload = buildPublicGuestPayload(guest.id, guest);
-        if (mirrorSnapshots[index].exists()) {
-          delete payload.rsvpStatus;
-          delete payload.additionalGuests;
-        }
-        batch.set(mirrorRef, payload, { merge: true });
-      });
-      await batch.commit();
-    }
-    console.info(
-      "[Dashboard Firestore diagnostics] public mirrors reconciled",
-      {
-        weddingId: state.weddingId,
-        mirroredGuestCount: eligibleGuests.length,
-        skippedWithoutToken: guests.length - eligibleGuests.length,
-      },
-    );
-  } catch (error) {
-    state.publicMirrorsReconciled = false;
-    console.error("Public guest mirror reconciliation failed.", error);
-    showToast(
-      "Guest data is live, but invitation records could not be synchronized.",
-      "error",
-    );
-  }
-}
-
-// fields === null writes the full mirror doc (guest creation only). Update
-// paths must pass the changed field names so a patch from stale local state
-// can never clobber values other actors own (e.g. the guest's own RSVP).
-async function syncPublicGuest(guestId, guest, fields = null) {
-  if (state.mode !== "live" || !guest?.guestToken) {
-    return;
-  }
-  try {
-    const mirrorRef = doc(
-      state.services.db,
-      "weddings",
-      state.weddingId,
-      "publicGuests",
-      guest.guestToken,
-    );
-    if (!fields) {
-      await setDoc(mirrorRef, buildPublicGuestPayload(guestId, guest));
-      return;
-    }
-    const fullPayload = buildPublicGuestPayload(guestId, guest);
-    const patch = { updatedAt: serverTimestamp() };
-    fields
-      .filter((key) => publicGuestMirrorKeys.includes(key))
-      .forEach((key) => {
-        patch[key] = fullPayload[key];
-      });
-    await setDoc(mirrorRef, patch, { merge: true });
-  } catch (error) {
-    console.error("Public invitation mirror update failed.", error);
-    showToast(
-      "Saved, but the guest's public invitation page could not be refreshed.",
-      "error",
-    );
-  }
-}
-
-async function removePublicGuest(guestToken) {
-  if (state.mode !== "live" || !guestToken) {
-    return;
-  }
-  try {
-    await deleteDoc(
-      doc(
-        state.services.db,
-        "weddings",
-        state.weddingId,
-        "publicGuests",
-        guestToken,
-      ),
-    );
-  } catch (error) {
-    console.error("Public invitation mirror delete failed.", error);
   }
 }
 
@@ -6138,19 +6083,16 @@ async function saveBulkGuests(event) {
     ? normalizeGuestSide(elements.bulkAddForm.side.value)
     : "general";
   const payloads = entries.map((entry) => {
-    const token = generateGuestToken();
     return {
       fullName: entry.fullName,
       phone: entry.phone,
       side,
+      additionalGuestAllowance: entry.additionalGuests,
       additionalGuests: entry.additionalGuests,
       rsvpStatus: "pending",
-      guestToken: token,
-      inviteLink: buildInviteLink(token),
       tableId: "",
       tableName: "",
       seatNumber: "",
-      qrCodeValue: buildCheckinLink(token),
       checkedIn: false,
       checkedInAt: null,
       notes: "",
@@ -6161,6 +6103,11 @@ async function saveBulkGuests(event) {
   });
 
   if (state.mode === "demo") {
+    payloads.forEach((payload) => {
+      payload.guestToken = generateGuestToken();
+      payload.inviteLink = buildInviteLink(payload.guestToken);
+      payload.qrCodeValue = buildCheckinLink(payload.guestToken);
+    });
     state.guests = [
       ...state.guests,
       ...payloads.map((payload) => ({
@@ -6190,16 +6137,6 @@ async function saveBulkGuests(event) {
           collection(state.services.db, "weddings", state.weddingId, "guests"),
         );
         batch.set(guestRef, { ...payload, createdAt: serverTimestamp() });
-        batch.set(
-          doc(
-            state.services.db,
-            "weddings",
-            state.weddingId,
-            "publicGuests",
-            payload.guestToken,
-          ),
-          buildPublicGuestPayload(guestRef.id, payload),
-        );
       });
       await batch.commit();
       committed += chunk.length;
@@ -6272,14 +6209,6 @@ async function updateGuest(guestId, payload) {
       doc(state.services.db, "weddings", state.weddingId, "guests", guestId),
       payload,
     );
-    const existingGuest = state.guests.find((guest) => guest.id === guestId);
-    if (existingGuest) {
-      await syncPublicGuest(
-        guestId,
-        { ...existingGuest, ...payload },
-        Object.keys(payload),
-      );
-    }
     await syncTablesAndGuests();
     showToast("Guest updated.", "success");
   } catch (error) {
@@ -6312,7 +6241,6 @@ async function deleteGuest(guestId) {
   }
 
   try {
-    const removedGuest = state.guests.find((guest) => guest.id === guestId);
     const batch = writeBatch(state.services.db);
     const nextTables = clearGuestFromTables(state.tables, guestId);
     const nextGuests = state.guests.filter((guest) => guest.id !== guestId);
@@ -6335,17 +6263,6 @@ async function deleteGuest(guestId) {
     batch.delete(
       doc(state.services.db, "weddings", state.weddingId, "guests", guestId),
     );
-    if (removedGuest?.guestToken) {
-      batch.delete(
-        doc(
-          state.services.db,
-          "weddings",
-          state.weddingId,
-          "publicGuests",
-          removedGuest.guestToken,
-        ),
-      );
-    }
     await batch.commit();
     state.tables = hydrateTables(nextTables, nextGuests);
     state.guests = syncGuestSeatingSummaries(nextGuests, state.tables);
@@ -6386,40 +6303,6 @@ function openTableModal(table = null) {
     table?.height || defaultHeightForShape(table?.shape);
   document.body.classList.add("is-modal-open");
   elements.tableModal.showModal();
-}
-
-// Invitation pages intentionally read only the token-keyed public mirror.
-// Older guest records can predate that mirror, so create/repair it before an
-// owner copies or opens a personal invitation link.
-async function ensurePublicGuestMirror(guest) {
-  if (state.mode !== "live" || !guest?.guestToken) return true;
-  if (!can("canEditGuests")) {
-    showToast(
-      "This invitation link needs an owner to prepare its secure guest record.",
-      "error",
-    );
-    return false;
-  }
-  try {
-    await setDoc(
-      doc(
-        state.services.db,
-        "weddings",
-        state.weddingId,
-        "publicGuests",
-        guest.guestToken,
-      ),
-      buildPublicGuestPayload(guest.id, guest),
-    );
-    return true;
-  } catch (error) {
-    console.error("Public invitation mirror repair failed.", error);
-    showToast(
-      "The invitation could not be prepared. Please try again.",
-      "error",
-    );
-    return false;
-  }
 }
 
 async function saveTable(event) {
@@ -6570,12 +6453,6 @@ async function saveTable(event) {
       for (const guestId of affectedGuestIds) {
         const nextGuest = nextGuests.find((guest) => guest.id === guestId);
         if (nextGuest) {
-          await syncPublicGuest(nextGuest.id, nextGuest, [
-            "seatingAssignments",
-            "tableId",
-            "tableName",
-            "seatNumber",
-          ]);
         }
       }
     } else {
@@ -6771,11 +6648,6 @@ async function deleteTable(tableId) {
           id: snapshot.id,
           ref: snapshot.ref,
         }));
-      const publicMirrorSnapshots = await Promise.all(
-        liveGuests.map((guest) =>
-          getPublicGuestMirrorInTransaction(transaction, guest),
-        ),
-      );
       nextGuests = liveGuests.map(({ ref, ...guest }) => {
         const assignments = (guest.seatingAssignments || []).filter(
           (assignment) => assignment.tableId !== tableId,
@@ -6797,11 +6669,6 @@ async function deleteTable(tableId) {
         transaction.update(
           liveGuests[index].ref,
           buildGuestSeatingPatch(nextGuest),
-        );
-        updatePublicGuestSeatingMirrorInTransaction(
-          transaction,
-          publicMirrorSnapshots[index],
-          nextGuest,
         );
       });
       transaction.delete(liveTableSnapshot.ref);
@@ -7359,7 +7226,7 @@ function renderAssignmentGuestOption(guest) {
   const partySize = getPartySize(guest);
   const remaining = Math.max(0, partySize - assignedCount);
   return `
-    <button class="assignment-guest-option" type="button" data-action="choose-assignment-guest" data-guest-id="${guest.id}">
+    <button class="assignment-guest-option" type="button" data-action="choose-assignment-guest" data-guest-id="${escapeAttribute(guest.id)}">
       <strong>${escapeHtml(guest.fullName || "Guest")}</strong>
       <span>Party of ${partySize}${eventUsesGuestSides(state.wedding) ? ` · ${escapeHtml(guest.side || "Side not set")}` : ""}</span>
       <small>${remaining} seat${remaining === 1 ? "" : "s"} remaining${assignedCount ? ` · ${assignedCount} already seated` : ""}</small>
@@ -7578,10 +7445,6 @@ async function savePartyAssignment(guest, selectedChairs, movingParty = false) {
       id: guestSnapshot.id,
     };
     const liveTables = await getLiveTablesInTransaction(transaction, tableRefs);
-    const liveMirrorSnapshot = await getPublicGuestMirrorInTransaction(
-      transaction,
-      liveGuest,
-    );
     const selectedKeys = new Set(
       selectedChairs.map((item) => buildSeatKey(item.tableId, item.chairId)),
     );
@@ -7671,11 +7534,6 @@ async function savePartyAssignment(guest, selectedChairs, movingParty = false) {
         liveGuest.id,
       ),
       buildGuestSeatingPatch(nextGuest),
-    );
-    updatePublicGuestSeatingMirrorInTransaction(
-      transaction,
-      liveMirrorSnapshot,
-      nextGuest,
     );
   });
   if (savedTables && savedGuests) {
@@ -7769,7 +7627,6 @@ function reportSeatingOperationFailure({ operation, stage, tableIds = [], guestI
       (tableId) => `${weddingPath}/tables/${tableId}`,
     ),
     ...(guestId ? [`${weddingPath}/guests/${guestId}`] : []),
-    ...(guestId ? [`${weddingPath}/publicGuests/{invitation-token-for-${guestId}}`] : []),
   ];
   const diagnostic = {
     operation,
@@ -8069,10 +7926,6 @@ async function clearPartyAssignments(guestId, expectedSignature = "") {
         "This party no longer exists. The seating plan has been refreshed.",
       );
     const liveGuest = { ...guestSnapshot.data(), id: guestSnapshot.id };
-    const liveMirrorSnapshot = await getPublicGuestMirrorInTransaction(
-      transaction,
-      liveGuest,
-    );
     nextGuests = state.guests.map((guest) =>
       guest.id === guestId
         ? {
@@ -8108,11 +7961,6 @@ async function clearPartyAssignments(guestId, expectedSignature = "") {
     transaction.update(
       guestSnapshot.ref,
       buildGuestSeatingPatch(nextGuests.find((guest) => guest.id === guestId)),
-    );
-    updatePublicGuestSeatingMirrorInTransaction(
-      transaction,
-      liveMirrorSnapshot,
-      nextGuests.find((guest) => guest.id === guestId),
     );
   });
   state.tables = hydrateTables(nextTables, nextGuests);
@@ -8276,10 +8124,6 @@ async function unassignSingleSeat(tableId, chairId) {
       );
     }
     const liveGuest = { ...guestSnapshot.data(), id: guestSnapshot.id };
-    const liveMirrorSnapshot = await getPublicGuestMirrorInTransaction(
-      transaction,
-      liveGuest,
-    );
     const liveGuests = state.guests.map((guest) =>
       guest.id === liveGuest.id ? { ...guest, ...liveGuest } : guest,
     );
@@ -8305,11 +8149,6 @@ async function unassignSingleSeat(tableId, chairId) {
     transaction.update(
       doc(state.services.db, "weddings", state.weddingId, "guests", guestId),
       buildGuestSeatingPatch(nextGuest),
-    );
-    updatePublicGuestSeatingMirrorInTransaction(
-      transaction,
-      liveMirrorSnapshot,
-      nextGuest,
     );
   });
   if (savedTables && savedGuests) {
@@ -8472,10 +8311,6 @@ async function movePartyToTable(guestId, destinationTableId) {
       id: guestSnapshot.id,
     };
     const liveTables = await getLiveTablesInTransaction(transaction, tableRefs);
-    const liveMirrorSnapshot = await getPublicGuestMirrorInTransaction(
-      transaction,
-      liveGuest,
-    );
     const nextTables = buildMovedTables(liveTables, liveGuest);
     const liveGuests = state.guests.map((item) =>
       item.id === liveGuest.id ? liveGuest : item,
@@ -8523,11 +8358,6 @@ async function movePartyToTable(guestId, destinationTableId) {
         liveGuest.id,
       ),
       buildGuestSeatingPatch(nextGuest),
-    );
-    updatePublicGuestSeatingMirrorInTransaction(
-      transaction,
-      liveMirrorSnapshot,
-      nextGuest,
     );
   });
   if (savedTables && savedGuests) {
@@ -8690,6 +8520,8 @@ async function handleExport(type) {
     filtered.map((guest) => ({
       ...guest,
       checkedInAt: formatTimestamp(guest.checkedInAt),
+      inviteLink: guest.guestToken ? buildInviteLink(guest.guestToken) : "",
+      qrCodeValue: guest.guestToken && isInvitationQrEnabled() ? buildCheckinLink(guest.guestToken) : "",
     })),
     `guests-${type || "all"}`,
     { includeSeating: type === "tables", includeSide: eventUsesGuestSides(state.wedding) },
@@ -9227,8 +9059,8 @@ function can(permission) {
 }
 
 function canManageSeatingLayout() {
-  const hasAccountLayoutAccess = state.currentUser?.email?.trim().toLowerCase() === "girl@gmail.com";
-  return can("canEditSeating") && (!state.editorMode || hasAccountLayoutAccess);
+  const explicitLayoutAccess = state.permissions?.canManageSeatingLayout === true;
+  return can("canEditSeating") && (!state.editorMode || explicitLayoutAccess);
 }
 
 function signedInUserName() {
@@ -9374,17 +9206,19 @@ function normalizeWhatsAppPhone(phone) {
 }
 
 function buildInviteLink(guestToken) {
-  return new URL(
-    `index.html?wedding=${encodeURIComponent(state.weddingId)}&guest=${encodeURIComponent(guestToken)}`,
-    window.location.href,
-  ).toString();
+  const url = new URL("index.html", window.location.href);
+  if (state.mode === "demo") url.searchParams.set("demo", "1");
+  else url.searchParams.set("wedding", state.weddingId);
+  url.hash = new URLSearchParams({ guest: guestToken }).toString();
+  return url.toString();
 }
 
 function buildCheckinLink(guestToken) {
-  return new URL(
-    `checkin.html?wedding=${encodeURIComponent(state.weddingId)}&guest=${encodeURIComponent(guestToken)}`,
-    window.location.href,
-  ).toString();
+  const url = new URL("checkin.html", window.location.href);
+  if (state.mode === "demo") url.searchParams.set("demo", "1");
+  else url.searchParams.set("wedding", state.weddingId);
+  url.hash = new URLSearchParams({ guest: guestToken }).toString();
+  return url.toString();
 }
 
 // Sender lists mirror the Guest Directory's side field exactly. This prevents
@@ -9400,7 +9234,6 @@ function getSenderGuests(side = "all") {
   return state.guests.filter(
     (guest) =>
       normalizeWhatsAppPhone(guest.phone) &&
-      guest.guestToken &&
       senderSideMatches(guest, side),
   );
 }
@@ -9499,21 +9332,49 @@ function renderMissingSeatsModal(blocked, side = "all") {
   `;
 }
 
-function buildSenderLink(side = "all") {
-  const payload = createSenderPayload({
+async function buildSenderLink(side = "all") {
+  if (state.mode === "demo") {
+    const payload = createSenderPayload({
+      weddingId: state.weddingId,
+      coupleName: getEventDisplayTitle(state.wedding),
+      eventCategory: state.wedding?.eventCategory || "wedding_engagement",
+      side,
+      senderId: crypto.randomUUID(),
+      guests: getSenderGuests(side).map((guest) => ({
+        ...guest,
+        phone: normalizeWhatsAppPhone(guest.phone),
+      })),
+    });
+    return new URL(`send.html?demo=1#data=${encodeSenderPayload(payload)}`, window.location.href).toString();
+  }
+  const guests = getSenderGuests(side);
+  const result = await httpsCallable(state.services.functions, "createSenderSession")({
     weddingId: state.weddingId,
-    coupleName: getEventDisplayTitle(state.wedding),
-    eventCategory: state.wedding?.eventCategory || "wedding_engagement",
     side,
-    guests: getSenderGuests(side).map((guest) => ({
-      ...guest,
-      phone: normalizeWhatsAppPhone(guest.phone),
-    })),
+    guestIds: guests.map((guest) => guest.id),
   });
-  return new URL(
-    `send.html#data=${encodeSenderPayload(payload)}`,
-    window.location.href,
-  ).toString();
+  if (!/^[A-Za-z0-9_-]{43}$/.test(result.data?.token || "")) {
+    throw new Error("Sender link creation failed.");
+  }
+  return new URL(`send.html#session=${encodeURIComponent(result.data.token)}`, window.location.href).toString();
+}
+
+async function openSenderLink(side = "all") {
+  const senderWindow = window.open("about:blank", "_blank");
+  if (senderWindow) senderWindow.opener = null;
+  try {
+    const senderLink = await buildSenderLink(side);
+    if (senderWindow) {
+      senderWindow.location.replace(senderLink);
+      return;
+    }
+    await copyText(senderLink);
+    showToast("Popup blocked — the sender link was copied instead.", "info");
+  } catch (error) {
+    senderWindow?.close();
+    console.error("Could not create a sender link.", error?.code || "unavailable");
+    showToast("Could not prepare the sender link. Check event access and try again.", "error");
+  }
 }
 
 function buildSideViewLink(side) {

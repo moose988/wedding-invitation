@@ -144,7 +144,9 @@ test("dashboard table editor and guest filters use the shared compatibility and 
   assert.match(dashboard, /assignmentsForGuest\(getAllAssignments\(tables\), guestId\)/);
   assert.match(dashboard, /name: `\$\{resolveTableName\(table\)\} Copy`/);
   assert.match(dashboard, /nextGuests = syncGuestSeatingSummaries\(state\.guests, nextTables\)/);
-  assert.match(dashboard, /syncPublicGuest\(nextGuest\.id, nextGuest,\s*\[\s*"seatingAssignments",\s*"tableId",\s*"tableName"/);
+  assert.match(dashboard, /function syncGuestSeatingSummaries\(guests, tables\)/);
+  assert.match(dashboard, /nextGuests = syncGuestSeatingSummaries\(state\.guests, nextTables\)/);
+  assert.doesNotMatch(dashboard, /syncPublicGuest\(/);
   assert.match(invitation, /resolveTableName\(table\)/);
   assert.match(side, /name: resolveTableName\(table\)/);
   assert.match(side, /tableName: resolveTableName\(table\)/);

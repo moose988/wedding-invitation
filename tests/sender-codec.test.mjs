@@ -13,6 +13,7 @@ function roundTripGuest(guest) {
     weddingId: "wedding-test",
     coupleName: "Layla & Zaid",
     side: "all",
+    senderId: "sender-test-1",
     guests: [
       {
         fullName: guest.n,
@@ -23,7 +24,7 @@ function roundTripGuest(guest) {
       },
     ],
   });
-  const link = `send.html#data=${encodeSenderPayload(payload)}`;
+  const link = `send.html?demo=1#data=${encodeSenderPayload(payload)}`;
   const encoded = new URL(`https://example.test/${link}`).hash.slice(6);
   return { payload: decodeSenderPayload(encoded), link };
 }
@@ -38,6 +39,7 @@ test("sender workflow keeps names and excludes unsupported guest fields", () => 
 
   guests.forEach((guest) => {
     const { payload } = roundTripGuest(guest);
+    assert.equal(payload.sid, "sender-test-1");
     assert.equal(payload.g[0].legacyName, undefined);
     assert.equal(payload.g[0].n, guest.n);
     assert.equal(senderGuestPresentation(payload.g[0]).displayName, guest.n);

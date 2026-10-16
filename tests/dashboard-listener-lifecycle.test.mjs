@@ -74,24 +74,19 @@ test("dashboard navigation and seating toolbar keep the requested operational or
   assert.match(dashboard, /class="planner-canvas-controls"[\s\S]*?actionButton\("Add table"/);
 });
 
-test("wedding list resolves access entries against source documents and replaces by ID", async () => {
-  const weddings = await read("weddings.js");
+test("wedding list uses the server membership projection and replaces rows by ID", async () => {
+  const [weddings, functions] = await Promise.all([read("weddings.js"), read("functions/index.js")]);
 
-  assert.match(weddings, /async function loadIndexedWeddings\(accessEntries\)/);
-  assert.match(weddings, /getDoc\(doc\(state\.services\.db, "weddings", entry\.id\)\)/);
-  assert.match(weddings, /weddingDoc\.exists\(\) \? \{ \.\.\.weddingDoc\.data\(\), id: weddingDoc\.id \} : null/);
-  assert.match(weddings, /return weddings\.filter\(Boolean\)/);
-  assert.match(weddings, /state\.weddings = replaceRowsById\(\[\.\.\.legacyWeddings, \.\.\.indexedWeddings\]\)/);
+  assert.match(weddings, /httpsCallable\(state\.services\.functions, "getAccessibleWorkspaceEvents"\)/);
+  assert.match(weddings, /state\.weddings = replaceRowsById\(result\.data\?\.events \|\| \[\]\)/);
+  assert.match(weddings, /state\.weddings\.every\(\(wedding\) => wedding\.seatingOnly === true\)/);
+  assert.match(functions, /collectionGroup\("dashboardUsers"\)/);
+  assert.match(functions, /permissions\.canViewDashboard !== true/);
+  assert.match(functions, /seatingOnly && \(permissions\.canEditSeating !== true/);
   assert.match(weddings, /generation !== state\.snapshotGeneration/);
-  assert.match(weddings, /state\.unsubscribe\?\.\(\)/);
-  assert.match(weddings, /permissions\[index\]\.data\(\)\.canViewDashboard === true/);
-  assert.doesNotMatch(
-    weddings.slice(
-      weddings.indexOf("async function loadLegacyActiveWeddings()"),
-      weddings.indexOf("function replaceRowsById"),
-    ),
-    /setDoc\(/,
-  );
+  assert.match(weddings, /state\.unsubscribeAuth\?\.\(\)/);
+  assert.doesNotMatch(weddings, /function loadLegacyActiveWeddings\(/);
+  assert.doesNotMatch(weddings, /collectionGroup\("dashboardUsers"\)/);
 });
 
 test("wedding action menus obey hidden state and close consistently", async () => {

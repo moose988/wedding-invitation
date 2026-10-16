@@ -1,259 +1,149 @@
-# Event Invitation Platform Firebase MVP
+# Event Invitation Platform
 
-## Custom coded invitation designs
+A bilingual event dashboard and digital invitation app backed by Firebase
+Authentication, Cloud Firestore, and Cloud Functions. Event IDs remain readable;
+they are identifiers, not credentials.
 
-Public invitation designs are code-owned—not dashboard-configured. Existing
-guest links continue to point to `index.html`; the lightweight router checks
-[`invitations/wedding-designs/registry.js`](./invitations/wedding-designs/registry.js)
-and forwards only mapped event IDs to their dedicated design. Unmapped
-events keep the current root invitation as the fallback.
+## Main routes
 
-### Current design map
+- `all-events.html` — events available to the signed-in dashboard account.
+- `dashboard.html` — event settings, guests, invitations, seating, exports, and
+  organizer actions.
+- `index.html` — guest invitation and RSVP.
+- `side.html` — public aggregate status page or authenticated seating view,
+  depending on the route and account.
+- `checkin.html` — authenticated check-in and search.
+- `send.html` — delegated WhatsApp sender workflow.
 
-| Event | Firestore ID | Design folder |
-| --- | --- | --- |
-| Layla & Zaid | `luxury-wedding-demo` | `invitations/wedding-designs/layla-zaid/` |
-| Ali & Salma | `M1S1aBL9134GSAozWh6G` | `invitations/wedding-designs/ali-salma/` |
+Invitation designs are code-owned. The shared invitation data module loads a
+server-projected guest and event; individual designs do not read Firestore
+collections directly.
 
-To add an event-specific design:
+## Access model
 
-1. Copy `invitations/wedding-designs/layla-zaid/` to a clearly named new folder.
-2. Build the visual markup and CSS only in that folder.
-3. Reuse `invitations/shared/invitation-data.js` for Firebase event/guest
-   data, live updates, RSVP writes, and check-in QR URLs.
-4. Add the real Firestore event ID and route to the registry.
+| Principal | Access |
+| --- | --- |
+| Event owner | Event settings, guests, invitations, users, exports, seating, check-in, and deletion. |
+| Dashboard member | Only the event permissions in `weddings/{eventId}/dashboardUsers/{uid}`. |
+| Seating-only member | Assigned side through server-checked seating operations; cannot edit guests or check in. |
+| Seating editor link | One event and role, exchanged for a versioned Firebase custom token; revocation is checked on data access. |
+| Guest invitation holder | One event and guest invitation; may view the projected invitation and submit RSVP. |
+| Check-in member | Search or scan only for the allowed side and update check-in fields only. |
+| Public family page | Event title and aggregate counts from `publicSummary/summary`. |
+| Demo mode | Synthetic fixture data in the browser; it does not fall through to live Firebase data. |
 
-The dashboard, guest documents, public guest mirror, RSVP rules, QR/check-in,
-seating, exports, and sender links remain shared. Do not duplicate them inside
-individual invitation designs.
+The WhatsApp sender link is a separate, 24-hour delegated capability. Its URL
+contains only a random token; the server rechecks the creator's event
+permission and the selected invitations each time the page opens or refreshes.
+Organizers can revoke a sender capability. Anyone holding it can see the
+selected names and phone numbers and share those invitations until expiry or
+revocation. Encoded roster payloads work only for explicit synthetic demo
+routes. See [SECURITY.md](./SECURITY.md).
 
-This project is a luxury bilingual Arabic/English event invitation experience with a Firebase-powered multi-client MVP layered on top of the existing invitation flow.
+## Invitation access
 
-## Included pages
-
-- `index.html`
-  Guest invitation page with demo fallback and Firebase guest mode
-- `dashboard.html`
-  Auth-protected planner/client dashboard
-- `checkin.html`
-  Hostess check-in page with QR-link guest lookup and manual search mode
-
-## 1. Add Firebase config
-
-Edit [firebase-config.js](C:\Users\mohda\OneDrive\Desktop\wedding invitaion\firebase-config.js) and replace the empty `window.FIREBASE_CONFIG` values:
-
-```js
-window.FIREBASE_CONFIG = {
-  apiKey: "YOUR_API_KEY",
-  authDomain: "YOUR_PROJECT.firebaseapp.com",
-  projectId: "YOUR_PROJECT_ID",
-  storageBucket: "YOUR_PROJECT.appspot.com",
-  messagingSenderId: "YOUR_MESSAGING_SENDER_ID",
-  appId: "YOUR_APP_ID",
-};
-```
-
-The invitation page keeps working in static demo mode if those values stay empty.
-
-## 2. Create Firestore collections
-
-Use this structure:
+Live guest links use a 256-bit random token in the URL fragment:
 
 ```text
-weddings/{weddingId}
-weddings/{weddingId}/guests/{guestId}
-weddings/{weddingId}/tables/{tableId}
-weddings/{weddingId}/dashboardUsers/{userId}
-weddings/{weddingId}/seatingAccess/{bride|groom}
+index.html?wedding={readableEventId}#guest={43-character-token}
 ```
 
-## 3. Example event document
+The raw token is not stored in the guest document. Cloud Functions store a
+SHA-256 lookup digest and an AES-GCM encrypted owner-recovery copy in
+server-only collections. The invitation callable verifies token format,
+purpose, event, guest, active status, version, and expiry on every read and
+RSVP. RSVP writes only the allowed RSVP fields and enforces that guest's actual
+additional-guest allowance. Invitation access does not authorize check-in,
+seating, or dashboard access.
 
-```json
-{
-  "coupleName": "Sara & Khalid",
-  "brideName": "Sara",
-  "groomName": "Khalid",
-  "brideNameAr": "سارة",
-  "groomNameAr": "خالد",
-  "subtitleEn": "With love, we invite you to celebrate our special day.",
-  "subtitleAr": "بكل الحب ندعوكم لمشاركتنا فرحة العمر.",
-  "invitationMessageEn": "We would be honored by your presence as we begin a beautiful new chapter together.",
-  "invitationMessageAr": "نتشرف بحضوركم لتشهدوا معنا بداية فصل جديد من العمر.",
-  "eventDateISO": "2026-12-20T20:00:00+04:00",
-  "timeEn": "8:00 PM",
-  "timeAr": "الساعة ٨:٠٠ مساءً",
-  "venueEn": "Pearl Ballroom, Dubai",
-  "venueAr": "قاعة اللؤلؤة، دبي",
-  "locationEn": "Dubai, United Arab Emirates",
-  "locationAr": "دبي، الإمارات العربية المتحدة",
-  "mapsUrl": "https://maps.app.goo.gl/example",
-  "dressCodeEn": "Formal attire in champagne, mocha, emerald, and soft neutrals.",
-  "dressCodeAr": "الزي الرسمي بألوان الشامبانيا والموكا والزمردي والدرجات الهادئة.",
-  "closingEn": "Your presence makes our joy complete.",
-  "closingAr": "حضوركم يزيد فرحتنا.",
-  "status": "active",
-  "ownerUserId": "firebase-auth-uid",
-  "createdAt": "serverTimestamp()",
-  "updatedAt": "serverTimestamp()"
-}
-```
+Organizers can reuse the same active link from the dashboard. Revocation removes
+its lookup record; regeneration issues a new token and invalidates the old one.
+Tokens expire 90 days after the event date, or earlier when an event is
+completed or deleted. Old legacy links are not accepted as a fallback.
 
-## 4. Example guest document
+The guest projection includes event invitation content and the seat-map data
+needed by the invitation. It excludes the guest's phone number, internal guest
+ID, other guests, member permissions, and raw token records. The public family
+page is a separate aggregate projection.
 
-```json
-{
-  "fullName": "Noor Ahmed",
-  "phone": "971500000000",
-  "side": "bride",
-  "rsvpStatus": "pending",
-  "guestToken": "secureRandomToken",
-  "inviteLink": "https://your-domain/index.html?wedding=wedding123&guest=secureRandomToken",
-  "tableId": "tableA",
-  "tableName": "Moonlight",
-  "seatNumber": "4",
-  "qrCodeValue": "https://your-domain/checkin.html?wedding=wedding123&guest=secureRandomToken",
-  "checkedIn": false,
-  "checkedInAt": null,
-  "notes": "",
-  "inviteSentAt": null,
-  "reminderSentAt": null,
-  "createdAt": "serverTimestamp()",
-  "updatedAt": "serverTimestamp()"
-}
-```
+## Firebase data
 
-## 5. Example table document
-
-```json
-{
-  "name": "Moonlight",
-  "label": "Table A",
-  "capacity": 8,
-  "x": 20,
-  "y": 24,
-  "shape": "round",
-  "floorZone": "Grand Hall",
-  "guestIds": [],
-  "createdAt": "serverTimestamp()",
-  "updatedAt": "serverTimestamp()"
-}
-```
-
-## 6. Guest links
-
-Guest invitation:
+Dashboard data lives under:
 
 ```text
-index.html?wedding={weddingId}&guest={guestToken}
+weddings/{eventId}
+weddings/{eventId}/guests/{guestId}
+weddings/{eventId}/tables/{tableId}
+weddings/{eventId}/dashboardUsers/{uid}
+weddings/{eventId}/seatingAccess/{role}
+weddings/{eventId}/publicSummary/summary
 ```
 
-Hostess QR check-in:
+Private invitation records live in server-only top-level collections:
 
 ```text
-checkin.html?wedding={weddingId}&guest={guestToken}
+invitationSecrets/{hashedEventGuestKey}
+invitationAccessTokens/{sha256Token}
+invitationRateLimits/{windowAndHmacIp}
+senderSessions/{sha256Token}
+checkinRosterRateLimits/{windowAndHashedUidEvent}
 ```
 
-If `wedding` and `guest` are missing, the invitation falls back to demo mode automatically.
+Firestore rules deny client access to those collections. Public reads of full
+events, guest documents, tables, old guest mirrors, and `publicStats` are denied.
+Sensitive callable responses also carry `Cache-Control: no-store`; the Functions
+emulator suite verifies this response header.
 
-## 7. Dashboard login
+## Local setup and checks
 
-- Create Firebase Auth email/password users.
-- Add each allowed user to:
+Use Node.js 22 or newer. Firestore, Auth, Functions, and Hosting emulator runs
+also require Java 21 or newer.
+
+```powershell
+npm ci
+npm --prefix functions ci
+node --test
+firebase emulators:exec --only firestore --project demo-wedding-security "node --test --test-reporter=tap tests/event-settings-firestore.test.mjs tests/firestore-security.test.mjs"
+npm run test:functions
+npm audit
+npm audit --prefix functions
+```
+
+The Functions emulator runner creates a short-lived local encryption key for
+tests, then removes it. Never replace an existing `functions/.secret.local`
+file automatically. The emulator fixtures use synthetic events and accounts.
+
+Run the Hosting header release gate after deploying to a non-production test
+site by setting `HOSTING_SECURITY_TEST_URL` to its base URL, then running:
+
+```powershell
+$env:HOSTING_SECURITY_TEST_URL = "https://your-test-site.web.app"
+node --test tests/hosting-headers.test.mjs
+```
+
+## Deployment
+
+Deployment order, migration gates, backups, rollback boundaries, and the
+current readiness assessment are in [RELEASE.md](./RELEASE.md). Do not deploy
+the rules before the compatible Functions and Hosting client are available.
+Never deploy permissive rules as a compatibility bridge.
+
+Required server-only secrets:
 
 ```text
-weddings/{weddingId}/dashboardUsers/{userId}
+INVITATION_TOKEN_ENCRYPTION_KEY
+SEATING_LINK_ENCRYPTION_KEY
 ```
 
-- Set role fields like:
-  - `canViewDashboard`
-  - `canEditGuests`
-  - `canEditSeating`
-  - `seatingOnly` (set to `true` for the restricted seating workspace)
-  - `allowedSide` (`"bride"`, `"groom"`, or `"all"`, required whenever `seatingOnly` is true; `"all"` grants both sides' seating access while keeping the account in the seating-only workspace)
-  - `canCheckIn`
-  - `canExport`
-  - `canManageUsers`
-
-The dashboard verifies both Firebase Auth and the matching `dashboardUsers/{userId}` document.
-For a side manager, share the matching Groom or Bride link from **Side status pages**. It opens the authenticated seating sign-in route with the event and side preserved; copied public Family links remain read-only.
-
-## 8. Check-in flow
-
-- QR links open the guest card directly.
-- Authenticated hostess users with `canCheckIn: true` can mark guests as checked in.
-- When no guest token is in the URL, hostess search mode becomes available after sign-in.
-- The page shows a live checked-in counter from Firestore.
-
-## 9. Deployment
-
-You can deploy this as a static Firebase Hosting site:
-
-1. Install Firebase CLI.
-2. Run `firebase login`
-3. Run `firebase init hosting`
-4. Set the public directory to this project folder.
-5. Install the Functions dependencies: `cd functions; npm install; cd ..`
-6. Set the server-only encryption secret used to store recoverable owner links:
-
-```text
-firebase functions:secrets:set SEATING_LINK_ENCRYPTION_KEY
-```
-
-Use a long random value and keep it private. It is never sent to the browser.
-
-7. Deploy rules, Functions, and Hosting with `firebase deploy`.
-
-Any static host also works if Firebase Auth and Firestore are configured for the deployed domain.
-
-## 10. Security notes and production recommendations
-
-- Review [firestore.rules](C:\Users\mohda\OneDrive\Desktop\wedding invitaion\firestore.rules) before production.
-- The current dashboard role model is suitable for MVP testing.
-- Guest-token reads and RSVP writes are the main area that needs hardening.
-- Safest production approach:
-  - Use Cloud Functions or a token-keyed public mirror collection for guest-facing reads.
-  - Validate guest tokens server-side before allowing RSVP or check-in writes.
-- Keep planner-only fields separate from guest-facing fields.
-
-### Bride & groom seating editor links
-
-The Invitations page gives the event owner exactly two fixed seating-editor cards: Bride and Groom. Creating, opening, copying, regenerating, and revoking a link calls the deployed `manageSeatingEditorAccess` Cloud Function. The function verifies `ownerUserId`, creates a 256-bit random token, stores its SHA-256 lookup value and an AES-GCM encrypted owner-recovery copy, and returns the plaintext link only to the owner. It exchanges a valid link for a Firebase custom token restricted to one event and one role.
-
-Firestore rules allow this custom-token identity to read the event's existing `guests` and `tables` data and update only seating fields plus table documents. It cannot read dashboard users, invitation access records, check-in data, exports, or another event. Revoking or regenerating increments the access version in `seatingAccess`; rules compare that version on every request, so previously issued editor sessions immediately lose Firestore access as well.
-
-The secure editor route is `dashboard.html?seatingEditor=1&token=...`. After the one-time exchange, the raw token is removed from the address bar and the route exposes only the existing shared Seating Planner.
-
-## Notes about the current implementation
-
-- `index.html` preserves the envelope intro, music toggle, countdown, bilingual copy, gallery, and dress code sections.
-- `dashboard.html` listens to guests and tables in real time.
-- `export.js` prefers `.xlsx` via SheetJS CDN and falls back to `.csv`.
-- `qr.js` prefers a QR library and falls back to a visible check-in link.
+Use different random values with at least 32 bytes of entropy. Configure them
+through Firebase Secret Manager; do not put them in browser config, source,
+logs, or test reports. Firebase Web API configuration in `firebase-config.js`
+is public client configuration, not a service-account credential.
 
 ## Event categories
 
-The `weddings/{weddingId}` collection and the `wedding` URL parameter remain in place for backward compatibility. New documents use:
-
-```js
-{
-  eventCategory: "wedding_engagement" | "celebration",
-  eventTitle: string
-}
-```
-
-`wedding_engagement` events retain `brideName`, `groomName`, and `coupleName`; `eventTitle` is normally the couple display name. `celebration` events use `eventTitle` as their display name and do not require Bride/Groom fields. New celebration guests use `side: "general"`. Existing documents with no `eventCategory` continue to behave as weddings, and missing titles resolve from `coupleName`, then Bride/Groom names, then `Untitled event`.
-
-The event category and display title are also copied into each planner's private `users/{uid}/weddingAccess/{weddingId}` card index. Guest data is not included in that index.
-
-### Backfill existing event documents
-
-`functions/migrate-event-categories.js` safely fills only missing category/title fields on existing events using Admin SDK `update` semantics. It does not recreate documents or touch guests, tables, access records, invitation settings, or other fields. It includes the documented Layla & Zaid (`luxury-wedding-demo`) and Ali & Salma (`M1S1aBL9134GSAozWh6G`) IDs and is safe to rerun.
-
-From the repository root, after authenticating with Firebase Application Default Credentials for the project's Firebase project, run:
-
-```powershell
-node .\functions\migrate-event-categories.js --project weddinginvitaion-b4f36
-```
-
-The script reports how many existing event documents were updated. It requires the `firebase-admin` dependency already declared in `functions/package.json`.
+Events use `eventCategory: "wedding_engagement" | "celebration"`. Wedding
+events keep Bride/Groom sides; celebration guests use `side: "general"`.
+Missing event categories remain compatible as wedding events. See
+`event-utils.js` and the event settings in the dashboard for the canonical
+schema.

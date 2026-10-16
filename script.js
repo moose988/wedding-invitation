@@ -1,13 +1,5 @@
-import {
-  collection,
-  doc,
-  getDoc,
-  getDocs,
-  initPublicFirebase,
-  isFirebaseConfigured,
-  onSnapshot,
-} from "./firebase-config.js?v=20261013-auth-session-isolation-2";
-import { saveInvitationRsvp } from "./invitations/shared/invitation-data.js?v=20261013-auth-session-isolation-2";
+import { isFirebaseConfigured } from "./firebase-config.js?v=20261016-secure-invitation-1";
+import { getInvitationParams, loadInvitationContext, saveInvitationRsvp, subscribeToInvitation } from "./invitations/shared/invitation-data.js?v=20261016-secure-invitation-1";
 import { invitationRefreshIsCurrent, invitationRsvpStorageKey, invitationRsvpView } from "./invitations/shared/rsvp-state.js";
 import { buildSatelliteMapEmbedUrl } from "./invitations/shared/map-embed.js";
 import { buildInvitationCalendar } from "./invitations/shared/calendar.js";
@@ -23,7 +15,7 @@ import {
   normalizeTableShape,
   resolveTableName,
 } from "./seating-utils.js?v=20261012-seating-refresh-2";
-import { invitationSeatingEnabled } from "./invitations/shared/invitation-data.js?v=20261013-auth-session-isolation-2";
+import { invitationSeatingEnabled } from "./invitations/shared/invitation-data.js?v=20261016-secure-invitation-1";
 import { getEventDisplayTitle, isCelebrationEvent } from "./event-utils.js";
 
 const demoWedding = {
@@ -325,24 +317,11 @@ async function boot() {
       renderInvitationAccessError("This sample invitation is unavailable.");
       return;
     }
-    if (!isFirebaseConfigured()) {
-      renderInvitationAccessError("This sample invitation could not load current event details.");
-      return;
-    }
-    try {
-      await initPublicFirebase();
-      state.firebaseReady = true;
-      const wedding = await loadWedding(weddingId);
-      if (!wedding) throw new Error("Event not found.");
-      state.mode = "sample";
-      state.wedding = normaliseWedding(wedding);
-      state.hallObjects = hydrateHallObjects(state.wedding.hallObjects);
-      startSampleWeddingListener(weddingId);
-    } catch (error) {
-      console.error("Public sample invitation could not load.", error);
-      renderInvitationAccessError("This sample invitation could not load current event details.");
-      return;
-    }
+    // Sample mode always uses the built-in fictional fixture and never reads a
+    // live event, guest record, seating map, or RSVP token.
+    state.mode = "sample";
+    state.wedding = normaliseWedding({ ...demoWedding, id: weddingId });
+    state.hallObjects = hydrateHallObjects(state.wedding.hallObjects);
     populateInvitation();
     setupCountdown();
     return;
@@ -355,11 +334,17 @@ async function boot() {
 
   if (weddingId && guestToken && isFirebaseConfigured()) {
     try {
-      await initPublicFirebase();
-      state.firebaseReady = true;
       state.mode = "firebase";
       await loadFirebaseInvitation(weddingId, guestToken);
-      startFirebaseInvitationListeners(weddingId, guestToken);
+      clearInvitationCredentialFromUrl();
+      state.unsubGuest = subscribeToInvitation(
+        { weddingId, guestToken },
+        (context) => applyInvitationContext(context),
+        (error) => {
+          console.error("Invitation refresh failed.", error);
+          renderInvitationAccessError("This invitation is no longer available. Please ask the couple for a new link.");
+        },
+      );
     } catch (error) {
       console.error(error);
       state.mode = "unavailable";
@@ -373,24 +358,6 @@ async function boot() {
 
   populateInvitation();
   setupCountdown();
-}
-
-function startSampleWeddingListener(weddingId) {
-  const db = initPublicFirebase().db;
-  state.unsubWedding?.();
-  state.unsubWedding = onSnapshot(doc(db, "weddings", weddingId), (snapshot) => {
-    if (!snapshot.exists()) {
-      renderInvitationAccessError("This sample invitation is unavailable.");
-      return;
-    }
-    state.wedding = normaliseWedding({ id: snapshot.id, ...snapshot.data() });
-    state.hallObjects = hydrateHallObjects(state.wedding.hallObjects);
-    populateInvitation();
-    setupCountdown();
-  }, (error) => {
-    console.error("Public sample event updates could not be loaded.", error);
-    showToast("Current event details could not be refreshed.", "error");
-  });
 }
 
 function renderInvitationAccessError(message) {
@@ -410,87 +377,35 @@ function warmEnvelopeAssets() {
   return Promise.allSettled(images.map((image) => image.decode ? Promise.race([image.decode().catch(() => undefined), new Promise((resolve) => window.setTimeout(resolve, 900))]) : Promise.resolve()));
 }
 
-function startFirebaseInvitationListeners(weddingId, guestToken) {
-  state.unsubWedding?.(); state.unsubGuest?.(); state.unsubTables?.();
-  const db = initPublicFirebase().db;
-  const refresh = async () => {
-    const requestVersion = ++state.invitationRefreshVersion;
-    try {
-      await loadFirebaseInvitation(weddingId, guestToken, requestVersion);
-      if (!invitationRefreshIsCurrent(requestVersion, state.invitationRefreshVersion)) return;
-      populateInvitation();
-    } catch (error) {
-      if (!invitationRefreshIsCurrent(requestVersion, state.invitationRefreshVersion)) return;
-      console.error(error);
-      if (/guest not found|wedding not found/i.test(error.message || "")) {
-        renderInvitationAccessError("This invitation is no longer available. Please ask the couple for a new link.");
-      } else {
-        showToast("Live seating update could not be loaded. Refresh to retry.", "error");
-      }
-    }
-  };
-  state.unsubWedding = onSnapshot(doc(db, "weddings", weddingId), (snapshot) => snapshot.exists() ? refresh() : renderInvitationAccessError("This event is no longer available."), () => showToast("Event data is unavailable.", "error"));
-  state.unsubGuest = onSnapshot(doc(db, "weddings", weddingId, "publicGuests", guestToken), (snapshot) => snapshot.exists() ? refresh() : renderInvitationAccessError("This invitation is no longer available. Please ask the couple for a new link."), () => showToast("Invitation access is unavailable.", "error"));
-  state.unsubTables = onSnapshot(collection(db, "weddings", weddingId, "tables"), refresh, () => showToast("Live seating update is unavailable.", "error"));
+function getUrlParams() {
+  const params = getInvitationParams();
+  return { ...params, guestToken: explicitSampleMode ? "" : params.guestToken };
 }
 
-function getUrlParams() {
-  const params = new URLSearchParams(window.location.search);
-  return {
-    weddingId: params.get("wedding")?.trim() || "",
-    guestToken: explicitSampleMode ? "" : (params.get("guest")?.trim() || ""),
-  };
+function clearInvitationCredentialFromUrl() {
+  if (!window.location.hash) return;
+  const url = new URL(window.location.href);
+  url.hash = "";
+  history.replaceState(null, "", url.toString());
 }
 
 async function loadFirebaseInvitation(weddingId, guestToken, requestVersion = ++state.invitationRefreshVersion) {
-  const wedding = await loadWedding(weddingId);
-  const guest = await loadGuestByToken(weddingId, guestToken);
-  const tables = await loadTables(weddingId);
-
+  const context = await loadInvitationContext({ weddingId, guestToken });
   if (!invitationRefreshIsCurrent(requestVersion, state.invitationRefreshVersion)) return;
+  applyInvitationContext(context);
+}
 
-  if (!wedding) {
-    throw new Error("Event not found.");
-  }
-
-  if (!guest) {
-    throw new Error("Guest not found.");
-  }
-  if (guest.guestToken !== guestToken || !guest.guestId || guest.id !== guestToken) {
-    throw new Error("Invitation token does not map to a valid guest record.");
-  }
-
-  state.wedding = normaliseWedding(wedding);
-  state.guest = guest;
+function applyInvitationContext(context) {
+  state.wedding = normaliseWedding(context.wedding);
+  state.guest = context.guest;
   state.hallObjects = hydrateHallObjects(state.wedding.hallObjects);
-  state.tables = tables;
-  const primaryAssignment = getInvitationSeatAssignments(guest)[0];
-  state.assignedTable = tables.find((table) => table.id === (primaryAssignment?.tableId || guest.tableId)) || null;
-}
-
-async function loadWedding(weddingId) {
-  const snapshot = await getDoc(doc(initPublicFirebase().db, "weddings", weddingId));
-  if (!snapshot.exists()) {
-    return null;
+  state.tables = Array.isArray(state.wedding.tables) ? state.wedding.tables : [];
+  const primaryAssignment = getInvitationSeatAssignments(state.guest)[0];
+  state.assignedTable = state.tables.find((table) => table.id === primaryAssignment?.tableId) || null;
+  if (state.mode === "firebase") {
+    populateInvitation();
+    setupCountdown();
   }
-  return { id: snapshot.id, ...snapshot.data() };
-}
-
-async function loadGuestByToken(weddingId, guestToken) {
-  const snapshot = await getDoc(
-    doc(initPublicFirebase().db, "weddings", weddingId, "publicGuests", guestToken)
-  );
-  if (!snapshot.exists()) {
-    return null;
-  }
-  return { id: snapshot.id, ...snapshot.data() };
-}
-
-async function loadTables(weddingId) {
-  const snapshot = await getDocs(collection(initPublicFirebase().db, "weddings", weddingId, "tables"));
-  // The Firestore document ID is the table identity used by Seating.  Never
-  // let an old embedded `id` field override it on the invitation page.
-  return snapshot.docs.map((docSnapshot) => ({ ...docSnapshot.data(), id: docSnapshot.id }));
 }
 
 function normaliseWedding(wedding) {
@@ -791,8 +706,8 @@ function renderDetails() {
       (detail) => `
         <article class="detail-card">
           <div class="detail-card__icon">${detail.icon}</div>
-          <h3 class="detail-card__title">${detail.title}</h3>
-          <p class="detail-card__english ${state.laylaLanguage === "ar" && isLaylaInvitation() ? "rtl-copy" : ""}" ${state.laylaLanguage === "ar" && isLaylaInvitation() ? 'lang="ar" dir="rtl"' : ""}>${detail.en}</p>
+          <h3 class="detail-card__title">${escapeHtml(detail.title)}</h3>
+          <p class="detail-card__english ${state.laylaLanguage === "ar" && isLaylaInvitation() ? "rtl-copy" : ""}" ${state.laylaLanguage === "ar" && isLaylaInvitation() ? 'lang="ar" dir="rtl"' : ""}>${escapeHtml(detail.en)}</p>
         </article>
       `
     )
@@ -1442,7 +1357,7 @@ async function renderGuestQrPass() {
   }
 
   elements.qrPassSection.hidden = false;
-  const checkinUrl = buildAbsoluteUrl(`checkin.html?wedding=${encodeURIComponent(state.weddingId)}&guest=${encodeURIComponent(state.guestToken)}`);
+  const checkinUrl = buildAbsoluteUrl(`checkin.html?wedding=${encodeURIComponent(state.weddingId)}#guest=${encodeURIComponent(state.guestToken)}`);
   const mount = document.getElementById("qrPassMount");
   mount.innerHTML = `
     <div class="qr-pass__content">
@@ -1456,7 +1371,7 @@ async function renderGuestQrPass() {
 }
 
 async function updateRsvp(status, additionalGuests) {
-  if (state.sampleMode || state.mode !== "firebase" || state.isRsvpSaving || !state.guest?.guestId || !["confirmed", "declined"].includes(status)) return;
+  if (state.sampleMode || state.mode !== "firebase" || state.isRsvpSaving || !state.guest || !["confirmed", "declined"].includes(status)) return;
   state.isRsvpSaving = true;
   state.rsvpSaveError = "";
   const liveForm = document.getElementById("firebaseRsvpForm");

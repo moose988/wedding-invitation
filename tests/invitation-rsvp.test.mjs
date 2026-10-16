@@ -2,7 +2,6 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import {
   buildInvitationRsvpPatch,
-  commitInvitationRsvpPatch,
   invitationRefreshIsCurrent,
   invitationRsvpStorageKey,
   invitationRsvpView,
@@ -53,48 +52,9 @@ test("a late listener refresh cannot replace a newer request", () => {
   assert.equal(invitationRefreshIsCurrent(5, 5), true);
 });
 
-test("private and token mirror writes commit together, and batch failure is returned to the caller", async () => {
-  const context = { weddingId: "event-a", guestToken: "token-a", guest: { guestId: "private-a" } };
-  const payload = buildInvitationRsvpPatch("confirmed");
-  const committed = [];
-  const fakeDoc = (_db, ...segments) => segments.join("/");
-  const fakeBatchFactory = () => {
-    const pending = [];
-    return {
-      update: (ref, patch) => pending.push({ ref, patch }),
-      commit: async () => committed.push(...pending),
-    };
-  };
-  await commitInvitationRsvpPatch({ db: {}, context, payload, writeBatch: fakeBatchFactory, doc: fakeDoc });
-  assert.deepEqual(committed.map((entry) => entry.ref), [
-    "weddings/event-a/guests/private-a",
-    "weddings/event-a/publicGuests/token-a",
-  ]);
-  assert.equal(committed[0].patch, committed[1].patch);
-  assert.equal("additionalGuests" in payload, false);
-  assert.equal("seatingAssignments" in payload, false);
-
-  const failingBatchFactory = () => ({
-    update() {},
-    commit: async () => { throw new Error("permission denied"); },
-  });
-  await assert.rejects(
-    commitInvitationRsvpPatch({ db: {}, context, payload, writeBatch: failingBatchFactory, doc: fakeDoc }),
-    /permission denied/,
-  );
-});
-
-test("private optional message is written atomically but excluded from the public token mirror", async () => {
-  const context = { weddingId: "event-a", guestToken: "token-a", guest: { guestId: "private-a" } };
-  const privatePayload = buildInvitationRsvpPatch("confirmed", undefined, "  See you there!  ");
-  const publicPayload = { ...privatePayload };
-  delete publicPayload.rsvpMessage;
-  const pending = [];
-  const fakeDoc = (_db, ...segments) => segments.join("/");
-  const batchFactory = () => ({ update: (ref, patch) => pending.push({ ref, patch }), commit: async () => {} });
-  await commitInvitationRsvpPatch({ db: {}, context, payload: publicPayload, privatePayload, writeBatch: batchFactory, doc: fakeDoc });
-  assert.equal(pending[0].patch.rsvpMessage, "See you there!");
-  assert.equal("rsvpMessage" in pending[1].patch, false);
+test("RSVP patch validation respects the invite allowance and bounds messages", () => {
+  assert.throws(() => buildInvitationRsvpPatch("confirmed", 3, undefined, 2), /Invalid additional guest count/);
   assert.throws(() => buildInvitationRsvpPatch("declined", undefined, "x".repeat(1001)), /1000 characters/);
   assert.throws(() => buildInvitationRsvpPatch("confirmed", undefined, 42), /1000 characters/);
+  assert.equal(buildInvitationRsvpPatch("confirmed", 2, "  See you!  ", 2).rsvpMessage, "See you!");
 });

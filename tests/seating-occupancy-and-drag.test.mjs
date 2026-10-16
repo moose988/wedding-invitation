@@ -4,7 +4,7 @@ import test from "node:test";
 
 const read = (file) => readFile(new URL(`../${file}`, import.meta.url), "utf8");
 
-test("dashboard and guest map use white empty chairs, configured-color occupied chairs, and configured-color temporary selections", async () => {
+test("dashboard and guest map distinguish empty, occupied, and temporary chairs", async () => {
   const [dashboard, script, dashboardCss, invitationCss] = await Promise.all([
     read("dashboard.js"), read("script.js"), read("dashboard.css"), read("styles.css"),
   ]);
@@ -16,8 +16,8 @@ test("dashboard and guest map use white empty chairs, configured-color occupied 
   assert.match(invitationCss, /\.seat-plan-chair\.is-occupied\s*\{\s*background:var\(--chair-color\) !important/);
   assert.match(script, /isAssignedToInvite \? "is-yours is-occupied" : "is-empty"/);
   assert.match(script, /--chair-color:\$\{escapeAttribute\(table\.chairColor/);
-  assert.match(dashboardCss, /\.planner-chair\.is-empty\.is-temporary\s*\{[^}]*background:var\(--chair-color\) !important; color:var\(--chair-ink,#fffdf8\) !important;[^}]*outline:3px dashed color-mix\(in srgb,var\(--chair-color\)/);
-  assert.match(dashboardCss, /\.planner-chair\.is-empty\.is-temporary::before\s*\{\s*background:var\(--chair-color\)/);
+  assert.match(dashboardCss, /\.planner-chair\.is-empty\.is-temporary\s*\{[^}]*background:#f2b94b !important;[^}]*outline:3px solid #8a5d05/);
+  assert.match(dashboardCss, /\.planner-chair\.is-empty\.is-temporary::before\s*\{\s*background:#f2b94b/);
   assert.match(dashboardCss, /\.planner-chair\.is-empty\.is-selected:not\(\.is-temporary\)/);
   assert.doesNotMatch(dashboardCss, /\.planner-chair\.is-empty\.is-temporary\s*\{[^}]*background:#fff !important/);
   assert.doesNotMatch(dashboardCss, /\.planner-table\.is-selected\s+\.planner-chair\s*\{/);

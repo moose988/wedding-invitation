@@ -17,12 +17,13 @@ export function invitationRsvpStorageKey(weddingId = "", guestToken = "") {
   return `premium-invitation-demo-rsvp:${weddingId || "demo"}:${guestToken || "demo"}`;
 }
 
-export function buildInvitationRsvpPatch(status, additionalGuests, message) {
+export function buildInvitationRsvpPatch(status, additionalGuests, message, allowance = 10) {
   if (!["confirmed", "declined"].includes(status)) throw new Error("Invalid RSVP status.");
-  const patch = { rsvpStatus: status, updatedAt: "server-timestamp" };
+  const patch = { rsvpStatus: status };
   if (additionalGuests !== undefined && additionalGuests !== null) {
     const count = Number(additionalGuests);
-    if (!Number.isInteger(count) || count < 0 || count > 10) throw new Error("Invalid additional guest count.");
+    const max = Number.isInteger(Number(allowance)) ? Math.max(0, Math.min(10, Number(allowance))) : 0;
+    if (!Number.isInteger(count) || count < 0 || count > max) throw new Error("Invalid additional guest count.");
     patch.additionalGuests = count;
   }
   if (message !== undefined) {
@@ -30,11 +31,4 @@ export function buildInvitationRsvpPatch(status, additionalGuests, message) {
     patch.rsvpMessage = message.trim();
   }
   return patch;
-}
-
-export async function commitInvitationRsvpPatch({ db, context, payload, privatePayload = payload, writeBatch, doc }) {
-  const batch = writeBatch(db);
-  batch.update(doc(db, "weddings", context.weddingId, "guests", context.guest.guestId), privatePayload);
-  batch.update(doc(db, "weddings", context.weddingId, "publicGuests", context.guestToken), payload);
-  await batch.commit();
 }

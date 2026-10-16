@@ -4,5 +4,7 @@
 .firebase/
 *.log
 functions/node_modules/
+functions/.secret.local
+/node_modules/
 
 .vercel

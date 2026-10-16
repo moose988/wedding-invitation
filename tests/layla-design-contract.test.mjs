@@ -10,8 +10,8 @@ const assetDir = new URL("assets/", root);
 
 test("Layla landing uses one envelope poster, an envelope-only inline video, and event-owned paper art", () => {
   assert.match(html, /Ivory Wedding Envelope with LZ Seal\.png/);
-  assert.match(html, /src="\.\/invitations\/wedding-designs\/layla-zaid\/assets\/enevlope opening\.mp4"/);
-  assert.match(html, /playsinline muted preload="auto"/);
+  assert.match(html, /src="\.\/invitations\/wedding-designs\/layla-zaid\/assets\/opening-envelope\.mp4"/);
+  assert.match(html, /playsinline webkit-playsinline muted preload="metadata"/);
   assert.match(html, /id="skipOpening"/);
   assert.doesNotMatch(html, /envelope-layer--seal|envelope-layer--card|heroBackdrop/);
   assert.match(css, /url\("\.\/assets\/Sculpted Ivory Paper Wedding Invitation\.png"\)/);
@@ -20,6 +20,7 @@ test("Layla landing uses one envelope poster, an envelope-only inline video, and
   assert.match(html, /Watercolor Ivory Courtyard Wedding Venue\.png/);
   assert.match(html, /href="https:\/\/qdsystems\.ae"/);
   assert.match(css, /prefers-reduced-motion: reduce/);
+  assert.match(css, /envelope-intro__video \{ object-fit: contain; \}/);
 });
 
 test("the supplied design assets remain present with their source transparency and video", async () => {
@@ -39,4 +40,17 @@ test("the supplied design assets remain present with their source transparency a
     assert.ok((await stat(new URL(filename, assetDir))).size > 100_000);
   }
   assert.ok((await stat(new URL("enevlope opening.mp4", assetDir))).size > 1_000_000);
+  const optimizedVideo = await stat(new URL("opening-envelope.mp4", assetDir));
+  assert.ok(optimizedVideo.size < 1_000_000);
+});
+
+test("the base element resolves the optimized opening video to the site-root asset", () => {
+  const documentUrl = new URL("https://invitation.example/invitations/wedding-designs/layla-zaid/index.html");
+  const baseHref = html.match(/<base href="([^"]+)"/)?.[1];
+  const mediaPath = html.match(/<source src="([^"]+opening-envelope\.mp4)"/)?.[1];
+  assert.ok(baseHref);
+  assert.ok(mediaPath);
+  const baseUrl = new URL(baseHref, documentUrl);
+  const mediaUrl = new URL(mediaPath, baseUrl);
+  assert.equal(mediaUrl.pathname, "/invitations/wedding-designs/layla-zaid/assets/opening-envelope.mp4");
 });

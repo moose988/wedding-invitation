@@ -808,7 +808,6 @@ const state = {
   mobileSavedScrollY: 0,
   mobileTouchGesture: null,
   showFullSeatingSummary: false,
-  mobileAssignmentFilter: "unassigned",
   renderedMobileSeatingLayout: null,
   dragState: null,
   layoutPositionSavePending: false,
@@ -1310,31 +1309,18 @@ function handleDocumentInput(event) {
 
   const search = event.target.closest("[data-guest-search]");
   if (search) {
-    const selectionStart = search.selectionStart;
-    const selectionEnd = search.selectionEnd;
-    state.guestFilters.search = search.value.trim();
+    state.guestFilters.search = search.value;
     state.guestPageIndex = 0;
     closeGuestMenu({ restoreFocus: false });
-    renderActiveView();
-    restoreGuestSearchFocus(selectionStart, selectionEnd);
+    renderGuestDirectoryResults();
     return;
   }
 
   const seatSearch = event.target.closest("[data-seat-search]");
   if (seatSearch) {
-    state.guestAssignmentSearch = seatSearch.value.trim().toLowerCase();
+    state.guestAssignmentSearch = seatSearch.value;
     if (elements.assignmentModal?.open) {
-      renderAssignmentModal();
-      requestAnimationFrame(() => {
-        const nextSearch =
-          elements.assignmentModal.querySelector("[data-seat-search]");
-        if (!nextSearch) {
-          return;
-        }
-        nextSearch.focus();
-        const cursorPosition = nextSearch.value.length;
-        nextSearch.setSelectionRange?.(cursorPosition, cursorPosition);
-      });
+      renderAssignmentCandidateList();
     } else {
       renderActiveView();
     }
@@ -1345,15 +1331,8 @@ function handleDocumentInput(event) {
     "[data-seating-guest-search]",
   );
   if (seatingGuestSearch) {
-    const selectionStart = seatingGuestSearch.selectionStart;
-    const selectionEnd = seatingGuestSearch.selectionEnd;
     state.seatingGuestSearch = seatingGuestSearch.value;
-    renderActiveView();
-    requestAnimationFrame(() => {
-      const nextSearch = document.querySelector("[data-seating-guest-search]");
-      nextSearch?.focus();
-      nextSearch?.setSelectionRange?.(selectionStart, selectionEnd);
-    });
+    renderSeatingGuestResults();
   }
 }
 
@@ -1867,6 +1846,7 @@ function startListeners() {
       });
       state.loadingGuests = false;
       renderAll();
+      refreshAssignmentCandidatesAfterSnapshot();
       // Cached guest rows can predate a visitor's latest RSVP. Wait for the
       // server-backed snapshot before any one-time mirror repair is allowed.
       if (!snapshot.metadata.fromCache && !state.publicMirrorsReconciled && can("canEditGuests")) {
@@ -1894,6 +1874,7 @@ function startListeners() {
       state.loadingTables = false;
       if (state.layoutPositionSavePending) return;
       renderAll();
+      refreshAssignmentCandidatesAfterSnapshot();
       void syncPublicStats();
     },
     (error) => handleSeatingListenerError(error),
@@ -2572,6 +2553,11 @@ function renderGuestPage() {
   const guests = getFilteredGuests();
   const directoryCounts = calculateGuestDirectoryCounts(state.guests);
   const filteredCounts = calculateGuestDirectoryCounts(guests);
+  const hasGuestFilters = Boolean(
+    state.guestFilters.search.trim() ||
+    state.guestFilters.rsvp !== "all" ||
+    state.guestFilters.side !== "all",
+  );
   const totalGuestPages = Math.max(
     1,
     Math.ceil(guests.length / guestDirectoryPageSize),
@@ -2607,7 +2593,11 @@ function renderGuestPage() {
               ["family", "Family"],
             ]) : ""}
           </div>
-          <span class="pill">${filteredCounts.primary} primary result${filteredCounts.primary === 1 ? "" : "s"}</span>
+          <div class="guest-directory-counts" aria-live="polite">
+            <strong>${hasGuestFilters ? "Matching guests" : "Event guests"}</strong>
+            <span>Guests: ${hasGuestFilters ? filteredCounts.primary : directoryCounts.primary}</span>
+            <span>Including additional guests: ${hasGuestFilters ? filteredCounts.people : directoryCounts.people}</span>
+          </div>
         </div>
       </article>
 
@@ -2635,49 +2625,68 @@ function renderGuestPage() {
         ${actionButton("Refresh", "refresh-dashboard", false, "secondary")}
       </div>
 
-      ${
-        !guests.length
-          ? `<div class="da3wa-empty">No guests match the current search and filters.</div>`
-          : `
-            <article class="da3wa-table guest-table-wrap">
-              <table class="guest-table ${usesSides ? "guest-table--with-sides" : "guest-table--without-sides"}">
-                <colgroup>
-                  <col class="guest-table__selection-column" />
-                  <col class="guest-table__name-column" />
-                  <col class="guest-table__phone-column" />
-                  <col class="guest-table__additional-column" />
-                  ${usesSides ? '<col class="guest-table__side-column" />' : ""}
-                  <col class="guest-table__rsvp-column" />
-                  <col class="guest-table__actions-column" />
-                </colgroup>
-                <thead>
-                  <tr>
-                    <th><input type="checkbox" data-guest-select-all ${allVisibleGuestsSelected(guests) ? "checked" : ""} aria-label="Select all visible guests" /></th>
-                    <th>Guest</th>
-                    <th>Phone</th>
-                    <th>Additional guests</th>
-                    ${usesSides ? "<th>Side</th>" : ""}
-                    <th>RSVP</th>
-                    <th>Actions</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  ${visibleGuests.map((guest) => renderGuestRow(guest)).join("")}
-                </tbody>
-              </table>
-            </article>
-            <article class="guest-page-controls" aria-label="Guest directory pages">
-              <button class="da3wa-button da3wa-button--secondary" type="button" data-action="guest-page-prev" aria-label="Previous guest page" ${state.guestPageIndex === 0 ? 'disabled aria-disabled="true"' : ""}>←</button>
-              <span>Showing ${pageStart + 1}-${Math.min(pageStart + guestDirectoryPageSize, guests.length)} of ${guests.length}</span>
-              <button class="da3wa-button da3wa-button--secondary" type="button" data-action="guest-page-next" aria-label="Next guest page" ${state.guestPageIndex >= totalGuestPages - 1 ? 'disabled aria-disabled="true"' : ""}>→</button>
-            </article>
-            <div class="guest-cards">
-              ${visibleGuests.map((guest) => renderGuestCard(guest)).join("")}
-            </div>
-          `
-      }
+      <div class="guest-directory-list" data-guest-directory-list>
+        ${renderGuestDirectoryList(visibleGuests, usesSides, guests)}
+      </div>
+      ${renderGuestDirectoryPagination(pageStart, guests.length, totalGuestPages)}
     </section>
   `;
+}
+
+function renderGuestDirectoryList(visibleGuests, usesSides, allFilteredGuests) {
+  if (!allFilteredGuests.length) {
+    return '<div class="da3wa-empty">No guests match the current search and filters.</div>';
+  }
+  return `
+    <article class="da3wa-table guest-table-wrap">
+      <table class="guest-table ${usesSides ? "guest-table--with-sides" : "guest-table--without-sides"}">
+        <colgroup>
+          <col class="guest-table__selection-column" /><col class="guest-table__name-column" />
+          <col class="guest-table__phone-column" /><col class="guest-table__additional-column" />
+          ${usesSides ? '<col class="guest-table__side-column" />' : ""}
+          <col class="guest-table__rsvp-column" /><col class="guest-table__actions-column" />
+        </colgroup>
+        <thead><tr>
+          <th><input type="checkbox" data-guest-select-all ${allVisibleGuestsSelected(allFilteredGuests) ? "checked" : ""} aria-label="Select all visible guests" /></th>
+          <th>Guest</th><th>Phone</th><th>Additional guests</th>${usesSides ? "<th>Side</th>" : ""}<th>RSVP</th><th>Actions</th>
+        </tr></thead>
+        <tbody>${visibleGuests.map((guest) => renderGuestRow(guest)).join("")}</tbody>
+      </table>
+    </article>
+    <div class="guest-cards">${visibleGuests.map((guest) => renderGuestCard(guest)).join("")}</div>
+  `;
+}
+
+function renderGuestDirectoryPagination(pageStart, total, totalPages) {
+  const first = total ? pageStart + 1 : 0;
+  const last = Math.min(pageStart + guestDirectoryPageSize, total);
+  return `
+    <article class="guest-page-controls" aria-label="Guest directory pages">
+      <button class="da3wa-button da3wa-button--secondary" type="button" data-action="guest-page-prev" aria-label="Previous guest page" ${state.guestPageIndex === 0 ? 'disabled aria-disabled="true"' : ""}>←</button>
+      <span>Showing ${first}-${last} of ${total}</span>
+      <button class="da3wa-button da3wa-button--secondary" type="button" data-action="guest-page-next" aria-label="Next guest page" ${state.guestPageIndex >= totalPages - 1 ? 'disabled aria-disabled="true"' : ""}>→</button>
+    </article>
+  `;
+}
+
+function renderGuestDirectoryResults() {
+  if (state.activeView !== "guests" || !elements.pageContent.querySelector("[data-guest-directory-list]")) {
+    renderActiveView();
+    return;
+  }
+  const guests = getFilteredGuests();
+  const totalPages = Math.max(1, Math.ceil(guests.length / guestDirectoryPageSize));
+  state.guestPageIndex = clamp(state.guestPageIndex, 0, totalPages - 1);
+  const pageStart = state.guestPageIndex * guestDirectoryPageSize;
+  const visibleGuests = guests.slice(pageStart, pageStart + guestDirectoryPageSize);
+  const usesSides = eventUsesGuestSides(state.wedding);
+  const matching = Boolean(state.guestFilters.search.trim() || state.guestFilters.rsvp !== "all" || state.guestFilters.side !== "all");
+  const counts = calculateGuestDirectoryCounts(matching ? guests : state.guests);
+  const countNode = elements.pageContent.querySelector(".guest-directory-counts");
+  if (countNode) countNode.innerHTML = `<strong>${matching ? "Matching guests" : "Event guests"}</strong><span>Guests: ${counts.primary}</span><span>Including additional guests: ${counts.people}</span>`;
+  elements.pageContent.querySelector("[data-guest-directory-list]").innerHTML = renderGuestDirectoryList(visibleGuests, usesSides, guests);
+  const controls = elements.pageContent.querySelector(".guest-page-controls");
+  if (controls) controls.outerHTML = renderGuestDirectoryPagination(pageStart, guests.length, totalPages);
 }
 
 function renderSeatingPage() {
@@ -3744,24 +3753,36 @@ function renderGuestRow(guest) {
 function renderGuestCard(guest) {
   return `
     <article class="guest-card">
-      <div class="guest-card__header">
-        <div class="guest-primary">
+      <div class="guest-card__main">
+        <div class="guest-card__identity">
           <button class="guest-name-button" type="button" data-action="edit-guest" data-id="${escapeAttribute(guest.id)}">${escapeHtml(guest.fullName || "Guest")}</button>
         </div>
         ${renderGuestRsvpSelect(guest)}
+        <div class="guest-card__meta">
+          <span>Phone: <bdi dir="auto">${escapeHtml(guest.phone || "Not set")}</bdi></span>
+          <span>Additional guests: ${escapeHtml(String(normalizeAdditionalGuests(guest.additionalGuests)))}</span>
+          ${eventUsesGuestSides(state.wedding) ? `<span>Side: ${escapeHtml(guest.side || "other")}</span>` : ""}
+          ${isSeatingEnabled() ? `<span>${renderReservationReadinessBadge(guest)}</span>` : ""}
+        </div>
+        ${guest.rsvpMessage ? `<details class="guest-rsvp-message"><summary>Message for the couple</summary><p>${escapeHtml(guest.rsvpMessage)}</p></details>` : ""}
       </div>
-      <div class="guest-card__meta">
-        <span>Phone: ${escapeHtml(guest.phone || "Not set")}</span>
-        <span>Additional guests: ${escapeHtml(String(normalizeAdditionalGuests(guest.additionalGuests)))}</span>
-        ${eventUsesGuestSides(state.wedding) ? `<span>Side: ${escapeHtml(guest.side || "other")}</span>` : ""}
-        ${isSeatingEnabled() ? `<span>${renderReservationReadinessBadge(guest)}</span>` : ""}
-      </div>
-      ${guest.rsvpMessage ? `<details class="guest-rsvp-message"><summary>Message for the couple</summary><p>${escapeHtml(guest.rsvpMessage)}</p></details>` : ""}
       <div class="guest-card__actions">
-        ${renderGuestInlineActions(guest)}
+        ${renderGuestCardActions(guest)}
         ${renderGuestMenuToggle(guest, "card", state.activeGuestMenu?.guestId === guest.id)}
       </div>
     </article>
+  `;
+}
+
+function renderGuestCardActions(guest) {
+  const editDisabled = !can("canEditGuests");
+  return `
+    <button class="guest-quick-button guest-quick-button--copy" type="button" data-action="copy-guest-invite" data-guest-id="${escapeAttribute(guest.id)}" aria-label="Copy invitation link for ${escapeAttribute(guest.fullName || "guest")}" title="Copy invitation link">
+      <svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="8" y="8" width="12" height="12" rx="2"/><path d="M16 8V5a1 1 0 0 0-1-1H5a1 1 0 0 0-1 1v10a1 1 0 0 0 1 1h3"/></svg>
+    </button>
+    <button class="guest-quick-button guest-quick-button--edit" type="button" data-action="edit-guest" data-id="${escapeAttribute(guest.id)}" aria-label="Edit ${escapeAttribute(guest.fullName || "guest")}" title="Edit guest" ${editDisabled ? 'disabled aria-disabled="true"' : ""}>
+      <svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="m14 5 5 5M4 20l4.2-.8L19 8.4a2.1 2.1 0 0 0-3-3L5.2 16.2 4 20Z"/></svg>
+    </button>
   `;
 }
 
@@ -4192,6 +4213,22 @@ function renderSeatingGuestsTab(table) {
       ${rows.length ? rows.map(({ guest, assignments, tableAssignments, seating }) => renderSeatingGuestRow(guest, assignments, tableAssignments, table, seating)).join("") : `<div class="seating-panel-empty"><strong>${query ? "No guests match your search" : "No guests match this filter"}</strong><span>${query ? "Try a different name or clear your search." : "Choose another filter to see guests."}</span></div>`}
     </div>
   `;
+}
+
+function renderSeatingGuestResults() {
+  const currentSearch = document.querySelector("[data-seating-guest-search]");
+  if (!currentSearch?.isConnected) {
+    renderActiveView();
+    return;
+  }
+  const table = state.tables.find((item) => item.id === state.selectedTableId);
+  const scratch = document.createElement("div");
+  scratch.innerHTML = renderSeatingGuestsTab(table);
+  const nextRows = scratch.querySelector(".seating-guest-rows");
+  const rows = currentSearch.closest(".seating-guest-tools")?.nextElementSibling;
+  if (nextRows && rows?.classList.contains("seating-guest-rows")) {
+    rows.innerHTML = nextRows.innerHTML;
+  }
 }
 
 function renderSeatingGuestRow(guest, assignments, tableAssignments, table, seating = summarizePartySeating(guest, assignments)) {
@@ -5014,10 +5051,6 @@ async function handleAction(action, dataset, event = null) {
       handleAssignmentChairClick(tableId, chairId, event?.target);
       return;
     }
-    case "mobile-assignment-filter":
-      state.mobileAssignmentFilter = dataset.filter === "all" ? "all" : "unassigned";
-      renderAssignmentWorkflow();
-      return;
     case "open-layout-library":
       state.seatingPanelTab = "venue";
       renderActiveView();
@@ -7151,60 +7184,92 @@ function renderAssignmentModal() {
   const guest = session.guestId
     ? state.guests.find((item) => item.id === session.guestId)
     : null;
+  const selectedCount = session.selectedChairs.length;
+  const seatSummary = getAssignmentDestinationSummary(session.selectedChairs);
+  const existingSearch = elements.assignmentContent.querySelector("[data-seat-search]");
+  if (!guest && existingSearch) {
+    const summary = elements.assignmentContent.querySelector("[data-assignment-seat-summary]");
+    if (summary) summary.textContent = seatSummary;
+    renderAssignmentCandidateList();
+    return;
+  }
   const candidates = getSeatCandidates(session.guestId).filter(
     (item) => getGuestRemainingSeats(item) > 0 || item.id === session.guestId,
   );
-  const filtered = candidates.filter((item) => {
-    if (session.mobileDirectAssignment && state.mobileAssignmentFilter === "unassigned" && getGuestRemainingSeats(item) <= 0 && item.id !== session.guestId) return false;
-    if (!state.guestAssignmentSearch) {
-      return true;
-    }
-    return [item.fullName, item.phone].some((value) =>
-      String(value || "")
-        .toLowerCase()
-        .includes(state.guestAssignmentSearch),
-    );
-  });
-  const selectedCount = session.selectedChairs.length;
+  const searchValue = state.guestAssignmentSearch;
   elements.assignmentContent.innerHTML = `
     <div class="da3wa-sheet__header">
       <div>
-        <p class="da3wa-eyebrow">Assign party</p>
-        <h2>${guest ? escapeHtml(guest.fullName) : "Choose a guest"}</h2>
+        <p class="da3wa-eyebrow">${guest ? "Assign seat" : "Assign party"}</p>
+        <h2>${guest ? "Confirm assignment" : "Choose a guest"}</h2>
       </div>
-      <button class="da3wa-icon-button" type="button" data-action="cancel-assignment" aria-label="Close assignment modal">x</button>
+      <button class="da3wa-icon-button" type="button" data-action="cancel-assignment" aria-label="Close assignment modal">×</button>
     </div>
     <div class="da3wa-sheet__body">
       ${
         guest
           ? `
-        <div class="assignment-progress">
-          <strong>${session.mobileDirectAssignment ? "Assign one person to this seat" : `${selectedCount} of ${session.requiredSeats} chairs selected`}</strong>
-          <span>${escapeHtml(getSelectedChairSummary(session.selectedChairs))} · ${getPartySize(guest)} people in party · ${getGuestAssignedSeats(guest.id).length} already seated</span>
+        <div class="assignment-progress assignment-confirmation">
+          <strong>${escapeHtml(guest.fullName || "Guest")}</strong>
+          <span>${escapeHtml(seatSummary)}</span>
+          <small>Party of ${getPartySize(guest)} · ${getGuestRemainingSeats(guest)} seat${getGuestRemainingSeats(guest) === 1 ? "" : "s"} remaining</small>
+          ${session.mobileDirectAssignment && getGuestRemainingSeats(guest) > 1 ? `<small>Assigns 1 person; ${getGuestRemainingSeats(guest) - 1} will still need seats.</small>` : !session.mobileDirectAssignment ? `<small>${selectedCount} of ${session.requiredSeats} seats selected.</small>` : ""}
         </div>
         ${state.modalError ? `<div class="planner-warning-list"><span class="warning-chip">${escapeHtml(state.modalError)}</span></div>` : ""}
-        ${session.mobileDirectAssignment ? `<p class="planner-note">This assigns one unseated person from ${escapeHtml(guest.fullName || "this party")} to the selected seat. Remaining party members stay unassigned.</p>` : `<p class="planner-note">Use the canvas behind this modal to add or remove empty chairs. You can save a partial party assignment and finish the remaining seats later.</p>`}
       `
           : `
-        ${selectedCount ? `<div class="assignment-progress" role="status"><strong>${selectedCount} chair${selectedCount === 1 ? "" : "s"} selected</strong><span>${escapeHtml(getSelectedChairSummary(session.selectedChairs))}</span></div>` : ""}
-        ${session.mobileDirectAssignment ? `<div class="mobile-assignment-filters"><button type="button" data-action="mobile-assignment-filter" data-filter="unassigned" class="${state.mobileAssignmentFilter === "unassigned" ? "is-active" : ""}">Needs seats</button><button type="button" data-action="mobile-assignment-filter" data-filter="all" class="${state.mobileAssignmentFilter === "all" ? "is-active" : ""}">All eligible</button></div>` : ""}
-        <label class="planner-drawer__search">
-          <span>Search by guest name or phone</span>
-          <input class="da3wa-input" type="search" value="${escapeAttribute(state.guestAssignmentSearch)}" data-seat-search />
-        </label>
-        <div class="assignment-guest-list">
-          ${filtered.length ? filtered.map(renderAssignmentGuestOption).join("") : `<div class="da3wa-empty">${candidates.length ? "No matching guests need seats." : "All guests are assigned"}</div>`}
+        <div class="assignment-progress assignment-seat-summary" role="status">
+          <strong>${selectedCount > 1 ? `${selectedCount} seats selected` : "Selected seat"}</strong>
+          <span data-assignment-seat-summary>${escapeHtml(seatSummary)}</span>
         </div>
+        ${state.modalError ? `<div class="planner-warning-list"><span class="warning-chip">${escapeHtml(state.modalError)}</span></div>` : ""}
+        <label class="planner-drawer__search assignment-search">
+          <span class="sr-only">Search by guest name or phone</span>
+          <input class="da3wa-input" type="search" placeholder="Search by guest name or phone" value="${escapeAttribute(searchValue)}" data-seat-search autocomplete="off" />
+        </label>
+        ${renderAssignmentCandidates(candidates)}
       `
       }
     </div>
     <div class="da3wa-sheet__footer">
       <button class="da3wa-button da3wa-button--secondary" type="button" data-action="cancel-assignment">Cancel</button>
-      <div class="da3wa-sheet__footer-actions">
-        ${guest ? actionButton(session.mobileDirectAssignment ? "Assign guest" : "Complete assignment", "complete-assignment", selectedCount < 1 || Boolean(state.activeModalOperation), "primary") : ""}
-      </div>
+      ${guest ? `<div class="da3wa-sheet__footer-actions">${actionButton(session.mobileDirectAssignment ? "Assign seat" : "Complete assignment", "complete-assignment", selectedCount < 1 || Boolean(state.activeModalOperation), "primary")}</div>` : ""}
     </div>
   `;
+}
+
+function getAssignmentDestinationSummary(chairs) {
+  return chairs.map((item) => {
+    const table = state.tables.find((row) => row.id === item.tableId);
+    const chair = table?.chairs.find((row) => row.id === item.chairId);
+    return `${table?.name || "Table"} · Seat ${chair?.seatNumber || "?"}`;
+  }).join(" · ");
+}
+
+function renderAssignmentCandidates(candidates) {
+  const normalized = state.guestAssignmentSearch.trim().toLocaleLowerCase();
+  const filtered = candidates.filter((guest) => !normalized ||
+    [guest.fullName, guest.phone, guest.side, guest.rsvpStatus].some((value) =>
+      String(value || "").toLocaleLowerCase().includes(normalized)));
+  return `<div class="assignment-guest-list" data-assignment-candidate-list aria-live="polite">
+    ${filtered.length ? filtered.map(renderAssignmentGuestOption).join("") : `<div class="da3wa-empty">${normalized ? "No matching guests." : "All eligible guests are seated."}</div>`}
+  </div>`;
+}
+
+function renderAssignmentCandidateList() {
+  const session = state.assignmentSession;
+  const list = elements.assignmentContent?.querySelector("[data-assignment-candidate-list]");
+  if (!session || session.guestId || !list) return;
+  const candidates = getSeatCandidates(session.guestId).filter(
+    (item) => getGuestRemainingSeats(item) > 0 || item.id === session.guestId,
+  );
+  list.outerHTML = renderAssignmentCandidates(candidates);
+}
+
+function refreshAssignmentCandidatesAfterSnapshot() {
+  if (elements.assignmentModal?.open && !state.assignmentSession?.guestId) {
+    renderAssignmentCandidateList();
+  }
 }
 
 function renderAssignmentGuestOption(guest) {
@@ -7214,8 +7279,8 @@ function renderAssignmentGuestOption(guest) {
   return `
     <button class="assignment-guest-option" type="button" data-action="choose-assignment-guest" data-guest-id="${guest.id}">
       <strong>${escapeHtml(guest.fullName || "Guest")}</strong>
-      ${eventUsesGuestSides(state.wedding) ? `<span>${escapeHtml(guest.side || "Side not set")} - party of ${partySize}</span>` : `<span>Party of ${partySize}</span>`}
-      <small>${assignedCount} of ${partySize} seats assigned - ${remaining} remaining</small>
+      <span>Party of ${partySize}${eventUsesGuestSides(state.wedding) ? ` · ${escapeHtml(guest.side || "Side not set")}` : ""}</span>
+      <small>${remaining} seat${remaining === 1 ? "" : "s"} remaining${assignedCount ? ` · ${assignedCount} already seated` : ""}</small>
     </button>
   `;
 }
@@ -8661,13 +8726,14 @@ function getAssignableGuests() {
 }
 
 function getSeatCandidates(currentGuestId) {
+  const query = state.guestAssignmentSearch.trim().toLocaleLowerCase();
   return [...state.guests]
     .filter(
       (guest) =>
         getGuestRemainingSeats(guest) > 0 || guest.id === currentGuestId,
     )
     .filter((guest) => {
-      if (!state.guestAssignmentSearch) {
+      if (!query) {
         return true;
       }
       return [
@@ -8677,8 +8743,8 @@ function getSeatCandidates(currentGuestId) {
         guest.rsvpStatus,
       ].some((value) =>
         String(value || "")
-          .toLowerCase()
-          .includes(state.guestAssignmentSearch),
+          .toLocaleLowerCase()
+          .includes(query),
       );
     })
     .sort((a, b) => {
@@ -8839,20 +8905,6 @@ async function persistHallObjects(errorMessage = "Venue layout could not be save
     showToast(errorMessage, "error");
     return false;
   }
-}
-
-function restoreGuestSearchFocus(selectionStart, selectionEnd) {
-  requestAnimationFrame(() => {
-    if (state.activeView !== "guests") return;
-    const search = elements.pageContent.querySelector("[data-guest-search]");
-    if (!search) return;
-    search.focus({ preventScroll: true });
-    const length = search.value.length;
-    search.setSelectionRange?.(
-      Math.min(selectionStart ?? length, length),
-      Math.min(selectionEnd ?? length, length),
-    );
-  });
 }
 
 function syncDanceFloorDimensions() {

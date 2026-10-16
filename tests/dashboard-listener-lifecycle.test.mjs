@@ -66,8 +66,8 @@ test("dashboard navigation and seating toolbar keep the requested operational or
   assert.deepEqual([...navigationPositions].sort((a, b) => a - b), navigationPositions);
   assert.match(dashboard, /description: "",/);
   assert.match(dashboard, /elements\.pageDescription\.hidden = !elements\.pageDescription\.textContent/);
-  assert.match(dashboard, /restoreGuestSearchFocus\(selectionStart, selectionEnd\)/);
-  assert.match(dashboard, /search\.focus\(\{ preventScroll: true \}\)/);
+  assert.match(dashboard, /state\.guestFilters\.search = search\.value;\s*state\.guestPageIndex = 0;\s*closeGuestMenu\(\{ restoreFocus: false \}\);\s*renderGuestDirectoryResults\(\)/);
+  assert.doesNotMatch(dashboard, /function restoreGuestSearchFocus\(/);
   assert.match(dashboard, /setPlannerZoom\(state\.plannerZoom \+ 0\.05\)/);
   assert.match(dashboard, /setPlannerZoom\(state\.plannerZoom - 0\.05\)/);
   assert.match(dashboard, /renderPlannerStatCard\(state\.tables\.length, "Tables"\)/);

@@ -12,6 +12,7 @@ import { invitationRefreshIsCurrent, invitationRsvpStorageKey, invitationRsvpVie
 import { buildSatelliteMapEmbedUrl } from "./invitations/shared/map-embed.js";
 import { buildInvitationCalendar } from "./invitations/shared/calendar.js";
 import { renderQrCode } from "./qr.js";
+import { createIntroSequence } from "./intro-sequence.js";
 import {
   buildChairPositions,
   buildSeatAssignmentKeys,
@@ -110,6 +111,12 @@ const laylaCopy = {
   musicUnavailable: { en: "Event music unavailable", ar: "موسيقى الحفل غير متاحة" },
   introCaption: { en: "Your invitation awaits — tap to open", ar: "دعوتكم بانتظاركم — اضغطوا لفتحها" },
   openInvitation: { en: "Open your wedding invitation", ar: "افتحوا دعوة زفافكم" },
+  retryOpening: { en: "Tap to retry opening", ar: "اضغطوا لإعادة محاولة الفتح" },
+  introLoading: { en: "Opening your invitation…", ar: "جارٍ فتح دعوتكم…" },
+  introBuffering: { en: "The envelope animation is loading…", ar: "جارٍ تحميل حركة الظرف…" },
+  introRetry: { en: "Still loading. Tap the envelope to retry or skip.", ar: "ما زال التحميل جارياً. اضغطوا على الظرف لإعادة المحاولة أو تخطّي الحركة." },
+  introBlocked: { en: "The animation could not start. Tap the envelope to retry or skip.", ar: "تعذّر بدء الحركة. اضغطوا على الظرف لإعادة المحاولة أو تخطّي الحركة." },
+  introError: { en: "The animation is unavailable. Tap the envelope to retry or skip.", ar: "الحركة غير متاحة. اضغطوا على الظرف لإعادة المحاولة أو تخطّي الحركة." },
   skip: { en: "Skip", ar: "تخطي" },
   viewDetails: { en: "View details", ar: "عرض التفاصيل" },
   scrollDetails: { en: "Scroll to event details", ar: "انتقلوا إلى تفاصيل الحفل" },
@@ -189,6 +196,9 @@ const state = {
   laylaLanguage: document.body?.classList.contains("layla-zaid-invitation") && localStorage.getItem(laylaLanguageStorageKey) === "ar" ? "ar" : "en",
   invitationOpening: false,
   introCompletion: null,
+  introSequence: null,
+  introPageHideHandler: null,
+  introTimer: null,
   rsvpMessage: "",
   revealObserver: null,
   motionObserver: null,
@@ -219,6 +229,8 @@ const icons = {
 
 const elements = {
   introScreen: document.getElementById("introScreen"),
+  introStatus: document.getElementById("introStatus"),
+  introRetryLabel: document.getElementById("introRetryLabel"),
   openInvitationButton: document.getElementById("openInvitation"),
   openingVideo: document.getElementById("openingVideo"),
   skipOpeningButton: document.getElementById("skipOpening"),
@@ -237,10 +249,68 @@ document.body.classList.add("intro-active");
 
 boot();
 
+function setupIntroSequence() {
+  if (!elements.introScreen || state.introSequence) return;
+  state.introSequence = createIntroSequence({
+    video: elements.openingVideo,
+    onState: updateIntroPresentation,
+    onFrame: () => {
+      elements.introScreen?.classList.add("is-playing");
+    },
+    onComplete: () => revealInvitation(),
+  });
+  state.introCompletion = () => state.introSequence?.skip();
+  state.introPageHideHandler = () => disposeIntroSequence();
+  window.addEventListener("pagehide", state.introPageHideHandler, { once: true });
+}
+
+function updateIntroPresentation(phase) {
+  const retryable = ["retry", "blocked", "error"].includes(phase);
+  const opening = ["loading", "buffering", "retry", "playing"].includes(phase);
+  elements.introScreen?.classList.toggle("is-opening", opening);
+  elements.introScreen?.classList.toggle("is-retryable", retryable);
+  if (["blocked", "error"].includes(phase)) {
+    state.invitationOpening = false;
+    elements.introScreen?.classList.remove("is-playing");
+  } else if (opening) {
+    state.invitationOpening = true;
+  }
+
+  const statusKey = {
+    loading: "introLoading",
+    buffering: "introBuffering",
+    retry: "introRetry",
+    blocked: "introBlocked",
+    error: "introError",
+  }[phase];
+  if (elements.introStatus) {
+    elements.introStatus.hidden = !statusKey;
+    elements.introStatus.textContent = statusKey ? laylaText(statusKey) : "";
+  }
+  if (elements.introRetryLabel) {
+    elements.introRetryLabel.textContent = retryable ? laylaText("retryOpening") : "";
+  }
+  elements.openInvitationButton?.setAttribute("aria-label", laylaText(retryable ? "retryOpening" : "openInvitation"));
+}
+
+function disposeIntroSequence() {
+  state.introSequence?.dispose();
+  state.introSequence = null;
+  state.introCompletion = null;
+  if (state.introTimer !== null) {
+    window.clearTimeout(state.introTimer);
+    state.introTimer = null;
+  }
+  if (state.introPageHideHandler) {
+    window.removeEventListener("pagehide", state.introPageHideHandler);
+    state.introPageHideHandler = null;
+  }
+}
+
 async function boot() {
   bindBaseEvents();
+  setupIntroSequence();
   void warmEnvelopeAssets();
-  elements.openingVideo?.addEventListener("playing", () => elements.introScreen?.classList.add("is-playing"));
   setupRevealObserver();
   setupAudioState();
   setupStickyFooterAwareness();
@@ -329,6 +399,7 @@ function startSampleWeddingListener(weddingId) {
 }
 
 function renderInvitationAccessError(message) {
+  disposeIntroSequence();
   document.body.classList.remove("intro-active");
   const isArabic = isLaylaInvitation() && state.laylaLanguage === "ar";
   const unavailable = isArabic ? "الدعوة غير متاحة" : "Invitation unavailable";
@@ -588,6 +659,9 @@ function applyLaylaLanguage() {
   document.querySelector(".hero-down")?.setAttribute("aria-label", laylaText("scrollDetails"));
   elements.openingVideo?.setAttribute("aria-label", laylaText("videoLabel"));
   if (elements.musicToggle) elements.musicToggle.setAttribute("aria-label", laylaText(elements.weddingAudio?.paused === false ? "stopMusic" : "playMusic"));
+  if (state.introSequence && !["idle", "complete", "disposed"].includes(state.introSequence.phase)) {
+    updateIntroPresentation(state.introSequence.phase);
+  }
 }
 
 function setLaylaLanguage(language) {
@@ -1423,6 +1497,7 @@ async function updateRsvp(status, additionalGuests) {
 
 function bindBaseEvents() {
   elements.openInvitationButton?.addEventListener("click", handleOpenInvitation);
+  elements.skipOpeningButton?.addEventListener("click", () => revealInvitation());
   elements.musicToggle?.addEventListener("click", handleMusicToggle);
 
   document.addEventListener("click", async (event) => {
@@ -1462,39 +1537,82 @@ function bindBaseEvents() {
   });
 }
 
-async function handleOpenInvitation() {
-  if (state.invitationOpening || document.body.classList.contains("invitation-open")) {
+function configureInlineEnvelopePlayback(video) {
+  video.defaultMuted = true;
+  video.muted = true;
+  video.playsInline = true;
+  video.setAttribute("muted", "");
+  video.setAttribute("playsinline", "");
+  video.setAttribute("webkit-playsinline", "");
+}
+
+function handleOpenInvitation() {
+  if (document.body.classList.contains("invitation-open")) return;
+
+  const video = elements.openingVideo;
+  if (state.introSequence?.active) {
+    if (!state.introSequence.retry() || !video) return;
+    configureInlineEnvelopePlayback(video);
+    try {
+      const playback = video.play();
+      if (playback && typeof playback.catch === "function") {
+        playback.catch(() => state.introSequence?.playbackRejected());
+      }
+    } catch (error) {
+      state.introSequence.playbackRejected();
+    }
     return;
   }
 
+  if (state.invitationOpening) return;
   state.invitationOpening = true;
-  elements.introScreen?.classList.add("is-opening");
   if (elements.skipOpeningButton) elements.skipOpeningButton.hidden = false;
-  // The envelope video starts directly in the tap gesture. Music is an
-  // independent best-effort action and is never awaited by this sequence.
-  void playWeddingMusicFromGesture();
+
   if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) {
-    window.setTimeout(revealInvitation, 180);
+    elements.introScreen?.classList.add("is-opening");
+    state.introTimer = window.setTimeout(() => {
+      state.introTimer = null;
+      revealInvitation();
+    }, 180);
+    state.introCompletion = () => {};
+    void playWeddingMusicFromGesture();
     return;
   }
-  void waitForIntroAnimation();
-  if (!elements.openingVideo) { window.setTimeout(revealInvitation, 450); return; }
-  elements.openingVideo.muted = true;
-  elements.openingVideo.playsInline = true;
-  elements.openingVideo.currentTime = 0;
-  // Don't wait on the play promise. Its settle time is browser/network owned;
-  // the video events and bounded timer below drive the visible transition.
-  const playback = elements.openingVideo.play();
-  if (playback && typeof playback.catch === "function") playback.catch(() => revealInvitation());
+
+  if (!video || !state.introSequence) {
+    state.introSequence?.unavailable();
+    if (!state.introSequence) updateIntroPresentation("error");
+    void playWeddingMusicFromGesture();
+    return;
+  }
+
+  configureInlineEnvelopePlayback(video);
+  waitForIntroAnimation();
+  try {
+    // Keep play() in the tap handler and before any awaited work so mobile
+    // browsers retain the user's activation for this media request.
+    const playback = video.play();
+    if (playback && typeof playback.catch === "function") {
+      playback.catch(() => state.introSequence?.playbackRejected());
+    }
+  } catch (error) {
+    state.introSequence.playbackRejected();
+  }
+  // Audio is a separate best-effort request and never gates the envelope.
+  void playWeddingMusicFromGesture();
 }
 
 function revealInvitation() {
   if (document.body.classList.contains("invitation-open")) return;
-  if (state.introCompletion) { state.introCompletion(); state.introCompletion = null; }
+  document.body.classList.add("invitation-open");
+  const finishIntro = state.introCompletion;
+  state.introCompletion = null;
+  finishIntro?.();
+  disposeIntroSequence();
+  state.invitationOpening = false;
   elements.openingVideo?.pause();
   document.body.classList.remove("intro-active");
-  document.body.classList.add("invitation-open");
-  elements.introScreen.classList.add("is-hidden");
+  elements.introScreen?.classList.add("is-hidden");
   const siteContent = document.getElementById("siteContent");
   if (siteContent) siteContent.inert = false;
   if (elements.skipOpeningButton) elements.skipOpeningButton.hidden = true;
@@ -1538,27 +1656,9 @@ async function handleMusicToggle() {
 }
 
 function waitForIntroAnimation() {
-  return new Promise((resolve) => {
-    let settled = false;
-    const finish = () => {
-      if (settled) return;
-      settled = true;
-      window.clearTimeout(fallback);
-      elements.openingVideo?.removeEventListener("ended", finish);
-      elements.openingVideo?.removeEventListener("error", fail);
-      elements.openingVideo?.removeEventListener("stalled", fail);
-      elements.skipOpeningButton?.removeEventListener("click", finish);
-      resolve();
-      revealInvitation();
-    };
-    const fail = () => window.setTimeout(finish, 450);
-    const fallback = window.setTimeout(finish, 6800);
-    elements.openingVideo?.addEventListener("ended", finish, { once: true });
-    elements.openingVideo?.addEventListener("error", fail, { once: true });
-    elements.openingVideo?.addEventListener("stalled", fail, { once: true });
-    elements.skipOpeningButton?.addEventListener("click", finish, { once: true });
-    state.introCompletion = finish;
-  });
+  if (!state.introSequence?.start()) return false;
+  state.introCompletion = () => state.introSequence?.skip();
+  return true;
 }
 
 function handleDemoRsvpSubmit(event) {
@@ -1695,7 +1795,7 @@ function setupAudioState() {
   });
   elements.weddingAudio?.addEventListener("error", () => {
     state.musicAvailable = false;
-    setMusicToggleState("unavailable", "Off", "Event music unavailable");
+    setMusicToggleState("unavailable", "Off", isLaylaInvitation() ? laylaText("musicUnavailable") : "Event music unavailable");
   });
 
   elements.weddingAudio?.addEventListener("pause", () => {
@@ -1704,9 +1804,15 @@ function setupAudioState() {
     }
   });
 
-  elements.weddingAudio?.addEventListener("play", () => {
+  elements.weddingAudio?.addEventListener("playing", () => {
     if (state.musicAvailable) {
       setMusicToggleState("playing", "♫", isLaylaInvitation() ? laylaText("stopMusic") : "Stop event music");
+    }
+  });
+
+  elements.weddingAudio?.addEventListener("ended", () => {
+    if (state.musicAvailable) {
+      setMusicToggleState("paused", "♫", isLaylaInvitation() ? laylaText("playMusic") : "Play event music");
     }
   });
 }
@@ -1758,6 +1864,7 @@ function setupMobileStickyFooterScroll() {
 
 function setMusicToggleState(stateName, label, ariaLabel) {
   elements.musicToggle.dataset.state = stateName;
+  elements.musicToggle.setAttribute("aria-pressed", String(stateName === "playing"));
   const labelNode = elements.musicToggle.querySelector(".music-toggle__label");
   if (labelNode) {
     labelNode.textContent = label;

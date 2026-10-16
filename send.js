@@ -161,6 +161,17 @@ function render() {
   `;
 }
 
+function updateProgress() {
+  if (!payload?.g?.length) return;
+  const sentCount = payload.g.filter((guest) => sentMap[guestKey(guest)]).length;
+  const progress = shell.querySelector(".sender-progress__track");
+  const label = shell.querySelector(".sender-progress__label");
+  const bar = shell.querySelector(".sender-progress__bar");
+  if (progress) progress.setAttribute("aria-valuenow", String(sentCount));
+  if (label) label.textContent = `${sentCount} of ${payload.g.length} sent`;
+  if (bar) bar.style.width = `${Math.round((sentCount / payload.g.length) * 100)}%`;
+}
+
 shell.addEventListener("click", (event) => {
   const sendLink = event.target.closest("[data-send-index]");
   if (sendLink) {
@@ -168,8 +179,18 @@ shell.addEventListener("click", (event) => {
     if (guest) {
       sentMap[guestKey(guest)] = Date.now();
       persistSentMap();
-      // Re-render after the browser has followed the link to WhatsApp.
-      setTimeout(render, 300);
+      const row = sendLink.closest(".sender-row");
+      row?.classList.add("is-sent");
+      sendLink.textContent = "Sent ✓ · Resend";
+      if (row && !row.querySelector("[data-undo-index]")) {
+        const undo = document.createElement("button");
+        undo.className = "sender-undo";
+        undo.type = "button";
+        undo.dataset.undoIndex = sendLink.dataset.sendIndex;
+        undo.textContent = "Mark as not sent";
+        sendLink.parentElement?.append(undo);
+      }
+      updateProgress();
     }
     return;
   }
@@ -180,7 +201,12 @@ shell.addEventListener("click", (event) => {
     if (guest) {
       delete sentMap[guestKey(guest)];
       persistSentMap();
-      render();
+      const row = undoButton.closest(".sender-row");
+      row?.classList.remove("is-sent");
+      const sendAction = row?.querySelector("[data-send-index]");
+      if (sendAction) sendAction.textContent = "Send";
+      undoButton.remove();
+      updateProgress();
     }
   }
 });

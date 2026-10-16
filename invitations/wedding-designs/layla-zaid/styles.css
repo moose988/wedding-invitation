@@ -393,10 +393,61 @@ body.layla-zaid-invitation .envelope-intro__open {
   background: transparent; cursor: pointer; touch-action: manipulation;
 }
 body.layla-zaid-invitation .envelope-intro__open:focus-visible { outline: 3px solid #8d6b49; outline-offset: 4px; background: #fff8e322; }
+body.layla-zaid-invitation .envelope-intro__retry-label {
+  display: none;
+  max-width: min(70vw, 190px);
+  padding: 10px 15px;
+  border: 1px solid #bda780;
+  border-radius: 999px;
+  color: #fffaf0;
+  background: #5b493beF;
+  box-shadow: 0 4px 16px #44382b35;
+  font: 600 .82rem/1.25 "Lora", Georgia, serif;
+  text-align: center;
+}
+body.layla-zaid-invitation .envelope-intro.is-retryable .envelope-intro__open {
+  display: grid;
+  place-items: center;
+}
+body.layla-zaid-invitation .envelope-intro.is-retryable .envelope-intro__retry-label { display: block; }
 body.layla-zaid-invitation .envelope-intro__caption {
   position: absolute; z-index: 2; inset-inline: 12%; inset-block-start: 62%; margin: 0; text-align: center; color: #725e4c;
   font: italic clamp(.95rem, 3.6vw, 1.35rem) "Cormorant Garamond", Georgia, serif; letter-spacing: .04em; pointer-events: none;
 }
+body.layla-zaid-invitation .envelope-intro__status {
+  position: absolute;
+  z-index: 3;
+  inset-inline-start: 50%;
+  inset-block-end: max(18px, env(safe-area-inset-bottom));
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  width: max-content;
+  max-width: min(88vw, 430px);
+  margin: 0;
+  padding: 9px 14px;
+  border: 1px solid #d5c4a2;
+  border-radius: 999px;
+  color: #65513f;
+  background: #fffaf0ed;
+  box-shadow: 0 4px 14px #44382b1a;
+  transform: translateX(-50%);
+  font: 500 .76rem/1.35 "Lora", Georgia, serif;
+  text-align: center;
+}
+body.layla-zaid-invitation .envelope-intro__status[hidden] { display: none; }
+body.layla-zaid-invitation .envelope-intro__status::before {
+  width: 13px;
+  height: 13px;
+  flex: 0 0 13px;
+  border: 2px solid #d4c3a3;
+  border-top-color: #80674d;
+  border-radius: 50%;
+  content: "";
+  animation: intro-status-spin .9s linear infinite;
+}
+body.layla-zaid-invitation .envelope-intro.is-retryable .envelope-intro__status::before { display: none; }
+@keyframes intro-status-spin { to { transform: rotate(360deg); } }
 body.layla-zaid-invitation .envelope-intro__skip {
   position: absolute; z-index: 4; inset-inline-end: max(20px, env(safe-area-inset-right)); inset-block-end: max(20px, env(safe-area-inset-bottom));
   padding: 9px 15px; border: 1px solid #bda780; border-radius: 999px; color: #fffaf0; background: #5b493be8; font: .8rem "Lora", Georgia, serif; cursor: pointer;
@@ -594,17 +645,16 @@ body.layla-zaid-invitation.layla-arabic .sample-rsvp-note { font-family:"Amiri",
 @media (max-width: 600px) {
   body.layla-zaid-invitation .envelope-intro {
     padding: 0;
-    place-items: stretch;
+    place-items: center;
     background: #f5efe4;
   }
   body.layla-zaid-invitation .envelope-intro__stage {
-    width: 100%;
-    max-width: none;
-    height: 100%;
-    aspect-ratio: auto;
+    width: min(100vw, 530px, calc((100svh - 44px) * .5625));
+    height: auto;
+    aspect-ratio: 941/1672;
   }
   body.layla-zaid-invitation .envelope-intro__poster,
-  body.layla-zaid-invitation .envelope-intro__video { object-fit: cover; }
+  body.layla-zaid-invitation .envelope-intro__video { object-fit: contain; }
   body.layla-zaid-invitation .envelope-intro__caption {
     inset-inline: 8%;
     inset-block-start: 65%;
@@ -650,4 +700,68 @@ body.layla-zaid-invitation.layla-arabic .sample-rsvp-note { font-family:"Amiri",
     max-width: none;
     aspect-ratio: auto;
   }
+}
+
+/* Keep the record artwork and its upright playback glyph as separate layers. */
+body.layla-zaid-invitation .music-toggle {
+  inset-inline-start: auto;
+  inset-inline-end: max(18px, calc(env(safe-area-inset-right) + 12px));
+  inset-block-start: auto;
+  inset-block-end: max(18px, calc(env(safe-area-inset-bottom) + 12px));
+  display: grid;
+  width: 52px;
+  height: 52px;
+  min-width: 52px;
+  min-height: 52px;
+  box-sizing: border-box;
+  flex: 0 0 52px;
+  padding: 0;
+  overflow: visible;
+  place-items: center;
+  border: 0;
+  border-radius: 50%;
+  color: #302a23;
+  background: transparent;
+}
+body.layla-zaid-invitation .music-toggle:focus-visible {
+  outline: 2px solid #b99b6e;
+  outline-offset: 3px;
+}
+body.layla-zaid-invitation .music-toggle__record {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  border-radius: 50%;
+  transform-origin: center;
+  animation: recordSpin 5s linear infinite;
+  animation-play-state: paused;
+  user-select: none;
+  -webkit-user-drag: none;
+}
+body.layla-zaid-invitation .music-toggle[data-state="playing"] .music-toggle__record {
+  animation-play-state: running;
+}
+body.layla-zaid-invitation .music-toggle__indicator {
+  position: absolute;
+  inset: 50% auto auto 50%;
+  display: block;
+  width: 22px;
+  height: 22px;
+  overflow: visible;
+  transform: translate(-50%, -50%);
+  pointer-events: none;
+  filter: drop-shadow(0 1px 1px #0005);
+}
+body.layla-zaid-invitation .music-toggle__indicator circle {
+  fill: #f5efe4ed;
+  stroke: #b99b6e;
+  stroke-width: 1;
+}
+body.layla-zaid-invitation .music-toggle__indicator path { fill: #302a23; }
+body.layla-zaid-invitation .music-toggle__pause-mark { display: none; }
+body.layla-zaid-invitation .music-toggle[data-state="playing"] .music-toggle__play-mark { display: none; }
+body.layla-zaid-invitation .music-toggle[data-state="playing"] .music-toggle__pause-mark { display: block; }
+@media (prefers-reduced-motion: reduce) {
+  body.layla-zaid-invitation .music-toggle__record { animation: none; }
 }

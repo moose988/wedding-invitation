@@ -2578,6 +2578,9 @@ function renderGuestPage() {
     <section class="guest-page">
       <article class="guest-toolbar">
         <div class="guest-toolbar__filters ${usesSides ? "guest-toolbar__filters--with-sides" : "guest-toolbar__filters--single-filter"}">
+          <div class="guest-directory-counts" aria-live="polite">
+            ${renderGuestDirectoryCounts(hasGuestFilters ? "Matching guests" : "Guest totals", hasGuestFilters ? filteredCounts : directoryCounts)}
+          </div>
           <div class="guest-toolbar__controls">
             <input class="da3wa-input guest-toolbar__search" type="search" placeholder="Search name or phone" value="${escapeAttribute(state.guestFilters.search)}" data-guest-search aria-label="Search guests by name or phone" />
             ${selectInput("rsvp", state.guestFilters.rsvp, [
@@ -2592,9 +2595,6 @@ function renderGuestPage() {
               ["groom", "Groom"],
               ["family", "Family"],
             ]) : ""}
-          </div>
-          <div class="guest-directory-counts" aria-live="polite">
-            ${renderGuestDirectoryCounts(hasGuestFilters ? "Matching guests" : "Guest totals", hasGuestFilters ? filteredCounts : directoryCounts)}
           </div>
         </div>
       </article>

@@ -42,13 +42,27 @@ test("one pagination group is rendered after both list representations and zero 
 test("directory counts use the complete matching dataset and clarify filtered totals", async () => {
   const dashboard = await read("dashboard.js");
   const render = extractFunction(dashboard, "renderGuestPage", "renderGuestDirectoryList");
+  const countMarkup = extractFunction(dashboard, "renderGuestDirectoryCounts", "renderGuestDirectoryList");
   const update = extractFunction(dashboard, "renderGuestDirectoryResults", "renderSeatingPage");
 
   assert.match(render, /calculateGuestDirectoryCounts\(state\.guests\)/);
   assert.match(render, /calculateGuestDirectoryCounts\(guests\)/);
   assert.match(render, /Matching guests/);
-  assert.match(render, /Including additional guests/);
+  assert.match(countMarkup, /People, including additional guests/);
   assert.match(update, /calculateGuestDirectoryCounts\(matching \? guests : state\.guests\)/);
+});
+
+test("mobile guest directory stacks totals, filters, action buttons, guests, then pagination", async () => {
+  const [dashboard, css] = await Promise.all([read("dashboard.js"), read("dashboard.css")]);
+  const render = extractFunction(dashboard, "renderGuestPage", "renderGuestDirectoryCounts");
+  const mobileRules = css.slice(css.indexOf("  .guest-page-actions {"));
+  assert.match(mobileRules, /\.guest-toolbar \{\s*order: 0;/);
+  assert.match(mobileRules, /\.guest-bulkbar \{\s*order: 1;/);
+  assert.match(mobileRules, /\.guest-page-actions \{\s*order: 2;/);
+  assert.match(mobileRules, /\.guest-directory-list \{\s*order: 3;/);
+  assert.match(mobileRules, /\.guest-page-controls \{\s*order: 4;/);
+  assert.ok(render.indexOf("guest-directory-counts") < render.indexOf("guest-toolbar__search"));
+  assert.ok(render.indexOf("guest-toolbar__search") < render.indexOf('selectInput("rsvp"'));
 });
 
 test("assignment and seating searches update result regions without replacing or refocusing the input", async () => {
@@ -83,7 +97,7 @@ test("assignment picker keeps eligibility and partial-party semantics while remo
   assert.match(choose, /if \(!remainingSeats\)/);
   assert.match(candidates, /getGuestRemainingSeats\(guest\) > 0 \|\| guest\.id === currentGuestId/);
   assert.match(dashboard, /refreshAssignmentCandidatesAfterSnapshot\(\)/);
-  assert.match(css, /\.assignment-guest-list \{ min-height: 72px; max-height: none; flex: 1; overflow: auto;/);
+  assert.match(css, /\.assignment-guest-list \{ min-height: 72px; max-height: none; flex: 1;[^}]*align-content: start; grid-auto-rows: max-content; overflow: auto;/);
 });
 
 test("sender introduction scrolls naturally and progress updates do not rebuild rows", async () => {

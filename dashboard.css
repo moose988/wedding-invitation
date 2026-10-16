@@ -1243,7 +1243,7 @@ body.is-overview-view .da3wa-topbar__actions {
 
 .guest-toolbar__filters {
   display: grid;
-  grid-template-columns: minmax(260px, 1fr) minmax(128px, 160px) minmax(128px, 160px) max-content;
+  grid-template-columns: minmax(260px, 1fr) minmax(128px, 160px) minmax(128px, 160px);
   width: 100%;
   gap: 10px;
   align-items: center;
@@ -3827,10 +3827,13 @@ body.is-seating-view .planner-canvas {
 /* Mobile directory, assignment dialog, and stable search result regions. */
 .guest-directory-counts {
   display: grid;
-  gap: 8px;
-  width: min(100%, 540px);
+  grid-column: 1 / -1;
+  grid-template-columns: max-content minmax(0, 1fr);
+  align-items: center;
+  gap: 8px 14px;
+  width: 100%;
   max-width: 100%;
-  padding: 12px;
+  padding: 8px 12px;
   border: 1px solid rgba(205, 187, 151, 0.48);
   border-radius: 16px;
   background: linear-gradient(140deg, rgba(255, 253, 248, 0.96), rgba(246, 241, 232, 0.88));
@@ -3851,17 +3854,17 @@ body.is-seating-view .planner-canvas {
 .guest-directory-counts__grid {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 8px;
+  gap: 7px;
 }
 
 .guest-directory-counts__item {
   display: grid;
-  grid-template-columns: 22px minmax(0, 1fr);
-  grid-template-rows: auto auto;
+  grid-template-columns: 20px minmax(0, 1fr) auto;
   align-items: center;
-  gap: 3px 8px;
+  gap: 0 8px;
   min-width: 0;
-  padding: 9px;
+  min-height: 40px;
+  padding: 6px 9px;
   border: 1px solid rgba(205, 187, 151, 0.34);
   border-radius: 12px;
   background: rgba(246, 241, 232, 0.76);
@@ -3873,7 +3876,6 @@ body.is-seating-view .planner-canvas {
 }
 
 .guest-directory-counts__item svg {
-  grid-row: 1 / 3;
   width: 20px;
   height: 20px;
   fill: none;
@@ -3886,7 +3888,7 @@ body.is-seating-view .planner-canvas {
 .guest-directory-counts__item span {
   min-width: 0;
   color: var(--da3wa-text-soft);
-  font-size: 10px;
+  font-size: 11px;
   font-weight: 700;
   line-height: 1.25;
   overflow-wrap: anywhere;
@@ -3894,7 +3896,7 @@ body.is-seating-view .planner-canvas {
 
 .guest-directory-counts__item strong {
   color: var(--da3wa-text);
-  font-size: 19px;
+  font-size: 18px;
   line-height: 1;
 }
 
@@ -3946,9 +3948,10 @@ body.is-seating-view .planner-canvas {
 .da3wa-dialog--modal#assignmentModal .da3wa-sheet__footer .da3wa-button { min-height: 46px; justify-content: center; }
 
 @media (max-width: 700px) {
-  .guest-directory-counts { gap: 7px; padding: 10px; }
+  .guest-directory-counts { grid-template-columns: minmax(0, 1fr); gap: 7px; padding: 10px; }
   .guest-directory-counts__grid { gap: 6px; }
-  .guest-directory-counts__item { grid-template-columns: 18px minmax(0, 1fr); gap: 3px 6px; padding: 8px; }
+  .guest-directory-counts__item { grid-template-columns: 18px minmax(0, 1fr); grid-template-rows: auto auto; gap: 3px 6px; padding: 8px; }
+  .guest-directory-counts__item svg { grid-row: 1 / 3; }
   .guest-directory-counts__item svg { width: 17px; height: 17px; }
   .guest-directory-counts__item span { font-size: 9px; }
   .guest-card {
@@ -4618,7 +4621,7 @@ body.is-seating-view .planner-canvas {
   }
 
   .guest-page-actions {
-    order: 0;
+    order: 2;
     display: flex;
     width: 100%;
     justify-content: flex-start;
@@ -4633,7 +4636,7 @@ body.is-seating-view .planner-canvas {
   }
 
   .guest-toolbar {
-    order: 1;
+    order: 0;
     width: 100%;
     padding: 12px;
     border-radius: 18px;
@@ -4679,7 +4682,7 @@ body.is-seating-view .planner-canvas {
   }
 
   .guest-bulkbar {
-    order: 2;
+    order: 1;
     width: 100%;
     gap: 10px;
     padding: 12px;

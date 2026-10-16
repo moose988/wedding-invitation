@@ -198,7 +198,6 @@ const state = {
   introCompletion: null,
   introSequence: null,
   introPageHideHandler: null,
-  introTimer: null,
   rsvpMessage: "",
   revealObserver: null,
   motionObserver: null,
@@ -297,10 +296,6 @@ function disposeIntroSequence() {
   state.introSequence?.dispose();
   state.introSequence = null;
   state.introCompletion = null;
-  if (state.introTimer !== null) {
-    window.clearTimeout(state.introTimer);
-    state.introTimer = null;
-  }
   if (state.introPageHideHandler) {
     window.removeEventListener("pagehide", state.introPageHideHandler);
     state.introPageHideHandler = null;
@@ -1567,17 +1562,6 @@ function handleOpenInvitation() {
   if (state.invitationOpening) return;
   state.invitationOpening = true;
   if (elements.skipOpeningButton) elements.skipOpeningButton.hidden = false;
-
-  if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) {
-    elements.introScreen?.classList.add("is-opening");
-    state.introTimer = window.setTimeout(() => {
-      state.introTimer = null;
-      revealInvitation();
-    }, 180);
-    state.introCompletion = () => {};
-    void playWeddingMusicFromGesture();
-    return;
-  }
 
   if (!video || !state.introSequence) {
     state.introSequence?.unavailable();

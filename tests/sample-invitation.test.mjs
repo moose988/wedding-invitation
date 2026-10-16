@@ -25,6 +25,23 @@ test("Layla & Zaid sample panel lives once at workspace level with distinct prev
   assert.match(styles, /@media\(max-width:640px\)\s*\{[^}]*sample-invitation/s);
 });
 
+test("mobile event workspace places the sample, search, status filters, then create action", async () => {
+  const styles = await read("weddings.css");
+  const mobileOrder = styles.slice(styles.lastIndexOf("@media(max-width:640px){\n  .weddings-shell"));
+  const selectors = [
+    ".workspace-header { order:0; }",
+    ".workspace-hero > div { order:1;",
+    ".sample-invitation { order:2;",
+    ".workspace-controls { order:3;",
+    ".filter-row { order:4;",
+    "#createWeddingButton { order:5;",
+  ];
+  const positions = selectors.map((selector) => mobileOrder.indexOf(selector));
+  assert.ok(positions.every((position) => position >= 0), "all mobile workspace sections have explicit positions");
+  assert.deepEqual(positions, [...positions].sort((a, b) => a - b));
+  assert.match(mobileOrder, /\.workspace-hero \{ display:contents; \}/);
+});
+
 test("sample route reads current public event only and never resolves a guest token or private seating", async () => {
   const [script, router, html] = await Promise.all([
     read("script.js"),

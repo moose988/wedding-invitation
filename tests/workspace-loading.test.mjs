@@ -13,7 +13,7 @@ test("All Events hides its full-screen loading placeholder after workspace initi
   assert.match(html, /id="loadingState"[^>]*class="workspace-loading"|class="workspace-loading"[^>]*id="loadingState"/);
   assert.match(script, /el\.loadingState\.hidden = true/);
   assert.match(styles, /\.workspace-loading\[hidden\]\s*\{\s*display:\s*none\s*!important;?\s*\}/);
-  assert.match(html, /weddings\.css\?v=20261013-workspace-pagination/);
+  assert.match(html, /weddings\.css\?v=20261016-mobile-order/);
 });
 
 test("All Events displays six events per page and clamps navigation after filtering", () => {

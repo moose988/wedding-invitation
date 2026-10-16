@@ -61,3 +61,18 @@
 .sample-invitation__feedback { grid-area:feedback; min-height:1.3em; margin:0; padding-inline-start:51px; color:#486659; font-size:11px; }
 .sample-invitation__feedback[data-state="error"] { color:#a9443d; }
 @media(max-width:640px){ .sample-invitation { grid-template-columns:minmax(0,1fr); grid-template-areas:"intro" "link" "actions" "feedback"; gap:11px; margin-bottom:20px; padding:16px 15px 11px; } .sample-invitation__actions { display:grid; grid-template-columns:minmax(0,1fr); } .sample-invitation__button { width:100%; } .sample-invitation__url { font-size:11px; } .sample-invitation__feedback { padding-inline-start:0; } }
+
+@media(max-width:640px){
+  .weddings-shell { display:flex; flex-direction:column; }
+  .workspace-header { order:0; }
+  .workspace-hero { display:contents; }
+  .workspace-hero > div { order:1; margin:42px 0 24px; }
+  .sample-invitation { order:2; width:100%; }
+  .workspace-controls { order:3; width:100%; }
+  .filter-row { order:4; }
+  #createWeddingButton { order:5; width:100%; }
+  .workspace-status { order:6; }
+  .wedding-grid { order:7; }
+  .pagination-controls { order:8; }
+  .empty-state { order:9; }
+}

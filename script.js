@@ -1,4 +1,4 @@
-import { isFirebaseConfigured } from "./firebase-config.js?v=20261016-secure-invitation-1";
+import { isFirebaseConfigured } from "./firebase-config.js";
 import { getInvitationParams, loadInvitationContext, saveInvitationRsvp, subscribeToInvitation } from "./invitations/shared/invitation-data.js?v=20261017-firestore-invitation-1";
 import { invitationRefreshIsCurrent, invitationRsvpStorageKey, invitationRsvpView } from "./invitations/shared/rsvp-state.js";
 import { buildSatelliteMapEmbedUrl } from "./invitations/shared/map-embed.js";

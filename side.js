@@ -10,7 +10,7 @@ import {
   runTransaction,
   serverTimestamp,
   where,
-} from "./firebase-config.js?v=20261016-tab-session-isolation-1";
+} from "./firebase-config.js";
 import { resolveTableName } from "./seating-utils.js";
 import { getEventDisplayTitle, isCelebrationEvent } from "./event-utils.js";
 import { projectSeatAssignments, mutateSeating } from "./seating-firestore.js";

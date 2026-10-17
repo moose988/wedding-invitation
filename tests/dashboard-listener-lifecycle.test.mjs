@@ -108,7 +108,7 @@ test("wedding action menus obey hidden state and close consistently", async () =
 test("successful password login preserves side workspace context and otherwise opens All Events", async () => {
   const login = await read("dashboard-login.js");
 
-  assert.match(login, /window\.location\.replace\("\.\/all-events\.html"\)/);
+  assert.match(login, /window\.location\.replace\(services\.isAdmin \? "\.\/all-events\.html" : "\.\/customer-events\.html"\)/);
   assert.match(login, /params\.get\("wedding"\)/);
   assert.match(login, /params\.get\("workspace"\) === "side"/);
   assert.match(login, /target\.searchParams\.set\("wedding", weddingId\)/);

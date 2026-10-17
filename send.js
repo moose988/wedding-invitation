@@ -3,7 +3,7 @@ import {
   decodeSenderPayload,
   senderGuestPresentation,
 } from "./sender-codec.js";
-import { doc, getDoc, initPublicFirebase, isFirebaseConfigured, onSnapshot } from "./firebase-config.js?v=20261017-spark-direct-capabilities-1";
+import { doc, getDoc, initPublicFirebase, isFirebaseConfigured, onSnapshot } from "./firebase-config.js";
 import { createShareUrl } from "./share-link.js";
 
 const shell = document.getElementById("senderShell");

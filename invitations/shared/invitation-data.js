@@ -1,13 +1,28 @@
 import {
   doc,
   getDoc,
+  getDocs,
+  collection,
   initPublicFirebase,
   isFirebaseConfigured,
   onSnapshot,
   serverTimestamp,
   writeBatch,
-} from "../../firebase-config.js?v=20261017-firestore-invitation-1";
+} from "../../firebase-config.js";
 import { isValidInvitationToken } from "./invitation-token.js";
+import { generateTableChairs } from "../../seating-utils.js";
+
+async function resolvePublicLayout(db, weddingId, wedding) {
+  if (!wedding?.canonicalLayout || wedding.seatingEnabled === false) return wedding;
+  const [layouts, venue] = await Promise.all([
+    getDocs(collection(db, "weddings", weddingId, "publicLayouts")),
+    getDocs(collection(db, "weddings", weddingId, "publicVenue")),
+  ]);
+  return { ...wedding, hallObjects: venue.docs.map((row) => row.data()).filter((item) => Number.isInteger(item.index)).sort((a, b) => a.index - b.index), tables: layouts.docs.map((row) => {
+    const table = { ...row.data(), id: row.id };
+    return { ...table, chairs: generateTableChairs(table.shape, table.seatCount, table.width, table.height, [], table.id) };
+  }) };
+}
 
 const INVITATION_TOKEN_PATTERN = /^[A-Za-z0-9_-]{43}$/;
 
@@ -46,7 +61,7 @@ export async function loadInvitationContext({ weddingId, guestToken, guestId = "
       weddingId,
       guestToken,
       guestId,
-      wedding: { id: weddingId, ...invitation.wedding },
+      wedding: { id: weddingId, ...await resolvePublicLayout(db, weddingId, invitation.wedding) },
       guest: {
         ...invitation.guest,
         rsvpStatus: invitation.rsvpStatus,
@@ -65,6 +80,7 @@ export async function loadInvitationContext({ weddingId, guestToken, guestId = "
 // Firestore, and the unsubscribe is owned by the invitation page lifecycle.
 export function subscribeToInvitation(context, onChange, onError = console.error) {
   let active = true;
+  let revision = 0;
   if (!isFirebaseConfigured() || !context?.weddingId || !isValidInvitationToken(context?.guestToken || "")) {
     queueMicrotask(() => { if (active) onError(new Error("This invitation is unavailable.")); });
     return () => { active = false; };
@@ -78,8 +94,9 @@ export function subscribeToInvitation(context, onChange, onError = console.error
     onError(new Error("This invitation is unavailable."));
   };
   unsubscribe = onSnapshot(doc(db, "weddings", context.weddingId, "publicGuests", context.guestToken),
-    (snapshot) => {
+    async (snapshot) => {
       if (!active) return;
+      const currentRevision = ++revision;
       if (!snapshot.exists()) { stopWithUnavailable(); return; }
       const invitation = snapshot.data();
       if (invitation.eventId !== context.weddingId || !invitation.wedding || !invitation.guest ||
@@ -87,9 +104,13 @@ export function subscribeToInvitation(context, onChange, onError = console.error
         stopWithUnavailable();
         return;
       }
+      let wedding;
+      try { wedding = await resolvePublicLayout(db, context.weddingId, invitation.wedding); }
+      catch { stopWithUnavailable(); return; }
+      if (!active || currentRevision !== revision) return;
       onChange({
         ...context,
-        wedding: { id: context.weddingId, ...invitation.wedding },
+        wedding: { id: context.weddingId, ...wedding },
         guest: {
           ...invitation.guest,
           rsvpStatus: invitation.rsvpStatus,

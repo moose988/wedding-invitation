@@ -2,9 +2,12 @@
 
 A bilingual invitation and event dashboard built for Firebase Spark using Firebase Authentication, Cloud Firestore, and a Vercel-hosted static frontend. Live browser workflows do not require Cloud Functions, billing, paid APIs, or a local web server. Event IDs are identifiers, not credentials.
 
+See [Administrator and customer access](ACCESS-WORKFLOW.md) for the current authorization, onboarding, local tests, and trusted initial repair.
+
 ## Main routes
 
-- `all-events.html` — events available to the signed-in dashboard account.
+- `dashboard-login.html` / `all-events.html` — administrator login and event list.
+- `customer-login.html` / `customer-events.html` — customer login and assigned-event list.
 - `dashboard.html` — event settings, guests, invitations, seating, exports, and organizer actions.
 - `index.html` — public guest invitation and RSVP.
 - `side.html` — public family summary or an authenticated, side-scoped seating workspace.
@@ -50,7 +53,7 @@ The security command starts only the Firestore emulator. It does not connect to 
 ## Firebase Console setup and deployment
 
 1. Confirm the project is on the Spark plan and Cloud Firestore is initialized. Firebase Hosting is not used for production.
-2. In Firebase Console → Authentication → Sign-in method, enable **Email/Password**. Add authorized customer accounts and grant event access through the dashboard's account permission controls.
+2. In Firebase Console → Authentication → Sign-in method, enable **Email/Password**. Provision the protected platform administrator through trusted IAM tooling, then use Event Settings → **Customer access** to create/link customers.
 3. Sign in to the Firebase CLI and select the intended project:
 
 ```powershell

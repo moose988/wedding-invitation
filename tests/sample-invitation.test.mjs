@@ -21,7 +21,7 @@ test("Layla & Zaid sample panel lives once at workspace level with distinct prev
   assert.match(html, /id="sampleInvitationPanel"[^>]*\shidden(?:\s|>)/);
   assert.match(workspace, /state\.canSeeSampleInvitation = false;\s*el\.sampleInvitationPanel\.hidden = true/);
   assert.match(workspace, /if \(permissions\.seatingOnly === true\) \{[\s\S]*?return \{ \.\.\.eventSummary/);
-  assert.match(workspace, /if \(isOwner \|\| permissions\.canManageUsers === true\) state\.canSeeSampleInvitation = true/);
+  assert.match(workspace, /if \(state\.isAdmin\) state\.canSeeSampleInvitation = true/);
   assert.match(workspace, /el\.sampleInvitationPanel\.hidden = !state\.canSeeSampleInvitation/);
   assert.doesNotMatch(workspace, /girl@gmail\.com|isRestrictedAccount/);
   assert.match(styles, /\.workspace-controls\[hidden\], \.filter-row\[hidden\]\s*\{\s*display:none !important;\s*\}/);

@@ -38,9 +38,9 @@ function validColor(value) {
   return typeof value === "string" && /^#[0-9a-f]{6}$/i.test(value) ? value : "";
 }
 
-export function buildInvitationProjection(weddingId, wedding = {}, guest = {}, tables = []) {
+export function buildInvitationProjection(weddingId, wedding = {}, guest = {}, tables = [], { canonicalLayout = false } = {}) {
   const sourceTables = wedding.seatingEnabled === false ? [] : (Array.isArray(tables) ? tables : []).slice(0, 200);
-  const tableIds = new Map(sourceTables.map((table, index) => [String(table.id || ""), `t${index + 1}`]));
+  const tableIds = new Map(sourceTables.map((table, index) => [String(table.id || ""), canonicalLayout ? String(table.id) : `t${index + 1}`]));
   const projectedTables = sourceTables.map((table, index) => {
     const chairs = Array.isArray(table.chairs) ? table.chairs.slice(0, 250).map((chair, chairIndex) => ({
       id: `c${chairIndex + 1}`,
@@ -50,7 +50,7 @@ export function buildInvitationProjection(weddingId, wedding = {}, guest = {}, t
       rotation: boundedNumber(chair?.rotation, -360, 360, 0),
     })) : [];
     return {
-      id: `t${index + 1}`,
+      id: canonicalLayout ? String(table.id) : `t${index + 1}`,
       name: text(table.name || table.label, 100, "Table"),
       shape: text(table.shape, 30, "round"),
       x: boundedNumber(table.x, 0, 100, 50),
@@ -106,28 +106,32 @@ export function buildInvitationProjection(weddingId, wedding = {}, guest = {}, t
       invitationLanguage: wedding.invitationLanguage === "ar" ? "ar" : "en",
       showInvitationQr: wedding.showInvitationQr !== false,
       seatingEnabled: wedding.seatingEnabled !== false,
-      schedule: Array.isArray(wedding.schedule) ? wedding.schedule.slice(0, 12).map((item) => ({
+      schedule: canonicalLayout ? (wedding.schedule || []) : Array.isArray(wedding.schedule) ? wedding.schedule.slice(0, 12).map((item) => ({
         titleEn: text(item?.titleEn, 160), titleAr: text(item?.titleAr, 160),
         timeEn: text(item?.timeEn, 80), timeAr: text(item?.timeAr, 80),
         descriptionEn: text(item?.descriptionEn, 500), descriptionAr: text(item?.descriptionAr, 500),
       })) : [],
-      hallObjects: Array.isArray(wedding.hallObjects) ? wedding.hallObjects.slice(0, 100).map((item) => ({
+      hallObjects: canonicalLayout ? [] : Array.isArray(wedding.hallObjects) ? wedding.hallObjects.slice(0, 100).map((item) => ({
         id: text(item?.id, 80), type: text(item?.type, 40), label: text(item?.label, 100),
         x: boundedNumber(item?.x, 0, 100, 50), y: boundedNumber(item?.y, 0, 100, 50),
         width: boundedNumber(item?.width, 0, 1200, 280), height: boundedNumber(item?.height, 0, 1200, 280),
         rotation: boundedNumber(item?.rotation, -360, 360, 0), shape: text(item?.shape, 40),
         fillColor: validColor(item?.fillColor), borderColor: validColor(item?.borderColor),
       })) : [],
-      tables: projectedTables,
+      tables: canonicalLayout ? [] : projectedTables,
+      ...(canonicalLayout ? { canonicalLayout: true } : {}),
     },
     guest: {
       fullName: text(guest.fullName, 160, "Guest"),
       additionalGuestAllowance: Number.isInteger(allowance) ? Math.max(0, Math.min(allowance, 10)) :
         (Number.isInteger(extra) ? Math.max(0, Math.min(extra, 10)) : 0),
-      seatingAssignments: assignments,
+      seatingAssignments: canonicalLayout ? rawAssignments.map((item) => ({
+        tableId: text(item?.tableId, 150), tableName: text(item?.tableName, 100),
+        seatNumber: String(item?.seatNumber || ""), personKey: text(item?.personKey, 40), label: text(item?.label, 80),
+      })) : assignments,
       tableId: "",
-      tableName: assignments[0]?.tableName || "",
-      seatNumber: assignments[0]?.seatNumber || "",
+      tableName: canonicalLayout ? (guest.tableName || "") : assignments[0]?.tableName || "",
+      seatNumber: canonicalLayout ? String(guest.seatNumber || "") : assignments[0]?.seatNumber || "",
     },
   };
 }

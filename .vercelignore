@@ -1,0 +1,17 @@
+.git
+.firebase
+.local-evidence
+.playwright-mcp
+node_modules
+functions
+tests
+scripts
+*.log
+README.md
+SECURITY.md
+RELEASE.md
+ACCESS-WORKFLOW.md
+firestore.rules
+firestore.indexes.json
+firebase.json
+package-lock.json

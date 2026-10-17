@@ -5,6 +5,17 @@ service cloud.firestore {
       return request.auth != null;
     }
 
+    // Provisioned only through trusted IAM credentials. All client writes,
+    // including writes by administrators, are denied below.
+    function isPlatformAdmin() {
+      return isSignedIn() && exists(/databases/$(database)/documents/platformAdmins/$(request.auth.uid))
+        && get(/databases/$(database)/documents/platformAdmins/$(request.auth.uid)).data.enabled == true;
+    }
+
+    function isCustomer(weddingId) {
+      return isSignedIn() && exists(dashboardUserPath(weddingId)) && dashboardUser(weddingId).data.get("role", "") == "customer";
+    }
+
     function eventAvailable(weddingId) {
       return exists(/databases/$(database)/documents/weddings/$(weddingId))
         && get(/databases/$(database)/documents/weddings/$(weddingId)).data.get("deleting", false) != true;
@@ -12,7 +23,7 @@ service cloud.firestore {
 
     function isEventOwner(weddingId) {
       return isSignedIn() && exists(/databases/$(database)/documents/weddings/$(weddingId))
-        && get(/databases/$(database)/documents/weddings/$(weddingId)).data.ownerUserId == request.auth.uid;
+        && (isPlatformAdmin() || get(/databases/$(database)/documents/weddings/$(weddingId)).data.ownerUserId == request.auth.uid);
     }
 
     function dashboardUserPath(weddingId) {
@@ -28,13 +39,13 @@ service cloud.firestore {
     }
 
     function canViewDashboard(weddingId) {
-      return isDashboardMember(weddingId) && dashboardUser(weddingId).data.canViewDashboard == true;
+      return (isPlatformAdmin() && eventAvailable(weddingId)) || (isDashboardMember(weddingId) && dashboardUser(weddingId).data.canViewDashboard == true);
     }
 
     function canManageGuestRecords(weddingId) {
-      return isDashboardMember(weddingId) &&
+      return (isPlatformAdmin() && eventAvailable(weddingId)) || (isDashboardMember(weddingId) &&
         dashboardUser(weddingId).data.get("canEditGuests", false) == true &&
-        dashboardUser(weddingId).data.get("seatingOnly", false) != true;
+        dashboardUser(weddingId).data.get("seatingOnly", false) != true);
     }
 
     function canEditSeating(weddingId) {
@@ -164,24 +175,7 @@ service cloud.firestore {
     }
 
     function canManageUsers(weddingId) {
-      return isEventOwner(weddingId);
-    }
-
-    // The production Layla & Zaid event was created before an Auth owner was
-    // attached. Allow only its designated, existing admin account to claim
-    // the placeholder once; all later owner operations use isEventOwner.
-    function canClaimLaylaZaidOwner(weddingId) {
-      return isSignedIn()
-        && weddingId == "luxury-wedding-demo"
-        && resource.data.get("ownerUserId", "") == "pending-auth-setup"
-        && resource.data.get("deleting", false) != true
-        && request.auth.token.get("email", "") == "test@gmail.com"
-        && exists(dashboardUserPath(weddingId))
-        && dashboardUser(weddingId).data.get("role", "") == "admin"
-        && dashboardUser(weddingId).data.get("canManageUsers", false) == true
-        && request.resource.data.get("ownerUserId", "") == request.auth.uid
-        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(["ownerUserId", "updatedAt"])
-        && request.resource.data.get("updatedAt", null) == request.time;
+      return isPlatformAdmin() && eventAvailable(weddingId);
     }
 
     function isEventDeletingOwner(weddingId) {
@@ -194,7 +188,7 @@ service cloud.firestore {
           "userId", "email", "role", "canViewDashboard", "canEditGuests",
           "canEditSeating", "canCheckIn", "canManageUsers", "canEditEventDetails",
           "canViewEventSettings", "canExport", "allowedViews", "seatingOnly",
-          "allowedSide", "createdAt", "updatedAt"
+          "allowedSide", "createdAt", "updatedAt", "grantId"
         ])
         && data.get("userId", "") == userId
         && data.get("email", "") is string && data.get("email", "").size() <= 254
@@ -215,7 +209,40 @@ service cloud.firestore {
         && data.get("seatingOnly", false) is bool
         && data.get("allowedSide", "all") in ["all", "bride", "groom", "family"]
         && (!data.keys().hasAny(["createdAt"]) || data.createdAt is timestamp)
-        && (!data.keys().hasAny(["updatedAt"]) || data.updatedAt == request.time);
+        && (!data.keys().hasAny(["updatedAt"]) || data.updatedAt == request.time)
+        && (data.get("role", "") != "customer" || validCustomerProfile(data));
+    }
+
+    function validCustomerProfile(data) {
+      return data.role == "customer" && data.canViewDashboard == true
+        && data.canEditGuests == true && data.canEditSeating == true
+        && data.canEditEventDetails == true && data.canViewEventSettings == true
+        && data.canExport == true && data.canCheckIn == false && data.canManageUsers == false
+        && data.seatingOnly == false && data.allowedSide == "all"
+        && data.allowedViews == ["overview", "guests", "seating", "settings", "exports"];
+    }
+
+    function canRedeemCustomerGrant(weddingId, userId, data) {
+      let grant = /databases/$(database)/documents/customerGrants/$(data.get("grantId", "missing"));
+      return isSignedIn() && request.auth.uid == userId
+        && request.auth.token.get("email_verified", false) == true
+        && data.email == request.auth.token.email.lower()
+        && exists(grant) && get(grant).data.email == data.email
+        && get(grant).data.weddingId == weddingId && get(grant).data.role == "customer"
+        && !existsAfter(grant) && validDashboardMembership(data, userId) && validCustomerProfile(data);
+    }
+
+    function isCustomerEventDetailsUpdate(weddingId) {
+      return isCustomer(weddingId) && canEditEventDetails(weddingId)
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly([
+          "eventTitle", "coupleName", "brideName", "groomName", "eventDateISO", "timeEn", "timeAr",
+          "venueEn", "location", "locationEn", "mapsUrl", "whatsAppCountryCode", "invitationLanguage", "updatedAt"
+        ])
+        && (resource.data.get("eventCategory", "wedding_engagement") != "celebration"
+          || !request.resource.data.diff(resource.data).affectedKeys().hasAny(["coupleName", "brideName", "groomName"]))
+        && validEventDetails(request.resource.data) && request.resource.data.updatedAt == request.time
+        && request.resource.data.get("whatsAppCountryCode", "971").matches("^[0-9]{1,4}$")
+        && request.resource.data.get("invitationLanguage", "en") in ["en", "ar"];
     }
 
     // Event owners retain access automatically. Other dashboard users need
@@ -227,6 +254,7 @@ service cloud.firestore {
 
     function isInvitationQrSettingsUpdate(weddingId) {
       return isSignedIn()
+        && !isCustomer(weddingId)
         && (request.auth.uid == resource.data.ownerUserId || canManageUsers(weddingId) || canEditEventDetails(weddingId))
         && request.resource.data.diff(resource.data).affectedKeys()
           .hasOnly(["showInvitationQr", "updatedAt"])
@@ -236,6 +264,7 @@ service cloud.firestore {
 
     function isInvitationSeatingSettingsUpdate(weddingId) {
       return isSignedIn()
+        && !isCustomer(weddingId)
         && (request.auth.uid == resource.data.ownerUserId || canManageUsers(weddingId) || canEditEventDetails(weddingId))
         && request.resource.data.diff(resource.data).affectedKeys()
           .hasOnly(["seatingEnabled", "updatedAt"])
@@ -273,7 +302,7 @@ service cloud.firestore {
       let statusUnchanged = !changes.hasAny(["status"]);
       let normalStatusChange = resource.data.get("status", "") != "completed"
         && request.resource.data.get("status", "") in ["draft", "upcoming", "active", "archived"];
-      return (request.auth.uid == resource.data.ownerUserId || canEditEventDetails(weddingId))
+      return !isCustomer(weddingId) && (isPlatformAdmin() || request.auth.uid == resource.data.ownerUserId || canEditEventDetails(weddingId))
         && changes.hasOnly([
           "eventCategory", "eventTitle", "coupleName", "brideName", "groomName",
           "eventDateISO", "timeEn", "timeAr", "venueEn", "location", "locationEn",
@@ -304,7 +333,7 @@ service cloud.firestore {
         && changes.hasOnly(["status", "updatedAt"]);
       let archiving = nextStatus in ["archived", "draft"]
         && changes.hasOnly(["status", "updatedAt"]);
-      return (request.auth.uid == resource.data.ownerUserId || canEditEventDetails(weddingId))
+      return !isCustomer(weddingId) && (isPlatformAdmin() || request.auth.uid == resource.data.ownerUserId || canEditEventDetails(weddingId))
         && changes.hasOnly(["status", "completedAt", "statusBeforeCompletion", "updatedAt"])
         && request.resource.data.updatedAt == request.time
         && (completing || reopening || ordinaryStatusChange || archiving);
@@ -390,7 +419,7 @@ service cloud.firestore {
           "eventCategory", "eventDateISO", "rsvpDeadlineISO", "timeEn", "timeAr", "venueEn",
           "location", "locationEn", "mapsUrl", "venueMapEmbedUrl", "subtitleEn", "subtitleAr",
           "invitationMessageEn", "invitationMessageAr", "invitationLanguage", "showInvitationQr",
-          "seatingEnabled", "schedule", "hallObjects", "tables"
+          "seatingEnabled", "schedule", "hallObjects", "tables", "canonicalLayout"
         ])
         && data.guest is map
         && data.guest.keys().hasOnly([
@@ -413,6 +442,54 @@ service cloud.firestore {
       // Legacy guest records may omit additionalGuestAllowance. The client has
       // always treated additionalGuests as their effective allowance.
       return guest.get("additionalGuestAllowance", guest.get("additionalGuests", 0));
+    }
+
+    function canonicalCustomerInvitation(weddingId, token, data) {
+      let guestId = getAfter(invitationTokenPath(weddingId, token)).data.guestId;
+      let guest = getAfter(/databases/$(database)/documents/weddings/$(weddingId)/guests/$(guestId)).data;
+      let event = getAfter(/databases/$(database)/documents/weddings/$(weddingId)).data;
+      return !isCustomer(weddingId) || (data.wedding == {
+          "canonicalLayout": true, "tables": [], "hallObjects": [],
+          "eventTitle": event.get("eventTitle", ""), "coupleName": event.get("coupleName", ""),
+          "brideName": event.get("brideName", ""), "groomName": event.get("groomName", ""),
+          "brideNameAr": event.get("brideNameAr", ""), "groomNameAr": event.get("groomNameAr", ""),
+          "eventCategory": event.get("eventCategory", "wedding_engagement"), "eventDateISO": event.get("eventDateISO", ""),
+          "rsvpDeadlineISO": event.get("rsvpDeadlineISO", ""), "timeEn": event.get("timeEn", ""), "timeAr": event.get("timeAr", ""),
+          "venueEn": event.get("venueEn", ""), "location": event.get("location", ""), "locationEn": event.get("locationEn", ""),
+          "mapsUrl": event.get("mapsUrl", ""), "venueMapEmbedUrl": event.get("venueMapEmbedUrl", ""),
+          "subtitleEn": event.get("subtitleEn", ""), "subtitleAr": event.get("subtitleAr", ""),
+          "invitationMessageEn": event.get("invitationMessageEn", ""), "invitationMessageAr": event.get("invitationMessageAr", ""),
+          "invitationLanguage": event.get("invitationLanguage", "en"), "showInvitationQr": event.get("showInvitationQr", true),
+          "seatingEnabled": event.get("seatingEnabled", true), "schedule": event.get("schedule", [])
+        }
+        && canonicalPublicAssignments(data.guest.seatingAssignments, guest.get("seatingAssignments", []))
+        && data.guest.tableName == guest.get("tableName", "") && data.guest.seatNumber == guest.get("seatNumber", "")
+        && data.rsvpStatus == guest.get("rsvpStatus", "pending")
+        && data.additionalGuests == guest.get("additionalGuests", 0) && data.rsvpMessage == guest.get("rsvpMessage", ""));
+    }
+
+    function canonicalPublicAssignmentAt(projected, canonical, index) {
+      return projected.size() <= index || projected[index].keys().hasOnly(["tableId", "tableName", "seatNumber", "personKey", "label"]);
+    }
+
+    function canonicalPublicAssignments(projected, canonical) {
+      return projected == canonical && projected.size() <= 11
+        && canonicalPublicAssignmentAt(projected, canonical, 0) && canonicalPublicAssignmentAt(projected, canonical, 1)
+        && canonicalPublicAssignmentAt(projected, canonical, 2) && canonicalPublicAssignmentAt(projected, canonical, 3)
+        && canonicalPublicAssignmentAt(projected, canonical, 4) && canonicalPublicAssignmentAt(projected, canonical, 5)
+        && canonicalPublicAssignmentAt(projected, canonical, 6) && canonicalPublicAssignmentAt(projected, canonical, 7)
+        && canonicalPublicAssignmentAt(projected, canonical, 8) && canonicalPublicAssignmentAt(projected, canonical, 9)
+        && canonicalPublicAssignmentAt(projected, canonical, 10);
+    }
+
+    function customerInvitationWrite(weddingId, token, data) {
+      let index = getAfter(invitationTokenPath(weddingId, token)).data;
+      let guest = getAfter(/databases/$(database)/documents/weddings/$(weddingId)/guests/$(index.guestId)).data;
+      return eventAvailable(weddingId) && index.status == "active" && index.purpose == "guest-invitation"
+        && data.expiresAt == index.expiresAt && validInvitationToken(token)
+        && validInvitationProjection(data, weddingId) && canonicalCustomerInvitation(weddingId, token, data)
+        && data.guest.fullName == guest.fullName && data.guest.additionalGuestAllowance == invitationGuestAllowance(guest)
+        && data.updatedAt == request.time;
     }
 
     function isGuestRsvpUpdate(weddingId) {
@@ -510,20 +587,14 @@ service cloud.firestore {
         && request.resource.data.updatedAt == request.time;
     }
 
-    function validGuestDocument(data) {
+    function validGuestDocumentFields(data) {
       let extra = data.get("additionalGuests", 0);
       let allowance = data.get("additionalGuestAllowance", extra);
       let status = data.get("rsvpStatus", "pending");
       let message = data.get("rsvpMessage", "");
       let fullName = data.get("fullName", "");
       let phone = data.get("phone", "");
-      return data.keys().hasOnly([
-          "fullName", "phone", "side", "additionalGuests", "additionalGuestAllowance",
-          "rsvpStatus", "rsvpMessage", "tableId", "tableName", "seatNumber",
-          "seatingAssignments", "checkedIn", "checkedInAt", "notes", "inviteSentAt",
-          "reminderSentAt", "createdAt", "updatedAt"
-        ])
-        && fullName is string && fullName.size() > 0 && fullName.size() <= 160
+      return fullName is string && fullName.size() > 0 && fullName.size() <= 160
         && phone is string && phone.size() <= 40
         && extra is int && extra >= 0 && extra <= 10
         && allowance is int && allowance >= 0 && allowance <= 10
@@ -540,6 +611,29 @@ service cloud.firestore {
         && (data.get("reminderSentAt", null) == null || data.get("reminderSentAt", null) is timestamp)
         && (!data.keys().hasAny(["createdAt"]) || data.createdAt is timestamp)
         && (!data.keys().hasAny(["updatedAt"]) || data.updatedAt is timestamp);
+    }
+
+    function validGuestDocument(data) {
+      return data.keys().hasOnly([
+          "fullName", "phone", "side", "additionalGuests", "additionalGuestAllowance",
+          "rsvpStatus", "rsvpMessage", "tableId", "tableName", "seatNumber",
+          "seatingAssignments", "checkedIn", "checkedInAt", "notes", "inviteSentAt",
+          "reminderSentAt", "createdAt", "updatedAt"
+        ]) && validGuestDocumentFields(data);
+    }
+
+    // Existing production guests may still carry fields from the retired
+    // Functions workflow. Owners can edit supported fields and finish the
+    // seating migration while those legacy values remain byte-for-byte intact.
+    // New guest records continue to use the strict validGuestDocument schema.
+    function validLegacyGuestDocumentUpdate(data) {
+      return data.keys().hasOnly([
+          "fullName", "phone", "side", "additionalGuests", "additionalGuestAllowance",
+          "rsvpStatus", "rsvpMessage", "tableId", "tableName", "seatNumber",
+          "seatingAssignments", "checkedIn", "checkedInAt", "notes", "inviteSentAt",
+          "reminderSentAt", "createdAt", "updatedAt", "qrCodeValue", "inviteLink",
+          "fullNameAr", "guestToken", "token", "id"
+        ]) && validGuestDocumentFields(data);
     }
 
     function seatingGuestPath(weddingId, guestId) {
@@ -619,6 +713,22 @@ service cloud.firestore {
         && (!data.keys().hasAny(["updatedAt"]) || data.updatedAt is timestamp);
     }
 
+    function canonicalGuestProjection(weddingId, guestId, data) {
+      let guest = getAfter(/databases/$(database)/documents/weddings/$(weddingId)/guests/$(guestId)).data;
+      return data.fullName == guest.fullName && data.side == normalizedGuestSide(guest)
+        && data.rsvpStatus == guest.get("rsvpStatus", "pending")
+        && (!data.keys().hasAny(["additionalGuests"]) || data.additionalGuests == guest.get("additionalGuests", 0));
+    }
+
+    function canonicalCheckinProjection(weddingId, guestId, data) {
+      let guest = getAfter(/databases/$(database)/documents/weddings/$(weddingId)/guests/$(guestId)).data;
+      return canonicalGuestProjection(weddingId, guestId, data)
+        && data.phone == guest.get("phone", "") && data.checkedIn == guest.get("checkedIn", false)
+        && data.checkedInAt == guest.get("checkedInAt", null)
+        && data.tableId == guest.get("tableId", "") && data.tableName == guest.get("tableName", "")
+        && data.seatNumber == guest.get("seatNumber", "");
+    }
+
     function validSeatAssignment(data, weddingId, seatId) {
       let guestPath = seatingGuestPath(weddingId, data.guestId);
       let occupancyPath = seatOccupancyPath(weddingId, data.tableId, data.chairId);
@@ -626,6 +736,7 @@ service cloud.firestore {
       let guestAfter = getAfter(guestPath).data;
       let occupancyAfter = getAfter(occupancyPath).data;
       let bindingAfter = getAfter(bindingPath).data;
+      let table = getAfter(/databases/$(database)/documents/weddings/$(weddingId)/tables/$(data.tableId)).data;
       return data.keys().hasOnly(["weddingId", "tableId", "chairId", "guestId", "partyMemberIndex", "personKey", "side", "seatNumber", "updatedAt"])
         && data.keys().hasAll(["weddingId", "tableId", "chairId", "guestId", "partyMemberIndex", "personKey", "side", "seatNumber", "updatedAt"])
         && data.weddingId == weddingId
@@ -639,7 +750,8 @@ service cloud.firestore {
         && validPartyPerson(guestAfter, data.personKey, data.partyMemberIndex)
         && data.side == guestAfter.side
         && data.partyMemberIndex <= guestAfter.additionalGuests
-        && data.seatNumber is int && data.seatNumber >= 0 && data.seatNumber <= 1000
+        && data.seatNumber is int && data.seatNumber >= 1 && data.seatNumber <= table.chairs.size()
+        && table.chairs[data.seatNumber - 1].id == data.chairId
         && data.updatedAt == request.time
         && existsAfter(occupancyPath)
         && occupancyAfter.occupied == true
@@ -702,7 +814,7 @@ service cloud.firestore {
       allow get: if isEventOwner(weddingId) || isFullDashboardAccount(weddingId);
       allow list: if isFullDashboardAccount(weddingId);
 
-      allow create: if isSignedIn() &&
+      allow create: if isPlatformAdmin() &&
         request.auth.uid == request.resource.data.ownerUserId &&
         request.resource.data.eventCategory in ["wedding_engagement", "celebration"];
 
@@ -710,8 +822,9 @@ service cloud.firestore {
       // stage/entrance markers live on the wedding document. Let seating
       // editors update only that layout field, without granting access to any
       // other wedding settings.
-      allow update: if canClaimLaylaZaidOwner(weddingId)
-        || (validEventCategory(request.resource.data) && (isOwnerEventDetailsUpdate(weddingId)
+      allow update: if isCustomer(weddingId) ? (isCustomerEventDetailsUpdate(weddingId)
+        || (canManageSeatingLayout(weddingId) && request.resource.data.diff(resource.data).affectedKeys().hasOnly(["hallObjects", "updatedAt"]) && request.resource.data.updatedAt == request.time))
+        : (validEventCategory(request.resource.data) && (isOwnerEventDetailsUpdate(weddingId)
         || isOwnerLifecycleUpdate(weddingId)
         || isOwnerHallLayoutUpdate(weddingId)
         || isInvitationQrSettingsUpdate(weddingId)
@@ -734,20 +847,21 @@ service cloud.firestore {
 
       match /dashboardUsers/{userId} {
         allow get: if (isDashboardMember(weddingId) && request.auth.uid == userId)
-          || isEventOwner(weddingId);
+          || isPlatformAdmin();
         allow list: if canManageUsers(weddingId);
         allow create: if canManageUsers(weddingId)
           && userId != get(/databases/$(database)/documents/weddings/$(weddingId)).data.ownerUserId
           && validDashboardMembership(request.resource.data, userId);
+        allow create: if canRedeemCustomerGrant(weddingId, userId, request.resource.data);
         // Bootstrap the owner record atomically with the event document.
-        allow create: if (isSignedIn()
+        allow create: if (isPlatformAdmin()
           && userId == request.auth.uid
           && request.resource.data.get("userId", "") == userId
           && getAfter(/databases/$(database)/documents/weddings/$(weddingId)).data.ownerUserId == request.auth.uid
           && request.resource.data.canViewDashboard == true
           && request.resource.data.canManageUsers == true
           && validDashboardMembership(request.resource.data, userId));
-        allow update: if canManageUsers(weddingId)
+        allow update: if (resource.data.get("role", "") == "customer" && canRedeemCustomerGrant(weddingId, userId, request.resource.data)) || canManageUsers(weddingId)
           && userId != get(/databases/$(database)/documents/weddings/$(weddingId)).data.ownerUserId
           && validDashboardMembership(request.resource.data, userId);
         allow delete: if canManageUsers(weddingId)
@@ -768,13 +882,15 @@ service cloud.firestore {
       match /guests/{guestId} {
         allow get, list: if isFullDashboardAccount(weddingId);
         allow create: if canManageGuestRecords(weddingId) &&
+          (!isCustomer(weddingId) || (request.resource.data.get("checkedIn", false) == false && request.resource.data.get("checkedInAt", null) == null)) &&
           validGuestDocument(request.resource.data) &&
           validGuestSide(weddingId, request.resource.data, false) &&
           (!request.resource.data.keys().hasAny(["createdAt"]) || request.resource.data.createdAt == request.time) &&
           (!request.resource.data.keys().hasAny(["updatedAt"]) || request.resource.data.updatedAt == request.time);
         allow delete: if canManageGuestRecords(weddingId);
         allow update: if (canManageGuestRecords(weddingId) &&
-            validGuestDocument(request.resource.data) &&
+            (!isCustomer(weddingId) || !request.resource.data.diff(resource.data).affectedKeys().hasAny(["checkedIn", "checkedInAt"])) &&
+            validLegacyGuestDocumentUpdate(request.resource.data) &&
             request.resource.data.diff(resource.data).affectedKeys().hasOnly([
               "fullName", "phone", "side", "additionalGuests", "additionalGuestAllowance",
               "rsvpStatus", "rsvpMessage", "tableId", "tableName", "seatNumber",
@@ -795,8 +911,8 @@ service cloud.firestore {
           || (seatingMemberMayReadSide(weddingId, resource.data.side));
         allow list: if isEventOwner(weddingId)
           || seatingMemberMayReadSide(weddingId, resource.data.side);
-        allow create: if isEventOwner(weddingId) && validSeatingGuest(request.resource.data, guestId);
-        allow update: if (isEventOwner(weddingId) && validSeatingGuest(request.resource.data, guestId))
+        allow create: if (isEventOwner(weddingId) || canManageGuestRecords(weddingId)) && validSeatingGuest(request.resource.data, guestId) && (!isCustomer(weddingId) || canonicalGuestProjection(weddingId, guestId, request.resource.data));
+        allow update: if ((isEventOwner(weddingId) || canManageGuestRecords(weddingId)) && validSeatingGuest(request.resource.data, guestId) && (!isCustomer(weddingId) || canonicalGuestProjection(weddingId, guestId, request.resource.data)))
           || isPublicGuestRsvpSeatingMirrorUpdate(weddingId, guestId);
         allow delete: if isEventDeletingOwner(weddingId) || canManageGuestRecords(weddingId);
       }
@@ -804,8 +920,8 @@ service cloud.firestore {
       match /checkinGuests/{guestId} {
         allow get, list: if isEventOwner(weddingId)
           || (canCheckIn(weddingId) && checkInAccountMayAccessGuest(weddingId, resource.data));
-        allow create: if isEventOwner(weddingId) && validCheckinGuest(request.resource.data, guestId);
-        allow update: if (isEventOwner(weddingId) && validCheckinGuest(request.resource.data, guestId))
+        allow create: if (isEventOwner(weddingId) || canManageGuestRecords(weddingId)) && validCheckinGuest(request.resource.data, guestId) && (!isCustomer(weddingId) || canonicalCheckinProjection(weddingId, guestId, request.resource.data));
+        allow update: if ((isEventOwner(weddingId) || canManageGuestRecords(weddingId)) && validCheckinGuest(request.resource.data, guestId) && (!isCustomer(weddingId) || canonicalCheckinProjection(weddingId, guestId, request.resource.data)))
           || (canCheckIn(weddingId) && checkInAccountMayAccessGuest(weddingId, resource.data)
             && request.resource.data.diff(resource.data).affectedKeys().hasOnly(["checkedIn", "checkedInAt", "updatedAt"])
             && request.resource.data.checkedIn == true
@@ -880,6 +996,39 @@ service cloud.firestore {
           && request.resource.data.status in ["running", "complete", "blocked"]
           && request.resource.data.updatedAt == request.time;
         allow delete: if isEventDeletingOwner(weddingId);
+      }
+
+      // Only venue geometry is public. One canonical table per document avoids
+      // trusting arbitrary nested arrays in invitation projections and keeps
+      // each validation within Firestore's document-access budget.
+      match /publicLayouts/{tableId} {
+        allow read: if eventAvailable(weddingId);
+        allow create, update: if canManageSeatingLayout(weddingId)
+          && request.resource.data.keys().hasOnly(["name", "shape", "x", "y", "width", "height", "rotation", "seatCount", "tableColor", "borderColor", "chairColor", "updatedAt"])
+          && request.resource.data.diff(getAfter(/databases/$(database)/documents/weddings/$(weddingId)/tables/$(tableId)).data).affectedKeys().hasOnly(["id", "tableName", "label", "chairs", "capacity", "guestIds", "floorZone", "locked", "createdAt", "updatedAt"])
+          && request.resource.data.updatedAt == request.time;
+        allow delete: if canManageSeatingLayout(weddingId) && !existsAfter(/databases/$(database)/documents/weddings/$(weddingId)/tables/$(tableId));
+      }
+
+      match /publicVenue/{docId} {
+        allow get, list: if eventAvailable(weddingId);
+        function canonicalVenueObject() {
+          let index = request.resource.data.index;
+          let objects = getAfter(/databases/$(database)/documents/weddings/$(weddingId)).data.get("hallObjects", []);
+          let item = objects[index];
+          return index is int && index >= 0 && index < objects.size()
+            && request.resource.data == {
+              "index": index, "id": item.get("id", ""), "type": item.get("type", ""), "label": item.get("label", ""),
+              "x": item.get("x", 50), "y": item.get("y", 50), "width": item.get("width", 280), "height": item.get("height", 280),
+              "rotation": item.get("rotation", 0), "shape": item.get("shape", ""), "fillColor": item.get("fillColor", ""),
+              "borderColor": item.get("borderColor", ""), "updatedAt": request.time
+            };
+        }
+        allow create, update: if canManageSeatingLayout(weddingId) && canonicalVenueObject();
+        allow delete: if isEventDeletingOwner(weddingId) || (canManageSeatingLayout(weddingId)
+          && (resource.data.get("index", -1) < 0
+            || resource.data.index >= getAfter(/databases/$(database)/documents/weddings/$(weddingId)).data.get("hallObjects", []).size()
+            || resource.data.id != getAfter(/databases/$(database)/documents/weddings/$(weddingId)).data.hallObjects[resource.data.index].id));
       }
 
       match /eventMaintenance/{maintenanceId} {
@@ -1013,11 +1162,11 @@ service cloud.firestore {
         }
         allow get: if (isEventOwner(weddingId) || (capabilityIsActive() && invitationEventExists(weddingId)));
         allow list: if isEventOwner(weddingId);
-        allow create: if canManageGuestRecords(weddingId)
+        allow create: if !isCustomer(weddingId) && canManageGuestRecords(weddingId)
           && request.resource.data.createdBy == request.auth.uid
           && request.resource.data.status == "preparing"
           && validSenderCapability(request.resource.data);
-        allow update: if (isEventOwner(weddingId) || (canManageGuestRecords(weddingId) && resource.data.createdBy == request.auth.uid))
+        allow update: if !isCustomer(weddingId) && (isEventOwner(weddingId) || (canManageGuestRecords(weddingId) && resource.data.createdBy == request.auth.uid))
           && request.resource.data.diff(resource.data).affectedKeys().hasOnly(["status", "updatedAt"])
           && request.resource.data.status in ["active", "revoked"]
           && request.resource.data.updatedAt == request.time
@@ -1041,7 +1190,7 @@ service cloud.firestore {
               && (get(/databases/$(database)/documents/weddings/$(weddingId)/senderCapabilities/$(capabilityId)).data.expiresAt == null
                 || get(/databases/$(database)/documents/weddings/$(weddingId)/senderCapabilities/$(capabilityId)).data.expiresAt > request.time));
           allow list: if false;
-          allow create: if canManageGuestRecords(weddingId)
+          allow create: if !isCustomer(weddingId) && canManageGuestRecords(weddingId)
             && get(/databases/$(database)/documents/weddings/$(weddingId)/senderCapabilities/$(capabilityId)).data.createdBy == request.auth.uid
             && get(/databases/$(database)/documents/weddings/$(weddingId)/senderCapabilities/$(capabilityId)).data.status == "preparing"
             && validSenderRecipients(request.resource.data);
@@ -1056,22 +1205,24 @@ service cloud.firestore {
       match /publicGuests/{guestToken} {
         allow get: if isActiveInvitationToken(weddingId, guestToken) || canReadInvitationTokenRecord(weddingId, guestToken);
         allow list: if false;
-        allow create: if invitationEventExists(weddingId)
+        allow create: if isCustomer(weddingId) ? customerInvitationWrite(weddingId, guestToken, request.resource.data) : invitationEventExists(weddingId)
           && canManageInvitationForGuest(weddingId,
             getAfter(invitationTokenPath(weddingId, guestToken)).data.guestId)
           && validInvitationToken(guestToken)
           && validInvitationProjection(request.resource.data, weddingId)
+          && canonicalCustomerInvitation(weddingId, guestToken, request.resource.data)
           && getAfter(invitationTokenPath(weddingId, guestToken)).data.status == "active"
           && getAfter(invitationTokenPath(weddingId, guestToken)).data.purpose == "guest-invitation"
           && getAfter(invitationTokenPath(weddingId, guestToken)).data.expiresAt == request.resource.data.expiresAt
           && getAfter(/databases/$(database)/documents/weddings/$(weddingId)/guests/$(getAfter(invitationTokenPath(weddingId, guestToken)).data.guestId)).data.fullName == request.resource.data.guest.fullName
           && invitationGuestAllowance(getAfter(/databases/$(database)/documents/weddings/$(weddingId)/guests/$(getAfter(invitationTokenPath(weddingId, guestToken)).data.guestId)).data) == request.resource.data.guest.additionalGuestAllowance
           && request.resource.data.updatedAt == request.time;
-        allow update: if isPublicGuestRsvpUpdate(weddingId, guestToken)
+        allow update: if isCustomer(weddingId) ? customerInvitationWrite(weddingId, guestToken, request.resource.data) : isPublicGuestRsvpUpdate(weddingId, guestToken)
           || (invitationEventExists(weddingId)
             && canManageInvitationForGuest(weddingId,
             get(invitationTokenPath(weddingId, guestToken)).data.guestId)
             && validInvitationProjection(request.resource.data, weddingId)
+            && canonicalCustomerInvitation(weddingId, guestToken, request.resource.data)
             && get(invitationTokenPath(weddingId, guestToken)).data.status == "active"
             && get(invitationTokenPath(weddingId, guestToken)).data.purpose == "guest-invitation"
             && get(invitationTokenPath(weddingId, guestToken)).data.guestId is string
@@ -1096,12 +1247,42 @@ service cloud.firestore {
     // A private, user-owned index for the Wedding Workspace. It intentionally
     // duplicates only card metadata; no guest data or invitation tokens live here.
     match /users/{userId}/weddingAccess/{weddingId} {
-      allow read: if isSignedIn() && request.auth.uid == userId;
-      allow create: if isSignedIn() && request.auth.uid == userId &&
-        (isDashboardMember(weddingId) ||
-          getAfter(/databases/$(database)/documents/weddings/$(weddingId)).data.ownerUserId == userId);
-      allow update: if isSignedIn() && request.auth.uid == userId;
-      allow delete: if (isSignedIn() && request.auth.uid == userId) || isEventDeletingOwner(weddingId);
+      allow read: if isPlatformAdmin() || (isSignedIn() && request.auth.uid == userId);
+      allow create, update: if isPlatformAdmin() || (isSignedIn() && request.auth.uid == userId &&
+        (existsAfter(/databases/$(database)/documents/weddings/$(weddingId)/dashboardUsers/$(userId)) ||
+          getAfter(/databases/$(database)/documents/weddings/$(weddingId)).data.ownerUserId == userId));
+      allow delete: if isPlatformAdmin() || (isSignedIn() && request.auth.uid == userId) || isEventDeletingOwner(weddingId);
+    }
+
+    match /platformAdmins/{userId} {
+      allow get: if isSignedIn() && request.auth.uid == userId;
+      allow list, write: if false;
+    }
+
+    match /customerDirectory/{userId} {
+      allow get: if isPlatformAdmin() || (isSignedIn() && request.auth.uid == userId);
+      allow list: if isPlatformAdmin();
+      allow create, update: if (isPlatformAdmin() || (isSignedIn() && request.auth.uid == userId
+          && request.auth.token.get("email_verified", false) == true
+          && request.resource.data.email == request.auth.token.email.lower()))
+        && request.resource.data.keys().hasOnly(["userId", "email", "updatedAt"])
+        && request.resource.data.userId == userId && request.resource.data.email is string
+        && request.resource.data.updatedAt == request.time;
+      allow delete: if isPlatformAdmin();
+    }
+
+    match /customerGrants/{grantId} {
+      allow get, list: if isPlatformAdmin() || (isSignedIn() && request.auth.token.get("email_verified", false) == true
+        && resource.data.email == request.auth.token.email.lower());
+      allow create, update: if isPlatformAdmin()
+        && request.resource.data.keys().hasOnly(["email", "weddingId", "role", "updatedAt"])
+        && request.resource.data.role == "customer" && request.resource.data.email is string
+        && request.resource.data.email == request.resource.data.email.lower()
+        && eventAvailable(request.resource.data.weddingId) && request.resource.data.updatedAt == request.time;
+      allow delete: if isPlatformAdmin() || (isSignedIn() && request.auth.token.get("email_verified", false) == true
+        && resource.data.email == request.auth.token.email.lower()
+        && existsAfter(/databases/$(database)/documents/weddings/$(resource.data.weddingId)/dashboardUsers/$(request.auth.uid))
+        && validCustomerProfile(getAfter(/databases/$(database)/documents/weddings/$(resource.data.weddingId)/dashboardUsers/$(request.auth.uid)).data));
     }
   }
 }

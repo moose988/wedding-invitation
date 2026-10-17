@@ -75,13 +75,12 @@ test("limited dashboard links are guarded and the owner control writes only even
 
   assert.match(dashboard, /button\.hidden = !canViewDashboardPage\(button\.dataset\.navView, state\.permissions\)/);
   assert.match(dashboard, /if \(!canViewDashboardPage\(view, state\.permissions\)\) return;/);
-  const limitedProfileWriter = dashboard.match(/async function saveLimitedDashboardAccount\(event\) \{[\s\S]*?\n\}/)?.[0];
-  assert.ok(limitedProfileWriter, "owner-only limited dashboard writer should exist");
-  assert.match(limitedProfileWriter, /allowedViews: \["overview", "guests", "seating", "settings", "exports"\]/);
-  assert.match(limitedProfileWriter, /canEditGuests: currentPermissions\.canEditGuests === true/);
-  assert.match(limitedProfileWriter, /canEditSeating: currentPermissions\.canEditSeating === true/);
-  assert.match(limitedProfileWriter, /canEditEventDetails: currentPermissions\.canEditEventDetails === true/);
-  assert.match(limitedProfileWriter, /canViewEventSettings: true,[\s\S]*?canExport: true/);
+  const access = await readFile(new URL("../account-access.js", import.meta.url), "utf8");
+  assert.match(access, /export function customerMembership/);
+  assert.match(access, /canEditGuests: true, canEditSeating: true/);
+  assert.match(access, /canEditEventDetails: true, canViewEventSettings: true, canExport: true/);
+  assert.match(dashboard, /mountCustomerAccess/);
+  assert.doesNotMatch(dashboard, /saveLimitedDashboardAccount/);
   assert.match(rules, /"canViewEventSettings", "canExport", "allowedViews"/);
   assert.match(rules, /data\.allowedViews\.hasOnly\(\["overview", "guestSummary", "guests", "seating", "share", "exports", "checkin", "settings"\]\)/);
   assert.match(workspace, /w\.allowedViews\.includes\("share"\)/);

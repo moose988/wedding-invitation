@@ -2,11 +2,14 @@ import {
   initFirebase,
   isFirebaseConfigured,
   signInWithEmailAndPassword,
-} from "./firebase-config.js?v=20261016-tab-session-isolation-1";
+} from "./firebase-config.js";
 import {
   initializeFirebaseServicesForRoute,
   waitForFirebaseSessionPersistence,
 } from "./firebase-service-scopes.js";
+
+import * as accountApi from "./firebase-config.js";
+import { isPlatformAdmin, redeemCustomerGrants } from "./account-access.js";
 
 const params = new URLSearchParams(window.location.search);
 
@@ -90,8 +93,11 @@ async function handleLogin(event) {
 
   try {
     if (!(await servicesReady)) return;
-    await signInWithEmailAndPassword(services.auth, email, password);
-    elements.authStatus.textContent = "Opening All Events...";
+    const { user } = await signInWithEmailAndPassword(services.auth, email, password);
+    try { await redeemCustomerGrants(accountApi, services.db, user); }
+    catch (error) { console.warn("Customer linking will be retried from the event list.", error.code || "unavailable"); }
+    services.isAdmin = await isPlatformAdmin(accountApi, services.db, user.uid);
+    elements.authStatus.textContent = services.isAdmin ? "Opening All Events..." : "Opening My Events...";
     redirectAfterLogin();
   } catch (error) {
     console.error(error);
@@ -135,5 +141,5 @@ function redirectAfterLogin() {
     window.location.replace(target.toString());
     return;
   }
-  window.location.replace("./all-events.html");
+  window.location.replace(services.isAdmin ? "./all-events.html" : "./customer-events.html");
 }

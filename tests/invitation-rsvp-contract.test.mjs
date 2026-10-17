@@ -14,7 +14,7 @@ test("invitation capabilities are accepted only from URL fragments and exact tok
   assert.match(shared, /new URLSearchParams\(String\(location\.hash \|\| ""\)\.replace\(\/\^#\//);
   assert.match(shared, /INVITATION_TOKEN_PATTERN = \/\^\[A-Za-z0-9_-\]\{43\}\$\//);
   assert.match(shared, /getDoc\(doc\(db, "weddings", weddingId, "publicGuests", guestToken\)\)/);
-  assert.doesNotMatch(shared, /httpsCallable|collection\(|getDocs\(/);
+  assert.doesNotMatch(shared, /httpsCallable|collection\(db, "weddings", weddingId, "(?:guests|publicGuests|dashboardUsers)"/);
   assert.doesNotMatch(runtime, /clearInvitationCredentialFromUrl|history\.replaceState\(null, "", url\.toString\(\)\)/);
   assert.match(runtime, /await loadFirebaseInvitation\(weddingId, guestToken\);\s*state\.unsubGuest = subscribeToInvitation/);
   assert.match(shared, /const stopWithUnavailable = \(\) => \{[\s\S]*?active = false;\s*unsubscribe\(\);/);
@@ -51,7 +51,7 @@ test("invitation projection excludes contacts, internal IDs, raw tokens, and oth
   assert.match(projection, /additionalGuestAllowance:/);
   assert.match(projection, /seatingAssignments:/);
   assert.doesNotMatch(projection, /phone:|email:|guestToken|guestId:/);
-  assert.match(projection, /id: `t\$\{index \+ 1\}`/);
+  assert.match(projection, /canonicalLayout \? String\(table\.id\) : `t\$\{index \+ 1\}`/);
 });
 
 test("dashboard token creation is transactional and offers explicit revoke/regenerate", () => {

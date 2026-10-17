@@ -11,7 +11,7 @@ import {
   signInWithEmailAndPassword,
   where,
   writeBatch,
-} from "./firebase-config.js?v=20261016-tab-session-isolation-1";
+} from "./firebase-config.js";
 import { getEventDisplayTitle } from "./event-utils.js";
 
 const params = new URLSearchParams(window.location.search);

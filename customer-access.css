@@ -1,0 +1,4 @@
+body[data-account-surface="customer"] { --customer-accent: #3c6d7a; }
+body[data-account-surface="customer"] .planner-login__story { background: #e3eef0; }
+body[data-account-surface="customer"] .planner-login__submit { background: #3c6d7a; }
+body[data-account-surface="customer"] .workspace-kicker { color: #3c6d7a; }

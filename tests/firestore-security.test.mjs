@@ -42,7 +42,8 @@ test("Spark Firestore rules and direct client workflows enforce event, seating, 
     import("@firebase/rules-unit-testing"), import("firebase/firestore"),
   ]);
   const rules = await readFile(new URL("../firestore.rules", import.meta.url), "utf8");
-  const env = await initializeTestEnvironment({ projectId: "demo-wedding-security", firestore: { rules } });
+  const env = await initializeTestEnvironment({ projectId: "demo-wedding-rules", firestore: { rules } });
+  await env.clearFirestore();
   const api = {
     doc: firestore.doc, runTransaction: firestore.runTransaction,
     serverTimestamp: firestore.serverTimestamp,
@@ -51,6 +52,7 @@ test("Spark Firestore rules and direct client workflows enforce event, seating, 
   try {
     // The owner can create the event and its own authoritative membership in
     // one batch. No self-promotion write is required after event creation.
+    await env.withSecurityRulesDisabled((context) => firestore.setDoc(firestore.doc(context.firestore(), "platformAdmins/owner-a"), { enabled: true }));
     const ownerBootstrap = env.authenticatedContext("owner-a").firestore();
     const bootstrap = firestore.writeBatch(ownerBootstrap);
     bootstrap.set(firestore.doc(ownerBootstrap, "weddings/event-a"), event("owner-a", "A & B"));
@@ -211,6 +213,12 @@ test("Spark Firestore rules and direct client workflows enforce event, seating, 
       });
       await firestore.updateDoc(firestore.doc(db, "weddings/event-a/guests/bride-1"), {
         seatingAssignments: [{ tableId: "table-1", chairId: "chair-1", partyMemberIndex: 0 }],
+        qrCodeValue: "legacy-qr-fixture",
+        inviteLink: "https://example.test/legacy-invite#fixture-token",
+        fullNameAr: "اسم قديم",
+        guestToken: "legacy-guest-token-fixture",
+        token: "legacy-token-fixture",
+        id: "legacy-id-fixture",
       });
     });
     const ownerApi = { ...firestore };
@@ -219,6 +227,27 @@ test("Spark Firestore rules and direct client workflows enforce event, seating, 
     const migratedTable = await firestore.getDoc(firestore.doc(ownerBootstrap, "weddings/event-a/tables/table-1"));
     assert.equal(migratedTable.data().chairs[0].id, "chair-1");
     assert.equal(Object.hasOwn(migratedTable.data().chairs[0], "assignment"), false);
+    const migratedLegacyGuest = await firestore.getDoc(firestore.doc(ownerBootstrap, "weddings/event-a/guests/bride-1"));
+    assert.deepEqual(migratedLegacyGuest.data().seatingAssignments, []);
+    for (const [field, value] of Object.entries({
+      qrCodeValue: "legacy-qr-fixture",
+      inviteLink: "https://example.test/legacy-invite#fixture-token",
+      fullNameAr: "اسم قديم",
+      guestToken: "legacy-guest-token-fixture",
+      token: "legacy-token-fixture",
+      id: "legacy-id-fixture",
+    })) assert.equal(migratedLegacyGuest.data()[field], value);
+    await assertSucceeds(firestore.updateDoc(firestore.doc(ownerBootstrap, "weddings/event-a/guests/bride-1"), {
+      fullName: "Updated fixture name", updatedAt: firestore.serverTimestamp(),
+    }));
+    await assertFails(firestore.updateDoc(firestore.doc(ownerBootstrap, "weddings/event-a/guests/bride-1"), {
+      token: "replacement-token-must-not-be-allowed", updatedAt: firestore.serverTimestamp(),
+    }));
+    await assertFails(firestore.setDoc(firestore.doc(ownerBootstrap, "weddings/event-a/guests/new-legacy-guest"), {
+      ...guest("new-legacy-guest", "bride"),
+      token: "new-record-legacy-token-must-not-be-allowed",
+      createdAt: firestore.serverTimestamp(), updatedAt: firestore.serverTimestamp(),
+    }));
     assert.equal((await migrateLegacySeating({ api: ownerApi, db: ownerBootstrap, weddingId: "event-a", uid: "owner-a" })).migrated, 0);
 
     // Stable token creation remains client-side and survives a fresh service
@@ -236,7 +265,7 @@ test("Spark Firestore rules and direct client workflows enforce event, seating, 
     assert.equal(await freshService.ensure(scope), tokenCopied);
     const invitationRef = firestore.doc(anonymous, `weddings/event-a/publicGuests/${token}`);
     const publicInvitation = await assertSucceeds(firestore.getDoc(invitationRef));
-    assert.equal(publicInvitation.data().guest.fullName, "bride-1 Guest");
+    assert.equal(publicInvitation.data().guest.fullName, "Updated fixture name");
     assert.equal(Object.hasOwn(publicInvitation.data(), "phone"), false);
     assert.equal(Object.hasOwn(publicInvitation.data(), "guestId"), false);
     await assertFails(firestore.getDocs(firestore.collection(anonymous, "weddings/event-a/publicGuests")));
@@ -339,14 +368,14 @@ test("Spark Firestore rules and direct client workflows enforce event, seating, 
   }
 });
 
-test("Layla & Zaid owner setup is limited to the designated admin account and only succeeds once", {
+test("retired email-based owner claim is denied even to legacy admin memberships", {
   skip: emulatorAvailable ? false : "Run with the Firestore Emulator to verify security rules.",
 }, async () => {
   const [{ assertFails, assertSucceeds, initializeTestEnvironment }, firestore] = await Promise.all([
     import("@firebase/rules-unit-testing"), import("firebase/firestore"),
   ]);
   const rules = await readFile(new URL("../firestore.rules", import.meta.url), "utf8");
-  const env = await initializeTestEnvironment({ projectId: "demo-wedding-security", firestore: { rules } });
+  const env = await initializeTestEnvironment({ projectId: "demo-wedding-rules", firestore: { rules } });
   const designatedOwner = env.authenticatedContext("designated-owner", { email: "test@gmail.com" }).firestore();
   const otherAdmin = env.authenticatedContext("other-admin", { email: "other@example.test" }).firestore();
   const eventRef = firestore.doc(designatedOwner, "weddings/luxury-wedding-demo");
@@ -372,7 +401,7 @@ test("Layla & Zaid owner setup is limited to the designated admin account and on
     await assertFails(firestore.updateDoc(eventRef, {
       ownerUserId: "other-admin", updatedAt: firestore.serverTimestamp(),
     }));
-    await assertSucceeds(firestore.updateDoc(eventRef, {
+    await assertFails(firestore.updateDoc(eventRef, {
       ownerUserId: "designated-owner", updatedAt: firestore.serverTimestamp(),
     }));
     await assertFails(firestore.updateDoc(eventRef, {

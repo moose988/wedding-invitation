@@ -8,3 +8,6 @@ functions/.secret.local
 /node_modules/
 
 .vercel
+
+/.local-evidence/
+/.playwright-mcp/

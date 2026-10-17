@@ -1,10 +1,16 @@
 import {
   getApps,
   initializeApp,
+  deleteApp,
 } from "https://www.gstatic.com/firebasejs/12.19.0/firebase-app.js";
 import { getAnalytics, isSupported } from "https://www.gstatic.com/firebasejs/12.19.0/firebase-analytics.js";
 import {
   browserSessionPersistence,
+  inMemoryPersistence,
+  connectAuthEmulator,
+  createUserWithEmailAndPassword,
+  sendEmailVerification,
+  reload,
   initializeAuth,
   onAuthStateChanged,
   signInWithEmailAndPassword,
@@ -28,7 +34,7 @@ import {
   where,
   writeBatch,
 } from "https://www.gstatic.com/firebasejs/12.19.0/firebase-firestore.js";
-import { getFirestore } from "https://www.gstatic.com/firebasejs/12.19.0/firebase-firestore.js";
+import { getFirestore, connectFirestoreEmulator } from "https://www.gstatic.com/firebasejs/12.19.0/firebase-firestore.js";
 import {
   createScopedServiceCache,
   DEFAULT_FIREBASE_APP_NAME,
@@ -46,12 +52,26 @@ const defaultConfig = {
 
 const serviceCache = createScopedServiceCache();
 
+// Test endpoints are opt-in, loopback-only, and use a demo project. A production
+// hostname can never activate them, even with a crafted URL or storage value.
+const localHost = ["localhost", "127.0.0.1", "[::1]"].includes(window.location.hostname);
+if (localHost && new URLSearchParams(window.location.search).get("emulator") === "1") {
+  sessionStorage.setItem("wedding:localEmulators", "1");
+}
+const localEmulators = localHost && sessionStorage.getItem("wedding:localEmulators") === "1";
+function connectLocalServices(app, auth, db) {
+  if (!localEmulators || app.__localConnected) return;
+  if (auth) connectAuthEmulator(auth, "http://127.0.0.1:9099", { disableWarnings: true });
+  connectFirestoreEmulator(db, "127.0.0.1", 8080);
+  app.__localConnected = true;
+}
+
 function getConfiguredApp(name = DEFAULT_FIREBASE_APP_NAME) {
   if (!isFirebaseConfigured()) {
     throw new Error("Firebase config is missing. Add window.FIREBASE_CONFIG in firebase-config.js.");
   }
 
-  const config = { ...defaultConfig, ...(window.FIREBASE_CONFIG || {}) };
+  const config = { ...defaultConfig, ...(window.FIREBASE_CONFIG || {}), ...(localEmulators ? { projectId: "demo-wedding-security", apiKey: "demo-key" } : {}) };
   const app = resolveFirebaseApp({ getApps, initializeApp }, config, name);
   return { app, config };
 }
@@ -68,9 +88,10 @@ export function initFirebase() {
     const { app, config } = getConfiguredApp("planner-session");
     const auth = initializeAuth(app, { persistence: browserSessionPersistence });
     const db = getFirestore(app);
+    connectLocalServices(app, auth, db);
     const persistenceReady = auth.authStateReady();
 
-    isSupported()
+    if (!localEmulators) isSupported()
       .then((supported) => {
         if (supported) getAnalytics(app);
       })
@@ -90,10 +111,24 @@ export function initPublicFirebase() {
       throw new Error("Firebase config is missing. Add window.FIREBASE_CONFIG in firebase-config.js.");
     }
 
-    const config = { ...defaultConfig, ...(window.FIREBASE_CONFIG || {}) };
-    const app = resolveFirebaseApp({ getApps, initializeApp }, config, "public-invitation");
-    return { app, db: getFirestore(app), config };
+    const { app, config } = getConfiguredApp("public-invitation");
+    const db = getFirestore(app);
+    connectLocalServices(app, null, db);
+    return { app, db, config };
   });
+}
+
+export async function createIsolatedCustomer(email, password) {
+  const { app } = getConfiguredApp(`customer-onboarding-${crypto.randomUUID()}`);
+  const auth = initializeAuth(app, { persistence: inMemoryPersistence });
+  connectLocalServices(app, auth, getFirestore(app));
+  try {
+    const { user } = await createUserWithEmailAndPassword(auth, email, password);
+    return { userId: user.uid, email: user.email };
+  } finally {
+    await signOut(auth).catch(() => {});
+    await deleteApp(app);
+  }
 }
 
 export {
@@ -116,6 +151,8 @@ export {
   updateDoc,
   where,
   writeBatch,
+  sendEmailVerification,
+  reload,
 };
 
 window.FIREBASE_CONFIG = window.FIREBASE_CONFIG || {

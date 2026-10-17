@@ -107,7 +107,7 @@ export function createInvitationTokenService({ db, firestore, tokenFactory = gen
           // Use the explicit organizer regenerate action to issue a new token.
           throw new Error("Invitation unavailable.");
         }
-        const projection = buildInvitationProjection(weddingId, wedding, sourceGuest, tables);
+        const projection = buildInvitationProjection(weddingId, wedding, sourceGuest, tables, { canonicalLayout: scope.customer === true });
         // Touch the private binding on each successful copy. Apart from keeping
         // the transaction auditable, this makes Firestore rules recheck event
         // existence even when the token and projection are already current.
@@ -150,7 +150,7 @@ export function createInvitationTokenService({ db, firestore, tokenFactory = gen
       }
 
       const version = Number(secret.version || 0) + (nextToken === oldToken ? 0 : 1);
-      const projection = buildInvitationProjection(weddingId, wedding, sourceGuest, tables);
+      const projection = buildInvitationProjection(weddingId, wedding, sourceGuest, tables, { canonicalLayout: scope.customer === true });
       const publicData = {
         ...projection,
         rsvpStatus: ["confirmed", "declined"].includes(sourceGuest.rsvpStatus) ? sourceGuest.rsvpStatus : "pending",

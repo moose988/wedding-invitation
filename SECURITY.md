@@ -2,6 +2,8 @@
 
 This repository is prepared for Firebase Spark with Firebase Authentication, Cloud Firestore rules, and a Vercel-hosted static frontend. Browser workflows do not call Cloud Functions or expose service-account credentials or encryption secrets. This review describes the source and emulator tests; it does not certify production configuration.
 
+The current customer workflow and protected platform-administrator records are documented in [ACCESS-WORKFLOW.md](ACCESS-WORKFLOW.md). Customer memberships never grant check-in, sender, lifecycle, account-management, or maintenance privileges.
+
 ## Access matrix
 
 | Data/action | Owner or authorized organizer | Side seating account | Check-in account | Invitation bearer | Public visitor |

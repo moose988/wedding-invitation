@@ -22,7 +22,7 @@ const [login, dashboard, firebase, publicData, invitation, side] = await Promise
 test("public invitation initialization cannot mutate Firebase Auth persistence", () => {
   const publicInitializer = firebase.match(/export function initPublicFirebase\(\) \{[\s\S]*?\n\}/)?.[0];
   assert.ok(publicInitializer, "public Firestore initializer exists");
-  assert.match(publicInitializer, /resolveFirebaseApp\(\{ getApps, initializeApp \}, config, "public-invitation"\)/);
+  assert.match(publicInitializer, /getConfiguredApp\("public-invitation"\)/);
   assert.match(publicInitializer, /getFirestore\(app\)/);
   assert.doesNotMatch(publicInitializer, /getAuth|setPersistence|signIn|signOut|onAuthStateChanged/);
   assert.match(publicData, /initPublicFirebase\(\)/);
@@ -59,7 +59,7 @@ test("each custom invitation design routes through the public data initializer",
 test("planner sessions are tab-scoped and public invitations stay separate", () => {
   assert.match(firebase, /getConfiguredApp\("planner-session"\)/);
   assert.match(firebase, /initializeAuth\(app, \{ persistence: browserSessionPersistence \}\)/);
-  assert.match(firebase, /resolveFirebaseApp\(\{ getApps, initializeApp \}, config, "public-invitation"\)/);
+  assert.match(firebase, /getConfiguredApp\("public-invitation"\)/);
   assert.match(dashboard, /initializeFirebaseServicesForRoute\(\{\}, \{ dashboard: initFirebase \}\)/);
   assert.match(dashboard, /await waitForFirebaseSessionPersistence\(state\.services\)/);
   assert.match(login, /initializeFirebaseServicesForRoute\([\s\S]*?\{ dashboard: initFirebase \}/);

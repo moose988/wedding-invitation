@@ -17,12 +17,17 @@ import {
   updateDoc,
   where,
   writeBatch,
-} from "./firebase-config.js?v=20261017-persistent-invitation-2";
+} from "./firebase-config.js";
 import {
   buildAuthRouteUrl,
   initializeFirebaseServicesForRoute,
   waitForFirebaseSessionPersistence,
 } from "./firebase-service-scopes.js";
+import * as accountApi from "./firebase-config.js";
+import { isPlatformAdmin } from "./account-access.js";
+import { persistCanonicalSeatDiff as persistCanonicalSeatDiffWithApi } from "./seating-transactions.js";
+import { syncCustomerEventProjections } from "./customer-projections.js";
+import { mountCustomerAccess } from "./customer-access-ui.js";
 import { createShareUrl } from "./share-link.js";
 import { exportGuests } from "./export.js";
 import { buildInvitationProjection, generateInvitationToken, isValidInvitationToken } from "./invitations/shared/invitation-token.js";
@@ -1105,7 +1110,7 @@ function bindEvents() {
     bindEventSettingsSubmit(elements.pageContent, (event) => void saveEventSettings(event));
     elements.pageContent.addEventListener("submit", (event) => {
       if (event.target?.id === "seatingAccountPermissionForm") void saveSeatingAccountPermission(event);
-      if (event.target?.id === "dashboardAccountAccessForm") void saveLimitedDashboardAccount(event);
+
     });
   }
   elements.guestModal?.addEventListener("click", handleDialogBackdropClick);
@@ -1636,6 +1641,7 @@ function persistDemoDashboardState() {
 }
 
 async function bootstrapDashboard() {
+  state.isAdmin = await isPlatformAdmin(accountApi, state.services.db, state.currentUser.uid);
   const permissionDoc = await getDoc(
     doc(
       state.services.db,
@@ -1646,12 +1652,13 @@ async function bootstrapDashboard() {
     ),
   );
 
-  if (!permissionDoc.exists() || !permissionDoc.data().canViewDashboard) {
-    redirectToLogin("access-denied");
+  if (!state.isAdmin && (!permissionDoc.exists() || !permissionDoc.data().canViewDashboard)) {
+    window.location.replace("./customer-events.html?message=access-denied");
     return;
   }
 
-  state.permissions = permissionDoc.data();
+  state.permissions = state.isAdmin ? { role: "admin", canViewDashboard: true, canEditGuests: true, canEditSeating: true, canEditEventDetails: true, canViewEventSettings: true, canExport: true, canCheckIn: true, canManageUsers: true } : permissionDoc.data();
+  state.loginSurface = state.permissions.role === "customer" ? "customer" : "admin";
   // Seat-only accounts are always routed into the simplified editor, even
   // when they open the regular dashboard address directly.
   if (state.permissions.seatingOnly === true) {
@@ -1680,6 +1687,15 @@ async function bootstrapDashboard() {
   } else if (Array.isArray(state.permissions.allowedViews)) {
     state.activeView = resolveDashboardPage(params.get("view"), state.permissions);
   }
+  state.unsubMembership?.();
+  state.unsubMembership = onSnapshot(doc(state.services.db, "weddings", state.weddingId, "dashboardUsers", state.currentUser.uid), (snapshot) => {
+    if (!state.isAdmin && (!snapshot.exists() || snapshot.data().canViewDashboard !== true || JSON.stringify(snapshot.data()) !== JSON.stringify(state.permissions))) {
+      clearInvitationTokenCache();
+      disposeDashboardListeners();
+      state.guests = []; state.tables = []; state.wedding = null; state.permissions = null;
+      window.location.replace("./customer-events.html?message=access-changed");
+    }
+  }, handleSeatingListenerError);
   rememberWeddingId(state.weddingId);
   const weddingDoc = await getDoc(
     doc(state.services.db, "weddings", state.weddingId),
@@ -1801,37 +1817,8 @@ async function normalizeGuestSidesInBackground() {
 
 function isWeddingOwner() {
   return Boolean(
-    state.currentUser?.uid &&
-      state.wedding?.ownerUserId === state.currentUser.uid,
+    state.isAdmin === true,
   );
-}
-
-function isLaylaZaidOwnerSetupCandidate() {
-  return state.mode === "live" &&
-    state.weddingId === "luxury-wedding-demo" &&
-    state.wedding?.ownerUserId === "pending-auth-setup" &&
-    String(state.currentUser?.email || "").trim().toLowerCase() === "test@gmail.com" &&
-    state.permissions?.role === "admin" &&
-    state.permissions?.canManageUsers === true;
-}
-
-async function claimLaylaZaidOwner() {
-  if (!isLaylaZaidOwnerSetupCandidate() || !state.currentUser?.uid || !state.services?.db) return;
-  const confirmed = window.confirm(
-    "Assign Layla & Zaid event ownership to test@gmail.com? This one-time setup enables the existing owner-only seating migration and account controls.",
-  );
-  if (!confirmed) return;
-  try {
-    await updateDoc(doc(state.services.db, "weddings", state.weddingId), {
-      ownerUserId: state.currentUser.uid,
-      updatedAt: serverTimestamp(),
-    });
-    showToast("Event owner setup completed. Preparing existing seating…", "success");
-    await bootstrapDashboard();
-  } catch (error) {
-    console.error("Layla & Zaid owner setup could not be completed.", error?.code || "unavailable");
-    showToast("Owner setup failed. Confirm this account is signed in and has the existing event admin access.", "error");
-  }
 }
 
 function canEditEventDetails() {
@@ -2164,6 +2151,7 @@ function startWeddingListener() {
 }
 
 function disposeDashboardListeners() {
+  state.unsubMembership?.();
   state.listenerGeneration += 1;
   state.unsubGuests?.();
   state.unsubTables?.();
@@ -2186,6 +2174,9 @@ function disposeDashboardListeners() {
 function handleSeatingListenerError(error) {
   console.error(error);
   if (error?.code === "permission-denied") {
+    state.unsubGuests?.(); state.unsubTables?.(); state.unsubSeatAssignments?.(); state.unsubSeatOccupancy?.(); state.unsubSenderCapabilities?.();
+    state.listenerGeneration += 1;
+    document.querySelectorAll("dialog[open]").forEach((dialog) => dialog.close());
     closeGuestMenu({ restoreFocus: false });
     clearInvitationTokenCache();
     state.unsubWedding?.();
@@ -2318,6 +2309,10 @@ async function commitProjectionWrites(db, writes) {
 // separate documents with their own rules. A second pass catches listener
 // changes that arrived while a repair was running.
 async function syncPublicStats({ force = false } = {}) {
+  if (state.permissions?.role === "customer") {
+    if (state.customerWritesStarted) return syncCustomerProjections().catch(() => {});
+    return;
+  }
   if (state.mode !== "live" || !isWeddingOwner() || !state.weddingId || state.loadingGuests || state.loadingTables || !state.seatAssignmentsReady) return;
   state.projectionSyncAgain = true;
   if (state.projectionSyncPromise) return state.projectionSyncPromise;
@@ -2454,6 +2449,7 @@ function renderChrome() {
   );
   if (elements.allEventsNavLink) {
     elements.allEventsNavLink.hidden = isAccountSeatingWorkspace || state.secureEditorMode;
+    if (state.permissions?.role === "customer") { elements.allEventsNavLink.href = "./customer-events.html"; elements.allEventsNavLink.querySelector("span")?.replaceChildren("My Events"); }
   }
   elements.signOutButton.textContent = state.editorMode
     ? "End session"
@@ -2762,13 +2758,7 @@ function renderOverviewPage() {
   const attention = calculateAttention(state.guests, state.tables, seatingEnabled);
   const recentActivity = deriveRecentActivity(state.guests);
   const sideStats = calculateSideStats(state.guests, state.tables);
-  const ownerSetupNotice = state.mode === "live" &&
-    state.weddingId === "luxury-wedding-demo" &&
-    state.wedding?.ownerUserId === "pending-auth-setup" &&
-    String(state.currentUser?.email || "").trim().toLowerCase() === "test@gmail.com" &&
-    state.permissions?.role === "admin" && state.permissions?.canManageUsers === true
-    ? `<article class="share-card owner-setup-notice"><p class="da3wa-eyebrow">Owner setup required</p><h2>Prepare this event’s seating workspace</h2><p>This one-time owner setup unlocks the existing seating migration and account controls for Layla &amp; Zaid.</p><button class="da3wa-button da3wa-button--primary" type="button" data-action="claim-event-ownership">Complete owner setup</button></article>`
-    : "";
+  const ownerSetupNotice = "";
   const sideDistribution = eventUsesGuestSides(state.wedding)
     ? `<article class="overview-card overview-distribution"><p class="da3wa-eyebrow">Guest distribution</p><h2>By invitation side</h2><div class="overview-table-wrap"><table class="overview-distribution__table"><thead><tr><th scope="col">Side</th><th scope="col">Invited</th><th scope="col">Confirmed</th><th scope="col">Pending</th>${seatingEnabled ? '<th scope="col">Seating</th>' : ""}</tr></thead><tbody>${renderDistributionRow("Groom", sideStats.groom, seatingEnabled)}${renderDistributionRow("Bride", sideStats.bride, seatingEnabled)}${renderDistributionRow("Family", sideStats.other, seatingEnabled)}</tbody></table></div></article>`
     : `<article class="overview-card overview-distribution"><p class="da3wa-eyebrow">Guest summary</p><h2>Overall RSVP totals</h2><div class="overview-seating-summary overview-seating-summary--totals"><div><strong>${stats.total}</strong><span>Guests invited</span></div><div><strong>${stats.confirmed}</strong><span>Confirmed</span></div><div><strong>${stats.pending}</strong><span>Awaiting reply</span></div><div><strong>${stats.declined}</strong><span>Declined</span></div></div></article>`;
@@ -3508,6 +3498,8 @@ function eventSettingsDraftFromWedding(wedding = state.wedding) {
     venueEn: wedding?.venueEn || "",
     location: wedding?.location || wedding?.locationEn || "",
     mapsUrl: wedding?.mapsUrl || "",
+    whatsAppCountryCode: wedding?.whatsAppCountryCode || "971",
+    invitationLanguage: wedding?.invitationLanguage || "en",
     venueMapEmbedUrl: wedding?.venueMapEmbedUrl || "",
     schedule: JSON.stringify(Array.isArray(wedding?.schedule) ? wedding.schedule : [], null, 2),
   };
@@ -3544,6 +3536,8 @@ function updateEventSettingsFormState() {
 
 function validateEventSettingsDraft(draft) {
   const errors = {};
+  if (!/^[0-9]{1,4}$/.test(draft.whatsAppCountryCode || "971")) errors.whatsAppCountryCode = "Enter a country calling code (1 to 4 digits).";
+  if (!["en", "ar"].includes(draft.invitationLanguage || "en")) errors.invitationLanguage = "Choose English or Arabic.";
   if (!String(draft.eventTitle || "").trim()) errors.eventTitle = "Enter an event name.";
   if (!String(draft.venueEn || "").trim()) errors.venueEn = "Enter a venue name.";
   const dateValue = String(draft.eventDate || "");
@@ -3597,6 +3591,7 @@ function validateEventSettingsDraft(draft) {
 }
 
 async function saveEventSettings(event) {
+  state.customerWritesStarted = true;
   event.preventDefault();
   if (!canEditEventDetails() || state.savingEventSettings) return;
   syncEventSettingsDraftFromForm();
@@ -3622,8 +3617,9 @@ async function saveEventSettings(event) {
     location: String(draft.location || "").trim(),
     locationEn: String(draft.location || "").trim(),
     mapsUrl: String(draft.mapsUrl || "").trim(),
-    venueMapEmbedUrl: String(draft.venueMapEmbedUrl || "").trim(),
-    schedule: JSON.parse(String(draft.schedule || "[]")),
+    whatsAppCountryCode: String(draft.whatsAppCountryCode || "971").trim(),
+    invitationLanguage: draft.invitationLanguage || "en",
+    ...(isWeddingOwner() ? { venueMapEmbedUrl: String(draft.venueMapEmbedUrl || "").trim(), schedule: JSON.parse(String(draft.schedule || "[]")) } : {}),
     updatedAt: serverTimestamp(),
   };
   if (eventUsesGuestSides(state.wedding)) {
@@ -3760,6 +3756,7 @@ async function processEventSettingQueue(key, mutation) {
 }
 
 async function updateEventLifecycle(action) {
+  if (!isWeddingOwner()) return;
   if (!canEditEventDetails() || state.eventStatusPending) return;
   if (state.dirtyEventSettings) {
     showToast("Save or discard your event detail edits before changing the event status.", "info");
@@ -3865,6 +3862,7 @@ function renderEventSettingsPage() {
     return `<label class="event-settings-field${full ? " is-full" : ""}"><span>${label}${required ? " <b aria-hidden=\"true\">*</b>" : ""}</span><input class="da3wa-input" name="${name}" type="${type}" value="${escapeAttribute(value)}" data-event-setting-field ${required ? "required" : ""} ${autocomplete ? `autocomplete="${autocomplete}"` : ""} ${canEditDetails ? "" : "disabled aria-disabled=\"true\""} ${message ? "aria-invalid=\"true\"" : ""} /><small class="event-setting-error" role="alert">${escapeHtml(message)}</small></label>`;
   };
 
+  const previousCustomerPanel = document.getElementById("customerAccessPanel");
   elements.pageContent.innerHTML = `
     <section class="event-settings-page">
       ${hideOptionsAndLifecycle ? "" : `
@@ -3881,6 +3879,7 @@ function renderEventSettingsPage() {
       </section>
       `}
 
+      ${isWeddingOwner() ? '<section class="event-settings-section share-card" id="customerAccessPanel"></section>' : ""}
       <form class="event-settings-section share-card" id="eventSettingsForm" novalidate>
         <header class="event-settings-section__header">
           <div><h2>Event details</h2></div>
@@ -3893,6 +3892,8 @@ function renderEventSettingsPage() {
           ${field("venueEn", "Venue name", "text", false, true)}
           ${field("location", "Location / address", "text", false, false, "street-address")}
           ${field("mapsUrl", "Maps link", "url", true, false)}
+          ${field("whatsAppCountryCode", "Country calling code", "text", false, true)}
+          <label class="event-settings-field"><span>Invitation language</span><select class="da3wa-input" name="invitationLanguage" data-event-setting-field ${canEditDetails ? "" : "disabled"}><option value="en" ${draft.invitationLanguage === "en" ? "selected" : ""}>English</option><option value="ar" ${draft.invitationLanguage === "ar" ? "selected" : ""}>Arabic</option></select></label>
           ${hideInvitationScheduleAndMapEmbed ? "" : `${field("venueMapEmbedUrl", "Google Maps embed URL", "url", true, false)}
           <p class="event-settings-timezone">Paste only the URL inside the Google Maps iframe's src="…" attribute, not the full iframe code. It is saved for this event only.</p>
           <label class="event-settings-field is-full"><span>Invitation schedule (JSON, optional)</span><textarea class="da3wa-input" name="schedule" rows="8" data-event-setting-field ${canEditDetails ? "" : "disabled aria-disabled=\"true\""}>${escapeHtml(draft.schedule || "[]")}</textarea><small class="event-setting-error" role="alert">${escapeHtml(errors.schedule || "")}</small><small class="event-settings-timezone">Use up to 12 JSON items with time, timeAr, titleEn, titleAr, descriptionEn, and descriptionAr. Leave [] to hide the schedule. The map URL belongs in Google Maps embed URL above.</small></label>`}
@@ -3912,6 +3913,11 @@ function renderEventSettingsPage() {
       `}
     </section>
   `;
+  if (isWeddingOwner()) {
+    const placeholder = document.getElementById("customerAccessPanel");
+    if (previousCustomerPanel) placeholder.replaceWith(previousCustomerPanel);
+    else void mountCustomerAccess(placeholder, { db: state.services.db, weddingId: state.weddingId, wedding: state.wedding });
+  }
   updateEventSettingsFormState();
   const eventSettingsForm = document.getElementById("eventSettingsForm");
   if (eventSettingsForm) {
@@ -4205,14 +4211,6 @@ function renderSeatingAccessCard() {
         <button class="da3wa-button da3wa-button--danger" name="operation" value="revoke" type="submit">Revoke seating access</button>
         <p class="form-status" data-seating-account-status role="status"></p>
       </form>
-      <h3>Manage a limited dashboard account</h3>
-      <p>Update an existing event member to access only Overview, Guests, Seating, Event Settings, and Exports. Their existing guest, seating, and event detail edit permissions are retained. Check-In and account management remain unavailable.</p>
-      <form class="seating-account-form" id="dashboardAccountAccessForm">
-        <label>Firebase Auth UID<input name="userId" required maxlength="128" autocomplete="off" /></label>
-        <label>Account email<input name="email" type="email" required maxlength="254" autocomplete="email" /></label>
-        <button class="da3wa-button da3wa-button--primary" type="submit">Save limited dashboard access</button>
-        <p class="form-status" data-dashboard-account-status role="status"></p>
-      </form>
       <h3>Repair event projections</h3>
       <p>Rebuild invitation, seating, check-in, and public count documents from this event. Public counts show the time of the last successful update.</p>
       <button class="da3wa-button da3wa-button--secondary" type="button" data-action="repair-event-projections" ${state.projectionSyncPromise ? 'disabled aria-disabled="true"' : ""}>${state.projectionSyncPromise ? "Repair running…" : "Repair projections"}</button>
@@ -4227,7 +4225,7 @@ function seatingAccountLoginLink(role = "all") {
 
 async function saveSeatingAccountPermission(event) {
   event.preventDefault();
-  const form = event.currentTarget;
+  const form = event.target;
   const status = form.querySelector("[data-seating-account-status]");
   const userId = String(form.elements.userId.value || "").trim();
   const selectedSide = String(form.elements.allowedSide.value || "");
@@ -4270,63 +4268,6 @@ async function saveSeatingAccountPermission(event) {
     showToast("Seating account permission saved.", "success");
   } catch (error) {
     console.error("Seating account permission could not be saved.", error);
-    status.textContent = "Permission update failed. Check the UID and your owner access, then try again.";
-  }
-}
-
-async function saveLimitedDashboardAccount(event) {
-  event.preventDefault();
-  const form = event.currentTarget;
-  const status = form.querySelector("[data-dashboard-account-status]");
-  const userId = String(form.elements.userId.value || "").trim();
-  const email = String(form.elements.email.value || "").trim().toLowerCase();
-  if (!isWeddingOwner() || !/^[A-Za-z0-9_-]{1,128}$/.test(userId) || userId === state.currentUser?.uid || !/^\S+@\S+\.\S+$/.test(email)) {
-    status.textContent = "Enter the UID and email of an existing event member.";
-    return;
-  }
-
-  const memberRef = doc(state.services.db, "weddings", state.weddingId, "dashboardUsers", userId);
-  try {
-    const existing = await getDoc(memberRef);
-    if (!existing.exists()) {
-      status.textContent = "This account is not already a member of this event.";
-      return;
-    }
-    const currentPermissions = existing.data();
-    const existingEmail = String(currentPermissions.email || "").trim().toLowerCase();
-    if (existingEmail && existingEmail !== email) {
-      status.textContent = "The email does not match this event membership.";
-      return;
-    }
-    if (currentPermissions.canEditSeating !== true) {
-      status.textContent = "This account needs existing seating permission before it can use the seating dashboard.";
-      return;
-    }
-    const eventTitle = getEventDisplayTitle(state.wedding);
-    if (!window.confirm(`Grant ${email} access to Overview, Guests, Seating, Event Settings, and Exports for ${eventTitle}? This replaces their current access on this event.`)) return;
-
-    await setDoc(memberRef, {
-      userId,
-      email,
-      role: "limited-dashboard",
-      canViewDashboard: true,
-      canEditGuests: currentPermissions.canEditGuests === true,
-      canEditSeating: currentPermissions.canEditSeating === true,
-      canCheckIn: false,
-      canManageUsers: false,
-      canEditEventDetails: currentPermissions.canEditEventDetails === true,
-      canViewEventSettings: true,
-      canExport: true,
-      allowedViews: ["overview", "guests", "seating", "settings", "exports"],
-      seatingOnly: false,
-      allowedSide: "all",
-      createdAt: currentPermissions.createdAt || serverTimestamp(),
-      updatedAt: serverTimestamp(),
-    });
-    status.textContent = `Limited dashboard access saved for ${email}.`;
-    showToast("Limited dashboard access saved.", "success");
-  } catch (error) {
-    console.error("Limited dashboard access could not be saved.", error?.code || "unavailable");
     status.textContent = "Permission update failed. Check the UID and your owner access, then try again.";
   }
 }
@@ -4462,7 +4403,7 @@ function renderHallObject(item) {
 }
 
 function canManageInvitationSettings() {
-  return canEditEventDetails();
+  return isWeddingOwner();
 }
 
 function isSeatingEnabled() {
@@ -5019,8 +4960,26 @@ async function copyPreparedInvitationLink(url, successMessage = "Invitation link
     showToast(successMessage, "success");
     return true;
   }
-  window.prompt("The link is saved and ready to copy:", url);
-  showToast("The invitation link is saved. Copy it from the open prompt.", "info");
+  const dialog = document.createElement("dialog");
+  dialog.className = "workspace-dialog";
+  const label = document.createElement("label");
+  label.textContent = "Invitation link";
+  const input = document.createElement("input");
+  input.readOnly = true;
+  input.value = url;
+  input.style.cssText = "display:block;min-width:280px;width:60vw;max-width:100%;margin:1rem 0";
+  label.append(input);
+  const close = document.createElement("button");
+  close.type = "button";
+  close.textContent = "Close link";
+  close.addEventListener("click", () => dialog.close());
+  dialog.append(label, close);
+  dialog.addEventListener("close", () => dialog.remove(), { once: true });
+  document.body.append(dialog);
+  dialog.showModal();
+  input.focus();
+  input.select();
+  showToast("The invitation link is saved. Select and copy the link.", "info");
   return false;
 }
 
@@ -5060,7 +5019,8 @@ async function updateInvitationToken(guestId, action, requestId = "") {
   const uid = state.currentUser.uid;
   const weddingId = state.weddingId;
   const generation = state.listenerGeneration;
-  const scope = { uid, weddingId, guestId, tables: state.tables, wedding: state.wedding };
+  if (state.permissions?.role === "customer") await syncCustomerProjections();
+  const scope = { uid, weddingId, guestId, tables: state.tables, wedding: state.wedding, customer: state.permissions?.role === "customer" };
   const service = getInvitationTokenService();
   const token = action === "revoke" ? await service.revoke(scope)
     : action === "regenerate" ? await service.regenerate(scope, requestId)
@@ -5247,9 +5207,7 @@ async function handleAction(action, dataset, event = null) {
       }
       showToast("Dashboard refreshed.", "success");
       return;
-    case "claim-event-ownership":
-      await claimLaylaZaidOwner();
-      return;
+
     case "reload-dashboard":
       window.location.reload();
       return;
@@ -6081,186 +6039,8 @@ async function getLiveTablesInTransaction(transaction, tableRefs) {
   return hydrateTables(projectSeatAssignments(layoutTables, state.seatAssignments, state.seatOccupancy));
 }
 
-function seatSlotMap(tables) {
-  const slots = new Map();
-  for (const table of tables || []) {
-    for (const chair of table.chairs || []) {
-      const chairId = String(chair.id || "");
-      if (!chairId) continue;
-      const key = `${table.id}\u0000${chairId}`;
-      slots.set(key, { table, chair, assignment: getChairAssignment(table.id, chair) });
-    }
-  }
-  return slots;
-}
-
-function seatPersonKey(assignment) {
-  return `${assignment.guestId}\u0000${assignment.personKey || personKeyForIndex(assignment.partyMemberIndex)}`;
-}
-
-function sameSeatPerson(left, right) {
-  return Boolean(left && right)
-    && left.guestId === right.guestId
-    && Number(left.partyMemberIndex) === Number(right.partyMemberIndex)
-    && (left.personKey || personKeyForIndex(left.partyMemberIndex)) === (right.personKey || personKeyForIndex(right.partyMemberIndex));
-}
-
 async function persistCanonicalSeatDiff(transaction, beforeTables, afterTables) {
-  const before = seatSlotMap(beforeTables);
-  const after = seatSlotMap(afterTables);
-  const keys = new Set([...before.keys(), ...after.keys()]);
-  const changed = [...keys].filter((key) => {
-    const oldSlot = before.get(key);
-    const newSlot = after.get(key);
-    if (!oldSlot || !newSlot) return true;
-    if (!sameSeatPerson(oldSlot.assignment, newSlot.assignment)) return true;
-    return Boolean(oldSlot.assignment && Number(oldSlot.chair.seatNumber) !== Number(newSlot.chair.seatNumber));
-  });
-  if (!changed.length) return;
-
-  const parsed = changed.map((key) => {
-    const [tableId, chairId] = key.split("\u0000");
-    const oldSlot = before.get(key) || null;
-    const newSlot = after.get(key) || null;
-    const oldAssignment = oldSlot?.assignment || null;
-    const newAssignment = newSlot?.assignment || null;
-    return {
-      key, tableId, chairId, oldSlot, newSlot, oldAssignment, newAssignment,
-      seatRef: doc(state.services.db, "weddings", state.weddingId, "seatAssignments", `${tableId}~${chairId}`),
-      occupancyRef: doc(state.services.db, "weddings", state.weddingId, "seatOccupancy", `${tableId}~${chairId}`),
-    };
-  });
-  const personEntries = new Map();
-  for (const item of parsed) {
-    for (const assignment of [item.oldAssignment, item.newAssignment]) {
-      if (!assignment) continue;
-      const personKey = assignment.personKey || personKeyForIndex(assignment.partyMemberIndex);
-      const personId = `${assignment.guestId}\u0000${personKey}`;
-      const entry = personEntries.get(personId) || {
-        guestId: assignment.guestId,
-        personKey,
-        ref: doc(state.services.db, "weddings", state.weddingId, "seatedPeople", `${assignment.guestId}~${personKey}`),
-        oldLocations: [],
-        newLocation: null,
-      };
-      if (assignment === item.oldAssignment) entry.oldLocations.push({ tableId: item.tableId, chairId: item.chairId });
-      if (assignment === item.newAssignment) {
-        if (entry.newLocation && (entry.newLocation.tableId !== item.tableId || entry.newLocation.chairId !== item.chairId)) {
-          throw new Error("One party member is assigned to more than one chair.");
-        }
-        entry.newLocation = { tableId: item.tableId, chairId: item.chairId, side: "" };
-      }
-      personEntries.set(personId, entry);
-    }
-  }
-  const guestIds = [...new Set(parsed.map((item) => item.newAssignment?.guestId).filter(Boolean))];
-  const guestRefs = guestIds.map((guestId) => doc(state.services.db, "weddings", state.weddingId, "seatingGuests", guestId));
-  const readRefs = [
-    ...parsed.flatMap((item) => [item.seatRef, item.occupancyRef]),
-    ...[...personEntries.values()].map((entry) => entry.ref),
-    ...guestRefs,
-  ];
-  const snapshots = await Promise.all(readRefs.map((ref) => transaction.get(ref)));
-  let cursor = 0;
-  const seatSnapshots = new Map();
-  const occupancySnapshots = new Map();
-  parsed.forEach((item) => {
-    seatSnapshots.set(item.key, snapshots[cursor++]);
-    occupancySnapshots.set(item.key, snapshots[cursor++]);
-  });
-  const personSnapshots = new Map();
-  [...personEntries.keys()].forEach((key) => personSnapshots.set(key, snapshots[cursor++]));
-  const seatingGuests = new Map();
-  guestIds.forEach((guestId) => {
-    const snapshot = snapshots[cursor++];
-    if (!snapshot.exists()) throw new Error("A guest's seating record is missing. Ask the event owner to repair seating.");
-    seatingGuests.set(guestId, snapshot.data());
-  });
-
-  for (const item of parsed) {
-    const seatSnapshot = seatSnapshots.get(item.key);
-    const occupancySnapshot = occupancySnapshots.get(item.key);
-    if (item.oldAssignment) {
-      if (!seatSnapshot.exists() || !sameSeatPerson(seatSnapshot.data(), item.oldAssignment)) {
-        throw new Error("A chair changed on another device. Review the refreshed seating plan and try again.");
-      }
-      if (!occupancySnapshot.exists() || occupancySnapshot.data().occupied !== true) {
-        throw new Error("The seating occupancy records are out of sync. Ask the event owner to repair seating.");
-      }
-    } else if (seatSnapshot.exists() || (occupancySnapshot.exists() && occupancySnapshot.data().occupied === true)) {
-      throw new Error("A chair was assigned on another device. Review the refreshed seating plan and try again.");
-    }
-    if (item.newAssignment) {
-      const guest = seatingGuests.get(item.newAssignment.guestId);
-      const index = Number(item.newAssignment.partyMemberIndex);
-      if (!Number.isInteger(index) || index < 0 || index > Number(guest.additionalGuests || 0)) {
-        throw new Error("That party member is no longer included in the RSVP.");
-      }
-      item.newAssignment.side = normalizeGuestSide(guest.side);
-      const entry = personEntries.get(seatPersonKey(item.newAssignment));
-      if (entry?.newLocation) entry.newLocation.side = item.newAssignment.side;
-    }
-  }
-
-  for (const [personId, entry] of personEntries) {
-    const snapshot = personSnapshots.get(personId);
-    if (entry.oldLocations.length > 1) throw new Error("A party member appears in more than one seat record. Ask the event owner to repair seating.");
-    if (entry.oldLocations.length) {
-      const oldLocation = entry.oldLocations[0];
-      if (!snapshot?.exists() || snapshot.data().tableId !== oldLocation.tableId || snapshot.data().chairId !== oldLocation.chairId) {
-        throw new Error("A party member's seat binding changed on another device. Refresh and try again.");
-      }
-    } else if (snapshot?.exists() && (!entry.newLocation || snapshot.data().tableId !== entry.newLocation.tableId || snapshot.data().chairId !== entry.newLocation.chairId)) {
-      throw new Error("That party member already has a chair. Refresh the seating plan.");
-    }
-    if (snapshot?.exists() && entry.newLocation
-      && (snapshot.data().tableId !== entry.newLocation.tableId || snapshot.data().chairId !== entry.newLocation.chairId)
-      && !entry.oldLocations.some((location) => location.tableId === snapshot.data().tableId && location.chairId === snapshot.data().chairId)) {
-      throw new Error("That party member already has a chair. Refresh the seating plan.");
-    }
-  }
-
-  for (const item of parsed) {
-    if (!item.newSlot) {
-      transaction.delete(item.seatRef);
-      transaction.delete(item.occupancyRef);
-      continue;
-    }
-    if (!item.newAssignment) {
-      transaction.delete(item.seatRef);
-      transaction.set(item.occupancyRef, {
-        weddingId: state.weddingId, tableId: item.tableId, chairId: item.chairId,
-        occupied: false, updatedAt: serverTimestamp(),
-      });
-      continue;
-    }
-    const assignment = item.newAssignment;
-    const personKey = assignment.personKey || personKeyForIndex(assignment.partyMemberIndex);
-    const side = assignment.side || normalizeGuestSide(seatingGuests.get(assignment.guestId).side);
-    transaction.set(item.seatRef, {
-      weddingId: state.weddingId, tableId: item.tableId, chairId: item.chairId,
-      guestId: assignment.guestId, partyMemberIndex: Number(assignment.partyMemberIndex), personKey,
-      side, seatNumber: Number(item.newSlot.chair.seatNumber || assignment.seatNumber || 0),
-      updatedAt: serverTimestamp(),
-    });
-    transaction.set(item.occupancyRef, {
-      weddingId: state.weddingId, tableId: item.tableId, chairId: item.chairId,
-      occupied: true, updatedAt: serverTimestamp(),
-    });
-  }
-  for (const entry of personEntries.values()) {
-    if (!entry.newLocation) {
-      transaction.delete(entry.ref);
-      continue;
-    }
-    const guest = seatingGuests.get(entry.guestId);
-    transaction.set(entry.ref, {
-      weddingId: state.weddingId, guestId: entry.guestId, personKey: entry.personKey,
-      tableId: entry.newLocation.tableId, chairId: entry.newLocation.chairId,
-      side: entry.newLocation.side || normalizeGuestSide(guest.side),
-      updatedAt: serverTimestamp(),
-    });
-  }
+  return persistCanonicalSeatDiffWithApi({ api: accountApi, db: state.services.db, weddingId: state.weddingId, transaction, beforeTables, afterTables });
 }
 
 function stripTableOccupancy(table) {
@@ -6378,7 +6158,7 @@ async function updateBulkRsvp(status) {
   }
 
   try {
-    const chunkSize = 200;
+    const chunkSize = 100;
     for (let index = 0; index < ids.length; index += chunkSize) {
       const batch = writeBatch(state.services.db);
       ids.slice(index, index + chunkSize).forEach((guestId) => {
@@ -6437,6 +6217,7 @@ async function openGuestModal(guest = null) {
 }
 
 async function saveGuest(event) {
+  state.customerWritesStarted = true;
   event.preventDefault();
   if (!can("canEditGuests")) {
     showToast("Your role does not allow guest editing.", "error");
@@ -6540,13 +6321,13 @@ async function saveGuest(event) {
     if (guestId) {
       await persistGuestAndInvitation(guestId, ownedPayload);
     } else {
-      await addDoc(
-        collection(state.services.db, "weddings", state.weddingId, "guests"),
-        {
-          ...createPayload,
-          createdAt: serverTimestamp(),
-        },
-      );
+      const ref = doc(collection(state.services.db, "weddings", state.weddingId, "guests"));
+      const batch = writeBatch(state.services.db);
+      const guest = { ...createPayload, id: ref.id };
+      batch.set(ref, { ...createPayload, createdAt: serverTimestamp() });
+      batch.set(doc(state.services.db, "weddings", state.weddingId, "seatingGuests", ref.id), { ...buildSeatingGuestProjection(guest), updatedAt: serverTimestamp() });
+      batch.set(doc(state.services.db, "weddings", state.weddingId, "checkinGuests", ref.id), { ...buildCheckinGuestProjection(guest, []), updatedAt: serverTimestamp() });
+      await batch.commit();
     }
     state.dirtyGuestForm = false;
     elements.guestModal.close();
@@ -6605,6 +6386,7 @@ function updateBulkAddPreview() {
 }
 
 async function saveBulkGuests(event) {
+  state.customerWritesStarted = true;
   event.preventDefault();
   if (!can("canEditGuests")) {
     showToast("Your role does not allow guest editing.", "error");
@@ -6673,6 +6455,9 @@ async function saveBulkGuests(event) {
           collection(state.services.db, "weddings", state.weddingId, "guests"),
         );
         batch.set(guestRef, { ...payload, createdAt: serverTimestamp() });
+        const guest = { ...payload, id: guestRef.id };
+        batch.set(doc(state.services.db, "weddings", state.weddingId, "seatingGuests", guestRef.id), { ...buildSeatingGuestProjection(guest), updatedAt: serverTimestamp() });
+        batch.set(doc(state.services.db, "weddings", state.weddingId, "checkinGuests", guestRef.id), { ...buildCheckinGuestProjection(guest, []), updatedAt: serverTimestamp() });
       });
       await batch.commit();
       committed += chunk.length;
@@ -6751,6 +6536,7 @@ async function updateGuest(guestId, payload) {
 }
 
 async function persistGuestAndInvitation(guestId, payload) {
+  state.customerWritesStarted = true;
   const guestRef = doc(state.services.db, "weddings", state.weddingId, "guests", guestId);
   if (!can("canEditGuests")) {
     await updateDoc(guestRef, payload);
@@ -6789,6 +6575,8 @@ async function persistGuestAndInvitation(guestId, payload) {
     const publicSnapshot = hasToken ? snapshots[offset++] : null;
     if (!guestSnapshot.exists() || !weddingSnapshot.exists()) throw new Error("Guest unavailable.");
     const current = guestSnapshot.data();
+    const seatingPatch = state.permissions?.role === "customer" ? buildGuestSeatingPatchFromTables(current, state.tables, false) : {};
+    payload = { ...payload, ...seatingPatch };
     const updated = { ...current, ...payload };
     const maxAssignedIndex = Math.max(-1, ...currentAssignments.map((assignment) => Number(assignment.partyMemberIndex || 0)));
     if (Number(updated.additionalGuests || 0) < maxAssignedIndex) {
@@ -6833,11 +6621,11 @@ async function persistGuestAndInvitation(guestId, payload) {
       checkedInAt: updated.checkedInAt || null,
       updatedAt: serverTimestamp(),
     });
-    if (secretSnapshot?.exists() && indexSnapshot?.exists() && publicSnapshot?.exists()
+    if (state.permissions?.role !== "customer" && secretSnapshot?.exists() && indexSnapshot?.exists() && publicSnapshot?.exists()
       && secretSnapshot.data().status === "active" && secretSnapshot.data().token === token
       && indexSnapshot.data().status === "active" && indexSnapshot.data().guestId === guestId) {
       const projectedGuest = { ...updated, ...buildGuestSeatingPatchFromTables(updated, state.tables, false) };
-      const projection = buildInvitationProjection(weddingId, weddingSnapshot.data(), projectedGuest, state.tables);
+      const projection = buildInvitationProjection(weddingId, weddingSnapshot.data(), { ...updated, ...buildGuestSeatingPatchFromTables(updated, state.tables, false) }, state.tables, { canonicalLayout: state.permissions?.role === "customer" });
       transaction.update(publicRef, {
         ...projection,
         rsvpStatus: ["confirmed", "declined"].includes(updated.rsvpStatus) ? updated.rsvpStatus : "pending",
@@ -6851,6 +6639,7 @@ async function persistGuestAndInvitation(guestId, payload) {
 }
 
 async function deleteGuest(guestId) {
+  state.customerWritesStarted = true;
   if (!can("canEditGuests")) {
     showToast("Your role does not allow guest deletion.", "error");
     return;
@@ -6954,6 +6743,7 @@ function openTableModal(table = null) {
 }
 
 async function saveTable(event) {
+  state.customerWritesStarted = true;
   event.preventDefault();
   if (!canManageSeatingLayout()) {
     showToast("Your role does not allow seating edits.", "error");
@@ -7097,6 +6887,7 @@ async function saveTable(event) {
 }
 
 async function duplicateTable(table) {
+  state.customerWritesStarted = true;
   if (!canManageSeatingLayout()) {
     showToast("Your role does not allow seating edits.", "error");
     return;
@@ -7206,6 +6997,7 @@ async function deleteSelectedTableFromModal() {
 }
 
 async function deleteTable(tableId) {
+  state.customerWritesStarted = true;
   if (!canManageSeatingLayout()) {
     showToast("Your role does not allow seating edits.", "error");
     return;
@@ -7574,6 +7366,7 @@ async function handlePlannerPointerUp(event) {
     return;
   }
 
+  state.customerWritesStarted = true;
   state.layoutPositionSavePending = true;
   setSaveState("saving");
   try {
@@ -7595,6 +7388,7 @@ async function handlePlannerPointerUp(event) {
     showToast("Table position could not be saved. Its original position was restored.", "error");
   } finally {
     state.layoutPositionSavePending = false;
+    void syncPublicStats();
   }
 }
 
@@ -7983,6 +7777,7 @@ function renderAssignmentWorkflow() {
 }
 
 async function savePartyAssignment(guest, selectedChairs, movingParty = false) {
+  state.customerWritesStarted = true;
   if (state.mode === "demo") {
     const nextTables = applyPartyAssignmentToTables(
       state.tables,
@@ -8420,6 +8215,7 @@ async function confirmPartyUnassign(guestId) {
 }
 
 async function clearPartyAssignments(guestId, expectedSignature = "") {
+  state.customerWritesStarted = true;
   if (state.mode === "demo") {
     const nextTables = clearGuestFromTables(state.tables, guestId);
     const nextGuests = syncGuestSeatingSummaries(state.guests, nextTables);
@@ -8578,6 +8374,7 @@ async function performSeatUnassign(tableId, chairId) {
 }
 
 async function unassignSingleSeat(tableId, chairId) {
+  state.customerWritesStarted = true;
   const localSeat = getSeatByIds(tableId, chairId);
   const localAssignment = localSeat?.chair
     ? getChairAssignment(tableId, localSeat.chair)
@@ -8725,6 +8522,7 @@ async function confirmMovePartyToTable(guestId, tableId) {
 }
 
 async function movePartyToTable(guestId, destinationTableId) {
+  state.customerWritesStarted = true;
   const guest = state.guests.find((item) => item.id === guestId);
   if (!guest) {
     throw new Error("Guest not found.");
@@ -8884,6 +8682,21 @@ async function assignGuestToChair(tableId, chairId, guestId) {
   }
 }
 
+async function syncCustomerProjections() {
+  if (state.permissions?.role !== "customer" || state.loadingGuests || state.loadingTables || !state.seatAssignmentsReady) return;
+  if (state.customerProjectionPromise) { state.customerProjectionAgain = true; return state.customerProjectionPromise; }
+  const signature = JSON.stringify({
+    wedding: Object.fromEntries(Object.entries(state.wedding || {}).filter(([key]) => !["createdAt", "updatedAt"].includes(key)).sort(([a], [b]) => a.localeCompare(b))),
+    guests: state.guests.map((guest) => ({ id: guest.id, fullName: guest.fullName || "", phone: guest.phone || "", side: guest.side || "family", additionalGuests: guest.additionalGuests || 0, allowance: guest.additionalGuestAllowance ?? guest.additionalGuests ?? 0, rsvpStatus: guest.rsvpStatus || "pending", rsvpMessage: guest.rsvpMessage || "" })),
+    tables: state.tables.map((table) => ({ id: table.id, name: table.name, shape: table.shape, x: table.x, y: table.y, width: table.width, height: table.height, rotation: table.rotation, seatCount: table.seatCount, tableColor: table.tableColor, borderColor: table.borderColor, chairColor: table.chairColor, chairs: table.chairs.map((chair) => ({ id: chair.id, seatNumber: chair.seatNumber, guestId: chair.assignment?.guestId || "", personKey: chair.assignment?.personKey || "" })) })),
+  });
+  if (signature === state.customerProjectionSignature) return;
+  state.customerProjectionSignature = signature;
+  state.customerProjectionAgain = false;
+  state.customerProjectionPromise = syncCustomerEventProjections(accountApi, state.services.db, state.weddingId).catch((error) => { state.customerProjectionSignature = ""; state.customerProjectionAgain = false; console.error("Customer projections could not synchronize", error.code || "unavailable"); showToast("Changes saved, but invitation/seating refresh needs a retry. Use Refresh.", "error"); throw error; }).finally(() => { state.customerProjectionPromise = null; if (state.customerProjectionAgain) void syncCustomerProjections().catch(() => {}); });
+  return state.customerProjectionPromise;
+}
+
 async function syncTablesAndGuests() {
   if (state.mode === "demo") {
     state.tables = hydrateTables(state.tables);
@@ -8892,6 +8705,7 @@ async function syncTablesAndGuests() {
   }
 
   if (isWeddingOwner()) void syncPublicStats();
+  else if (state.permissions?.role === "customer") await syncCustomerProjections();
 }
 
 async function handleExport(type) {
@@ -9287,6 +9101,7 @@ function getSelectedHallObject() {
 }
 
 async function persistHallObjects(errorMessage = "Venue layout could not be saved.") {
+  state.customerWritesStarted = true;
   if (state.mode === "demo") {
     persistDemoDashboardState();
     return true;
@@ -9435,7 +9250,7 @@ function rememberWeddingId(weddingId) {
 }
 
 function buildLoginUrl(message) {
-  return buildAuthRouteUrl("./dashboard-login.html", {
+  return buildAuthRouteUrl(state.loginSurface === "customer" ? "./customer-login.html" : "./dashboard-login.html", {
     weddingId: state.weddingId,
     demo: state.mode === "demo",
     side: requestedSeatingSide,
@@ -9622,7 +9437,7 @@ function normalizeWhatsAppPhone(phone) {
     return digits.replace(/^0+/, "");
   }
   if (digits.startsWith("0")) {
-    const countryCode = String(state.wedding?.whatsappCountryCode || "971");
+    const countryCode = String(state.wedding?.whatsAppCountryCode || state.wedding?.whatsappCountryCode || "971");
     return `${countryCode}${digits.replace(/^0+/, "")}`;
   }
   return digits;
@@ -9632,6 +9447,7 @@ function buildInviteLink(guestToken, guestId = "") {
   const url = createShareUrl("index.html", window.location.href);
   if (state.mode === "demo") url.searchParams.set("demo", "1");
   else url.searchParams.set("wedding", state.weddingId);
+  if (["localhost", "127.0.0.1"].includes(location.hostname) && sessionStorage.getItem("wedding:localEmulators") === "1") url.searchParams.set("emulator", "1");
   const fragment = { guest: guestToken };
   if (state.mode === "live" && guestId) fragment.recipient = guestId;
   url.hash = new URLSearchParams(fragment).toString();

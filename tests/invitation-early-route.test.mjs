@@ -4,14 +4,18 @@ import { readFile } from "node:fs/promises";
 import { runInNewContext } from "node:vm";
 
 test("mapped invitation routes happen before body paint and retain search and hash", async () => {
-  const [source, html, registry] = await Promise.all([
+  const [source, html, loginHtml, registry] = await Promise.all([
     readFile(new URL("../invitation-early-route.js", import.meta.url), "utf8"),
     readFile(new URL("../index.html", import.meta.url), "utf8"),
+    readFile(new URL("../dashboard-login.html", import.meta.url), "utf8"),
     readFile(new URL("../invitations/wedding-designs/registry.js", import.meta.url), "utf8"),
   ]);
   const bodyOffset = html.indexOf("<body");
   const earlyScriptOffset = html.indexOf("invitation-early-route.js");
   assert.ok(earlyScriptOffset >= 0 && earlyScriptOffset < bodyOffset);
+  const loginBodyOffset = loginHtml.indexOf("<body");
+  const loginEarlyScriptOffset = loginHtml.indexOf("invitation-early-route.js");
+  assert.ok(loginEarlyScriptOffset >= 0 && loginEarlyScriptOffset < loginBodyOffset);
 
   const original = new URL(
     "https://wedding-invitation-nlsf.vercel.app/index.html?wedding=luxury-wedding-demo#guest=synthetic-token&recipient=guest-a",
@@ -56,4 +60,41 @@ test("unmapped weddings keep the original invitation page visible", async () => 
 
   assert.equal(redirectedTo, "");
   assert.equal(document.documentElement.style.visibility, undefined);
+});
+
+test("planner login preserves session-required routing but routes personal invitations before paint", async () => {
+  const source = await readFile(new URL("../invitation-early-route.js", import.meta.url), "utf8");
+  for (const hash of ["", "#session-required"]) {
+    const original = new URL(`https://wedding-invitation-nlsf.vercel.app/dashboard-login.html?wedding=luxury-wedding-demo${hash}`);
+    let redirectedTo = "";
+    const window = {
+      location: {
+        search: original.search,
+        hash: original.hash,
+        href: original.href,
+        replace(url) { redirectedTo = url; },
+      },
+    };
+    const document = { documentElement: { style: {} } };
+    runInNewContext(source, { window, document, URL, URLSearchParams });
+    assert.equal(redirectedTo, "");
+    assert.equal(document.documentElement.style.visibility, undefined);
+  }
+
+  const original = new URL(
+    "https://wedding-invitation-nlsf.vercel.app/dashboard-login.html?wedding=luxury-wedding-demo#guest=synthetic-token&recipient=guest-a",
+  );
+  let redirectedTo = "";
+  const window = {
+    location: {
+      search: original.search,
+      hash: original.hash,
+      href: original.href,
+      replace(url) { redirectedTo = url; },
+    },
+  };
+  const document = { documentElement: { style: {} } };
+  runInNewContext(source, { window, document, URL, URLSearchParams });
+  assert.equal(new URL(redirectedTo).hash, original.hash);
+  assert.equal(document.documentElement.style.visibility, "hidden");
 });

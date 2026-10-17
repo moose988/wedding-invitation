@@ -7,7 +7,13 @@
     "M1S1aBL9134GSAozWh6G": "./invitations/wedding-designs/ali-salma/index.html",
   };
   const params = new URLSearchParams(window.location.search);
+  const fragment = new URLSearchParams(String(window.location.hash || "").replace(/^#/, ""));
   const weddingId = params.get("wedding")?.trim();
+  const isPlannerLogin = new URL(window.location.href).pathname.endsWith("/dashboard-login.html");
+  // The login page also receives legacy session-required URLs containing an
+  // event ID. Only treat it as an invitation entry when its bearer fragment
+  // is present; preserve organizer sign-in flows otherwise.
+  if (isPlannerLogin && !fragment.get("guest")) return;
   const route = weddingId ? routes[weddingId] : null;
   if (!route) return;
 

@@ -18,6 +18,11 @@ test("Layla & Zaid sample panel lives once at workspace level with distinct prev
   assert.match(workspace, /weddingAccess/);
   assert.match(workspace, /getDoc\(doc\(state\.services\.db, "weddings", entry\.id\)\)/);
   assert.match(workspace, /wedding\.seatingOnly === true/);
+  assert.match(html, /id="sampleInvitationPanel"[^>]*\shidden(?:\s|>)/);
+  assert.match(workspace, /state\.canSeeSampleInvitation = false;\s*el\.sampleInvitationPanel\.hidden = true/);
+  assert.match(workspace, /if \(permissions\.seatingOnly === true\) \{[\s\S]*?return \{ \.\.\.eventSummary/);
+  assert.match(workspace, /if \(isOwner \|\| permissions\.canManageUsers === true\) state\.canSeeSampleInvitation = true/);
+  assert.match(workspace, /el\.sampleInvitationPanel\.hidden = !state\.canSeeSampleInvitation/);
   assert.doesNotMatch(workspace, /girl@gmail\.com|isRestrictedAccount/);
   assert.match(styles, /\.workspace-controls\[hidden\], \.filter-row\[hidden\]\s*\{\s*display:none !important;\s*\}/);
   assert.match(workspace, /handleSamplePanelAction[\s\S]*?window\.open\(sampleInvitationUrl\(\)/);

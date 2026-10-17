@@ -2,7 +2,7 @@ import { collection, doc, getDoc, getDocs, initFirebase, isFirebaseConfigured, o
 import { EVENT_CATEGORIES, getEventCategory, getEventDisplayTitle, isCelebrationEvent } from "./event-utils.js";
 import { paginateRows } from "./workspace-pagination.js";
 
-const state = { services: null, user: null, weddings: [], workspaceLoaded: false, filter: "all", currentPage: 1, pageSize: 6, editId: "", deleteId: "", workspaceTimer: null, unsubscribeAuth: null, initialized: false, snapshotGeneration: 0, workspaceRequest: 0 };
+const state = { services: null, user: null, weddings: [], workspaceLoaded: false, canSeeSampleInvitation: false, filter: "all", currentPage: 1, pageSize: 6, editId: "", deleteId: "", workspaceTimer: null, unsubscribeAuth: null, initialized: false, snapshotGeneration: 0, workspaceRequest: 0 };
 const el = Object.fromEntries(["workspace","loadingState","userEmail","signOutButton","createWeddingButton","sampleInvitationPanel","workspaceControls","sampleInvitationUrl","searchInput","sortSelect","filterRow","workspaceStatus","retryLoadButton","weddingGrid","paginationControls","paginationStatus","emptyState","weddingDialog","weddingForm","formKicker","formTitle","formError","saveWeddingButton","categoryStep","eventFeaturesStep","eventInformationStep","continueEventButton","continueFeaturesButton","backEventButton","deleteDialog","deleteForm","deletePhrase","deleteConfirmation","deleteError"].map((id) => [id, document.getElementById(id)]));
 
 init();
@@ -11,6 +11,9 @@ function init() {
   state.initialized = true;
   if (!isFirebaseConfigured()) return showFatal("Firebase is not configured. Add your Firebase configuration before opening the workspace.");
   state.services = initFirebase();
+  // The sample invitation is an owner/admin demonstration tool. Keep it
+  // hidden until the signed-in account's actual event permissions are read.
+  el.sampleInvitationPanel.hidden = true;
   el.signOutButton.addEventListener("click", async () => { await signOut(state.services.auth); location.replace("./dashboard-login.html?message=signed-out"); });
   el.createWeddingButton.addEventListener("click", () => openForm());
   el.retryLoadButton.addEventListener("click", () => watchWorkspace());
@@ -39,6 +42,8 @@ function init() {
   state.unsubscribeAuth = onAuthStateChanged(state.services.auth, (user) => {
     if (state.user?.uid !== user?.uid) {
       state.weddings = [];
+      state.canSeeSampleInvitation = false;
+      el.sampleInvitationPanel.hidden = true;
       state.workspaceLoaded = false;
       state.currentPage = 1;
       state.workspaceRequest += 1;
@@ -63,6 +68,8 @@ function watchWorkspace() {
 
 async function refreshWorkspaceEvents(generation = state.snapshotGeneration) {
   const request = ++state.workspaceRequest;
+  state.canSeeSampleInvitation = false;
+  el.sampleInvitationPanel.hidden = true;
   try {
     // The index is only a discovery hint. Every event is re-read from its
     // membership document first; full dashboard accounts then read the
@@ -74,13 +81,18 @@ async function refreshWorkspaceEvents(generation = state.snapshotGeneration) {
         const membership = await getDoc(doc(state.services.db, "weddings", entry.id, "dashboardUsers", state.user.uid));
         if (!membership.exists() || membership.data().canViewDashboard !== true) return null;
         const permissions = membership.data();
+        const eventSummary = entry.data();
         // Seating-only accounts receive only their own index metadata. Do not
         // fetch the full event document (which contains organizer settings).
         if (permissions.seatingOnly === true) {
-          return { ...entry.data(), id: entry.id, seatingOnly: true, allowedSide: permissions.allowedSide || "restricted" };
+          return { ...eventSummary, id: entry.id, isOwner: false, seatingOnly: true, allowedSide: permissions.allowedSide || "restricted" };
         }
         const snapshot = await getDoc(doc(state.services.db, "weddings", entry.id));
-        return snapshot.exists() ? { ...snapshot.data(), id: snapshot.id } : null;
+        if (!snapshot.exists()) return null;
+        const wedding = snapshot.data();
+        const isOwner = wedding.ownerUserId === state.user.uid || permissions.role === "owner";
+        if (isOwner || permissions.canManageUsers === true) state.canSeeSampleInvitation = true;
+        return { ...wedding, id: snapshot.id, isOwner, canManageUsers: permissions.canManageUsers === true };
       } catch (error) {
         // A stale or forged index row is not authorization. Ignore only an
         // authorization denial for that candidate; surface actual outages.
@@ -93,7 +105,7 @@ async function refreshWorkspaceEvents(generation = state.snapshotGeneration) {
     state.workspaceLoaded = true;
     const onlySeating = state.weddings.length > 0 && state.weddings.every((wedding) => wedding.seatingOnly === true);
     el.createWeddingButton.hidden = onlySeating;
-    el.sampleInvitationPanel.hidden = onlySeating;
+    el.sampleInvitationPanel.hidden = !state.canSeeSampleInvitation;
     el.workspaceControls.hidden = false;
     el.filterRow.hidden = false;
     el.retryLoadButton.hidden = true;
@@ -103,6 +115,8 @@ async function refreshWorkspaceEvents(generation = state.snapshotGeneration) {
     if (generation !== state.snapshotGeneration || request !== state.workspaceRequest) return;
     console.error("Accessible event list could not be loaded.", error?.code || "unavailable");
     state.weddings = [];
+    state.canSeeSampleInvitation = false;
+    el.sampleInvitationPanel.hidden = true;
     state.workspaceLoaded = false;
     el.emptyState.hidden = true;
     el.weddingGrid.replaceChildren();

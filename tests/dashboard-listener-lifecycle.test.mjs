@@ -81,7 +81,7 @@ test("wedding list discovers from the private index and authorizes each canonica
   assert.match(weddings, /doc\(state\.services\.db, "weddings", entry\.id, "dashboardUsers", state\.user\.uid\)/);
   assert.match(weddings, /membership\.data\(\)\.canViewDashboard !== true/);
   assert.match(weddings, /getDoc\(doc\(state\.services\.db, "weddings", entry\.id\)\)/);
-  assert.match(weddings, /if \(permissions\.seatingOnly === true\) \{[\s\S]*?return \{ \.\.\.entry\.data\(\), id: entry\.id, seatingOnly: true, allowedSide: permissions\.allowedSide \|\| "restricted" \};[\s\S]*?const snapshot = await getDoc/);
+  assert.match(weddings, /if \(permissions\.seatingOnly === true\) \{[\s\S]*?return \{ \.\.\.eventSummary, id: entry\.id, isOwner: false, seatingOnly: true, allowedSide: permissions\.allowedSide \|\| "restricted" \};[\s\S]*?const snapshot = await getDoc/);
   assert.match(weddings, /state\.weddings = replaceRowsById\(indexed\.filter\(Boolean\)\)/);
   const discovery = weddings.slice(weddings.indexOf("async function refreshWorkspaceEvents"), weddings.indexOf("function replaceRowsById"));
   assert.doesNotMatch(discovery, /httpsCallable|collectionGroup|where\("status",\s*"==",\s*"active"\)/);

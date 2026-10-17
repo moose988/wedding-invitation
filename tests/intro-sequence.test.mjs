@@ -212,11 +212,22 @@ test("opening tap starts inline muted video before the independent music request
   assert.match(html, /assets\/opening-envelope\.mp4/);
 });
 
+test("opening tap reveals templates that do not provide an envelope video", async () => {
+  const script = await readFile(new URL("../script.js", import.meta.url), "utf8");
+  const html = await readFile(new URL("../index.html", import.meta.url), "utf8");
+  const tapHandler = script.slice(script.indexOf("function handleOpenInvitation()"), script.indexOf("function revealInvitation()"));
+  const noVideoBranch = tapHandler.slice(tapHandler.indexOf("if (!video || !state.introSequence)"));
+
+  assert.doesNotMatch(html, /id="openingVideo"/);
+  assert.match(noVideoBranch, /revealInvitation\(\)/);
+  assert.doesNotMatch(noVideoBranch, /\.unavailable\(\)/);
+});
+
 test("reduced-motion preference does not bypass the guest-requested envelope video", async () => {
   const script = await readFile(new URL("../script.js", import.meta.url), "utf8");
   const tapHandler = script.slice(script.indexOf("function handleOpenInvitation()"), script.indexOf("function revealInvitation()"));
 
-  assert.doesNotMatch(tapHandler, /prefers-reduced-motion|setTimeout|revealInvitation\(\)/);
+  assert.doesNotMatch(tapHandler, /prefers-reduced-motion|setTimeout/);
   assert.match(tapHandler, /configureInlineEnvelopePlayback\(video\);[\s\S]*?video\.play\(\)/);
   assert.match(tapHandler, /playback\.catch\(\(\) => state\.introSequence\?\.playbackRejected\(\)\)/);
 });

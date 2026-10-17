@@ -1483,8 +1483,10 @@ function handleOpenInvitation() {
   if (elements.skipOpeningButton) elements.skipOpeningButton.hidden = false;
 
   if (!video || !state.introSequence) {
-    state.introSequence?.unavailable();
-    if (!state.introSequence) updateIntroPresentation("error");
+    // Some invitation templates do not include an opening video. The guest's
+    // tap should still open the invitation instead of leaving the error
+    // overlay above the RSVP controls.
+    revealInvitation();
     void playWeddingMusicFromGesture();
     return;
   }

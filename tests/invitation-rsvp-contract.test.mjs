@@ -15,7 +15,8 @@ test("invitation capabilities are accepted only from URL fragments and exact tok
   assert.match(shared, /INVITATION_TOKEN_PATTERN = \/\^\[A-Za-z0-9_-\]\{43\}\$\//);
   assert.match(shared, /getDoc\(doc\(db, "weddings", weddingId, "publicGuests", guestToken\)\)/);
   assert.doesNotMatch(shared, /httpsCallable|collection\(|getDocs\(/);
-  assert.match(runtime, /clearInvitationCredentialFromUrl\(\)/);
+  assert.doesNotMatch(runtime, /clearInvitationCredentialFromUrl|history\.replaceState\(null, "", url\.toString\(\)\)/);
+  assert.match(runtime, /await loadFirebaseInvitation\(weddingId, guestToken\);\s*state\.unsubGuest = subscribeToInvitation/);
   assert.match(shared, /const stopWithUnavailable = \(\) => \{[\s\S]*?active = false;\s*unsubscribe\(\);/);
   assert.doesNotMatch(`${dashboard}\n${runtime}`, /getGuestInvitationTokens|manageGuestInvitationAccess|getGuestInvitation|submitGuestInvitationRsvp/);
 });

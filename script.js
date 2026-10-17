@@ -338,7 +338,6 @@ async function boot() {
     try {
       state.mode = "firebase";
       await loadFirebaseInvitation(weddingId, guestToken);
-      clearInvitationCredentialFromUrl();
       state.unsubGuest = subscribeToInvitation(
         { weddingId, guestToken, guestId },
         (context) => applyInvitationContext(context),
@@ -383,13 +382,6 @@ function warmEnvelopeAssets() {
 function getUrlParams() {
   const params = getInvitationParams();
   return { ...params, guestToken: explicitSampleMode ? "" : params.guestToken };
-}
-
-function clearInvitationCredentialFromUrl() {
-  if (!window.location.hash) return;
-  const url = new URL(window.location.href);
-  url.hash = "";
-  history.replaceState(null, "", url.toString());
 }
 
 async function loadFirebaseInvitation(weddingId, guestToken, requestVersion = ++state.invitationRefreshVersion) {

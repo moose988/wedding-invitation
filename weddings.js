@@ -1,9 +1,9 @@
-import { collection, doc, getDoc, getDocs, initFirebase, isFirebaseConfigured, onAuthStateChanged, serverTimestamp, setDoc, signOut, updateDoc, writeBatch, httpsCallable } from "./firebase-config.js?v=20261016-tab-session-isolation-1";
+import { collection, doc, getDoc, getDocs, initFirebase, isFirebaseConfigured, onAuthStateChanged, serverTimestamp, setDoc, signOut, updateDoc, writeBatch } from "./firebase-config.js?v=20261016-tab-session-isolation-1";
 import { EVENT_CATEGORIES, getEventCategory, getEventDisplayTitle, isCelebrationEvent } from "./event-utils.js";
 import { paginateRows } from "./workspace-pagination.js";
 
-const state = { services: null, user: null, weddings: [], filter: "all", currentPage: 1, pageSize: 6, editId: "", deleteId: "", workspaceTimer: null, unsubscribeAuth: null, initialized: false, snapshotGeneration: 0, workspaceRequest: 0 };
-const el = Object.fromEntries(["workspace","loadingState","userEmail","signOutButton","createWeddingButton","sampleInvitationPanel","workspaceControls","sampleInvitationUrl","searchInput","sortSelect","filterRow","workspaceStatus","weddingGrid","paginationControls","paginationStatus","emptyState","weddingDialog","weddingForm","formKicker","formTitle","formError","saveWeddingButton","categoryStep","eventFeaturesStep","eventInformationStep","continueEventButton","continueFeaturesButton","backEventButton","deleteDialog","deleteForm","deletePhrase","deleteConfirmation","deleteError"].map((id) => [id, document.getElementById(id)]));
+const state = { services: null, user: null, weddings: [], workspaceLoaded: false, filter: "all", currentPage: 1, pageSize: 6, editId: "", deleteId: "", workspaceTimer: null, unsubscribeAuth: null, initialized: false, snapshotGeneration: 0, workspaceRequest: 0 };
+const el = Object.fromEntries(["workspace","loadingState","userEmail","signOutButton","createWeddingButton","sampleInvitationPanel","workspaceControls","sampleInvitationUrl","searchInput","sortSelect","filterRow","workspaceStatus","retryLoadButton","weddingGrid","paginationControls","paginationStatus","emptyState","weddingDialog","weddingForm","formKicker","formTitle","formError","saveWeddingButton","categoryStep","eventFeaturesStep","eventInformationStep","continueEventButton","continueFeaturesButton","backEventButton","deleteDialog","deleteForm","deletePhrase","deleteConfirmation","deleteError"].map((id) => [id, document.getElementById(id)]));
 
 init();
 function init() {
@@ -13,6 +13,7 @@ function init() {
   state.services = initFirebase();
   el.signOutButton.addEventListener("click", async () => { await signOut(state.services.auth); location.replace("./dashboard-login.html?message=signed-out"); });
   el.createWeddingButton.addEventListener("click", () => openForm());
+  el.retryLoadButton.addEventListener("click", () => watchWorkspace());
   el.sampleInvitationUrl.value = sampleInvitationUrl();
   el.sampleInvitationPanel.addEventListener("click", handleSamplePanelAction);
   document.querySelectorAll("[data-create-wedding]").forEach((button) => button.addEventListener("click", () => openForm()));
@@ -38,6 +39,7 @@ function init() {
   state.unsubscribeAuth = onAuthStateChanged(state.services.auth, (user) => {
     if (state.user?.uid !== user?.uid) {
       state.weddings = [];
+      state.workspaceLoaded = false;
       state.currentPage = 1;
       state.workspaceRequest += 1;
       if (user) render();
@@ -56,30 +58,57 @@ function showFatal(message) { el.loadingState.textContent = message; }
 function watchWorkspace() {
   state.workspaceTimer && clearInterval(state.workspaceTimer);
   const generation = ++state.snapshotGeneration;
-  const refresh = () => void refreshWorkspaceEvents(generation);
-  refresh();
-  state.workspaceTimer = setInterval(refresh, 15000);
+  void refreshWorkspaceEvents(generation);
 }
 
 async function refreshWorkspaceEvents(generation = state.snapshotGeneration) {
   const request = ++state.workspaceRequest;
   try {
-    const result = await httpsCallable(state.services.functions, "getAccessibleWorkspaceEvents")({});
+    // The index is only a discovery hint. Every event is re-read from its
+    // membership document first; full dashboard accounts then read the
+    // canonical event, whose Firestore rules enforce the same boundary.
+    // Never query the global weddings collection and filter it in this client.
+    const access = await getDocs(collection(state.services.db, "users", state.user.uid, "weddingAccess"));
+    const indexed = await Promise.all(access.docs.map(async (entry) => {
+      try {
+        const membership = await getDoc(doc(state.services.db, "weddings", entry.id, "dashboardUsers", state.user.uid));
+        if (!membership.exists() || membership.data().canViewDashboard !== true) return null;
+        const permissions = membership.data();
+        // Seating-only accounts receive only their own index metadata. Do not
+        // fetch the full event document (which contains organizer settings).
+        if (permissions.seatingOnly === true) {
+          return { ...entry.data(), id: entry.id, seatingOnly: true, allowedSide: permissions.allowedSide || "restricted" };
+        }
+        const snapshot = await getDoc(doc(state.services.db, "weddings", entry.id));
+        return snapshot.exists() ? { ...snapshot.data(), id: snapshot.id } : null;
+      } catch (error) {
+        // A stale or forged index row is not authorization. Ignore only an
+        // authorization denial for that candidate; surface actual outages.
+        if (["permission-denied", "not-found"].includes(error?.code)) return null;
+        throw error;
+      }
+    }));
     if (generation !== state.snapshotGeneration || request !== state.workspaceRequest || !state.user) return;
-    state.weddings = replaceRowsById(result.data?.events || []);
+    state.weddings = replaceRowsById(indexed.filter(Boolean));
+    state.workspaceLoaded = true;
     const onlySeating = state.weddings.length > 0 && state.weddings.every((wedding) => wedding.seatingOnly === true);
     el.createWeddingButton.hidden = onlySeating;
     el.sampleInvitationPanel.hidden = onlySeating;
     el.workspaceControls.hidden = false;
     el.filterRow.hidden = false;
+    el.retryLoadButton.hidden = true;
     await enrichStats();
     render();
   } catch (error) {
     if (generation !== state.snapshotGeneration || request !== state.workspaceRequest) return;
     console.error("Accessible event list could not be loaded.", error?.code || "unavailable");
     state.weddings = [];
-    render();
-    el.workspaceStatus.textContent = "We could not load your accessible events. Please refresh and try again.";
+    state.workspaceLoaded = false;
+    el.emptyState.hidden = true;
+    el.weddingGrid.replaceChildren();
+    el.paginationControls.hidden = true;
+    el.workspaceStatus.textContent = `Couldn’t load events (${error?.code || "network error"}). Check your connection and try again.`;
+    el.retryLoadButton.hidden = false;
   }
 }
 
@@ -134,7 +163,7 @@ function render() {
   el.workspaceStatus.textContent = rows.length > state.pageSize
     ? `Showing ${page.start + 1}–${Math.min(page.start + state.pageSize, rows.length)} of ${rows.length} events`
     : state.weddings.length ? `${rows.length} event${rows.length === 1 ? "" : "s"} shown` : "";
-  el.emptyState.hidden = Boolean(state.weddings.length || term || state.filter !== "all");
+  el.emptyState.hidden = Boolean(!state.workspaceLoaded || state.weddings.length || term || state.filter !== "all" || el.retryLoadButton.hidden === false);
   el.weddingGrid.innerHTML = page.items.map(card).join("");
   el.paginationControls.hidden = page.pageCount <= 1;
   el.paginationStatus.textContent = `Page ${state.currentPage} of ${page.pageCount}`;

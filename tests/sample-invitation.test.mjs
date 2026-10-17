@@ -15,7 +15,8 @@ test("Layla & Zaid sample panel lives once at workspace level with distinct prev
   assert.match(html, /Copy sample link/);
   assert.match(html, /data-action="preview-sample"/);
   assert.match(workspace, /sampleInvitationPanel\.addEventListener\("click", handleSamplePanelAction\)/);
-  assert.match(workspace, /getAccessibleWorkspaceEvents/);
+  assert.match(workspace, /weddingAccess/);
+  assert.match(workspace, /getDoc\(doc\(state\.services\.db, "weddings", entry\.id\)\)/);
   assert.match(workspace, /wedding\.seatingOnly === true/);
   assert.doesNotMatch(workspace, /girl@gmail\.com|isRestrictedAccount/);
   assert.match(styles, /\.workspace-controls\[hidden\], \.filter-row\[hidden\]\s*\{\s*display:none !important;\s*\}/);

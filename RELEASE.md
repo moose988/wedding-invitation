@@ -4,6 +4,54 @@ Assessment date: 2026-10-16. **Readiness: NOT READY for production activation.**
 This is a local implementation and emulator verification; the production site,
 rules, data, secrets, and Auth configuration have not been changed by this work.
 
+## Spark-only recovery follow-up (2026-10-17)
+
+The live Firebase Console was inspected read-only. The project is on the Spark
+plan and `firebase functions:list --project weddinginvitaion-b4f36` reports no
+deployed Functions. No Firestore data or rules were changed.
+
+The signed-in `test@gmail.com` account has three existing root event documents:
+`ali & salma` (owner), `mohmads birthday` (owner), and the active `Layla & Zaid`
+demo event (admin membership). All three have matching entries in that user's
+`users/{uid}/weddingAccess` index and the canonical event documents exist. A
+fourth index entry labelled `taiba & mohamad (Copy)` points to a missing event
+document; the index is metadata only and cannot reconstruct the event, its
+guests, or seating. Firestore backup/import-export tools are unavailable on
+Spark, so that missing event was not recreated or guessed at.
+
+The other supplied account was checked by UID, not inferred from its email. It
+has no membership document on either owner event. On the shared Layla & Zaid
+demo it has a seating-only membership with `allowedSide: all`, no check-in or
+export permission, and no user-specific access to the two owner events.
+
+The All Events client now discovers candidates from the signed-in user's
+private `weddingAccess` collection, then reads each canonical event document so
+the deployed Firestore rules decide whether that account can see it. The index
+alone is never trusted; the flow does not query the global events collection.
+It also distinguishes a load error from a successful empty result and exposes
+a retry button. This change is local and has not been deployed.
+
+The broader Spark-only conversion remains a release blocker. Client call sites
+still depend on undeployed Functions: `getGuestInvitation`,
+`submitGuestInvitationRsvp`, `getGuestInvitationTokens`,
+`manageGuestInvitationAccess`, `exchangeSeatingEditorLink`,
+`manageSeatingEditorAccess`, `getSideSeatingState`, `mutateSideSeating`,
+`resolveCheckinGuest`, `getCheckinGuestList`, `createSenderSession`,
+`getSenderSession`, and `deleteWedding`. Event creation, editing, and archive
+are direct Firestore operations; hard deletion is not. Each listed operation
+needs a rules-enforced Firestore design or a server backend. For example,
+custom Firebase Auth token exchange requires trusted signing and cannot be
+replaced by a browser secret; public invitation reads/RSVP need a capability
+document and strict rules, while check-in must stay account-authorized. Those
+replacements and direct REST/SDK negative tests have not been implemented.
+
+The full Node suite passes (133 passed, 0 failed, 4 gated skips). The Firestore
+emulator suite is blocked because the machine has Java 19 while the installed
+Firebase CLI requires Java 21+. No paid plan or service was enabled. Full
+no-backend conversion, live-rule compatibility tests, migration backup,
+authenticated browser regression, and deployment have not been completed; do
+not treat this follow-up as a production release.
+
 ## What is local, staged, and deployed
 
 | Environment | State |

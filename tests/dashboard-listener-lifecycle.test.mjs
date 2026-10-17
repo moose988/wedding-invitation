@@ -74,19 +74,25 @@ test("dashboard navigation and seating toolbar keep the requested operational or
   assert.match(dashboard, /class="planner-canvas-controls"[\s\S]*?actionButton\("Add table"/);
 });
 
-test("wedding list uses the server membership projection and replaces rows by ID", async () => {
-  const [weddings, functions] = await Promise.all([read("weddings.js"), read("functions/index.js")]);
+test("wedding list discovers from the private index and authorizes each canonical document", async () => {
+  const [weddings, html] = await Promise.all([read("weddings.js"), read("all-events.html")]);
 
-  assert.match(weddings, /httpsCallable\(state\.services\.functions, "getAccessibleWorkspaceEvents"\)/);
-  assert.match(weddings, /state\.weddings = replaceRowsById\(result\.data\?\.events \|\| \[\]\)/);
+  assert.match(weddings, /collection\(state\.services\.db, "users", state\.user\.uid, "weddingAccess"\)/);
+  assert.match(weddings, /doc\(state\.services\.db, "weddings", entry\.id, "dashboardUsers", state\.user\.uid\)/);
+  assert.match(weddings, /membership\.data\(\)\.canViewDashboard !== true/);
+  assert.match(weddings, /getDoc\(doc\(state\.services\.db, "weddings", entry\.id\)\)/);
+  assert.match(weddings, /if \(permissions\.seatingOnly === true\) \{[\s\S]*?return \{ \.\.\.entry\.data\(\), id: entry\.id, seatingOnly: true, allowedSide: permissions\.allowedSide \|\| "restricted" \};[\s\S]*?const snapshot = await getDoc/);
+  assert.match(weddings, /state\.weddings = replaceRowsById\(indexed\.filter\(Boolean\)\)/);
+  const discovery = weddings.slice(weddings.indexOf("async function refreshWorkspaceEvents"), weddings.indexOf("function replaceRowsById"));
+  assert.doesNotMatch(discovery, /httpsCallable|collectionGroup|where\("status",\s*"==",\s*"active"\)/);
+  assert.match(weddings, /error\?\.code \|\| "network error"/);
+  assert.match(weddings, /retryLoadButton\.hidden = false/);
+  assert.match(html, /id="retryLoadButton"/);
+  assert.match(weddings, /workspaceLoaded: false/);
   assert.match(weddings, /state\.weddings\.every\(\(wedding\) => wedding\.seatingOnly === true\)/);
-  assert.match(functions, /collectionGroup\("dashboardUsers"\)/);
-  assert.match(functions, /permissions\.canViewDashboard !== true/);
-  assert.match(functions, /seatingOnly && \(permissions\.canEditSeating !== true/);
   assert.match(weddings, /generation !== state\.snapshotGeneration/);
   assert.match(weddings, /state\.unsubscribeAuth\?\.\(\)/);
-  assert.doesNotMatch(weddings, /function loadLegacyActiveWeddings\(/);
-  assert.doesNotMatch(weddings, /collectionGroup\("dashboardUsers"\)/);
+  assert.match(weddings, /Boolean\(!state\.workspaceLoaded \|\| state\.weddings\.length \|\| term \|\| state\.filter !== "all" \|\| el\.retryLoadButton\.hidden === false\)/);
 });
 
 test("wedding action menus obey hidden state and close consistently", async () => {

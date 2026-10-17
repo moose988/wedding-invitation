@@ -16,7 +16,15 @@ function init() {
   // The sample invitation is an owner/admin demonstration tool. Keep it
   // hidden until the signed-in account's actual event permissions are read.
   el.sampleInvitationPanel.hidden = true;
-  el.signOutButton.addEventListener("click", async () => { await signOut(state.services.auth); location.replace(document.body.dataset.accountSurface === "customer" ? "./customer-login.html?message=signed-out" : "./dashboard-login.html?message=signed-out"); });
+  el.signOutButton.addEventListener("click", async () => {
+    state.signingOut = true;
+    state.workspaceRequest += 1;
+    state.unsubscribeAuth?.(); state.unsubscribeAccess?.();
+    clearTimeout(state.workspaceTimer);
+    await signOut(state.services.auth);
+    location.replace(document.body.dataset.accountSurface === "customer" ? "./customer-login.html?message=signed-out" : "./dashboard-login.html?message=signed-out");
+  });
+  window.addEventListener("pagehide", () => { state.signingOut = true; state.workspaceRequest += 1; clearTimeout(state.workspaceTimer); state.unsubscribeAuth?.(); state.unsubscribeAccess?.(); }, { once: true });
   el.createWeddingButton.addEventListener("click", () => openForm());
   el.retryLoadButton.addEventListener("click", () => watchWorkspace());
   el.sampleInvitationUrl.value = sampleInvitationUrl();
@@ -42,6 +50,7 @@ function init() {
   document.addEventListener("keydown", (event) => { if (event.key === "Escape") closeActionMenus(); });
   state.unsubscribeAuth?.();
   state.unsubscribeAuth = onAuthStateChanged(state.services.auth, async (user) => {
+    if (state.signingOut) return;
     if (state.user?.uid !== user?.uid) {
       state.weddings = [];
       state.canSeeSampleInvitation = false;
@@ -58,6 +67,7 @@ function init() {
       try { await redeemCustomerGrants(accountApi, state.services.db, user); }
       catch (error) { el.workspaceStatus.textContent = "Your account is signed in. Event linking needs a retry or administrator assistance."; }
     } catch (error) { showFatal(`Account access could not be loaded (${error.code || "unavailable"}).`); return; }
+    if (state.signingOut || state.services.auth.currentUser?.uid !== user.uid) return;
     const customerSurface = document.body.dataset.accountSurface === "customer";
     if (!state.isAdmin && !customerSurface) return location.replace("./customer-events.html");
     if (state.isAdmin && customerSurface) return location.replace("./all-events.html");
@@ -410,6 +420,7 @@ async function deleteWedding(event) {
       "seatingAccess", "tables", "guests", "seatingGuests", "checkinGuests",
       "seatAssignments", "seatOccupancy", "seatedPeople", "invitationSecrets",
       "invitationTokens", "publicGuests", "publicSummary", "publicStats",
+      "publicEvent", "publicScene", "publicLayouts", "publicVenue",
       "seatingMigrations", "eventMaintenance", "senderCapabilities",
     ];
     for (const collectionId of childCollections) {
@@ -459,3 +470,5 @@ async function deleteDocIfPresent(path) {
   await deleteDoc(ref);
 }
 function timestampValue(value) { return value?.toMillis?.() || value?.seconds * 1000 || (value ? new Date(value).getTime() : 0); } function formatEvent(value) { const date=new Date(value); return Number.isNaN(+date) ? "Event date to be set" : new Intl.DateTimeFormat(undefined,{dateStyle:"medium",timeStyle:"short"}).format(date); } function formatRelative(value) { const ms=Date.now()-timestampValue(value); if (!ms) return "just now"; const days=Math.floor(ms/86400000); return days <= 0 ? "today" : days === 1 ? "yesterday" : `${days} days ago`; } function escape(value) { const node=document.createElement("span"); node.textContent=value; return node.innerHTML; } function flash(message) { el.workspaceStatus.textContent=message; }
+
+window.addEventListener("pageshow", (event) => { if (event.persisted) location.reload(); });

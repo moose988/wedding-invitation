@@ -4,9 +4,11 @@ import test from "node:test";
 
 const source = await readFile(new URL("../dashboard.js", import.meta.url), "utf8");
 const seating = await readFile(new URL("../seating-firestore.js", import.meta.url), "utf8");
+const guestEdit = await readFile(new URL("../guest-edit.js", import.meta.url), "utf8");
 
-test("owner dashboard migrates legacy seating once before using canonical seat documents", () => {
-  assert.match(source, /void ensureSeatingSchema\(\)/);
+test("dashboard does not migrate or normalize canonical records during navigation", () => {
+  assert.doesNotMatch(source, /void ensureSeatingSchema\(\)/);
+  assert.doesNotMatch(source, /void normalizeGuestSidesInBackground\(\)/);
   assert.match(source, /migrateLegacySeating\(/);
   assert.match(source, /state\.wedding = \{ \.\.\.state\.wedding, seatingSchemaVersion: 2 \}/);
   assert.match(seating, /if \(eventSnapshot\.data\(\)\.seatingSchemaVersion === 2\) return \{ migrated: 0 \}/);
@@ -21,9 +23,10 @@ test("dashboard maintains private guest projections and an owner repair action",
   assert.match(source, /"publicSummary", "summary"/);
   assert.match(source, /"publicStats", "summary"/);
   assert.match(source, /buildSeatingGuestProjection\(guest\)/);
-  assert.match(source, /buildCheckinGuestProjection\(guest, tables\)/);
-  assert.match(source, /"seatingGuests", id/);
-  assert.match(source, /"checkinGuests", id/);
+  assert.match(source, /buildCheckinGuestProjection/);
+  assert.match(source, /commitGuestEdit/);
+  assert.match(guestEdit, /"seatingGuests", guestId/);
+  assert.match(guestEdit, /"checkinGuests", guestId/);
   assert.match(source, /data-action="repair-event-projections"/);
   assert.match(source, /Repair projections/);
   assert.match(source, /updatedAt: serverTimestamp\(\)/);

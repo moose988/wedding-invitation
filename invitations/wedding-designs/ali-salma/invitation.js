@@ -1,4 +1,4 @@
-import { getInvitationParams, invitationCheckinUrl, invitationSeatingEnabled, loadInvitationContext, saveInvitationRsvp, subscribeToInvitation } from "../../shared/invitation-data.js?v=20261017-firestore-invitation-1";
+import { getInvitationParams, invitationCheckinUrl, invitationSeatingEnabled, loadInvitationContext, saveInvitationRsvp, subscribeToInvitation } from "../../shared/invitation-data.js?v=20261018-guest-invitation-regressions-1";
 import { escapeHtml, formatEventDate, guestSeat, setDocumentTitle } from "../../shared/invitation-utils.js";
 import { buildSatelliteMapEmbedUrl } from "../../shared/map-embed.js";
 import { getEventDisplayTitle, isCelebrationEvent } from "../../../event-utils.js";
@@ -25,6 +25,7 @@ async function boot() {
 
 function render() {
   const { wedding, guest } = context;
+  document.documentElement.lang = wedding.invitationLanguage === "ar" ? "ar" : "en";
   setDocumentTitle(wedding);
   const names = getEventDisplayTitle(wedding);
   const showQr = wedding.showInvitationQr !== false;
@@ -75,10 +76,10 @@ async function saveRsvp(event) {
     saveMessage = "Your response has been saved.";
     render();
   } catch (error) {
-    console.error(error);
+    console.error(error.code || "unavailable");
     isSaving = false;
     isEditing = true;
-    saveMessage = "We could not save your response. Please try again.";
+    saveMessage = error.transient || error.code === "permission-denied" ? error.message : "We could not save your response. Please try again.";
     render();
   }
 }
@@ -87,4 +88,15 @@ function safeMapsLink(value) {
   try { const url = new URL(String(value || "")); return ["https:", "http:"].includes(url.protocol) ? url.href : ""; }
   catch { return ""; }
 }
-function showError(error) { unsubscribeInvitation?.(); unsubscribeInvitation = null; console.error(error); app.innerHTML = `<section class="invitation-error"><div><h1>Invitation unavailable</h1><p>${escapeHtml(error.message || "Please check your personal invitation link.")}</p></div></section>`; }
+function showError(error) {
+  console.error(error.code || "unavailable");
+  if (error.transient && context) {
+    let notice = document.getElementById("invitationConnectionError");
+    if (!notice) { notice = document.createElement("aside"); notice.id = "invitationConnectionError"; notice.setAttribute("role", "status"); document.body.prepend(notice); }
+    notice.textContent = error.message + " ";
+    const retry = document.createElement("button"); retry.textContent = "Retry updates"; retry.addEventListener("click", () => location.reload(), { once: true }); notice.append(retry); return;
+  }
+  unsubscribeInvitation?.(); unsubscribeInvitation = null;
+  app.innerHTML = `<section class="invitation-error"><div><h1>${error.transient ? "Invitation temporarily unavailable" : "Invitation unavailable"}</h1><p>${escapeHtml(error.message || "Please check your personal invitation link.")}</p></div></section>`;
+}
+window.addEventListener("pageshow", (event) => { if (event.persisted) location.reload(); });

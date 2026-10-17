@@ -3,6 +3,7 @@ import {
   generateInvitationToken,
   isValidInvitationToken,
 } from "./invitation-token.js";
+import { projectionEqual } from "../../event-publishing.js?v=20261018-guest-invitation-regressions-1";
 
 function invitationRefs(api, db, weddingId, guestId, token = "") {
   const wedding = api.doc(db, "weddings", weddingId);
@@ -107,22 +108,11 @@ export function createInvitationTokenService({ db, firestore, tokenFactory = gen
           // Use the explicit organizer regenerate action to issue a new token.
           throw new Error("Invitation unavailable.");
         }
-        const projection = buildInvitationProjection(weddingId, wedding, sourceGuest, tables, { canonicalLayout: scope.customer === true });
-        // Touch the private binding on each successful copy. Apart from keeping
-        // the transaction auditable, this makes Firestore rules recheck event
-        // existence even when the token and projection are already current.
-        transaction.update(refs.secret, {
-          ...(secret.expiresAt !== null ? { expiresAt: null } : {}),
-          updatedAt: firestore.serverTimestamp(),
-        });
-        if (oldIndex.expiresAt !== null) {
-          transaction.update(oldRefs.index, { expiresAt: null, updatedAt: firestore.serverTimestamp() });
-        }
-        if (JSON.stringify(oldPublic.wedding) !== JSON.stringify(projection.wedding) ||
-            JSON.stringify(oldPublic.guest) !== JSON.stringify(projection.guest) ||
-            oldPublic.expiresAt !== null) {
+        const projection = buildInvitationProjection(weddingId, wedding, sourceGuest, tables, { canonicalLayout: true });
+        if (!projectionEqual(oldPublic.wedding, projection.wedding) ||
+            !projectionEqual(oldPublic.guest, projection.guest)) {
           transaction.update(oldRefs.public, {
-            ...projection, expiresAt: null, updatedAt: firestore.serverTimestamp(),
+            ...projection, updatedAt: firestore.serverTimestamp(),
           });
         }
         return oldToken;
@@ -150,7 +140,7 @@ export function createInvitationTokenService({ db, firestore, tokenFactory = gen
       }
 
       const version = Number(secret.version || 0) + (nextToken === oldToken ? 0 : 1);
-      const projection = buildInvitationProjection(weddingId, wedding, sourceGuest, tables, { canonicalLayout: scope.customer === true });
+      const projection = buildInvitationProjection(weddingId, wedding, sourceGuest, tables, { canonicalLayout: true });
       const publicData = {
         ...projection,
         rsvpStatus: ["confirmed", "declined"].includes(sourceGuest.rsvpStatus) ? sourceGuest.rsvpStatus : "pending",

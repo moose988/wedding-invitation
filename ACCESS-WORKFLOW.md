@@ -69,7 +69,7 @@ Account directories, maintenance, sender management, and organizer check-in
 remain unavailable to customers.
 
 Guest creation batches canonical and minimal seating/check-in records. Customer
-updates synchronize validated derivatives through `customer-projections.js`;
+updates use `guest-edit.js` and `dashboard-persistence.js` to synchronize only affected validated derivatives;
 they never require an administrator's open dashboard. Public table geometry is
 stored separately in `publicLayouts`, with each document checked against its
 canonical table. `publicVenue` contains only the canonical venue layout.
@@ -100,7 +100,7 @@ There is no browser bootstrap or open administrator-claim path.
 ## Local verification
 
 `npm test` runs the unit and contract suites. `npm run test:security` starts the
-Firestore emulator and runs all four behavioral security files. Their demo
+Firestore emulator and runs all five behavioral security files. Their demo
 project IDs are separate from the browser fixtures.
 
 For browser mutation tests, run Auth and Firestore emulators with project
@@ -110,6 +110,14 @@ For browser mutation tests, run Auth and Firestore emulators with project
 Use a loopback static server and open the login with `?emulator=1`. Only loopback
 hosts honor this option, and it forces a demo project. Copied local test links
 carry the same option. No seed script can default to production.
+
+For the three-regression browser matrix, use `node scripts/seed-local-regressions.mjs`
+with both loopback environment variables above. It creates only synthetic demo
+events (30 and 300 guests), legacy records, eleven-person seating, and existing
+embedded invitation fixtures. Random synthetic capability URLs stay in the
+ignored `.local-evidence/browser-fixtures.json`. Do not run this script against
+production. Local diagnostic counters/failure injection are enabled only by
+the loopback `?emulator=1` option; they record counts, not document contents.
 
 Production data audit scripts record counts and hashes only. Deployment must
 remain Firestore rules/indexes plus the existing Git-connected Vercel frontend;

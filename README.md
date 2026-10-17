@@ -26,7 +26,7 @@ Seating uses layout in `tables`, canonical per-chair assignments in `seatAssignm
 
 Each guest's invitation token is 256-bit random data generated in the browser and saved to `invitationSecrets`, `invitationTokens`, and an exact-token `publicGuests` projection. Copying an active invitation reuses its token. The URL carries `#guest=<token>&recipient=<guestId>`; RSVP updates the canonical guest and token projection in one Firestore batch, and rules validate the actual additional-guest allowance. Anonymous readers cannot list invitations or read the private guest roster, phone numbers, notes, or account memberships.
 
-Invitation data is a token-addressed projection, not a live read of event or guest collections. Owners can refresh projections from the dashboard. Old encrypted server-only token values cannot be recovered locally without the original server encryption secret; those guests need a newly issued invitation if no active browser-generated token exists.
+Personal invitation data is an exact-token projection. Sanitized shared event details, table geometry, and venue objects live in `publicEvent`, `publicLayouts`, and `publicVenue`; invitation listeners merge them with existing embedded projections. Saved settings/layouts update the same invitation URL without regenerating its token. Anonymous clients never read the private event or roster. Explicit owner repair is bounded and skips unchanged content.
 
 ## WhatsApp sender links
 
@@ -67,6 +67,6 @@ firebase use weddinginvitaion-b4f36
 firebase deploy --only firestore:rules,firestore:indexes --project weddinginvitaion-b4f36
 ```
 
-The existing Vercel project `wedding-invitation-nlsf` is connected to `moose988/wedding-invitation` on `main`; pushing the tested frontend commit to `main` triggers its production deployment. Do not deploy Firebase Hosting or Functions. Firestore rules and index configuration are deployed separately from Vercel.
+The reported production alias `https://wedding-invitation-ebon-three.vercel.app/` belongs to Vercel project **`wedding-invitation`**, connected to `moose988/wedding-invitation` on `main` (verified October 18, 2026). The local ignored `.vercel` binding and older references to `wedding-invitation-nlsf` identify a different project. Verify the alias, deployment source commit, and `access-release.json` after release. Do not deploy Firebase Hosting or Functions. Firestore rules deploy separately from Vercel.
 
-After deployment, an event owner should open each existing event dashboard once to run seating migration, then select **Repair projections** to refresh the public summary, invitation documents, and minimal seating/check-in projections. Verify the repaired event and two-account seating access before sending links.
+Opening dashboards and navigating do not write or migrate records. A relevant save publishes only affected data; the first explicit layout save initializes sanitized shared geometry (bounded to 200 tables). **Repair projections** is an explicit owner action: at most 50 guests per click, continuing from an in-memory cursor. It preserves tokens and skips unchanged content. Older seating schemas retain their placements; projection repair does not migrate them. Wait for quota availability before retrying a failed publication; **Refresh** retries pending work once.

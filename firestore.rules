@@ -444,11 +444,59 @@ service cloud.firestore {
       return guest.get("additionalGuestAllowance", guest.get("additionalGuests", 0));
     }
 
+    function validPublicScheduleAt(projected, source, index) {
+      return projected.size() <= index || projected[index] == { "titleEn": source[index].get("titleEn", ""), "titleAr": source[index].get("titleAr", ""), "time": source[index].get("time", ""), "timeEn": source[index].get("timeEn", ""), "timeAr": source[index].get("timeAr", ""), "descriptionEn": source[index].get("descriptionEn", ""), "descriptionAr": source[index].get("descriptionAr", "") };
+    }
+
+    function canonicalSharedEvent(weddingId, data) {
+      let event = getAfter(/databases/$(database)/documents/weddings/$(weddingId)).data;
+      return data == {
+          "eventTitle": event.get("eventTitle", ""),
+          "coupleName": event.get("coupleName", ""),
+          "brideName": event.get("brideName", ""),
+          "groomName": event.get("groomName", ""),
+          "brideNameAr": event.get("brideNameAr", ""),
+          "groomNameAr": event.get("groomNameAr", ""),
+          "eventCategory": event.get("eventCategory", "wedding_engagement"),
+          "eventDateISO": event.get("eventDateISO", ""),
+          "rsvpDeadlineISO": event.get("rsvpDeadlineISO", ""),
+          "timeEn": event.get("timeEn", ""),
+          "timeAr": event.get("timeAr", ""),
+          "venueEn": event.get("venueEn", ""),
+          "location": event.get("location", ""),
+          "locationEn": event.get("locationEn", ""),
+          "mapsUrl": event.get("mapsUrl", ""),
+          "venueMapEmbedUrl": event.get("venueMapEmbedUrl", ""),
+          "subtitleEn": event.get("subtitleEn", ""),
+          "subtitleAr": event.get("subtitleAr", ""),
+          "invitationMessageEn": event.get("invitationMessageEn", ""),
+          "invitationMessageAr": event.get("invitationMessageAr", ""),
+          "invitationLanguage": event.get("invitationLanguage", "en"),
+          "showInvitationQr": event.get("showInvitationQr", true),
+          "seatingEnabled": event.get("seatingEnabled", true),
+          "schedule": data.schedule, "updatedAt": request.time
+        }
+        && data.schedule is list && data.schedule.size() <= 12
+        && data.schedule.size() == event.get("schedule", []).size()
+        && validPublicScheduleAt(data.schedule, event.get("schedule", []), 0)
+          && validPublicScheduleAt(data.schedule, event.get("schedule", []), 1)
+          && validPublicScheduleAt(data.schedule, event.get("schedule", []), 2)
+          && validPublicScheduleAt(data.schedule, event.get("schedule", []), 3)
+          && validPublicScheduleAt(data.schedule, event.get("schedule", []), 4)
+          && validPublicScheduleAt(data.schedule, event.get("schedule", []), 5)
+          && validPublicScheduleAt(data.schedule, event.get("schedule", []), 6)
+          && validPublicScheduleAt(data.schedule, event.get("schedule", []), 7)
+          && validPublicScheduleAt(data.schedule, event.get("schedule", []), 8)
+          && validPublicScheduleAt(data.schedule, event.get("schedule", []), 9)
+          && validPublicScheduleAt(data.schedule, event.get("schedule", []), 10)
+          && validPublicScheduleAt(data.schedule, event.get("schedule", []), 11);
+    }
+
     function canonicalCustomerInvitation(weddingId, token, data) {
       let guestId = getAfter(invitationTokenPath(weddingId, token)).data.guestId;
       let guest = getAfter(/databases/$(database)/documents/weddings/$(weddingId)/guests/$(guestId)).data;
       let event = getAfter(/databases/$(database)/documents/weddings/$(weddingId)).data;
-      return !isCustomer(weddingId) || (data.wedding == {
+      return !isCustomer(weddingId) || ((data.wedding == {
           "canonicalLayout": true, "tables": [], "hallObjects": [],
           "eventTitle": event.get("eventTitle", ""), "coupleName": event.get("coupleName", ""),
           "brideName": event.get("brideName", ""), "groomName": event.get("groomName", ""),
@@ -461,7 +509,8 @@ service cloud.firestore {
           "invitationMessageEn": event.get("invitationMessageEn", ""), "invitationMessageAr": event.get("invitationMessageAr", ""),
           "invitationLanguage": event.get("invitationLanguage", "en"), "showInvitationQr": event.get("showInvitationQr", true),
           "seatingEnabled": event.get("seatingEnabled", true), "schedule": event.get("schedule", [])
-        }
+        } || (exists(/databases/$(database)/documents/weddings/$(weddingId)/publicGuests/$(token))
+          && data.wedding == resource.data.wedding))
         && canonicalPublicAssignments(data.guest.seatingAssignments, guest.get("seatingAssignments", []))
         && data.guest.tableName == guest.get("tableName", "") && data.guest.seatNumber == guest.get("seatNumber", "")
         && data.rsvpStatus == guest.get("rsvpStatus", "pending")
@@ -944,7 +993,7 @@ service cloud.firestore {
           (!request.resource.data.keys().hasAny(["createdAt"]) || request.resource.data.createdAt == request.time) &&
           (!request.resource.data.keys().hasAny(["updatedAt"]) || request.resource.data.updatedAt == request.time);
         allow delete: if canManageGuestRecords(weddingId);
-        allow update: if (isCustomer(weddingId) && canManageGuestRecords(weddingId)
+        allow update: if (canManageGuestRecords(weddingId)
             && validCustomerGuestUpdate(weddingId, guestId, request.resource.data))
           || (!isCustomer(weddingId) && canManageGuestRecords(weddingId) &&
             (!isCustomer(weddingId) || !request.resource.data.diff(resource.data).affectedKeys().hasAny(["checkedIn", "checkedInAt"])) &&
@@ -979,7 +1028,8 @@ service cloud.firestore {
       match /checkinGuests/{guestId} {
         allow get, list: if isEventOwner(weddingId)
           || (canCheckIn(weddingId) && checkInAccountMayAccessGuest(weddingId, resource.data));
-        allow create: if (canManageGuestRecords(weddingId) || isEventOwner(weddingId)) && validCheckinGuest(request.resource.data, guestId, false) && (!isCustomer(weddingId) || canonicalCheckinProjection(weddingId, guestId, request.resource.data));
+        allow create: if isCustomer(weddingId) ? (canManageGuestRecords(weddingId) && canonicalCheckinProjection(weddingId, guestId, request.resource.data))
+          : (canManageGuestRecords(weddingId) || isEventOwner(weddingId)) && validCheckinGuest(request.resource.data, guestId, false);
         allow update: if (canManageGuestRecords(weddingId) && isCustomer(weddingId) && canonicalCheckinProjection(weddingId, guestId, request.resource.data))
           || (!isCustomer(weddingId) && (isEventOwner(weddingId) || canManageGuestRecords(weddingId)) && validCheckinGuest(request.resource.data, guestId, true))
           || (canCheckIn(weddingId) && checkInAccountMayAccessGuest(weddingId, resource.data)
@@ -1065,11 +1115,37 @@ service cloud.firestore {
       // each validation within Firestore's document-access budget.
       match /publicLayouts/{tableId} {
         allow read: if eventAvailable(weddingId);
+        function safeAliases() {
+          let path = /databases/$(database)/documents/weddings/$(weddingId)/tables/$(tableId);
+          let oldAliases = exists(/databases/$(database)/documents/weddings/$(weddingId)/publicLayouts/$(tableId)) ? resource.data.get("aliases", []) : [];
+          let oldName = exists(/databases/$(database)/documents/weddings/$(weddingId)/publicLayouts/$(tableId)) ? resource.data.get("name", "") : "";
+          let canonicalName = exists(path) ? get(path).data.get("name", "") : "";
+          return request.resource.data.get("aliases", []) is list
+            && request.resource.data.get("aliases", []).size() <= 100
+            && request.resource.data.get("aliases", []).hasOnly(oldAliases.concat([oldName, canonicalName]));
+        }
         allow create, update: if canManageSeatingLayout(weddingId)
-          && request.resource.data.keys().hasOnly(["name", "shape", "x", "y", "width", "height", "rotation", "seatCount", "tableColor", "borderColor", "chairColor", "updatedAt"])
-          && request.resource.data.diff(getAfter(/databases/$(database)/documents/weddings/$(weddingId)/tables/$(tableId)).data).affectedKeys().hasOnly(["id", "tableName", "label", "chairs", "capacity", "guestIds", "floorZone", "locked", "createdAt", "updatedAt"])
+          && request.resource.data.keys().hasOnly(["name", "shape", "x", "y", "width", "height", "rotation", "seatCount", "tableColor", "borderColor", "chairColor", "aliases", "updatedAt"])
+          && request.resource.data.diff(getAfter(/databases/$(database)/documents/weddings/$(weddingId)/tables/$(tableId)).data).affectedKeys().hasOnly(["id", "tableName", "label", "chairs", "capacity", "guestIds", "floorZone", "locked", "createdAt", "updatedAt", "aliases"])
+          && safeAliases()
           && request.resource.data.updatedAt == request.time;
         allow delete: if canManageSeatingLayout(weddingId) && !existsAfter(/databases/$(database)/documents/weddings/$(weddingId)/tables/$(tableId));
+      }
+
+      match /publicEvent/{docId} {
+        allow get: if docId == "details" && eventAvailable(weddingId);
+        allow list: if false;
+        allow create, update: if docId == "details" && (isEventOwner(weddingId) || canEditEventDetails(weddingId) || canManageSeatingLayout(weddingId))
+          && canonicalSharedEvent(weddingId, request.resource.data);
+        allow delete: if isEventDeletingOwner(weddingId);
+      }
+
+      match /publicScene/{docId} {
+        allow get: if docId == "state" && eventAvailable(weddingId);
+        allow list: if false;
+        allow create, update: if docId == "state" && (isEventOwner(weddingId) || canManageSeatingLayout(weddingId))
+          && request.resource.data == { "version": 1, "updatedAt": request.time };
+        allow delete: if isEventDeletingOwner(weddingId);
       }
 
       match /publicVenue/{docId} {

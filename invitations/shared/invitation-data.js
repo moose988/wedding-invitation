@@ -1,7 +1,6 @@
 import {
   doc,
   getDoc,
-  getDocs,
   collection,
   initPublicFirebase,
   isFirebaseConfigured,
@@ -10,19 +9,7 @@ import {
   writeBatch,
 } from "../../firebase-config.js";
 import { isValidInvitationToken } from "./invitation-token.js";
-import { generateTableChairs } from "../../seating-utils.js";
-
-async function resolvePublicLayout(db, weddingId, wedding) {
-  if (!wedding?.canonicalLayout || wedding.seatingEnabled === false) return wedding;
-  const [layouts, venue] = await Promise.all([
-    getDocs(collection(db, "weddings", weddingId, "publicLayouts")),
-    getDocs(collection(db, "weddings", weddingId, "publicVenue")),
-  ]);
-  return { ...wedding, hallObjects: venue.docs.map((row) => row.data()).filter((item) => Number.isInteger(item.index)).sort((a, b) => a.index - b.index), tables: layouts.docs.map((row) => {
-    const table = { ...row.data(), id: row.id };
-    return { ...table, chairs: generateTableChairs(table.shape, table.seatCount, table.width, table.height, [], table.id) };
-  }) };
-}
+import { composeInvitation, createInvitationSubscription, invitationReadError } from "./invitation-live.js?v=20261018-guest-invitation-regressions-1";
 
 const INVITATION_TOKEN_PATTERN = /^[A-Za-z0-9_-]{43}$/;
 
@@ -57,75 +44,25 @@ export async function loadInvitationContext({ weddingId, guestToken, guestId = "
         !["pending", "confirmed", "declined"].includes(invitation.rsvpStatus)) {
       throw new Error("This invitation is unavailable.");
     }
-    return {
-      weddingId,
-      guestToken,
-      guestId,
-      wedding: { id: weddingId, ...await resolvePublicLayout(db, weddingId, invitation.wedding) },
-      guest: {
-        ...invitation.guest,
-        rsvpStatus: invitation.rsvpStatus,
-        additionalGuests: invitation.additionalGuests,
-        additionalGuestAllowance: invitation.guest.additionalGuestAllowance,
-        rsvpMessage: invitation.rsvpMessage || "",
-      },
-    };
-  } catch {
-    // Keep missing, malformed, revoked, expired, and wrong-event capabilities indistinguishable.
-    throw new Error("This invitation is unavailable.");
+    const shared = await getDoc(doc(db, "weddings", weddingId, "publicEvent", "details"));
+    return composeInvitation({ weddingId, guestToken, guestId }, invitation, shared.exists() ? shared.data() : null, null, null, null);
+  } catch (error) {
+    throw invitationReadError(error);
   }
 }
 
 // Listen to the exact capability document. Revocation/deletion is delivered by
 // Firestore, and the unsubscribe is owned by the invitation page lifecycle.
 export function subscribeToInvitation(context, onChange, onError = console.error) {
-  let active = true;
-  let revision = 0;
   if (!isFirebaseConfigured() || !context?.weddingId || !isValidInvitationToken(context?.guestToken || "")) {
-    queueMicrotask(() => { if (active) onError(new Error("This invitation is unavailable.")); });
-    return () => { active = false; };
+    queueMicrotask(() => onError(invitationReadError({ code: "not-found" })));
+    return () => {};
   }
   const { db } = initPublicFirebase();
-  let unsubscribe = () => {};
-  const stopWithUnavailable = () => {
-    if (!active) return;
-    active = false;
-    unsubscribe();
-    onError(new Error("This invitation is unavailable."));
-  };
-  unsubscribe = onSnapshot(doc(db, "weddings", context.weddingId, "publicGuests", context.guestToken),
-    async (snapshot) => {
-      if (!active) return;
-      const currentRevision = ++revision;
-      if (!snapshot.exists()) { stopWithUnavailable(); return; }
-      const invitation = snapshot.data();
-      if (invitation.eventId !== context.weddingId || !invitation.wedding || !invitation.guest ||
-          !["pending", "confirmed", "declined"].includes(invitation.rsvpStatus)) {
-        stopWithUnavailable();
-        return;
-      }
-      let wedding;
-      try { wedding = await resolvePublicLayout(db, context.weddingId, invitation.wedding); }
-      catch { stopWithUnavailable(); return; }
-      if (!active || currentRevision !== revision) return;
-      onChange({
-        ...context,
-        wedding: { id: context.weddingId, ...wedding },
-        guest: {
-          ...invitation.guest,
-          rsvpStatus: invitation.rsvpStatus,
-          additionalGuests: invitation.additionalGuests,
-          additionalGuestAllowance: invitation.guest.additionalGuestAllowance,
-          rsvpMessage: invitation.rsvpMessage || "",
-        },
-      });
-    },
-    () => stopWithUnavailable(),
-  );
-  return () => {
-    active = false;
-    unsubscribe();
-  };
+  const stop = createInvitationSubscription({ api: { doc, collection, onSnapshot }, db, context, onChange, onError });
+  const dispose = () => { stop(); window.removeEventListener("pagehide", dispose); };
+  window.addEventListener("pagehide", dispose, { once: true });
+  return dispose;
 }
 
 export async function saveInvitationRsvp(context, status, additionalGuests, message) {
@@ -148,29 +85,30 @@ export async function saveInvitationRsvp(context, status, additionalGuests, mess
     const guestRef = doc(db, "weddings", context.weddingId, "guests", context.guestId);
     const seatingGuestRef = doc(db, "weddings", context.weddingId, "seatingGuests", context.guestId);
     const checkinGuestRef = doc(db, "weddings", context.weddingId, "checkinGuests", context.guestId);
-    const [seatingGuestSnapshot, checkinGuestSnapshot] = await Promise.all([
-      getDoc(seatingGuestRef).catch(() => null),
-      getDoc(checkinGuestRef).catch(() => null),
-    ]);
-    const batch = writeBatch(db);
     const rsvpPatch = {
       rsvpStatus: normalizedStatus,
       additionalGuests: additionalGuestCount,
       rsvpMessage,
       updatedAt: serverTimestamp(),
     };
-    batch.update(tokenRef, rsvpPatch);
-    batch.update(guestRef, rsvpPatch);
-    if (seatingGuestSnapshot?.exists()) batch.update(seatingGuestRef, {
-      rsvpStatus: normalizedStatus,
-      additionalGuests: additionalGuestCount,
-      updatedAt: serverTimestamp(),
-    });
-    if (checkinGuestSnapshot?.exists()) batch.update(checkinGuestRef, {
-      rsvpStatus: normalizedStatus,
-      updatedAt: serverTimestamp(),
-    });
-    await batch.commit();
+    const responseBatch = (mirrors) => {
+      const batch = writeBatch(db);
+      batch.update(tokenRef, rsvpPatch);
+      batch.update(guestRef, rsvpPatch);
+      if (mirrors) {
+        batch.update(seatingGuestRef, { rsvpStatus: normalizedStatus, additionalGuests: additionalGuestCount, updatedAt: serverTimestamp() });
+        batch.update(checkinGuestRef, { rsvpStatus: normalizedStatus, updatedAt: serverTimestamp() });
+      }
+      return batch;
+    };
+    // A normal RSVP does not read private derivatives. Older events may lack
+    // these mirrors: only not-found gets one fallback atomic canonical save.
+    let batch = responseBatch(true);
+    try { await batch.commit(); }
+    catch (error) {
+      if (error.code !== "not-found") throw error;
+      batch = responseBatch(false); await batch.commit();
+    }
     context.guest = {
       ...context.guest,
       rsvpStatus: normalizedStatus,
@@ -178,8 +116,10 @@ export async function saveInvitationRsvp(context, status, additionalGuests, mess
       rsvpMessage,
     };
     return context.guest;
-  } catch {
-    throw new Error("We could not save your response. Please try again.");
+  } catch (error) {
+    const normalized = invitationReadError(error);
+    if (normalized.transient) throw normalized;
+    throw Object.assign(new Error(error.code === "permission-denied" ? "This response is not permitted. Check that your invitation is still active." : "We could not save your response. Please try again."), { code: error.code });
   }
 }
 

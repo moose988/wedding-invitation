@@ -98,3 +98,17 @@ test("planner login preserves session-required routing but routes personal invit
   assert.equal(new URL(redirectedTo).hash, original.hash);
   assert.equal(document.documentElement.style.visibility, "hidden");
 });
+
+test("login and authenticated workspace routes cannot become invitation entry points", async () => {
+  const source = await readFile(new URL("../invitation-early-route.js", import.meta.url), "utf8");
+  for (const route of ["customer-login.html?wedding=luxury-wedding-demo&message=signed-out", "dashboard-login.html?wedding=luxury-wedding-demo&message=signed-out", "customer-events.html?wedding=luxury-wedding-demo", "all-events.html?wedding=luxury-wedding-demo", "dashboard.html?wedding=luxury-wedding-demo"]) {
+    for (const hash of ["", "#guest=synthetic-only&recipient=g"]) {
+      const original = new URL(`https://example.test/${route}${hash}`);
+      let destination = "";
+      const window = { location: { search: original.search, hash: original.hash, href: original.href, replace(value) { destination = value; } } };
+      const document = { documentElement: { style: {} } };
+      runInNewContext(source, { window, document, URL, URLSearchParams });
+      assert.equal(destination, "", route);
+    }
+  }
+});

@@ -1,5 +1,5 @@
 import { isFirebaseConfigured } from "./firebase-config.js";
-import { getInvitationParams, loadInvitationContext, saveInvitationRsvp, subscribeToInvitation } from "./invitations/shared/invitation-data.js?v=20261017-firestore-invitation-1";
+import { getInvitationParams, loadInvitationContext, saveInvitationRsvp, subscribeToInvitation } from "./invitations/shared/invitation-data.js?v=20261018-guest-invitation-regressions-1";
 import { invitationRefreshIsCurrent, invitationRsvpStorageKey, invitationRsvpView } from "./invitations/shared/rsvp-state.js";
 import { buildSatelliteMapEmbedUrl } from "./invitations/shared/map-embed.js";
 import { buildInvitationCalendar } from "./invitations/shared/calendar.js";
@@ -15,7 +15,7 @@ import {
   normalizeTableShape,
   resolveTableName,
 } from "./seating-utils.js?v=20261012-seating-refresh-2";
-import { invitationSeatingEnabled } from "./invitations/shared/invitation-data.js?v=20261017-firestore-invitation-1";
+import { invitationSeatingEnabled } from "./invitations/shared/invitation-data.js?v=20261018-guest-invitation-regressions-1";
 import { getEventDisplayTitle, isCelebrationEvent } from "./event-utils.js";
 
 const demoWedding = {
@@ -343,6 +343,7 @@ async function boot() {
         (context) => applyInvitationContext(context),
         (error) => {
           console.error("Invitation refresh failed.", error);
+          if (error.transient) { showInvitationConnectionError(error.message); return; }
           renderInvitationAccessError("This invitation is no longer available. Please ask the couple for a new link.");
         },
       );
@@ -350,7 +351,7 @@ async function boot() {
     } catch (error) {
       console.error(error);
       state.mode = "unavailable";
-      renderInvitationAccessError("We could not open this invitation. Please check the link and try again.");
+      renderInvitationAccessError(error.transient ? error.message : "We could not open this invitation. Please check the link and try again.");
       return;
     }
   } else if (!explicitDemoMode) {
@@ -374,6 +375,16 @@ function renderInvitationAccessError(message) {
   document.body.innerHTML = `<main class="invitation-error"><section class="invitation-error__card"><p class="section-kicker">${privateInvite}</p><h1>${unavailable}</h1><p>${escapeHtml(localizedMessage)}</p></section></main>`;
 }
 
+function showInvitationConnectionError(message) {
+  let notice = document.getElementById("invitationConnectionError");
+  if (!notice) { notice = document.createElement("aside"); notice.id = "invitationConnectionError"; notice.setAttribute("role", "status"); document.body.prepend(notice); }
+  notice.textContent = message + " ";
+  const retry = document.createElement("button"); retry.textContent = "Retry updates";
+  retry.addEventListener("click", () => location.reload(), { once: true }); notice.append(retry);
+}
+
+window.addEventListener("pageshow", (event) => { if (event.persisted) location.reload(); });
+
 function warmEnvelopeAssets() {
   const images = [...document.querySelectorAll(".envelope-intro__poster, .venue-illustration")];
   return Promise.allSettled(images.map((image) => image.decode ? Promise.race([image.decode().catch(() => undefined), new Promise((resolve) => window.setTimeout(resolve, 900))]) : Promise.resolve()));
@@ -392,8 +403,14 @@ async function loadFirebaseInvitation(weddingId, guestToken, requestVersion = ++
 
 function applyInvitationContext(context) {
   state.wedding = normaliseWedding(context.wedding);
+  const publishedLanguage = context.wedding.invitationLanguage === "ar" ? "ar" : "en";
+  if (state.publishedInvitationLanguage !== publishedLanguage) {
+    state.laylaLanguage = publishedLanguage;
+    state.publishedInvitationLanguage = publishedLanguage;
+  }
+  document.documentElement.lang = state.laylaLanguage;
   state.guest = context.guest;
-  state.hallObjects = hydrateHallObjects(state.wedding.hallObjects);
+  state.hallObjects = hydrateHallObjects(state.wedding.hallObjects, state.mode === "firebase");
   state.tables = Array.isArray(state.wedding.tables) ? state.wedding.tables : [];
   const primaryAssignment = getInvitationSeatAssignments(state.guest)[0];
   state.assignedTable = state.tables.find((table) => table.id === primaryAssignment?.tableId) || null;
@@ -503,9 +520,9 @@ function populateInvitation() {
   const englishNames = isCelebrationEvent(wedding)
     ? getEventDisplayTitle(wedding)
     : `${wedding.brideName} & ${wedding.groomName}`;
-  const arabicNames = isCelebrationEvent(wedding) ? "" : `${wedding.brideNameAr} و ${wedding.groomNameAr}`;
+  const arabicNames = isCelebrationEvent(wedding) ? "" : [wedding.brideNameAr || wedding.brideName, wedding.groomNameAr || wedding.groomName].filter(Boolean).join(" و ");
 
-  document.title = `${englishNames} | Wedding Invitation`;
+  document.title = `${wedding.eventTitle || englishNames} | Wedding Invitation`;
   setText("heroArabicNames", arabicNames);
   setText("heroEnglishNames", englishNames);
   setText("heroSubtitleArabic", wedding.subtitleAr);
@@ -1313,10 +1330,10 @@ function createHallObjects() {
   ];
 }
 
-function hydrateHallObjects(savedObjects) {
+function hydrateHallObjects(savedObjects, live = false) {
   const saved = Array.isArray(savedObjects) ? savedObjects : [];
   const savedById = new Map(saved.map((item) => [item.id, item]));
-  const defaults = createHallObjects();
+  const defaults = live ? createHallObjects().filter((item) => item.type !== "dance-floor") : createHallObjects();
   const defaultIds = new Set(defaults.map((item) => item.id));
   const mergedDefaults = defaults.map((item) => ({
     ...item,
@@ -1392,9 +1409,9 @@ async function updateRsvp(status, additionalGuests) {
     renderFirebaseRsvp(document.getElementById("rsvpMount"));
     showToast(isLaylaInvitation() ? laylaText("responseSaved") : "Your response has been saved.", "success");
   } catch (error) {
-    console.error("Invitation RSVP save failed.", error);
+    console.error("Invitation RSVP save failed.", error.code || "unavailable");
     state.isRsvpSaving = false;
-    state.rsvpSaveError = isLaylaInvitation() ? laylaText("responseSaveError") : "We could not save your response. Please try again.";
+    state.rsvpSaveError = error.transient || error.code === "permission-denied" ? error.message : isLaylaInvitation() ? laylaText("responseSaveError") : "We could not save your response. Please try again.";
     state.rsvpSelection = status;
     renderFirebaseRsvp(document.getElementById("rsvpMount"));
     showToast(state.rsvpSaveError, "error");

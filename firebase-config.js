@@ -17,22 +17,22 @@ import {
   signOut,
 } from "https://www.gstatic.com/firebasejs/12.19.0/firebase-auth.js";
 import {
-  addDoc,
+  addDoc as rawAddDoc,
   collection,
-  deleteDoc,
+  deleteDoc as rawDeleteDoc,
   doc,
-  getDoc,
-  getDocs,
+  getDoc as rawGetDoc,
+  getDocs as rawGetDocs,
   limit,
-  onSnapshot,
+  onSnapshot as rawOnSnapshot,
   orderBy,
   query,
-  runTransaction,
+  runTransaction as rawRunTransaction,
   serverTimestamp,
-  setDoc,
-  updateDoc,
+  setDoc as rawSetDoc,
+  updateDoc as rawUpdateDoc,
   where,
-  writeBatch,
+  writeBatch as rawWriteBatch,
 } from "https://www.gstatic.com/firebasejs/12.19.0/firebase-firestore.js";
 import { getFirestore, connectFirestoreEmulator } from "https://www.gstatic.com/firebasejs/12.19.0/firebase-firestore.js";
 import {
@@ -50,6 +50,7 @@ const defaultConfig = {
   appId: "",
 };
 
+import { createLocalFirestoreDiagnostics } from "./local-firestore-diagnostics.js";
 const serviceCache = createScopedServiceCache();
 
 // Test endpoints are opt-in, loopback-only, and use a demo project. A production
@@ -59,6 +60,9 @@ if (localHost && new URLSearchParams(window.location.search).get("emulator") ===
   sessionStorage.setItem("wedding:localEmulators", "1");
 }
 const localEmulators = localHost && sessionStorage.getItem("wedding:localEmulators") === "1";
+export const firestoreDiagnostics = createLocalFirestoreDiagnostics(localEmulators);
+const { addDoc, deleteDoc, getDoc, getDocs, onSnapshot, runTransaction, setDoc, updateDoc, writeBatch } = firestoreDiagnostics.instrument({ addDoc: rawAddDoc, deleteDoc: rawDeleteDoc, getDoc: rawGetDoc, getDocs: rawGetDocs, onSnapshot: rawOnSnapshot, runTransaction: rawRunTransaction, setDoc: rawSetDoc, updateDoc: rawUpdateDoc, writeBatch: rawWriteBatch });
+
 function connectLocalServices(app, auth, db) {
   if (!localEmulators || app.__localConnected) return;
   if (auth) connectAuthEmulator(auth, "http://127.0.0.1:9099", { disableWarnings: true });

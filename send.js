@@ -4,6 +4,7 @@ import {
   senderGuestPresentation,
 } from "./sender-codec.js";
 import { httpsCallable, initPublicFirebase, isFirebaseConfigured } from "./firebase-config.js?v=20261016-tab-session-isolation-1";
+import { createShareUrl } from "./share-link.js";
 
 const shell = document.getElementById("senderShell");
 const params = new URLSearchParams(window.location.search);
@@ -107,7 +108,7 @@ function guestKey(_guest, index) {
 }
 
 function buildInviteLink(guest) {
-  const url = new URL("index.html", window.location.href);
+  const url = createShareUrl("index.html", window.location.href);
   if (payload.w) {
     url.searchParams.set("wedding", payload.w);
   }

@@ -26,6 +26,7 @@ import {
   initializeFirebaseServicesForRoute,
   waitForFirebaseSessionPersistence,
 } from "./firebase-service-scopes.js";
+import { createShareUrl } from "./share-link.js";
 import { exportGuests } from "./export.js";
 import { buildInvitationProjection, generateInvitationToken, isValidInvitationToken } from "./invitations/shared/invitation-token.js";
 import { createInvitationTokenService } from "./invitations/shared/invitation-token-service.js";
@@ -9422,7 +9423,7 @@ function normalizeWhatsAppPhone(phone) {
 }
 
 function buildInviteLink(guestToken, guestId = "") {
-  const url = new URL("index.html", window.location.href);
+  const url = createShareUrl("index.html", window.location.href);
   if (state.mode === "demo") url.searchParams.set("demo", "1");
   else url.searchParams.set("wedding", state.weddingId);
   const fragment = { guest: guestToken };
@@ -9432,7 +9433,7 @@ function buildInviteLink(guestToken, guestId = "") {
 }
 
 function buildCheckinLink(guestToken) {
-  const url = new URL("checkin.html", window.location.href);
+  const url = createShareUrl("checkin.html", window.location.href);
   if (state.mode === "demo") url.searchParams.set("demo", "1");
   else url.searchParams.set("wedding", state.weddingId);
   url.hash = new URLSearchParams({ guest: guestToken }).toString();

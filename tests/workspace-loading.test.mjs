@@ -13,10 +13,11 @@ test("All Events hides its full-screen loading placeholder after workspace initi
   assert.match(html, /id="loadingState"[^>]*class="workspace-loading"|class="workspace-loading"[^>]*id="loadingState"/);
   assert.match(script, /el\.loadingState\.hidden = true/);
   assert.match(styles, /\.workspace-loading\[hidden\]\s*\{\s*display:\s*none\s*!important;?\s*\}/);
+  assert.match(styles, /\.weddings-shell\[hidden\]\s*\{\s*display:\s*none\s*!important;?\s*\}/);
   assert.match(html, /<title>All Events · qdsystems<\/title>/);
   assert.match(html, /<h1>All Events<\/h1>/);
   assert.doesNotMatch(html, /My Events/);
-  assert.match(html, /weddings\.css\?v=20261016-account-controls-hide/);
+  assert.match(html, /weddings\.css\?v=20261017-customer-access-2/);
 });
 
 test("All Events displays six events per page and clamps navigation after filtering", () => {

@@ -28,7 +28,7 @@ import { exportGuests } from "./export.js";
 import { buildInvitationProjection, generateInvitationToken, isValidInvitationToken } from "./invitations/shared/invitation-token.js";
 import { createInvitationTokenService } from "./invitations/shared/invitation-token-service.js";
 import { projectSeatAssignments, migrateLegacySeating, seatAssignmentRef, seatedPersonRef, seatOccupancyRef } from "./seating-firestore.js";
-import { canViewSeatingAccountPage, resolveSeatingAccountPage } from "./dashboard-access.js";
+import { canViewDashboardPage, canViewSeatingAccountPage, resolveDashboardPage, resolveSeatingAccountPage } from "./dashboard-access.js";
 import { eventUsesGuestSides, getDefaultGuestSide, getEventDisplayTitle, isCelebrationEvent } from "./event-utils.js";
 import { attemptEventSettingsSave, bindEventSettingsFieldTracking, bindEventSettingsSubmit, canEditEventSettings, commitEventSettingsBatch, eventSettingsFeedback, eventSettingsHaveChanges, isEventSettingsSaveDisabled, updateEventSettingsSaveControl } from "./event-settings-state.js";
 import { createSenderPayload, encodeSenderPayload } from "./sender-codec.js";
@@ -1105,6 +1105,7 @@ function bindEvents() {
     bindEventSettingsSubmit(elements.pageContent, (event) => void saveEventSettings(event));
     elements.pageContent.addEventListener("submit", (event) => {
       if (event.target?.id === "seatingAccountPermissionForm") void saveSeatingAccountPermission(event);
+      if (event.target?.id === "dashboardAccountAccessForm") void saveLimitedDashboardAccount(event);
     });
   }
   elements.guestModal?.addEventListener("click", handleDialogBackdropClick);
@@ -1676,6 +1677,8 @@ async function bootstrapDashboard() {
       params.get("view"),
       state.permissions,
     );
+  } else if (Array.isArray(state.permissions.allowedViews)) {
+    state.activeView = resolveDashboardPage(params.get("view"), state.permissions);
   }
   rememberWeddingId(state.weddingId);
   const weddingDoc = await getDoc(
@@ -1803,6 +1806,34 @@ function isWeddingOwner() {
   );
 }
 
+function isLaylaZaidOwnerSetupCandidate() {
+  return state.mode === "live" &&
+    state.weddingId === "luxury-wedding-demo" &&
+    state.wedding?.ownerUserId === "pending-auth-setup" &&
+    String(state.currentUser?.email || "").trim().toLowerCase() === "test@gmail.com" &&
+    state.permissions?.role === "admin" &&
+    state.permissions?.canManageUsers === true;
+}
+
+async function claimLaylaZaidOwner() {
+  if (!isLaylaZaidOwnerSetupCandidate() || !state.currentUser?.uid || !state.services?.db) return;
+  const confirmed = window.confirm(
+    "Assign Layla & Zaid event ownership to test@gmail.com? This one-time setup enables the existing owner-only seating migration and account controls.",
+  );
+  if (!confirmed) return;
+  try {
+    await updateDoc(doc(state.services.db, "weddings", state.weddingId), {
+      ownerUserId: state.currentUser.uid,
+      updatedAt: serverTimestamp(),
+    });
+    showToast("Event owner setup completed. Preparing existing seating…", "success");
+    await bootstrapDashboard();
+  } catch (error) {
+    console.error("Layla & Zaid owner setup could not be completed.", error?.code || "unavailable");
+    showToast("Owner setup failed. Confirm this account is signed in and has the existing event admin access.", "error");
+  }
+}
+
 function canEditEventDetails() {
   return canEditEventSettings({
     isOwner: isWeddingOwner(),
@@ -1812,7 +1843,7 @@ function canEditEventDetails() {
 }
 
 function canViewEventSettings() {
-  return state.mode === "demo" || canEditEventDetails();
+  return state.mode === "demo" || state.permissions?.canViewEventSettings === true || canEditEventDetails();
 }
 
 function startListeners() {
@@ -2459,9 +2490,8 @@ function renderChrome() {
       "is-active",
       button.dataset.navView === state.activeView,
     );
-    if (isAccountSeatingWorkspace) {
-      button.hidden = !canViewSeatingAccountPage(button.dataset.navView, state.permissions);
-    } else {
+    button.hidden = !canViewDashboardPage(button.dataset.navView, state.permissions);
+    if (!button.hidden && !isAccountSeatingWorkspace) {
       if (button.dataset.navView === "seating") button.hidden = !isSeatingEnabled();
       if (button.dataset.navView === "checkin") {
         button.hidden = !isInvitationQrEnabled();
@@ -2471,7 +2501,7 @@ function renderChrome() {
       }
     }
     if (button.dataset.navView === "settings") {
-      button.hidden = !canViewEventSettings();
+      button.hidden = button.hidden || !canViewEventSettings();
     }
   });
 
@@ -2594,14 +2624,21 @@ function renderGlobalActions() {
 }
 
 function renderOverviewMoreActions() {
+  const actions = [
+    overviewMenuButton("Refresh", "refresh-dashboard"),
+    can("canExport") ? overviewMenuButton("Export guest list", "export-all") : "",
+    canViewDashboardPage("share", state.permissions)
+      ? overviewMenuButton("Copy invitation link", "copy-invitation-base")
+      : "",
+    canViewDashboardPage("checkin", state.permissions)
+      ? overviewMenuButton("Open check-in", "open-checkin")
+      : "",
+  ].filter(Boolean);
   return `
     <details class="overview-actions-menu">
       <summary class="da3wa-button da3wa-button--secondary">More actions</summary>
       <div class="overview-actions-menu__panel" role="menu" aria-label="More overview actions">
-        ${overviewMenuButton("Refresh", "refresh-dashboard")}
-        ${overviewMenuButton("Export guest list", "export-all", !can("canExport"))}
-        ${overviewMenuButton("Copy invitation link", "copy-invitation-base")}
-        ${overviewMenuButton("Open check-in", "open-checkin")}
+        ${actions.join("")}
       </div>
     </details>
   `;
@@ -2612,6 +2649,7 @@ function overviewMenuButton(label, action, disabled = false) {
 }
 
 function switchView(view) {
+  if (!canViewDashboardPage(view, state.permissions)) return;
   if (view === "settings" && !canViewEventSettings()) return;
   if (state.dirtyEventSettings && view !== state.activeView) {
     if (!window.confirm("Discard unsaved event detail changes and leave Event Settings?")) {
@@ -2620,7 +2658,6 @@ function switchView(view) {
     state.dirtyEventSettings = false;
     state.eventSettingsMessage = "";
   }
-  if (state.permissions?.seatingOnly === true && !canViewSeatingAccountPage(view, state.permissions)) return;
   if (state.editorMode && !state.permissions?.seatingOnly && view !== "seating") return;
   if (view === "guestSummary" && !canViewGuestSummary()) return;
   if (view === "checkin" && !isInvitationQrEnabled()) return;
@@ -2725,12 +2762,20 @@ function renderOverviewPage() {
   const attention = calculateAttention(state.guests, state.tables, seatingEnabled);
   const recentActivity = deriveRecentActivity(state.guests);
   const sideStats = calculateSideStats(state.guests, state.tables);
+  const ownerSetupNotice = state.mode === "live" &&
+    state.weddingId === "luxury-wedding-demo" &&
+    state.wedding?.ownerUserId === "pending-auth-setup" &&
+    String(state.currentUser?.email || "").trim().toLowerCase() === "test@gmail.com" &&
+    state.permissions?.role === "admin" && state.permissions?.canManageUsers === true
+    ? `<article class="share-card owner-setup-notice"><p class="da3wa-eyebrow">Owner setup required</p><h2>Prepare this event’s seating workspace</h2><p>This one-time owner setup unlocks the existing seating migration and account controls for Layla &amp; Zaid.</p><button class="da3wa-button da3wa-button--primary" type="button" data-action="claim-event-ownership">Complete owner setup</button></article>`
+    : "";
   const sideDistribution = eventUsesGuestSides(state.wedding)
     ? `<article class="overview-card overview-distribution"><p class="da3wa-eyebrow">Guest distribution</p><h2>By invitation side</h2><div class="overview-table-wrap"><table class="overview-distribution__table"><thead><tr><th scope="col">Side</th><th scope="col">Invited</th><th scope="col">Confirmed</th><th scope="col">Pending</th>${seatingEnabled ? '<th scope="col">Seating</th>' : ""}</tr></thead><tbody>${renderDistributionRow("Groom", sideStats.groom, seatingEnabled)}${renderDistributionRow("Bride", sideStats.bride, seatingEnabled)}${renderDistributionRow("Family", sideStats.other, seatingEnabled)}</tbody></table></div></article>`
     : `<article class="overview-card overview-distribution"><p class="da3wa-eyebrow">Guest summary</p><h2>Overall RSVP totals</h2><div class="overview-seating-summary overview-seating-summary--totals"><div><strong>${stats.total}</strong><span>Guests invited</span></div><div><strong>${stats.confirmed}</strong><span>Confirmed</span></div><div><strong>${stats.pending}</strong><span>Awaiting reply</span></div><div><strong>${stats.declined}</strong><span>Declined</span></div></div></article>`;
 
   elements.pageContent.innerHTML = `
     <section class="overview-page">
+      ${ownerSetupNotice}
       <div class="overview-event-details" aria-label="Event details">
         <div class="overview-event-detail">
           <span>Event</span>
@@ -3771,7 +3816,8 @@ function renderEventSettingsPage() {
     return;
   }
   const wedding = state.wedding || {};
-  const hideOptionsAndLifecycle = state.permissions?.seatingOnly === true;
+  const hideOptionsAndLifecycle = state.permissions?.seatingOnly === true ||
+    Array.isArray(state.permissions?.allowedViews);
   const hideInvitationScheduleAndMapEmbed = hideOptionsAndLifecycle;
   if (!state.eventSettingsDraft || !state.dirtyEventSettings) {
     state.eventSettingsDraft = eventSettingsDraftFromWedding(wedding);
@@ -4144,7 +4190,34 @@ function renderSeatingAccessCard() {
   const allowedSides = eventUsesGuestSides(state.wedding)
     ? '<option value="bride">Bride</option><option value="groom">Groom</option><option value="all">All sides</option><option value="family">Family · read-only</option>'
     : '<option value="all">All guests</option><option value="read-only-all">All guests · read-only</option>';
-  return `<article class="share-card share-card--sender"><p class="da3wa-eyebrow">Account-based seating access</p><h3>Share a ${eventUsesGuestSides(state.wedding) ? "side-specific" : "guest seating"} sign-in link</h3><p>These links only carry the event and workspace context. Firestore checks the signed-in account's event membership and allowed side.</p><div class="sender-options">${roles.map(([role, label]) => card(role, label)).join("")}</div><h3>Manage a seating account</h3><p>Enter the UID of an existing Firebase email/password account. Find it in Firebase Console → Authentication → Users. Family access is read-only.</p><form class="seating-account-form" id="seatingAccountPermissionForm"><label>Firebase Auth UID<input name="userId" required maxlength="128" autocomplete="off" /></label><label>Allowed side<select name="allowedSide">${allowedSides}</select></label><button class="da3wa-button da3wa-button--primary" name="operation" value="save" type="submit">Save seating permission</button><button class="da3wa-button da3wa-button--danger" name="operation" value="revoke" type="submit">Revoke seating access</button><p class="form-status" data-seating-account-status role="status"></p></form><h3>Repair event projections</h3><p>Rebuild invitation, seating, check-in, and public count documents from this event. Public counts show the time of the last successful update.</p><button class="da3wa-button da3wa-button--secondary" type="button" data-action="repair-event-projections" ${state.projectionSyncPromise ? 'disabled aria-disabled="true"' : ""}>${state.projectionSyncPromise ? "Repair running…" : "Repair projections"}</button>${state.projectionSyncError ? `<p class="form-status is-error" role="status">${escapeHtml(state.projectionSyncError)}</p>` : ""}</article>`;
+  return `
+    <article class="share-card share-card--sender">
+      <p class="da3wa-eyebrow">Account-based access</p>
+      <h3>Share a ${eventUsesGuestSides(state.wedding) ? "side-specific" : "guest seating"} sign-in link</h3>
+      <p>These links only carry the event and workspace context. Firestore checks the signed-in account's event membership and allowed side.</p>
+      <div class="sender-options">${roles.map(([role, label]) => card(role, label)).join("")}</div>
+      <h3>Manage a seating account</h3>
+      <p>Enter the UID of an existing Firebase email/password account. Find it in Firebase Console → Authentication → Users. Family access is read-only.</p>
+      <form class="seating-account-form" id="seatingAccountPermissionForm">
+        <label>Firebase Auth UID<input name="userId" required maxlength="128" autocomplete="off" /></label>
+        <label>Allowed side<select name="allowedSide">${allowedSides}</select></label>
+        <button class="da3wa-button da3wa-button--primary" name="operation" value="save" type="submit">Save seating permission</button>
+        <button class="da3wa-button da3wa-button--danger" name="operation" value="revoke" type="submit">Revoke seating access</button>
+        <p class="form-status" data-seating-account-status role="status"></p>
+      </form>
+      <h3>Manage a limited dashboard account</h3>
+      <p>Update an existing event member to access only Overview, Guests, Seating, Event Settings, and Exports. Their existing guest, seating, and event detail edit permissions are retained. Check-In and account management remain unavailable.</p>
+      <form class="seating-account-form" id="dashboardAccountAccessForm">
+        <label>Firebase Auth UID<input name="userId" required maxlength="128" autocomplete="off" /></label>
+        <label>Account email<input name="email" type="email" required maxlength="254" autocomplete="email" /></label>
+        <button class="da3wa-button da3wa-button--primary" type="submit">Save limited dashboard access</button>
+        <p class="form-status" data-dashboard-account-status role="status"></p>
+      </form>
+      <h3>Repair event projections</h3>
+      <p>Rebuild invitation, seating, check-in, and public count documents from this event. Public counts show the time of the last successful update.</p>
+      <button class="da3wa-button da3wa-button--secondary" type="button" data-action="repair-event-projections" ${state.projectionSyncPromise ? 'disabled aria-disabled="true"' : ""}>${state.projectionSyncPromise ? "Repair running…" : "Repair projections"}</button>
+      ${state.projectionSyncError ? `<p class="form-status is-error" role="status">${escapeHtml(state.projectionSyncError)}</p>` : ""}
+    </article>`;
 }
 
 function seatingAccountLoginLink(role = "all") {
@@ -4197,6 +4270,63 @@ async function saveSeatingAccountPermission(event) {
     showToast("Seating account permission saved.", "success");
   } catch (error) {
     console.error("Seating account permission could not be saved.", error);
+    status.textContent = "Permission update failed. Check the UID and your owner access, then try again.";
+  }
+}
+
+async function saveLimitedDashboardAccount(event) {
+  event.preventDefault();
+  const form = event.currentTarget;
+  const status = form.querySelector("[data-dashboard-account-status]");
+  const userId = String(form.elements.userId.value || "").trim();
+  const email = String(form.elements.email.value || "").trim().toLowerCase();
+  if (!isWeddingOwner() || !/^[A-Za-z0-9_-]{1,128}$/.test(userId) || userId === state.currentUser?.uid || !/^\S+@\S+\.\S+$/.test(email)) {
+    status.textContent = "Enter the UID and email of an existing event member.";
+    return;
+  }
+
+  const memberRef = doc(state.services.db, "weddings", state.weddingId, "dashboardUsers", userId);
+  try {
+    const existing = await getDoc(memberRef);
+    if (!existing.exists()) {
+      status.textContent = "This account is not already a member of this event.";
+      return;
+    }
+    const currentPermissions = existing.data();
+    const existingEmail = String(currentPermissions.email || "").trim().toLowerCase();
+    if (existingEmail && existingEmail !== email) {
+      status.textContent = "The email does not match this event membership.";
+      return;
+    }
+    if (currentPermissions.canEditSeating !== true) {
+      status.textContent = "This account needs existing seating permission before it can use the seating dashboard.";
+      return;
+    }
+    const eventTitle = getEventDisplayTitle(state.wedding);
+    if (!window.confirm(`Grant ${email} access to Overview, Guests, Seating, Event Settings, and Exports for ${eventTitle}? This replaces their current access on this event.`)) return;
+
+    await setDoc(memberRef, {
+      userId,
+      email,
+      role: "limited-dashboard",
+      canViewDashboard: true,
+      canEditGuests: currentPermissions.canEditGuests === true,
+      canEditSeating: currentPermissions.canEditSeating === true,
+      canCheckIn: false,
+      canManageUsers: false,
+      canEditEventDetails: currentPermissions.canEditEventDetails === true,
+      canViewEventSettings: true,
+      canExport: true,
+      allowedViews: ["overview", "guests", "seating", "settings", "exports"],
+      seatingOnly: false,
+      allowedSide: "all",
+      createdAt: currentPermissions.createdAt || serverTimestamp(),
+      updatedAt: serverTimestamp(),
+    });
+    status.textContent = `Limited dashboard access saved for ${email}.`;
+    showToast("Limited dashboard access saved.", "success");
+  } catch (error) {
+    console.error("Limited dashboard access could not be saved.", error?.code || "unavailable");
     status.textContent = "Permission update failed. Check the UID and your owner access, then try again.";
   }
 }
@@ -5116,6 +5246,9 @@ async function handleAction(action, dataset, event = null) {
         renderAll();
       }
       showToast("Dashboard refreshed.", "success");
+      return;
+    case "claim-event-ownership":
+      await claimLaylaZaidOwner();
       return;
     case "reload-dashboard":
       window.location.reload();

@@ -167,6 +167,23 @@ service cloud.firestore {
       return isEventOwner(weddingId);
     }
 
+    // The production Layla & Zaid event was created before an Auth owner was
+    // attached. Allow only its designated, existing admin account to claim
+    // the placeholder once; all later owner operations use isEventOwner.
+    function canClaimLaylaZaidOwner(weddingId) {
+      return isSignedIn()
+        && weddingId == "luxury-wedding-demo"
+        && resource.data.get("ownerUserId", "") == "pending-auth-setup"
+        && resource.data.get("deleting", false) != true
+        && request.auth.token.get("email", "") == "test@gmail.com"
+        && exists(dashboardUserPath(weddingId))
+        && dashboardUser(weddingId).data.get("role", "") == "admin"
+        && dashboardUser(weddingId).data.get("canManageUsers", false) == true
+        && request.resource.data.get("ownerUserId", "") == request.auth.uid
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(["ownerUserId", "updatedAt"])
+        && request.resource.data.get("updatedAt", null) == request.time;
+    }
+
     function isEventDeletingOwner(weddingId) {
       return isEventOwner(weddingId)
         && get(/databases/$(database)/documents/weddings/$(weddingId)).data.get("deleting", false) == true;
@@ -176,7 +193,8 @@ service cloud.firestore {
       return data.keys().hasOnly([
           "userId", "email", "role", "canViewDashboard", "canEditGuests",
           "canEditSeating", "canCheckIn", "canManageUsers", "canEditEventDetails",
-          "seatingOnly", "allowedSide", "createdAt", "updatedAt"
+          "canViewEventSettings", "canExport", "allowedViews", "seatingOnly",
+          "allowedSide", "createdAt", "updatedAt"
         ])
         && data.get("userId", "") == userId
         && data.get("email", "") is string && data.get("email", "").size() <= 254
@@ -187,6 +205,13 @@ service cloud.firestore {
         && data.get("canCheckIn", false) is bool
         && data.get("canManageUsers", false) is bool
         && data.get("canEditEventDetails", false) is bool
+        && data.get("canViewEventSettings", false) is bool
+        && data.get("canExport", false) is bool
+        && (!data.keys().hasAny(["allowedViews"]) || (
+          data.allowedViews is list
+          && data.allowedViews.size() <= 8
+          && data.allowedViews.hasOnly(["overview", "guestSummary", "guests", "seating", "share", "exports", "checkin", "settings"])
+        ))
         && data.get("seatingOnly", false) is bool
         && data.get("allowedSide", "all") in ["all", "bride", "groom", "family"]
         && (!data.keys().hasAny(["createdAt"]) || data.createdAt is timestamp)
@@ -685,7 +710,8 @@ service cloud.firestore {
       // stage/entrance markers live on the wedding document. Let seating
       // editors update only that layout field, without granting access to any
       // other wedding settings.
-      allow update: if validEventCategory(request.resource.data) && (isOwnerEventDetailsUpdate(weddingId)
+      allow update: if canClaimLaylaZaidOwner(weddingId)
+        || (validEventCategory(request.resource.data) && (isOwnerEventDetailsUpdate(weddingId)
         || isOwnerLifecycleUpdate(weddingId)
         || isOwnerHallLayoutUpdate(weddingId)
         || isInvitationQrSettingsUpdate(weddingId)
@@ -700,7 +726,7 @@ service cloud.firestore {
         || (isEventOwner(weddingId) && resource.data.get("deleting", false) != true
           && request.resource.data.diff(resource.data).affectedKeys().hasOnly(["deleting", "updatedAt"])
           && request.resource.data.deleting == true
-          && request.resource.data.updatedAt == request.time));
+          && request.resource.data.updatedAt == request.time)));
 
       // Parent removal is allowed only after the client has invalidated public
       // links and removed the known subcollections.

@@ -104,7 +104,13 @@ async function refreshWorkspaceEvents(generation = state.snapshotGeneration) {
         const wedding = snapshot.data();
         const isOwner = wedding.ownerUserId === state.user.uid || permissions.role === "owner";
         if (isOwner || permissions.canManageUsers === true) state.canSeeSampleInvitation = true;
-        return { ...wedding, id: snapshot.id, isOwner, canManageUsers: permissions.canManageUsers === true };
+        return {
+          ...wedding,
+          id: snapshot.id,
+          isOwner,
+          canManageUsers: permissions.canManageUsers === true,
+          ...(Array.isArray(permissions.allowedViews) ? { allowedViews: permissions.allowedViews } : {}),
+        };
       } catch (error) {
         // A stale or forged index row is not authorization. Ignore only an
         // authorization denial for that candidate; surface actual outages.
@@ -215,7 +221,9 @@ function card(w) {
     ? `<span class="stat">Seating access · ${escape(w.allowedSide || "restricted")}</span>`
     : `<span class="stat"><strong>${stats.total || 0}</strong> guests</span><span class="stat"><strong>${stats.confirmed || 0}</strong> confirmed</span><span class="stat"><strong>${stats.pending || 0}</strong> pending</span><span class="stat"><strong>${stats.declined || 0}</strong> declined</span>${active ? `<span class="stat"><strong>${stats.checkedIn || 0}/${stats.total || 0}</strong> checked in</span>` : ""}`;
   const openLabel = w.seatingOnly === true ? "Open seating" : "Open dashboard";
-  const copyAction = w.seatingOnly === true ? "" : `<button data-action="copy" data-id="${eventId}" type="button" title="Copy guest invitation link template">Copy guest link</button>`;
+  const canCopyGuestLink = w.seatingOnly !== true &&
+    (!Array.isArray(w.allowedViews) || w.allowedViews.includes("share"));
+  const copyAction = canCopyGuestLink ? `<button data-action="copy" data-id="${eventId}" type="button" title="Copy guest invitation link template">Copy guest link</button>` : "";
   return `<article class="wedding-card"><div class="card-head"><div><p class="workspace-kicker">${escape(w.venueEn || "Venue not set")}</p><h2>${escape(title)}</h2><span class="category-badge">${category}</span></div><div class="card-head__actions"><span class="status-badge status-badge--${eventStatus}">${escape(eventStatus)}</span>${cardMenu}</div></div><div class="card-meta">${formatEvent(w.eventDateISO)}${w.location ? ` · ${escape(w.location)}` : ""}</div><div class="card-stats">${statsMarkup}</div><div class="card-footer"><span>Updated ${formatRelative(w.updatedAt || w.createdAt)}</span></div><div class="card-actions"><button class="open-button" data-action="open" data-id="${eventId}" type="button">${openLabel}</button>${copyAction}</div></article>`;
 }
 

@@ -104,6 +104,36 @@ test("Spark Firestore rules and direct client workflows enforce event, seating, 
       }
     });
 
+    const limitedMemberRef = firestore.doc(ownerBootstrap, "weddings/event-a/dashboardUsers/guest-editor");
+    const limitedMembership = membership("guest-editor", {
+      canViewDashboard: true,
+      canEditGuests: true,
+      canEditSeating: true,
+      canEditEventDetails: true,
+      canViewEventSettings: true,
+      canExport: true,
+      allowedViews: ["overview", "guests", "seating", "settings", "exports"],
+      allowedSide: "all",
+    });
+    await assertSucceeds(firestore.setDoc(limitedMemberRef, {
+      ...limitedMembership,
+      updatedAt: firestore.serverTimestamp(),
+    }));
+    const limitedAccount = env.authenticatedContext("guest-editor").firestore();
+    const limitedSnapshot = await assertSucceeds(firestore.getDoc(
+      firestore.doc(limitedAccount, "weddings/event-a/dashboardUsers/guest-editor"),
+    ));
+    assert.deepEqual(limitedSnapshot.data().allowedViews, ["overview", "guests", "seating", "settings", "exports"]);
+    await assertFails(firestore.updateDoc(
+      firestore.doc(env.authenticatedContext("bride-a").firestore(), "weddings/event-a/dashboardUsers/guest-editor"),
+      { canExport: false, updatedAt: firestore.serverTimestamp() },
+    ));
+    await assertFails(firestore.setDoc(limitedMemberRef, {
+      ...limitedMembership,
+      allowedViews: ["billing"],
+      updatedAt: firestore.serverTimestamp(),
+    }));
+
     const brideA = env.authenticatedContext("bride-a").firestore();
     const brideB = env.authenticatedContext("bride-b").firestore();
     const groomSeat = env.authenticatedContext("groom-seat").firestore();
@@ -304,6 +334,50 @@ test("Spark Firestore rules and direct client workflows enforce event, seating, 
     assert.deepEqual(summary.data().stats, { total: 3, bride: 2, groom: 1 });
     await assertFails(firestore.getDoc(firestore.doc(anonymous, "weddings/event-a/publicStats/summary")));
     await assertFails(firestore.getDoc(firestore.doc(brideA, "weddings/event-a/publicStats/summary")));
+  } finally {
+    await env.cleanup();
+  }
+});
+
+test("Layla & Zaid owner setup is limited to the designated admin account and only succeeds once", {
+  skip: emulatorAvailable ? false : "Run with the Firestore Emulator to verify security rules.",
+}, async () => {
+  const [{ assertFails, assertSucceeds, initializeTestEnvironment }, firestore] = await Promise.all([
+    import("@firebase/rules-unit-testing"), import("firebase/firestore"),
+  ]);
+  const rules = await readFile(new URL("../firestore.rules", import.meta.url), "utf8");
+  const env = await initializeTestEnvironment({ projectId: "demo-wedding-security", firestore: { rules } });
+  const designatedOwner = env.authenticatedContext("designated-owner", { email: "test@gmail.com" }).firestore();
+  const otherAdmin = env.authenticatedContext("other-admin", { email: "other@example.test" }).firestore();
+  const eventRef = firestore.doc(designatedOwner, "weddings/luxury-wedding-demo");
+
+  try {
+    await env.withSecurityRulesDisabled(async (context) => {
+      const db = context.firestore();
+      await firestore.setDoc(firestore.doc(db, "weddings/luxury-wedding-demo"), event("pending-auth-setup"));
+      const designatedMembership = membership("designated-owner", {
+        role: "admin", canViewDashboard: true, canManageUsers: true,
+      });
+      delete designatedMembership.email;
+      await firestore.setDoc(firestore.doc(db, "weddings/luxury-wedding-demo/dashboardUsers/designated-owner"), {
+        ...designatedMembership,
+      });
+      await firestore.setDoc(firestore.doc(db, "weddings/luxury-wedding-demo/dashboardUsers/other-admin"), {
+        ...membership("other-admin", {
+          email: "other@example.test", role: "admin", canViewDashboard: true, canManageUsers: true,
+        }),
+      });
+    });
+
+    await assertFails(firestore.updateDoc(eventRef, {
+      ownerUserId: "other-admin", updatedAt: firestore.serverTimestamp(),
+    }));
+    await assertSucceeds(firestore.updateDoc(eventRef, {
+      ownerUserId: "designated-owner", updatedAt: firestore.serverTimestamp(),
+    }));
+    await assertFails(firestore.updateDoc(eventRef, {
+      ownerUserId: "other-admin", updatedAt: firestore.serverTimestamp(),
+    }));
   } finally {
     await env.cleanup();
   }

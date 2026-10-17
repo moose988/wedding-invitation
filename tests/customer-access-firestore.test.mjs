@@ -49,6 +49,43 @@ test("customer lifecycle, canonical operations, isolation, pending grants and re
     const currentEvent = (await api.getDoc(api.doc(a, "weddings/a"))).data();
     await api.updateDoc(api.doc(a, "weddings/a"), { hallObjects: [{ id: "stage", type: "stage", label: "Synthetic Stage", x: 50, y: 10, notes: "PRIVATE ORGANIZER NOTE" }], updatedAt: api.serverTimestamp() });
     await assertSucceeds(api.setDoc(api.doc(a, "weddings/a/guests/g1"), { ...guest, createdAt: api.serverTimestamp(), updatedAt: api.serverTimestamp() }));
+    // Production contains older check-in timestamps stored as display text.
+    // Customer guest saves refresh all projections in one atomic write, so the
+    // safe legacy value must remain editable when copied through unchanged.
+    await env.withSecurityRulesDisabled(async (context) => {
+      const legacyDb = context.firestore();
+      const legacyGuest = { ...guest, fullName: "Legacy check-in guest", additionalGuests: 2, additionalGuestAllowance: 2, checkedIn: true, checkedInAt: "Today, 8:12 PM" };
+      await api.setDoc(api.doc(legacyDb, "weddings/a/guests/legacy"), legacyGuest);
+      await api.setDoc(api.doc(legacyDb, "weddings/a/seatingGuests/legacy"), { fullName: legacyGuest.fullName, side: legacyGuest.side, additionalGuests: legacyGuest.additionalGuests, rsvpStatus: legacyGuest.rsvpStatus });
+      await api.setDoc(api.doc(legacyDb, "weddings/a/checkinGuests/legacy"), { guestId: "legacy", fullName: legacyGuest.fullName, phone: legacyGuest.phone, side: legacyGuest.side, rsvpStatus: legacyGuest.rsvpStatus, tableId: "", tableName: "", seatNumber: "", checkedIn: true, checkedInAt: "Today, 8:12 PM" });
+      const legacyChairs = [1, 2, 3].map((seatNumber) => ({ id: `legacy-chair-${seatNumber}`, seatNumber, x: 20 * seatNumber, y: 20 }));
+      await api.setDoc(api.doc(legacyDb, "weddings/a/tables/legacy-table"), { id: "legacy-table", name: "Legacy table", shape: "round", x: 20, y: 20, width: 180, height: 180, rotation: 0, seatCount: 3, capacity: 3, tableColor: "#ffffff", borderColor: "#aaaaaa", chairColor: "#112233", chairs: legacyChairs });
+      for (let index = 0; index < legacyChairs.length; index += 1) {
+        const chair = legacyChairs[index];
+        const personKey = index === 0 ? "main" : `guest-${index}`;
+        await api.setDoc(api.doc(legacyDb, `weddings/a/seatOccupancy/legacy-table~${chair.id}`), { weddingId: "a", tableId: "legacy-table", chairId: chair.id, occupied: true, updatedAt: new Date() });
+        await api.setDoc(api.doc(legacyDb, `weddings/a/seatAssignments/legacy-table~${chair.id}`), { weddingId: "a", tableId: "legacy-table", chairId: chair.id, guestId: "legacy", partyMemberIndex: index, personKey, side: "bride", seatNumber: index + 1, updatedAt: new Date() });
+        await api.setDoc(api.doc(legacyDb, `weddings/a/seatedPeople/legacy~${personKey}`), { weddingId: "a", guestId: "legacy", personKey, tableId: "legacy-table", chairId: chair.id, side: "bride", updatedAt: new Date() });
+      }
+    });
+    await assertSucceeds(api.updateDoc(api.doc(a, "weddings/a/guests/legacy"), { fullName: "Edited legacy guest", updatedAt: api.serverTimestamp() }));
+    await assertSucceeds(api.updateDoc(api.doc(a, "weddings/a/seatingGuests/legacy"), { fullName: "Edited legacy guest", updatedAt: api.serverTimestamp() }));
+    await assertSucceeds(api.updateDoc(api.doc(a, "weddings/a/checkinGuests/legacy"), { fullName: "Edited legacy guest", updatedAt: api.serverTimestamp() }));
+    const sideChange = api.writeBatch(a);
+    sideChange.update(api.doc(a, "weddings/a/guests/legacy"), { side: "groom", updatedAt: api.serverTimestamp() });
+    sideChange.update(api.doc(a, "weddings/a/seatingGuests/legacy"), { side: "groom", updatedAt: api.serverTimestamp() });
+    sideChange.update(api.doc(a, "weddings/a/checkinGuests/legacy"), { side: "groom", updatedAt: api.serverTimestamp() });
+    for (let index = 1; index <= 3; index += 1) {
+      const chairId = `legacy-chair-${index}`;
+      const personKey = index === 1 ? "main" : `guest-${index - 1}`;
+      sideChange.update(api.doc(a, `weddings/a/seatAssignments/legacy-table~${chairId}`), { side: "groom", updatedAt: api.serverTimestamp() });
+      sideChange.update(api.doc(a, `weddings/a/seatedPeople/legacy~${personKey}`), { side: "groom", updatedAt: api.serverTimestamp() });
+    }
+    await assertSucceeds(sideChange.commit());
+    const forgedLegacyCheckIn = api.writeBatch(a);
+    forgedLegacyCheckIn.update(api.doc(a, "weddings/a/checkinGuests/legacy"), { checkedInAt: "Forged check-in", updatedAt: api.serverTimestamp() });
+    await assertFails(forgedLegacyCheckIn.commit());
+    await assertFails(api.updateDoc(api.doc(a, "weddings/a/guests/legacy"), { checkedInAt: "Changed check-in", updatedAt: api.serverTimestamp() }));
     console.info("sync customer projections");
     await assertSucceeds(syncCustomerEventProjections(api, a, "a"));
     const venueProjection = await api.getDoc(api.doc(env.unauthenticatedContext().firestore(), "weddings/a/publicVenue/stage"));

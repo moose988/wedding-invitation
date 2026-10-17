@@ -1,8 +1,8 @@
-import { getInvitationParams, invitationCheckinUrl, invitationSeatingEnabled, loadInvitationContext, saveInvitationRsvp, subscribeToInvitation } from "../../shared/invitation-data.js?v=20261013-auth-session-isolation-2";
+import { getInvitationParams, invitationCheckinUrl, invitationSeatingEnabled, loadInvitationContext, saveInvitationRsvp, subscribeToInvitation } from "../../shared/invitation-data.js?v=20261017-firestore-invitation-1";
 import { escapeHtml, formatEventDate, guestSeat, setDocumentTitle } from "../../shared/invitation-utils.js";
 import { buildSatelliteMapEmbedUrl } from "../../shared/map-embed.js";
 import { getEventDisplayTitle, isCelebrationEvent } from "../../../event-utils.js";
-import { renderQrCode } from "../../../qr.js";
+import { renderQrCode } from "../../../qr.js?v=20261017-qr-module-fix";
 
 const app = document.getElementById("invitationApp");
 let context;
@@ -11,13 +11,15 @@ let isEditing = false;
 let selectedStatus = "";
 let saveMessage = "";
 let additionalGuestsDraft = null;
+let unsubscribeInvitation = null;
 
 boot();
 async function boot() {
   try {
     context = await loadInvitationContext(getInvitationParams());
     render();
-    subscribeToInvitation(context, (next) => { context = next; render(); }, showError);
+    unsubscribeInvitation = subscribeToInvitation(context, (next) => { context = next; render(); }, showError);
+    window.addEventListener("pagehide", () => unsubscribeInvitation?.(), { once: true });
   } catch (error) { showError(error); }
 }
 
@@ -85,4 +87,4 @@ function safeMapsLink(value) {
   try { const url = new URL(String(value || "")); return ["https:", "http:"].includes(url.protocol) ? url.href : ""; }
   catch { return ""; }
 }
-function showError(error) { console.error(error); app.innerHTML = `<section class="invitation-error"><div><h1>Invitation unavailable</h1><p>${escapeHtml(error.message || "Please check your personal invitation link.")}</p></div></section>`; }
+function showError(error) { unsubscribeInvitation?.(); unsubscribeInvitation = null; console.error(error); app.innerHTML = `<section class="invitation-error"><div><h1>Invitation unavailable</h1><p>${escapeHtml(error.message || "Please check your personal invitation link.")}</p></div></section>`; }

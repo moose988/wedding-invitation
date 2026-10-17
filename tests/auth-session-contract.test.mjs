@@ -29,7 +29,8 @@ test("public invitation initialization cannot mutate Firebase Auth persistence",
   assert.doesNotMatch(publicData, /initFirebase\(\)/);
   assert.match(invitation, /loadInvitationContext\(/);
   assert.doesNotMatch(invitation, /initFirebase\(\)|signInWithEmailAndPassword|signOut\(/);
-  assert.match(publicData, /getGuestInvitation/);
+  assert.match(publicData, /getDoc\(doc\(db, "weddings", weddingId, "publicGuests", guestToken\)\)/);
+  assert.doesNotMatch(publicData, /httpsCallable/);
 
   const dashboardInitializer = firebase.match(/export function initFirebase\(\) \{[\s\S]*?\n\}/)?.[0];
   assert.ok(dashboardInitializer, "dashboard initializer exists");

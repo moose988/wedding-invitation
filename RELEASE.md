@@ -271,3 +271,119 @@ client toasts.
 - [Firestore export/import](https://firebase.google.com/docs/firestore/manage-data/export-import)
 - [Firebase Auth persistence](https://firebase.google.com/docs/auth/web/auth-state-persistence?hl=en)
 - [Firebase Web SDK setup](https://firebase.google.com/docs/web/setup)
+
+## Browser-issued invitation capability follow-up (2026-10-17)
+
+This section supersedes the earlier callable-based invitation issuance and
+deployment steps above for the current working tree. It describes **local
+source only**; no Hosting release or Firestore rules were deployed.
+
+The browser generates a 32-byte token using Web Crypto, encodes it as
+canonical base64url, and creates the private per-event secret/index documents
+and the minimal `publicGuests/{token}` projection in one Firestore transaction.
+The secret document keeps the raw token so authorized event guest managers can
+copy the same link again. Security Rules allow managers to read that private
+record, allow anonymous exact gets of active invitation projections, deny
+public listing, and restrict public updates to RSVP fields and the allowance on
+that invitation. Revoke deletes the public projection and marks the token
+inactive; regenerate rotates the token transactionally. New links are stable
+when copied repeatedly; they change only on explicit regeneration.
+
+The projected invitation contains only event presentation data and the one
+guest's name, additional-guest allowance, and seating assignment. QR images
+remain generated in the browser. RSVP changes are mirrored to the canonical
+guest document by an authorized dashboard listener; this is eventual
+reconciliation, not an atomic multi-document public transaction. Verify the
+canonical guest and counts after RSVP before release.
+
+### Migration and cutover boundary
+
+No production token inventory was read and no migration was run. Earlier
+callable-issued raw invitation tokens are not compatible with the new nested
+per-event records. The previous server-side encrypted token material cannot be
+converted in the browser without exposing its encryption key, and the
+production project is on Spark with no deployed Functions. Therefore there is
+no safe automatic preservation or in-place conversion path in this release.
+Do not run the old callable migration procedure above: those callables are not
+deployed on the connected project. Do not apply the new rules while expecting
+old public guest documents or callable-based RSVP to keep working. Existing
+shared legacy links remain untouched until a separately approved cutover, but
+the browser token code does not provide an insecure legacy bypass.
+
+Before any live cutover, the event owner must review a read-only inventory of
+each event's existing invitation state, identify legacy/demo links, verify
+recipients and event ownership, then choose a controlled rotation and resend
+window. The current codebase has no production dry-run tool for reading those
+legacy token records. Build and review that tool against a staging export first;
+record counts and classifications only, never raw credentials. Back up the
+source data before any rotation. Restoring a backup can restore old bearer
+tokens, so rollback cannot restore confidentiality after a link was exposed.
+
+### Current verification and deployment order
+
+- `npm test`: **136 passed, 0 failed, 4 skipped** (140 total). These are local
+  unit/static-contract tests, not browser or Firestore emulator proof.
+- `npm run test:security`: **blocked** because the installed Firebase CLI
+  requires Java 21 and this machine has an older Java runtime.
+- Local HTTP smoke checks returned 200 for `/dashboard-login.html`,
+  `/all-events.html`, `/index.html`, and the Ali & Salma invitation template
+  at `http://127.0.0.1:8000`.
+- No signed-in multi-account browser test, Firestore emulator run, migration
+  dry-run, live send, production change, or rollback drill was performed in
+  this follow-up.
+
+For a future staging activation, first use an isolated Spark staging Firebase
+project and synthetic events. Back up/export any staging fixtures. Deploy the
+deny-by-default Firestore rules and verify direct SDK/REST negative cases,
+then publish the matching client build; until both are in place, invitation
+copy/RSVP may fail closed. Do not use a temporary public-read rule as a bridge.
+Run the full RSVP/revocation and session matrix against persisted emulator or
+staging data, then perform the legacy-token inventory and owner-approved
+cutover. Production activation remains blocked until Firestore emulator tests,
+authenticated browser tests, and the token migration plan have passed review.
+
+## Invitation lifetime correction (2026-10-17)
+
+Guest invitation links are non-expiring. New private token/index records and
+public projections store `expiresAt: null`; Firestore Rules no longer use the
+event date, event status, or `expiresAt` to authorize an active invitation.
+Completion and archival therefore do not invalidate the URL while the event
+document and active guest token records remain. Deleting the guest invitation
+revokes/removes its capability records; deleting the event makes its child
+capability unreadable because the required parent event no longer exists.
+Only an authorized organizer's explicit revoke or regenerate action replaces
+the active link. Copy/refresh reuses the stored token; logout and deployments
+do not rotate it.
+
+The emulator security fixture now seeds a token whose old `expiresAt` is in
+2020 and changes its event to `completed` before attempting an anonymous read
+and RSVP. This covers legacy dated records and completion status, though the
+fixture could not be executed on this machine because Firebase CLI requires
+Java 21 (installed runtime: Java 19). Local Node unit/source-contract checks
+pass; emulator execution and authenticated refresh/logout browser testing
+remain unverified.
+
+## Persistent browser invitation flow — current local verification (2026-10-17)
+
+This section supersedes earlier invitation-flow implementation and test-status statements above. The matching browser client, Firestore Rules, and emulator fixtures are **local only**. No production rules or Hosting files were deployed, and no production invitation or customer data was changed.
+
+- The dashboard creates one 32-byte Web Crypto base64url token per guest and stores its recoverable value only in the private `weddings/{eventId}/invitationSecrets/{guestId}` record, readable by event guest managers. Repeated copy/export/open operations reuse the ready scoped cache; refresh/logout recovers the same token from Firestore. Concurrent creation in separate service instances is serialized by a Firestore transaction.
+- Active token indexes bind one token to one event/guest/purpose. Anonymous access is an exact document get of the minimum `publicGuests/{token}` projection; listing and private guest/secret/index reads remain denied. Invitation reads do not use the legacy `getGuestInvitation` callable or 20-second polling. RSVP updates the public invitation and canonical guest in one Rules-validated batch, with status, field, message-size, and per-invitation allowance checks. The organizer dashboard reads that canonical guest state directly; there is no reconciliation write loop.
+- Event completion and old stored expiry timestamps do not invalidate an active link. Copy refuses revoked/incomplete capability records. Only an authorized explicit revoke/regenerate changes the invitation capability; regenerating invalidates the previous token. Event or guest deletion removes access through the parent/index checks and authorized cleanup path.
+- `npm test`: **136 passed, 0 failed, 4 skipped** (140 total). The skips are emulator-gated cases.
+- `npm run test:security`: **2 passed, 0 failed** under the local Firestore Emulator using synthetic fixtures. Coverage includes concurrent ensure, repeated ensure, legacy 2020 expiry with a completed event, revoke/ensure refusal, explicit idempotent regeneration, old-token denial, anonymous roster/private reads and list denial, atomic RSVP and persisted mirror state, plus the existing event, side, seating, check-in, and protected-field cases. Expected permission-denied messages are generated by negative tests.
+- `npm audit --audit-level=high`: **0 vulnerabilities**. Java 21.0.12.1 was downloaded from Eclipse Adoptium, SHA-256 verified, and extracted under the current user's Local Programs folder; it was not added to the repository or made a system-wide Java setting.
+- The local server at `http://127.0.0.1:8000` serves the repository root. `/dashboard.html` and its versioned `dashboard.js` both returned 200; the served script SHA-256 matched the source file, and the HTML references `dashboard.js?v=20261017-persistent-invitation-3`. The local login page rendered. A synthetic Layla & Zaid sample invitation opened and its in-page sample RSVP reached the confirmed state with the UI explicitly stating that no response is sent. A malformed token rendered the generic “Invitation unavailable” state. A separate browser probe confirmed QR generation stays local using a synthetic input.
+- Browser testing exposed a trailing literal `\\n` in `qr.js`, which caused a module parse error and prevented invitation interactivity. It was removed, and the QR import and invitation entry points were cache-versioned. The synthetic invitation-open/RSVP flow and local QR render passed after the fix.
+- The supplied dashboard screenshot is loading an older cached bundle that still calls the removed `getGuestInvitationTokens` callable and gets a CORS preflight failure. The current source has no reference to that callable. Bumped the dashboard entry script URL to `dashboard.js?v=20261017-persistent-invitation-3`; use a cache-busted dashboard URL or hard refresh to fetch it.
+- Authenticated browser checks across the two supplied accounts, signed-out access to a valid live invitation, browser-level real-token copy/refresh/logout, and separate-device sessions were **not run**. Test credentials were not present in the private session context, and the local browser is not connected to the Firestore Emulator; do not substitute the synthetic sample flow or emulator Rules tests for those checks.
+
+The invitation callables `getGuestInvitationTokens`, `manageGuestInvitationAccess`, `getGuestInvitation`, and `submitGuestInvitationRsvp` are no longer referenced by the live dashboard or invitation page. Other callables remain and are outside this change: `exchangeSeatingEditorLink`, `manageSeatingEditorAccess`, `createSenderSession` / `getSenderSession`, `resolveCheckinGuest`, and `getCheckinGuestList` (plus the separately configured owner-only `deleteWedding`). This application is not Function-free; sender sessions, seating-link authentication, and check-in still depend on backend Functions.
+
+### Migration, activation, and rollback boundary
+
+No production token inventory or dry run was performed. Older server-encrypted token records cannot be decoded in a browser without exposing the server key; predictable demo/legacy links are not accepted by the new 43-character live token reader. Do not publish these Rules/client changes as a transparent production cutover: existing shared legacy links may stop working. First run a read-only owner-authorized inventory against staging/export data, classify recoverable and encrypted records without logging tokens, obtain an owner cutover window, then issue new links and resend only through a test/sandbox recipient workflow. Keeping a predictable old link working would keep its guessing risk.
+
+Before production activation, back up Firestore data using a supported project-level export method, validate the legacy migration on synthetic staging fixtures, then deploy the matching Firestore Rules and Hosting client in a coordinated maintenance window. Do not use a public-read bridge. Verify token reuse, anonymous exact gets/list denial, RSVP persistence, revocation, and session isolation immediately after deployment. Roll back client and rules as a coordinated pair; a restored data backup can restore old bearer links, so rollback cannot undo confidentiality exposure after a token has been shared.
+
+**Readiness remains NOT READY for production activation.** Emulator and local unit checks pass, but production data migration, authenticated browser session regression, staging cutover, deployment compatibility, and rollback drills are still open.

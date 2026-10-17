@@ -50,5 +50,3 @@ export async function renderQrCode(container, value, options = {}) {
     container.appendChild(fallback);
   }
 }
-
-\n

@@ -1,9 +1,9 @@
 import { isFirebaseConfigured } from "./firebase-config.js?v=20261016-secure-invitation-1";
-import { getInvitationParams, loadInvitationContext, saveInvitationRsvp, subscribeToInvitation } from "./invitations/shared/invitation-data.js?v=20261016-secure-invitation-1";
+import { getInvitationParams, loadInvitationContext, saveInvitationRsvp, subscribeToInvitation } from "./invitations/shared/invitation-data.js?v=20261017-firestore-invitation-1";
 import { invitationRefreshIsCurrent, invitationRsvpStorageKey, invitationRsvpView } from "./invitations/shared/rsvp-state.js";
 import { buildSatelliteMapEmbedUrl } from "./invitations/shared/map-embed.js";
 import { buildInvitationCalendar } from "./invitations/shared/calendar.js";
-import { renderQrCode } from "./qr.js";
+import { renderQrCode } from "./qr.js?v=20261017-qr-module-fix";
 import { createIntroSequence } from "./intro-sequence.js";
 import {
   buildChairPositions,
@@ -15,7 +15,7 @@ import {
   normalizeTableShape,
   resolveTableName,
 } from "./seating-utils.js?v=20261012-seating-refresh-2";
-import { invitationSeatingEnabled } from "./invitations/shared/invitation-data.js?v=20261016-secure-invitation-1";
+import { invitationSeatingEnabled } from "./invitations/shared/invitation-data.js?v=20261017-firestore-invitation-1";
 import { getEventDisplayTitle, isCelebrationEvent } from "./event-utils.js";
 
 const demoWedding = {
@@ -176,6 +176,7 @@ const state = {
   sampleMode: explicitSampleMode,
   weddingId: "",
   guestToken: "",
+  guestId: "",
   wedding: structuredClone(demoWedding),
   guest: null,
   tables: [...demoTables],
@@ -303,9 +304,10 @@ async function boot() {
   setupStickyFooterAwareness();
   renderCountdownCards();
 
-  const { weddingId, guestToken } = getUrlParams();
+  const { weddingId, guestToken, guestId } = getUrlParams();
   state.weddingId = weddingId;
   state.guestToken = guestToken;
+  state.guestId = guestId;
 
   if (elements.weddingAudio?.querySelector("source")) {
     elements.weddingAudio.querySelector("source").src = demoWedding.media.audio;
@@ -338,13 +340,14 @@ async function boot() {
       await loadFirebaseInvitation(weddingId, guestToken);
       clearInvitationCredentialFromUrl();
       state.unsubGuest = subscribeToInvitation(
-        { weddingId, guestToken },
+        { weddingId, guestToken, guestId },
         (context) => applyInvitationContext(context),
         (error) => {
           console.error("Invitation refresh failed.", error);
           renderInvitationAccessError("This invitation is no longer available. Please ask the couple for a new link.");
         },
       );
+      window.addEventListener("pagehide", () => state.unsubGuest?.(), { once: true });
     } catch (error) {
       console.error(error);
       state.mode = "unavailable";
@@ -390,7 +393,7 @@ function clearInvitationCredentialFromUrl() {
 }
 
 async function loadFirebaseInvitation(weddingId, guestToken, requestVersion = ++state.invitationRefreshVersion) {
-  const context = await loadInvitationContext({ weddingId, guestToken });
+  const context = await loadInvitationContext({ weddingId, guestToken, guestId: state.guestId });
   if (!invitationRefreshIsCurrent(requestVersion, state.invitationRefreshVersion)) return;
   applyInvitationContext(context);
 }
@@ -1385,6 +1388,7 @@ async function updateRsvp(status, additionalGuests) {
     await saveInvitationRsvp({
       weddingId: state.weddingId,
       guestToken: state.guestToken,
+      guestId: state.guestId,
       guest: state.guest,
     }, status, additionalGuests, message || undefined);
     state.guest.rsvpStatus = status;

@@ -20,13 +20,15 @@ import {
   updateDoc,
   where,
   writeBatch,
-} from "./firebase-config.js?v=20261016-secure-invitation-1";
+} from "./firebase-config.js?v=20261017-persistent-invitation-2";
 import {
   buildAuthRouteUrl,
   initializeFirebaseServicesForRoute,
   waitForFirebaseSessionPersistence,
 } from "./firebase-service-scopes.js";
 import { exportGuests } from "./export.js";
+import { buildInvitationProjection, generateInvitationToken, isValidInvitationToken } from "./invitations/shared/invitation-token.js";
+import { createInvitationTokenService } from "./invitations/shared/invitation-token-service.js";
 import { canViewSeatingAccountPage, resolveSeatingAccountPage } from "./dashboard-access.js";
 import { eventUsesGuestSides, getDefaultGuestSide, getEventDisplayTitle, isCelebrationEvent } from "./event-utils.js";
 import { attemptEventSettingsSave, bindEventSettingsFieldTracking, bindEventSettingsSubmit, canEditEventSettings, commitEventSettingsBatch, eventSettingsFeedback, eventSettingsHaveChanges, isEventSettingsSaveDisabled, updateEventSettingsSaveControl } from "./event-settings-state.js";
@@ -783,6 +785,8 @@ const state = {
   invitationTokenScope: "",
   invitationTokenRequest: 0,
   invitationTokenHydrationPromise: null,
+  invitationTokenService: null,
+  invitationResponseUnsubscribers: new Map(),
   tables: [],
   hallObjects: createHallObjects(),
   selectedHallObjectId: "",
@@ -1592,7 +1596,7 @@ function loadDemoDashboard(
     additionalGuests: normalizeAdditionalGuests(guest.additionalGuests),
     // Rebuild public URLs from the current host. Saved links can contain an
     // old development address that is no longer running.
-    inviteLink: buildInviteLink(guest.guestToken),
+    inviteLink: buildInviteLink(guest.guestToken, guest.id),
     qrCodeValue: guest.qrCodeValue || buildCheckinLink(guest.guestToken),
   }));
   state.loadingGuests = false;
@@ -1915,51 +1919,57 @@ function stripLegacyInvitationFields(data = {}) {
 
 function clearInvitationTokenCache() {
   state.invitationTokenRequest += 1;
+  state.invitationResponseUnsubscribers.forEach((unsubscribe) => unsubscribe());
+  state.invitationResponseUnsubscribers.clear();
   state.invitationTokenCache.clear();
+  state.invitationTokenService = null;
   state.invitationTokenUnavailable.clear();
   state.invitationTokenScope = "";
   state.invitationTokenHydrationPromise = null;
 }
 
 async function hydrateGuestInvitationTokens(guests, generation) {
-  if (state.mode !== "live" || !state.services?.functions || !can("canEditGuests") || !state.currentUser?.uid) return;
+  if (state.mode !== "live" || !state.services?.db || !can("canEditGuests") || !state.currentUser?.uid) return;
+  // Seating-only accounts must never list the event-wide private token
+  // directory. They resolve a single authorized guest token on demand when a
+  // copy/send action is requested; Firestore rules enforce the same side scope.
+  if (state.permissions?.seatingOnly === true) return;
   const scope = `${state.currentUser.uid}:${state.weddingId}`;
   if (state.invitationTokenScope !== scope) {
     clearInvitationTokenCache();
     state.invitationTokenScope = scope;
   }
   if (state.invitationTokenHydrationPromise) return state.invitationTokenHydrationPromise;
-  const guestIds = [...new Set(guests.map((guest) => guest.id).filter((id) =>
-    !state.invitationTokenCache.has(id) && !state.invitationTokenUnavailable.has(id)))];
-  if (!guestIds.length) return;
   const requestId = ++state.invitationTokenRequest;
   const expectedUid = state.currentUser.uid;
   const expectedWeddingId = state.weddingId;
   const expectedScope = scope;
   const hydrate = (async () => {
-    const call = httpsCallable(state.services.functions, "getGuestInvitationTokens");
     try {
-      for (let offset = 0; offset < guestIds.length; offset += 100) {
-        const batchIds = guestIds.slice(offset, offset + 100);
-        const result = await call({ weddingId: expectedWeddingId, guestIds: batchIds, action: "ensure" });
-        if (requestId !== state.invitationTokenRequest || expectedUid !== state.currentUser?.uid ||
-            expectedWeddingId !== state.weddingId || expectedScope !== state.invitationTokenScope ||
-            generation !== state.listenerGeneration) return;
-        const tokens = result.data?.tokens || {};
-        Object.entries(tokens).forEach(([guestId, token]) => {
-          if (batchIds.includes(guestId) && typeof token === "string" && /^[A-Za-z0-9_-]{43}$/.test(token)) {
-            state.invitationTokenCache.set(guestId, token);
-          }
-        });
-        (result.data?.unavailableGuestIds || []).forEach((guestId) => {
-          if (batchIds.includes(guestId)) state.invitationTokenUnavailable.add(guestId);
-        });
-      }
-      if (requestId !== state.invitationTokenRequest || expectedUid !== state.currentUser?.uid || generation !== state.listenerGeneration) return;
+      const secrets = await getDocs(collection(state.services.db, "weddings", expectedWeddingId, "invitationSecrets"));
+      if (requestId !== state.invitationTokenRequest || expectedUid !== state.currentUser?.uid ||
+          expectedWeddingId !== state.weddingId || expectedScope !== state.invitationTokenScope ||
+          generation !== state.listenerGeneration) return;
+      state.invitationTokenCache.clear();
+      secrets.docs.forEach((snapshot) => {
+        const data = snapshot.data();
+        if (data.status === "active" && isValidInvitationToken(data.token) &&
+            guests.some((guest) => guest.id === snapshot.id)) {
+          state.invitationTokenCache.set(snapshot.id, data.token);
+        }
+      });
       state.guests = state.guests.map((guest) => {
         const guestToken = state.invitationTokenCache.get(guest.id);
-        return guestToken ? { ...guest, guestToken } : guest;
+        if (!guestToken) {
+          const next = { ...guest };
+          delete next.guestToken;
+          return next;
+        }
+        return { ...guest, guestToken };
       });
+      await hydrateGuestInvitationResponses(generation);
+      if (requestId !== state.invitationTokenRequest || generation !== state.listenerGeneration) return;
+      subscribeToGuestInvitationResponses(generation);
       renderAll();
     } catch (error) {
       if (requestId === state.invitationTokenRequest && generation === state.listenerGeneration) {
@@ -1971,11 +1981,81 @@ async function hydrateGuestInvitationTokens(guests, generation) {
   try { await hydrate; }
   finally {
     if (state.invitationTokenHydrationPromise === hydrate) state.invitationTokenHydrationPromise = null;
-    if (expectedUid === state.currentUser?.uid && expectedWeddingId === state.weddingId &&
-        generation === state.listenerGeneration && state.guests.some((guest) =>
-          !state.invitationTokenCache.has(guest.id) && !state.invitationTokenUnavailable.has(guest.id))) {
-      void hydrateGuestInvitationTokens(state.guests, generation);
+  }
+}
+
+async function hydrateGuestInvitationResponses(generation) {
+  const pairs = [...state.invitationTokenCache.entries()]
+    .filter(([guestId]) => state.guests.some((guest) => guest.id === guestId));
+  const updates = await Promise.all(pairs.map(async ([guestId, token]) => {
+    try {
+      const snapshot = await getDoc(doc(state.services.db, "weddings", state.weddingId, "publicGuests", token));
+      if (!snapshot.exists()) return null;
+      const data = snapshot.data();
+      if (data.eventId !== state.weddingId || !["pending", "confirmed", "declined"].includes(data.rsvpStatus)) return null;
+      return [guestId, { rsvpStatus: data.rsvpStatus, additionalGuests: data.additionalGuests, rsvpMessage: data.rsvpMessage || "" }];
+    } catch { return null; }
+  }));
+  if (generation !== state.listenerGeneration) return;
+  const values = new Map(updates.filter(Boolean));
+  state.guests = state.guests.map((guest) => values.has(guest.id) ? { ...guest, ...values.get(guest.id) } : guest);
+}
+
+function subscribeToGuestInvitationResponses(generation) {
+  const active = new Set(state.invitationTokenCache.keys());
+  state.invitationResponseUnsubscribers.forEach((unsubscribe, guestId) => {
+    if (!active.has(guestId)) {
+      unsubscribe();
+      state.invitationResponseUnsubscribers.delete(guestId);
     }
+  });
+  for (const [guestId, token] of state.invitationTokenCache) {
+    if (state.invitationResponseUnsubscribers.has(guestId)) continue;
+    const expectedUid = state.currentUser?.uid;
+    const expectedWeddingId = state.weddingId;
+    const unsubscribe = onSnapshot(
+      doc(state.services.db, "weddings", expectedWeddingId, "publicGuests", token),
+      (snapshot) => {
+        if (generation !== state.listenerGeneration || expectedUid !== state.currentUser?.uid ||
+            expectedWeddingId !== state.weddingId || state.invitationTokenCache.get(guestId) !== token) return;
+        if (!snapshot.exists()) {
+          state.invitationResponseUnsubscribers.get(guestId)?.();
+          state.invitationResponseUnsubscribers.delete(guestId);
+          state.invitationTokenCache.delete(guestId);
+          state.guests = state.guests.map((guest) => {
+            if (guest.id !== guestId) return guest;
+            const next = { ...guest };
+            delete next.guestToken;
+            return next;
+          });
+          renderAll();
+          return;
+        }
+        const invitation = snapshot.data();
+        if (invitation.eventId !== expectedWeddingId || !["pending", "confirmed", "declined"].includes(invitation.rsvpStatus)) return;
+        state.guests = state.guests.map((guest) => guest.id === guestId ? {
+          ...guest,
+          rsvpStatus: invitation.rsvpStatus,
+          additionalGuests: invitation.additionalGuests,
+          rsvpMessage: invitation.rsvpMessage || "",
+        } : guest);
+        renderAll();
+      },
+      () => {
+        if (generation !== state.listenerGeneration || expectedUid !== state.currentUser?.uid || expectedWeddingId !== state.weddingId) return;
+        state.invitationResponseUnsubscribers.get(guestId)?.();
+        state.invitationResponseUnsubscribers.delete(guestId);
+        state.invitationTokenCache.delete(guestId);
+        state.guests = state.guests.map((guest) => {
+          if (guest.id !== guestId) return guest;
+          const next = { ...guest };
+          delete next.guestToken;
+          return next;
+        });
+        renderAll();
+      },
+    );
+    state.invitationResponseUnsubscribers.set(guestId, unsubscribe);
   }
 }
 
@@ -3833,7 +3913,7 @@ function progressRow(label, value, total, tone) {
 }
 
 function renderGuestRow(guest) {
-  const inviteLink = buildInviteLink(guest.guestToken);
+  const inviteLink = buildInviteLink(guest.guestToken, guest.id);
   const qrLink = guest.qrCodeValue || buildCheckinLink(guest.guestToken);
   const isSelected = state.selectedGuestIds.includes(guest.id);
   const menuOpen = state.activeGuestMenu?.guestId === guest.id;
@@ -4698,7 +4778,7 @@ function renderGuestActionMenu(guest, trigger) {
   menu.setAttribute("role", "menu");
   menu.setAttribute("aria-label", `Actions for ${guest.fullName || "guest"}`);
   menu.innerHTML = `
-    ${menuItem("Send on WhatsApp", "open-reminder", guest.id, !buildWhatsAppReminderLink(guest))}
+    ${menuItem("Send on WhatsApp", "open-reminder", guest.id, !normalizeWhatsAppPhone(guest.phone))}
     ${isInvitationQrEnabled() ? menuItem("Copy QR link", "copy-guest-qr", guest.id) : ""}
     ${state.mode === "live" && can("canEditGuests") ? menuItem("Regenerate invitation link", "regenerate-guest-invite", guest.id) : ""}
     ${state.mode === "live" && can("canEditGuests") ? menuItem("Revoke invitation link", "revoke-guest-invite", guest.id, !guest.guestToken) : ""}
@@ -4713,7 +4793,7 @@ function renderGuestActionMenu(guest, trigger) {
 }
 
 async function manageGuestInvitationLink(guestId, action) {
-  if (state.mode !== "live" || !can("canEditGuests") || !state.services?.functions) {
+  if (state.mode !== "live" || !can("canEditGuests") || !state.services?.db) {
     showToast("You do not have permission to manage invitation links.", "error");
     return;
   }
@@ -4722,33 +4802,14 @@ async function manageGuestInvitationLink(guestId, action) {
   if (action === "revoke" && !window.confirm(`Revoke the invitation link for ${guest.fullName || "this guest"}? Anyone with the old link will lose access.`)) return;
   if (action === "regenerate" && !window.confirm(`Create a new invitation link for ${guest.fullName || "this guest"}? The old link will stop working immediately.`)) return;
   try {
-    const call = httpsCallable(state.services.functions, "manageGuestInvitationAccess");
     const requestId = action === "regenerate" ? window.crypto?.randomUUID?.() : undefined;
     if (action === "regenerate" && !requestId) throw new Error("Secure request IDs are not supported in this browser.");
-    const result = await call({
-      weddingId: state.weddingId,
-      guestId,
-      action,
-      ...(requestId ? { requestId } : {}),
-    });
     if (action === "revoke") {
-      state.invitationTokenCache.delete(guestId);
-      state.invitationTokenUnavailable.add(guestId);
-      state.guests = state.guests.map((item) => {
-        if (item.id !== guestId) return item;
-        const next = { ...item };
-        delete next.guestToken;
-        return next;
-      });
+      await updateInvitationToken(guestId, "revoke");
       showToast("Invitation link revoked.", "success");
     } else {
-      const token = result.data;
-      if (typeof token !== "string" || !/^[A-Za-z0-9_-]{43}$/.test(token)) throw new Error("The invitation service returned an invalid link.");
-      state.invitationTokenCache.set(guestId, token);
-      state.invitationTokenUnavailable.delete(guestId);
-      state.guests = state.guests.map((item) => item.id === guestId ? { ...item, guestToken: token } : item);
-      await copyText(buildInviteLink(token));
-      showToast("New invitation link created and copied.", "success");
+      const token = await updateInvitationToken(guestId, "regenerate", requestId);
+      await copyPreparedInvitationLink(buildInviteLink(token, guest.id), "New invitation link created and copied.");
     }
     closeGuestMenu({ restoreFocus: false });
     renderAll();
@@ -4756,6 +4817,82 @@ async function manageGuestInvitationLink(guestId, action) {
     console.error("Invitation link update failed.", error?.code || "unavailable");
     showToast("We could not update this invitation link. Please try again.", "error");
   }
+}
+
+async function copyPreparedInvitationLink(url, successMessage = "Invitation link copied.") {
+  if (await copyText(url)) {
+    showToast(successMessage, "success");
+    return true;
+  }
+  window.prompt("The link is saved and ready to copy:", url);
+  showToast("The invitation link is saved. Copy it from the open prompt.", "info");
+  return false;
+}
+
+async function ensureGuestInvitationToken(guestId) {
+  const guest = state.guests.find((item) => item.id === guestId);
+  if (!guest) throw new Error("Invitation unavailable.");
+  if (state.mode === "demo") {
+    if (typeof guest.guestToken !== "string" || !/^[A-Za-z0-9_-]{1,150}$/.test(guest.guestToken)) {
+      throw new Error("Invitation unavailable.");
+    }
+    return guest.guestToken;
+  }
+  if (state.mode !== "live" || !can("canEditGuests") || !state.services?.db || !state.currentUser?.uid) {
+    throw new Error("Invitation unavailable.");
+  }
+  const cachedToken = state.invitationTokenCache.get(guestId);
+  if (isValidInvitationToken(cachedToken)) return cachedToken;
+  return updateInvitationToken(guestId, "ensure");
+}
+
+function getInvitationTokenService() {
+  if (!state.services?.db) throw new Error("Invitation unavailable.");
+  if (!state.invitationTokenService) {
+    state.invitationTokenService = createInvitationTokenService({
+      db: state.services.db,
+      firestore: { doc, runTransaction, serverTimestamp },
+    });
+  }
+  return state.invitationTokenService;
+}
+
+async function updateInvitationToken(guestId, action, requestId = "") {
+  const guest = state.guests.find((item) => item.id === guestId);
+  if (!guest || state.mode !== "live" || !can("canEditGuests") || !state.services?.db || !state.currentUser?.uid) {
+    throw new Error("Invitation unavailable.");
+  }
+  const uid = state.currentUser.uid;
+  const weddingId = state.weddingId;
+  const generation = state.listenerGeneration;
+  const scope = { uid, weddingId, guestId, tables: state.tables, wedding: state.wedding };
+  const service = getInvitationTokenService();
+  const token = action === "revoke" ? await service.revoke(scope)
+    : action === "regenerate" ? await service.regenerate(scope, requestId)
+      : await service.ensure(scope);
+  // Do not attach a late result to a different event or account after a
+  // navigation/session change while the callable was in flight.
+  if (uid !== state.currentUser?.uid || weddingId !== state.weddingId || generation !== state.listenerGeneration ||
+      !state.guests.some((item) => item.id === guestId)) {
+    throw new Error("Invitation unavailable.");
+  }
+  state.invitationResponseUnsubscribers.get(guestId)?.();
+  state.invitationResponseUnsubscribers.delete(guestId);
+  if (action === "revoke") {
+    state.invitationTokenCache.delete(guestId);
+    state.guests = state.guests.map((item) => {
+      if (item.id !== guestId) return item;
+      const next = { ...item };
+      delete next.guestToken;
+      return next;
+    });
+  } else {
+    if (!isValidInvitationToken(token)) throw new Error("Invitation unavailable.");
+    state.invitationTokenCache.set(guestId, token);
+    state.guests = state.guests.map((item) => item.id === guestId ? { ...item, guestToken: token } : item);
+  }
+  subscribeToGuestInvitationResponses(state.listenerGeneration);
+  return token;
 }
 
 function positionGuestMenu(menu, trigger) {
@@ -4953,12 +5090,17 @@ async function handleAction(action, dataset, event = null) {
       return;
     case "open-invitation-preview": {
       const guest = state.guests[0];
-      if (guest && !guest.guestToken) {
-        showToast("The invitation link is still being prepared. Try again shortly.", "info");
-        return;
+      const previewWindow = window.open("about:blank", "_blank");
+      if (previewWindow) previewWindow.opener = null;
+      let token = guest?.guestToken;
+      if (guest && state.mode === "live") {
+        try { showToast("Preparing a secure invitation link…", "info"); token = await ensureGuestInvitationToken(guest.id); }
+        catch { previewWindow?.close(); showToast("We could not prepare this invitation. Please try again.", "error"); return; }
       }
-      const url = buildInviteLink(guest?.guestToken || "{guestToken}");
-      window.open(url, "_blank", "noopener");
+      if (!guest) { previewWindow?.close(); showToast("Add a guest before previewing a personal invitation.", "info"); return; }
+      const url = buildInviteLink(token, guest.id);
+      if (previewWindow) previewWindow.location.replace(url);
+      else await copyPreparedInvitationLink(url, "Invitation link copied.");
       return;
     }
     case "copy-invitation-base":
@@ -5011,11 +5153,13 @@ async function handleAction(action, dataset, event = null) {
       return;
     case "copy-preview": {
       const guest = state.guests[0];
-      if (guest && !guest.guestToken) {
-        showToast("The invitation link is still being prepared. Try again shortly.", "info");
-        return;
+      let token = guest?.guestToken;
+      if (guest && state.mode === "live") {
+        try { showToast("Preparing a secure invitation link…", "info"); token = await ensureGuestInvitationToken(guest.id); }
+        catch { showToast("We could not prepare this invitation. Please try again.", "error"); return; }
       }
-      await copyText(buildInviteLink(guest?.guestToken || "{guestToken}"));
+      if (!guest) { showToast("Add a guest before copying a personal invitation.", "info"); return; }
+      await copyPreparedInvitationLink(buildInviteLink(token, guest.id));
       return;
     }
     case "export-all":
@@ -5086,11 +5230,14 @@ async function handleAction(action, dataset, event = null) {
       const guest = state.guests.find(
         (item) => item.id === dataset.id || item.id === dataset.guestId,
       );
-      if (guest?.guestToken) {
-        await copyText(buildInviteLink(guest.guestToken));
-        showToast("Invitation link copied and ready to open.", "success");
-      } else if (guest) {
-        showToast("The invitation link is still being prepared. Try again shortly.", "info");
+      if (guest) {
+        try {
+          showToast("Preparing a secure invitation link…", "info");
+          const token = await ensureGuestInvitationToken(guest.id);
+          await copyPreparedInvitationLink(buildInviteLink(token, guest.id), "Invitation link copied and ready to open.");
+        } catch {
+          showToast("We could not prepare this invitation. Please try again.", "error");
+        }
       }
       return;
     }
@@ -5107,40 +5254,51 @@ async function handleAction(action, dataset, event = null) {
       }
       const guest = state.guests.find((item) => item.id === dataset.guestId);
       if (guest) {
-         await copyText(buildCheckinLink(guest.guestToken));
+        try {
+          showToast("Preparing a secure QR link…", "info");
+          const token = await ensureGuestInvitationToken(guest.id);
+          await copyPreparedInvitationLink(buildCheckinLink(token), "QR link copied and ready to open.");
+        } catch {
+          showToast("We could not prepare this QR link. Please try again.", "error");
+        }
       }
       return;
     }
     case "open-reminder": {
       const guest = state.guests.find((item) => item.id === dataset.guestId);
-      const url = buildWhatsAppReminderLink(guest);
-      if (!url) {
-        showToast(
-          "This guest does not have a valid phone number yet.",
-          "error",
-        );
+      if (!guest || !normalizeWhatsAppPhone(guest.phone)) {
+        showToast("This guest does not have a valid phone number yet.", "error");
         return;
       }
-      if (state.mode === "live") {
-        await updateDoc(
-          doc(
-            state.services.db,
-            "weddings",
-            state.weddingId,
-            "guests",
-            guest.id,
-          ),
-          {
-            reminderSentAt: serverTimestamp(),
-            updatedAt: serverTimestamp(),
-          },
-        );
-      } else {
-        guest.reminderSentAt = new Date().toLocaleString();
-        persistDemoDashboardState();
+      const reminderWindow = window.open("about:blank", "_blank");
+      if (reminderWindow) reminderWindow.opener = null;
+      try {
+        showToast("Preparing a secure reminder link…", "info");
+        guest.guestToken = await ensureGuestInvitationToken(guest.id);
+        const url = buildWhatsAppReminderLink(guest);
+        if (!url) {
+          showToast("This guest does not have a valid phone number yet.", "error");
+          return;
+        }
+        if (state.mode === "live") {
+          await updateDoc(
+            doc(state.services.db, "weddings", state.weddingId, "guests", guest.id),
+            { reminderSentAt: serverTimestamp(), updatedAt: serverTimestamp() },
+          );
+        } else {
+          guest.reminderSentAt = new Date().toLocaleString();
+          persistDemoDashboardState();
+        }
+        if (reminderWindow) {
+          reminderWindow.location.replace(url);
+          showToast("Reminder link opened.", "success");
+        } else {
+          await copyPreparedInvitationLink(url, "Reminder link copied.");
+        }
+      } catch {
+        reminderWindow?.close();
+        showToast("We could not prepare this reminder. Please try again.", "error");
       }
-      window.open(url, "_blank", "noopener");
-      showToast("Reminder link opened.", "success");
       return;
     }
     case "toggle-checkin": {
@@ -5999,10 +6157,7 @@ async function saveGuest(event) {
 
   try {
     if (guestId) {
-      await updateDoc(
-        doc(state.services.db, "weddings", state.weddingId, "guests", guestId),
-        ownedPayload,
-      );
+      await persistGuestAndInvitation(guestId, ownedPayload);
     } else {
       await addDoc(
         collection(state.services.db, "weddings", state.weddingId, "guests"),
@@ -6205,16 +6360,48 @@ async function updateGuest(guestId, payload) {
   }
 
   try {
-    await updateDoc(
-      doc(state.services.db, "weddings", state.weddingId, "guests", guestId),
-      payload,
-    );
+    await persistGuestAndInvitation(guestId, payload);
     await syncTablesAndGuests();
     showToast("Guest updated.", "success");
   } catch (error) {
     console.error(error);
     showToast("Guest update failed.", "error");
   }
+}
+
+async function persistGuestAndInvitation(guestId, payload) {
+  const guestRef = doc(state.services.db, "weddings", state.weddingId, "guests", guestId);
+  const token = state.invitationTokenCache.get(guestId);
+  if (!can("canEditGuests") || !isValidInvitationToken(token)) {
+    await updateDoc(guestRef, payload);
+    return;
+  }
+  const weddingId = state.weddingId;
+  const secretRef = doc(state.services.db, "weddings", weddingId, "invitationSecrets", guestId);
+  const indexRef = doc(state.services.db, "weddings", weddingId, "invitationTokens", token);
+  const publicRef = doc(state.services.db, "weddings", weddingId, "publicGuests", token);
+  await runTransaction(state.services.db, async (transaction) => {
+    const [guestSnapshot, weddingSnapshot, secretSnapshot, indexSnapshot, publicSnapshot] = await Promise.all([
+      transaction.get(guestRef), transaction.get(doc(state.services.db, "weddings", weddingId)),
+      transaction.get(secretRef), transaction.get(indexRef), transaction.get(publicRef),
+    ]);
+    if (!guestSnapshot.exists() || !weddingSnapshot.exists()) throw new Error("Guest unavailable.");
+    const current = guestSnapshot.data();
+    const updated = { ...current, ...payload };
+    transaction.update(guestRef, payload);
+    if (!secretSnapshot.exists() || !indexSnapshot.exists() || !publicSnapshot.exists() ||
+        secretSnapshot.data().status !== "active" || secretSnapshot.data().token !== token ||
+        indexSnapshot.data().status !== "active" || indexSnapshot.data().guestId !== guestId) return;
+    const projection = buildInvitationProjection(weddingId, weddingSnapshot.data(), updated, state.tables);
+    transaction.update(publicRef, {
+      ...projection,
+      rsvpStatus: ["confirmed", "declined"].includes(updated.rsvpStatus) ? updated.rsvpStatus : "pending",
+      additionalGuests: Math.max(0, Math.min(10, Number(updated.additionalGuests) || 0)),
+      rsvpMessage: typeof updated.rsvpMessage === "string" ? updated.rsvpMessage.slice(0, 1000) : "",
+      expiresAt: null,
+      updatedAt: serverTimestamp(),
+    });
+  });
 }
 
 async function deleteGuest(guestId) {
@@ -6242,6 +6429,19 @@ async function deleteGuest(guestId) {
 
   try {
     const batch = writeBatch(state.services.db);
+    const secretRef = doc(state.services.db, "weddings", state.weddingId, "invitationSecrets", guestId);
+    const secretSnapshot = await getDoc(secretRef);
+    if (secretSnapshot.exists()) {
+      const secret = secretSnapshot.data();
+      if (isValidInvitationToken(secret.token)) {
+        const indexRef = doc(state.services.db, "weddings", state.weddingId, "invitationTokens", secret.token);
+        const publicRef = doc(state.services.db, "weddings", state.weddingId, "publicGuests", secret.token);
+        const [indexSnapshot, publicSnapshot] = await Promise.all([getDoc(indexRef), getDoc(publicRef)]);
+        if (indexSnapshot.exists()) batch.delete(indexRef);
+        if (publicSnapshot.exists()) batch.delete(publicRef);
+      }
+      batch.delete(secretRef);
+    }
     const nextTables = clearGuestFromTables(state.tables, guestId);
     const nextGuests = state.guests.filter((guest) => guest.id !== guestId);
     nextTables.forEach((table) => {
@@ -6264,6 +6464,9 @@ async function deleteGuest(guestId) {
       doc(state.services.db, "weddings", state.weddingId, "guests", guestId),
     );
     await batch.commit();
+    state.invitationTokenCache.delete(guestId);
+    state.invitationResponseUnsubscribers.get(guestId)?.();
+    state.invitationResponseUnsubscribers.delete(guestId);
     state.tables = hydrateTables(nextTables, nextGuests);
     state.guests = syncGuestSeatingSummaries(nextGuests, state.tables);
     state.selectedSeatId = "";
@@ -6721,7 +6924,7 @@ function loadSeatingTestGuests() {
     .filter((guest) => !existingIds.has(guest.id))
     .map((guest) => ({
       ...guest,
-      inviteLink: buildInviteLink(guest.guestToken),
+      inviteLink: buildInviteLink(guest.guestToken, guest.id),
       qrCodeValue: buildCheckinLink(guest.guestToken),
     }));
   if (!nextGuests.length) {
@@ -8516,11 +8719,21 @@ async function handleExport(type) {
     }
   })();
 
+  if (state.mode === "live" && can("canEditGuests")) {
+    try {
+      await Promise.all(filtered.map((guest) => ensureGuestInvitationToken(guest.id)));
+    } catch (error) {
+      console.error("Guest export could not prepare invitation links.", error?.code || "unavailable");
+      showToast("Export was not created because invitation links could not be saved.", "error");
+      return;
+    }
+  }
+
   const format = await exportGuests(
     filtered.map((guest) => ({
       ...guest,
       checkedInAt: formatTimestamp(guest.checkedInAt),
-      inviteLink: guest.guestToken ? buildInviteLink(guest.guestToken) : "",
+      inviteLink: guest.guestToken ? buildInviteLink(guest.guestToken, guest.id) : "",
       qrCodeValue: guest.guestToken && isInvitationQrEnabled() ? buildCheckinLink(guest.guestToken) : "",
     })),
     `guests-${type || "all"}`,
@@ -9094,13 +9307,16 @@ async function copyText(text) {
       helper.style.opacity = "0";
       document.body.appendChild(helper);
       helper.select();
-      document.execCommand("copy");
+      const copied = document.execCommand("copy");
       helper.remove();
+      if (!copied) throw new Error("Clipboard access is unavailable.");
     }
     showToast("Copied to clipboard.", "success");
+    return true;
   } catch (error) {
     console.error(error);
     showToast("Could not copy the link automatically.", "error");
+    return false;
   }
 }
 
@@ -9165,11 +9381,11 @@ function buildWhatsAppReminderLink(guest) {
     return "";
   }
   const phone = normalizeWhatsAppPhone(guest.phone);
-  if (!phone) {
+  if (!phone || (state.mode === "live" && (!guest.guestToken || !guest.id))) {
     return "";
   }
   const title = getEventDisplayTitle(state.wedding);
-  const message = `Hello ${guest.fullName || "Guest"}, this is a kind reminder to confirm your attendance for ${title}.\nPlease open your personal invitation here:\n${buildInviteLink(guest.guestToken)}`;
+  const message = `Hello ${guest.fullName || "Guest"}, this is a kind reminder to confirm your attendance for ${title}.\nPlease open your personal invitation here:\n${buildInviteLink(guest.guestToken, guest.id)}`;
   return `https://wa.me/${phone}?text=${encodeURIComponent(message)}`;
 }
 
@@ -9205,11 +9421,13 @@ function normalizeWhatsAppPhone(phone) {
   return digits;
 }
 
-function buildInviteLink(guestToken) {
+function buildInviteLink(guestToken, guestId = "") {
   const url = new URL("index.html", window.location.href);
   if (state.mode === "demo") url.searchParams.set("demo", "1");
   else url.searchParams.set("wedding", state.weddingId);
-  url.hash = new URLSearchParams({ guest: guestToken }).toString();
+  const fragment = { guest: guestToken };
+  if (state.mode === "live" && guestId) fragment.recipient = guestId;
+  url.hash = new URLSearchParams(fragment).toString();
   return url.toString();
 }
 
@@ -9348,6 +9566,7 @@ async function buildSenderLink(side = "all") {
     return new URL(`send.html?demo=1#data=${encodeSenderPayload(payload)}`, window.location.href).toString();
   }
   const guests = getSenderGuests(side);
+  await Promise.all(guests.map((guest) => ensureGuestInvitationToken(guest.id)));
   const result = await httpsCallable(state.services.functions, "createSenderSession")({
     weddingId: state.weddingId,
     side,
@@ -9403,11 +9622,7 @@ function buildSideViewLink(side) {
 }
 
 function generateGuestToken() {
-  const bytes = new Uint8Array(12);
-  crypto.getRandomValues(bytes);
-  return Array.from(bytes, (byte) => byte.toString(16).padStart(2, "0")).join(
-    "",
-  );
+  return generateInvitationToken();
 }
 
 function demoNow() {

@@ -252,14 +252,155 @@ service cloud.firestore {
       return get(/databases/$(database)/documents/weddings/$(weddingId)).data.status == "active";
     }
 
+    function invitationEventExists(weddingId) {
+      // Event status and completion do not invalidate a bearer invitation.
+      // Deleting the event removes this parent document and closes access.
+      return exists(/databases/$(database)/documents/weddings/$(weddingId));
+    }
+
+    function validInvitationToken(token) {
+      return token is string && token.matches("^[A-Za-z0-9_-]{43}$");
+    }
+
+    function invitationTokenPath(weddingId, token) {
+      return /databases/$(database)/documents/weddings/$(weddingId)/invitationTokens/$(token);
+    }
+
+    function invitationSecretPath(weddingId, guestId) {
+      return /databases/$(database)/documents/weddings/$(weddingId)/invitationSecrets/$(guestId);
+    }
+
+    // Seating-only dashboard accounts may issue and revoke an invitation only
+    // for guests they are already allowed to access. Their access is always an
+    // exact document operation; they cannot list the event's token directory.
+    function canManageInvitationForGuest(weddingId, guestId) {
+      let guestPath = /databases/$(database)/documents/weddings/$(weddingId)/guests/$(guestId);
+      return canManageGuestRecords(weddingId) ||
+        (isDashboardMember(weddingId) &&
+          dashboardUser(weddingId).data.get("canEditGuests", false) == true &&
+          isSeatingOnlyDashboardAccount(weddingId) &&
+          exists(guestPath) && seatingAccountMayReadGuest(weddingId, get(guestPath).data));
+    }
+
+    function canManageInvitationCandidate(weddingId) {
+      return canManageGuestRecords(weddingId) ||
+        (isDashboardMember(weddingId) &&
+          dashboardUser(weddingId).data.get("canEditGuests", false) == true &&
+          isSeatingOnlyDashboardAccount(weddingId));
+    }
+
+    function canReadInvitationTokenRecord(weddingId, token) {
+      let path = invitationTokenPath(weddingId, token);
+      return canManageGuestRecords(weddingId) ||
+        (validInvitationToken(token) &&
+          ((!exists(path) && canManageInvitationCandidate(weddingId)) ||
+            (exists(path) && get(path).data.guestId is string &&
+              canManageInvitationForGuest(weddingId, get(path).data.guestId))));
+    }
+
+    function isActiveInvitationToken(weddingId, token) {
+      let path = invitationTokenPath(weddingId, token);
+      let record = get(path);
+      return validInvitationToken(token) && exists(path) && invitationEventExists(weddingId)
+        && record.data.status == "active"
+        && record.data.purpose == "guest-invitation"
+        && record.data.version is int;
+    }
+
+    function validInvitationProjection(data, weddingId) {
+      return data.keys().hasOnly(["eventId", "wedding", "guest", "rsvpStatus", "additionalGuests", "rsvpMessage", "expiresAt", "updatedAt"])
+        && data.keys().hasAll(["eventId", "wedding", "guest", "rsvpStatus", "additionalGuests", "rsvpMessage", "expiresAt", "updatedAt"])
+        && data.eventId == weddingId
+        && data.wedding is map
+        && data.wedding.keys().hasOnly([
+          "eventTitle", "coupleName", "brideName", "groomName", "brideNameAr", "groomNameAr",
+          "eventCategory", "eventDateISO", "rsvpDeadlineISO", "timeEn", "timeAr", "venueEn",
+          "location", "locationEn", "mapsUrl", "venueMapEmbedUrl", "subtitleEn", "subtitleAr",
+          "invitationMessageEn", "invitationMessageAr", "invitationLanguage", "showInvitationQr",
+          "seatingEnabled", "schedule", "hallObjects", "tables"
+        ])
+        && data.guest is map
+        && data.guest.keys().hasOnly([
+          "fullName", "additionalGuestAllowance", "seatingAssignments", "tableId", "tableName", "seatNumber"
+        ])
+        && data.guest.keys().hasAll(["fullName", "additionalGuestAllowance", "seatingAssignments", "tableId", "tableName", "seatNumber"])
+        && data.guest.fullName is string && data.guest.fullName.size() > 0 && data.guest.fullName.size() <= 160
+        && data.guest.additionalGuestAllowance is int && data.guest.additionalGuestAllowance >= 0 && data.guest.additionalGuestAllowance <= 10
+        && data.guest.seatingAssignments is list && data.guest.seatingAssignments.size() <= 11
+        && data.guest.tableId is string && data.guest.tableName is string && data.guest.tableName.size() <= 100
+        && (data.guest.seatNumber is string || data.guest.seatNumber is int)
+        && data.rsvpStatus in ["pending", "confirmed", "declined"]
+        && data.additionalGuests is int && data.additionalGuests >= 0 && data.additionalGuests <= data.guest.additionalGuestAllowance
+        && data.rsvpMessage is string && data.rsvpMessage.size() <= 1000
+        && (data.expiresAt == null || data.expiresAt is timestamp)
+        && data.updatedAt is timestamp;
+    }
+
+    function invitationGuestAllowance(guest) {
+      // Legacy guest records may omit additionalGuestAllowance. The client has
+      // always treated additionalGuests as their effective allowance.
+      return guest.get("additionalGuestAllowance", guest.get("additionalGuests", 0));
+    }
+
     function isGuestRsvpUpdate(weddingId) {
       // Anonymous RSVP is authorized by callable Functions after resolving a
       // per-guest capability token. A stored field comparison is not proof.
       return false;
     }
 
-    function isPublicGuestRsvpUpdate(weddingId) {
-      return false;
+    function isPublicGuestRsvpUpdate(weddingId, token) {
+      let allowedChanges = request.resource.data.diff(resource.data).affectedKeys();
+      let invitation = resource.data;
+      let tokenRecord = get(invitationTokenPath(weddingId, token));
+      let guestAfterPath = /databases/$(database)/documents/weddings/$(weddingId)/guests/$(tokenRecord.data.guestId);
+      let guestAfter = getAfter(guestAfterPath);
+      return isActiveInvitationToken(weddingId, token)
+        && tokenRecord.data.guestId is string
+        && allowedChanges.hasOnly(["rsvpStatus", "additionalGuests", "rsvpMessage", "updatedAt"])
+        && request.resource.data.rsvpStatus in ["confirmed", "declined"]
+        && request.resource.data.additionalGuests is int
+        && request.resource.data.additionalGuests >= 0
+        && request.resource.data.additionalGuests <= invitation.guest.additionalGuestAllowance
+        && request.resource.data.rsvpMessage is string
+        && request.resource.data.rsvpMessage.size() <= 1000
+        && request.resource.data.updatedAt == request.time
+        && request.resource.data.eventId == invitation.eventId
+        && request.resource.data.wedding == invitation.wedding
+        && request.resource.data.guest == invitation.guest
+        && request.resource.data.expiresAt == invitation.expiresAt
+        && guestAfter.data.rsvpStatus == request.resource.data.rsvpStatus
+        && guestAfter.data.additionalGuests == request.resource.data.additionalGuests
+        && guestAfter.data.get("rsvpMessage", "") == request.resource.data.rsvpMessage
+        && guestAfter.data.updatedAt == request.time;
+    }
+
+    function isPublicGuestRsvpMirrorUpdate(weddingId, guestId) {
+      let secret = get(invitationSecretPath(weddingId, guestId));
+      let token = secret.data.token;
+      let index = get(invitationTokenPath(weddingId, token));
+      let invitation = getAfter(/databases/$(database)/documents/weddings/$(weddingId)/publicGuests/$(token));
+      let changed = request.resource.data.diff(resource.data).affectedKeys();
+      return secret.data.status == "active"
+        && secret.data.purpose == "guest-invitation"
+        && validInvitationToken(token)
+        && index.data.status == "active"
+        && index.data.purpose == "guest-invitation"
+        && index.data.guestId == guestId
+        && isActiveInvitationToken(weddingId, token)
+        && changed.hasOnly(["rsvpStatus", "additionalGuests", "rsvpMessage", "updatedAt"])
+        && request.resource.data.rsvpStatus in ["confirmed", "declined"]
+        && request.resource.data.additionalGuests is int
+        && request.resource.data.additionalGuests >= 0
+        && request.resource.data.additionalGuests <= resource.data.get("additionalGuestAllowance", 0)
+        && request.resource.data.rsvpMessage is string
+        && request.resource.data.rsvpMessage.size() <= 1000
+        && request.resource.data.updatedAt == request.time
+        && invitation.data.eventId == weddingId
+        && invitation.data.guest.additionalGuestAllowance == resource.data.get("additionalGuestAllowance", 0)
+        && invitation.data.rsvpStatus == request.resource.data.rsvpStatus
+        && invitation.data.additionalGuests == request.resource.data.additionalGuests
+        && invitation.data.rsvpMessage == request.resource.data.rsvpMessage
+        && invitation.data.updatedAt == request.time;
     }
 
     function validGuestDocument(data) {
@@ -392,7 +533,76 @@ service cloud.firestore {
             request.resource.data.diff(resource.data).affectedKeys().hasOnly(["checkedIn", "checkedInAt", "updatedAt"]) &&
             request.resource.data.checkedIn == true && request.resource.data.checkedInAt == request.time &&
             request.resource.data.updatedAt == request.time)
-          || isGuestSeatingUpdate(weddingId);
+           || isGuestSeatingUpdate(weddingId)
+           || isPublicGuestRsvpMirrorUpdate(weddingId, guestId);
+      }
+
+      // The active token-to-guest binding is private to event guest managers.
+      // Its random document ID is not itself enough to authorize reading it.
+      match /invitationSecrets/{guestId} {
+        allow get: if canManageInvitationForGuest(weddingId, guestId);
+        allow list: if canManageGuestRecords(weddingId);
+        allow create, update: if invitationEventExists(weddingId)
+          && canManageInvitationForGuest(weddingId, guestId)
+          && request.resource.data.keys().hasOnly(["token", "status", "purpose", "version", "expiresAt", "createdAt", "updatedAt", "lastIssueRequestId"])
+          && validInvitationToken(request.resource.data.token)
+          && request.resource.data.status in ["active", "revoked"]
+          && request.resource.data.purpose == "guest-invitation"
+          && request.resource.data.version is int && request.resource.data.version >= 1
+          && (request.resource.data.expiresAt == null || request.resource.data.expiresAt is timestamp)
+          && request.resource.data.createdAt is timestamp
+          && request.resource.data.updatedAt == request.time
+          && (!exists(invitationSecretPath(weddingId, guestId)) || request.resource.data.diff(resource.data).affectedKeys().hasOnly(["token", "status", "purpose", "version", "expiresAt", "updatedAt", "lastIssueRequestId"]))
+          && request.resource.data.get("lastIssueRequestId", "") is string
+          && request.resource.data.get("lastIssueRequestId", "").size() <= 100
+          && exists(/databases/$(database)/documents/weddings/$(weddingId)/guests/$(guestId))
+          && existsAfter(invitationTokenPath(weddingId, request.resource.data.token))
+          && getAfter(invitationTokenPath(weddingId, request.resource.data.token)).data.guestId == guestId
+          && getAfter(invitationTokenPath(weddingId, request.resource.data.token)).data.status == request.resource.data.status
+          && (request.resource.data.status == "revoked" ||
+            (existsAfter(/databases/$(database)/documents/weddings/$(weddingId)/publicGuests/$(request.resource.data.token))
+              && getAfter(/databases/$(database)/documents/weddings/$(weddingId)/publicGuests/$(request.resource.data.token)).data.eventId == weddingId));
+        allow delete: if invitationEventExists(weddingId)
+          && canManageInvitationForGuest(weddingId, guestId)
+          && !existsAfter(invitationTokenPath(weddingId, resource.data.token))
+          && !existsAfter(/databases/$(database)/documents/weddings/$(weddingId)/publicGuests/$(resource.data.token));
+      }
+
+      // Private reverse index. Only authorized organizers can list it; public
+      // invitation reads are exact document gets through publicGuests below.
+      match /invitationTokens/{token} {
+        allow get: if canReadInvitationTokenRecord(weddingId, token);
+        allow list: if canManageGuestRecords(weddingId);
+        allow create, update: if invitationEventExists(weddingId)
+          && canManageInvitationForGuest(weddingId, request.resource.data.guestId)
+          && validInvitationToken(token)
+          && request.resource.data.keys().hasOnly(["guestId", "status", "purpose", "version", "expiresAt", "createdAt", "updatedAt"])
+          && request.resource.data.guestId is string
+          && request.resource.data.status in ["active", "revoked"]
+          && request.resource.data.purpose == "guest-invitation"
+          && request.resource.data.version is int && request.resource.data.version >= 1
+          && (request.resource.data.expiresAt == null || request.resource.data.expiresAt is timestamp)
+          && request.resource.data.createdAt is timestamp
+          && request.resource.data.updatedAt == request.time
+          && (!exists(invitationTokenPath(weddingId, token)) || (
+            request.resource.data.diff(resource.data).affectedKeys().hasOnly(["status", "version", "expiresAt", "updatedAt"])
+            && request.resource.data.guestId == resource.data.guestId
+            && request.resource.data.purpose == resource.data.purpose
+            && request.resource.data.createdAt == resource.data.createdAt
+          ))
+          && exists(/databases/$(database)/documents/weddings/$(weddingId)/guests/$(request.resource.data.guestId))
+          && existsAfter(invitationSecretPath(weddingId, request.resource.data.guestId))
+          && (request.resource.data.status == "revoked" ||
+            (getAfter(invitationSecretPath(weddingId, request.resource.data.guestId)).data.token == token
+              && getAfter(invitationSecretPath(weddingId, request.resource.data.guestId)).data.status == "active"))
+          && (request.resource.data.status == "revoked" ||
+            (existsAfter(/databases/$(database)/documents/weddings/$(weddingId)/publicGuests/$(token))
+              && getAfter(/databases/$(database)/documents/weddings/$(weddingId)/publicGuests/$(token)).data.eventId == weddingId));
+        allow delete: if invitationEventExists(weddingId)
+          && canManageInvitationForGuest(weddingId, resource.data.guestId)
+          && (!existsAfter(invitationSecretPath(weddingId, resource.data.guestId))
+            || getAfter(invitationSecretPath(weddingId, resource.data.guestId)).data.token != token)
+          && !existsAfter(/databases/$(database)/documents/weddings/$(weddingId)/publicGuests/$(token));
       }
 
       // Aggregated side-level counts only. Names and seat assignments stay private.
@@ -409,8 +619,36 @@ service cloud.firestore {
       }
 
       match /publicGuests/{guestToken} {
-        // Deprecated token-keyed mirrors are never a direct authorization path.
-        allow read, write: if false;
+        allow get: if isActiveInvitationToken(weddingId, guestToken) || canReadInvitationTokenRecord(weddingId, guestToken);
+        allow list: if false;
+        allow create: if invitationEventExists(weddingId)
+          && canManageInvitationForGuest(weddingId,
+            getAfter(invitationTokenPath(weddingId, guestToken)).data.guestId)
+          && validInvitationToken(guestToken)
+          && validInvitationProjection(request.resource.data, weddingId)
+          && getAfter(invitationTokenPath(weddingId, guestToken)).data.status == "active"
+          && getAfter(invitationTokenPath(weddingId, guestToken)).data.purpose == "guest-invitation"
+          && getAfter(invitationTokenPath(weddingId, guestToken)).data.expiresAt == request.resource.data.expiresAt
+          && getAfter(/databases/$(database)/documents/weddings/$(weddingId)/guests/$(getAfter(invitationTokenPath(weddingId, guestToken)).data.guestId)).data.fullName == request.resource.data.guest.fullName
+          && invitationGuestAllowance(getAfter(/databases/$(database)/documents/weddings/$(weddingId)/guests/$(getAfter(invitationTokenPath(weddingId, guestToken)).data.guestId)).data) == request.resource.data.guest.additionalGuestAllowance
+          && request.resource.data.updatedAt == request.time;
+        allow update: if isPublicGuestRsvpUpdate(weddingId, guestToken)
+          || (invitationEventExists(weddingId)
+            && canManageInvitationForGuest(weddingId,
+            get(invitationTokenPath(weddingId, guestToken)).data.guestId)
+            && validInvitationProjection(request.resource.data, weddingId)
+            && get(invitationTokenPath(weddingId, guestToken)).data.status == "active"
+            && get(invitationTokenPath(weddingId, guestToken)).data.purpose == "guest-invitation"
+            && get(invitationTokenPath(weddingId, guestToken)).data.guestId is string
+            && exists(/databases/$(database)/documents/weddings/$(weddingId)/guests/$(get(invitationTokenPath(weddingId, guestToken)).data.guestId))
+            && getAfter(/databases/$(database)/documents/weddings/$(weddingId)/guests/$(get(invitationTokenPath(weddingId, guestToken)).data.guestId)).data.fullName == request.resource.data.guest.fullName
+            && invitationGuestAllowance(getAfter(/databases/$(database)/documents/weddings/$(weddingId)/guests/$(get(invitationTokenPath(weddingId, guestToken)).data.guestId)).data) == request.resource.data.guest.additionalGuestAllowance
+            && request.resource.data.updatedAt == request.time);
+        allow delete: if invitationEventExists(weddingId)
+          && canManageInvitationForGuest(weddingId,
+            get(invitationTokenPath(weddingId, guestToken)).data.guestId)
+          && (!existsAfter(invitationTokenPath(weddingId, guestToken))
+            || getAfter(invitationTokenPath(weddingId, guestToken)).data.status == "revoked");
       }
     }
 

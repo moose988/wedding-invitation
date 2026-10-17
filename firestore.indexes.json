@@ -2,24 +2,6 @@
   "indexes": [],
   "fieldOverrides": [
     {
-      "collectionGroup": "invitationRateLimits",
-      "fieldPath": "expiresAt",
-      "ttl": true,
-      "indexes": []
-    },
-    {
-      "collectionGroup": "checkinRosterRateLimits",
-      "fieldPath": "expiresAt",
-      "ttl": true,
-      "indexes": []
-    },
-    {
-      "collectionGroup": "senderSessions",
-      "fieldPath": "expiresAt",
-      "ttl": true,
-      "indexes": []
-    },
-    {
       "collectionGroup": "dashboardUsers",
       "fieldPath": "userId",
       "indexes": [

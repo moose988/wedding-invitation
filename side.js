@@ -1,19 +1,19 @@
 import {
+  collection,
   initFirebase,
-  initSeatingEditorFirebase,
   isFirebaseConfigured,
   doc,
   getDoc,
-  httpsCallable,
   onSnapshot,
-  signInWithCustomToken,
+  onAuthStateChanged,
+  query,
+  runTransaction,
+  serverTimestamp,
+  where,
 } from "./firebase-config.js?v=20261016-tab-session-isolation-1";
 import { resolveTableName } from "./seating-utils.js";
 import { getEventDisplayTitle, isCelebrationEvent } from "./event-utils.js";
-import {
-  initializeFirebaseServicesForRoute,
-  waitForFirebaseSessionPersistence,
-} from "./firebase-service-scopes.js";
+import { projectSeatAssignments, mutateSeating } from "./seating-firestore.js";
 
 const shell = document.querySelector("#sideShell");
 const modalRoot = document.querySelector("#modalRoot");
@@ -25,16 +25,28 @@ const editorToken = params.get("token") || "";
 const demo = params.get("demo") === "1";
 let state = {
   role: roleHint,
+  permission: null,
+  currentUser: null,
+  authStateSeen: false,
+  authorized: false,
   editable: false,
   weddingId: params.get("wedding") || "",
   guests: [],
   tables: [],
+  layoutTables: [],
+  seatAssignments: [],
+  seatOccupancy: [],
+  guestsLoaded: false,
+  tablesLoaded: false,
+  assignmentsLoaded: false,
   wedding: null,
+  summaryUpdatedAt: null,
   pending: false,
   transform: { x: 0, y: 0, scale: 0.42 },
   mapInitialized: false,
   action: null,
   unsubs: [],
+  unsubAuth: null,
   initialized: false,
 };
 
@@ -45,6 +57,10 @@ async function init() {
   state.initialized = true;
   window.addEventListener("pagehide", disposeListeners, { once: true });
   try {
+    if (editorToken) {
+      renderLegacyEditorRoute();
+      return;
+    }
     if (demo) {
       loadDemo();
       render();
@@ -52,108 +68,168 @@ async function init() {
     }
     if (!isFirebaseConfigured())
       throw new Error("Firebase has not been configured.");
-    const services = initializeFirebaseServicesForRoute(
-      { seatingEditor: Boolean(editorToken) },
-      { dashboard: initFirebase, seating: initSeatingEditorFirebase },
-    );
-    state.services = services;
-    if (editorToken) await waitForFirebaseSessionPersistence(services);
-    await services.persistenceReady;
-    if (editorToken) {
-      const exchange = httpsCallable(
-        services.functions,
-        "exchangeSeatingEditorLink",
-      );
-      const result = await exchange({ token: editorToken });
-      await signInWithCustomToken(services.auth, result.data.customToken);
-      history.replaceState(null, "", `side.html?side=${roleHint}`);
-    }
-    const user = services.auth.currentUser;
-    if (user) {
-      const claims = (await user.getIdTokenResult(true)).claims;
-      if (
-        claims.seatingEditor &&
-        claims.seatingWeddingId &&
-        ["bride", "groom", "family"].includes(claims.seatingRole)
-      ) {
-        state.role = claims.seatingRole;
-        state.editable = ["bride", "groom"].includes(state.role);
-        state.weddingId = claims.seatingWeddingId;
-      } else if (state.weddingId) {
-        const account = await getDoc(doc(services.db, "weddings", state.weddingId, "dashboardUsers", user.uid));
-        const permission = account.exists() ? account.data() : {};
-        if (permission.seatingOnly === true && permission.canEditSeating === true && ["bride", "groom", "all"].includes(permission.allowedSide)) {
-          state.role = permission.allowedSide;
-          state.editable = true;
-        }
-      }
-    }
     if (!state.weddingId)
       throw new Error("This link is incomplete or has expired.");
-    subscribe();
+    state.services = initFirebase();
+    await state.services.persistenceReady;
+    await state.services.auth.authStateReady();
+    await handleAuthChange(state.services.auth.currentUser);
+    state.unsubAuth = onAuthStateChanged(state.services.auth, handleAuthChange);
   } catch (error) {
     console.error(error);
     renderError(error.message || "Unable to open this seating page.");
   }
 }
 
-function subscribe() {
-  const { db } = state.services;
-  const root = `weddings/${state.weddingId}`;
+async function handleAuthChange(user) {
+  if (state.authStateSeen && state.currentUser?.uid === user?.uid && (state.authorized || !user)) return;
   state.unsubs.forEach((stop) => stop());
   state.unsubs = [];
-  if (state.editable) {
-    void refreshSideSeatingData();
-    const timer = setInterval(() => void refreshSideSeatingData(), 10000);
-    state.unsubs.push(() => clearInterval(timer));
+  state.currentUser = user || null;
+  state.authStateSeen = true;
+  state.permission = null;
+  state.authorized = false;
+  state.editable = false;
+  state.guests = [];
+  state.tables = [];
+  state.layoutTables = [];
+  state.seatAssignments = [];
+  state.seatOccupancy = [];
+  state.guestsLoaded = state.tablesLoaded = state.assignmentsLoaded = false;
+  if (!user) {
+    if (roleHint === "family") {
+      state.role = "family";
+      subscribePublicFamily();
+    } else {
+      renderLoginRequired();
+    }
     return;
   }
-  if (!state.editable) {
-    state.unsubs.push(onSnapshot(
-      doc(db, root, "publicSummary", "summary"),
-      (snap) => {
-        state.publicStats = snap.exists() ? snap.data() : null;
-        state.wedding = snap.exists() ? {
-          id: state.weddingId,
-          eventTitle: snap.data().eventTitle || "",
-          coupleName: snap.data().coupleName || "",
-          eventCategory: snap.data().eventCategory || "wedding_engagement",
-          seatingEnabled: snap.data().seatingEnabled !== false,
-        } : null;
-        state.tables = [];
-        state.guests = [];
-        render();
-      },
-      fail,
-    ));
-    return;
-  }
-  state.unsubs = [];
-}
-let seatingRefreshPending = false;
-async function refreshSideSeatingData() {
-  if (seatingRefreshPending || !state.editable) return;
-  seatingRefreshPending = true;
   try {
-    const load = httpsCallable(state.services.functions, "getSideSeatingState");
-    const result = await load({ weddingId: state.weddingId });
-    state.role = result.data.role;
-    state.wedding = result.data.wedding;
-    state.tables = (result.data.tables || []).map(normalizeTable);
-    state.guests = result.data.guests || [];
-    render();
-  } catch {
-    state.wedding = null;
+    const membership = await getDoc(doc(state.services.db, "weddings", state.weddingId, "dashboardUsers", user.uid));
+    if (state.currentUser?.uid !== user.uid) return;
+    if (!membership.exists()) throw new Error("This account is not a member of this event.");
+    const permission = membership.data();
+    if (permission.canEditSeating !== true && permission.canViewDashboard !== true) throw new Error("This account does not have seating access for this event.");
+    const allowed = ["bride", "groom", "family", "all"].includes(String(permission.allowedSide || "").toLowerCase())
+      ? String(permission.allowedSide).toLowerCase()
+      : permission.seatingOnly === true ? "" : "all";
+    if (!allowed) throw new Error("This account's seating side is not configured.");
+    state.permission = permission;
+    state.role = allowed;
+    state.authorized = true;
+    state.editable = permission.canEditSeating === true && allowed !== "family";
+    subscribeAuthorized();
+  } catch (error) {
+    if (state.currentUser?.uid !== user.uid) return;
+    console.error(error);
+    renderAccessDenied(error.message || "This account does not have seating access for this event.");
+  }
+}
+
+function subscribe() {
+  subscribeAuthorized();
+}
+
+function subscribePublicFamily() {
+  const summaryRef = doc(state.services.db, "weddings", state.weddingId, "publicSummary", "summary");
+  state.unsubs.push(onSnapshot(summaryRef, (snapshot) => {
+    if (!snapshot.exists()) throw new Error("This event's public summary is unavailable.");
+    const data = snapshot.data();
+    state.publicStats = data.stats || data.publicStats || null;
+    state.summaryUpdatedAt = data.updatedAt || null;
+    state.wedding = {
+      id: state.weddingId,
+      eventTitle: data.eventTitle || "",
+      coupleName: data.coupleName || "",
+      eventCategory: data.eventCategory || "wedding_engagement",
+      seatingEnabled: data.seatingEnabled !== false,
+    };
     state.tables = [];
     state.guests = [];
-    renderError("This seating access is unavailable. Refresh or contact the event owner.");
-  } finally {
-    seatingRefreshPending = false;
+    render();
+  }, fail));
+}
+
+function subscribeAuthorized() {
+  const db = state.services.db;
+  const root = ["weddings", state.weddingId];
+  state.unsubs.push(onSnapshot(doc(db, ...root, "publicSummary", "summary"), (snapshot) => {
+    if (!snapshot.exists()) {
+      state.wedding = { id: state.weddingId, eventTitle: "Event seating", eventCategory: "wedding_engagement", seatingEnabled: true };
+      render();
+      return;
+    }
+    const data = snapshot.data();
+    state.summaryUpdatedAt = data.updatedAt || null;
+    state.wedding = {
+      id: state.weddingId,
+      eventTitle: data.eventTitle || "",
+      coupleName: data.coupleName || "",
+      eventCategory: data.eventCategory || "wedding_engagement",
+      seatingEnabled: data.seatingEnabled !== false,
+    };
+    render();
+  }, fail));
+
+  const guestCollection = collection(db, ...root, "seatingGuests");
+  const guestQuery = state.role === "all" ? guestCollection : query(guestCollection, where("side", "==", state.role));
+  state.unsubs.push(onSnapshot(guestQuery, (snapshot) => {
+    state.guests = snapshot.docs.map((item) => ({ ...item.data(), id: item.id, side: normalizeGuestSide(item.data().side) }));
+    state.guestsLoaded = true;
+    refreshAuthorizedView();
+  }, fail));
+
+  state.unsubs.push(onSnapshot(collection(db, ...root, "tables"), (snapshot) => {
+    state.layoutTables = snapshot.docs.map((item) => normalizeTable({ ...item.data(), id: item.id }));
+    state.tablesLoaded = true;
+    refreshAuthorizedView();
+  }, fail));
+
+  const assignments = collection(db, ...root, "seatAssignments");
+  const assignmentQuery = state.role === "all" ? assignments : query(assignments, where("side", "==", state.role));
+  state.unsubs.push(onSnapshot(assignmentQuery, (snapshot) => {
+    state.seatAssignments = snapshot.docs;
+    state.assignmentsLoaded = true;
+    refreshAuthorizedView();
+  }, fail));
+
+  state.unsubs.push(onSnapshot(collection(db, ...root, "seatOccupancy"), (snapshot) => {
+    state.seatOccupancy = snapshot.docs;
+    refreshAuthorizedView();
+  }, fail));
+}
+
+function refreshAuthorizedView() {
+  if (state.tablesLoaded && state.assignmentsLoaded) {
+    state.tables = projectSeatAssignments(state.layoutTables, state.seatAssignments, state.seatOccupancy).map(normalizeTable);
   }
+  if (state.guestsLoaded && state.tablesLoaded && state.assignmentsLoaded) {
+    state.guests = syncSeatSummaries(state.guests, state.tables);
+  }
+  render();
+}
+
+function syncSeatSummaries(guests, tables) {
+  const rows = new Map();
+  for (const table of tables) for (const chair of table.chairs) {
+    const value = assignment(table, chair);
+    if (!value) continue;
+    if (!rows.has(value.guestId)) rows.set(value.guestId, []);
+    rows.get(value.guestId).push({ ...value });
+  }
+  return guests.map((guest) => {
+    const seats = rows.get(guest.id) || [];
+    seats.sort((a, b) => a.partyMemberIndex - b.partyMemberIndex);
+    const main = seats.find((item) => item.partyMemberIndex === 0) || seats[0];
+    return { ...guest, seatingAssignments: seats, tableId: main?.tableId || "", tableName: main?.tableName || "", seatNumber: main ? String(main.seatNumber) : "" };
+  });
 }
 function disposeListeners() {
   state.unsubs.forEach((stop) => stop());
   state.unsubs = [];
+  state.unsubAuth?.();
+  state.unsubAuth = null;
 }
 function fail(error) {
   console.error(error);
@@ -162,6 +238,34 @@ function fail(error) {
   state.tables = [];
   state.guests = [];
   renderError("This event's public seating summary is unavailable.");
+}
+
+function guestSideValues(side) {
+  return [side];
+}
+
+function renderLegacyEditorRoute() {
+  const login = new URL("./dashboard-login.html", window.location.href);
+  if (state.weddingId) login.searchParams.set("wedding", state.weddingId);
+  login.searchParams.set("workspace", "side");
+  login.searchParams.set("side", roleHint);
+  shell.innerHTML = `<section class="card head"><div><p class="eyebrow">Account sign-in required</p><h1>This seating link has been retired</h1><p class="muted">Seating access now comes from the event's account permissions. Sign in with the account the event owner authorized.</p><p><a class="btn primary" href="${esc(login.toString())}">Sign in to seating</a></p></div></section>`;
+}
+
+function renderLoginRequired() {
+  const login = new URL("./dashboard-login.html", window.location.href);
+  login.searchParams.set("wedding", state.weddingId);
+  login.searchParams.set("side", roleHint);
+  login.searchParams.set("workspace", "side");
+  shell.innerHTML = `<section class="card head"><div><p class="eyebrow">Event account access</p><h1>Sign in to seating</h1><p class="muted">Use the email and password account the event owner authorized for this event.</p><p><a class="btn primary" href="${esc(login.toString())}">Open sign-in</a></p></div></section>`;
+}
+
+function renderAccessDenied(message) {
+  const login = new URL("./dashboard-login.html", window.location.href);
+  login.searchParams.set("wedding", state.weddingId);
+  login.searchParams.set("side", roleHint);
+  login.searchParams.set("workspace", "side");
+  shell.innerHTML = `<section class="card head"><div><p class="eyebrow">Seating access unavailable</p><h1>Ask the event owner to check your account permissions</h1><p class="muted">${esc(message)}</p><p><a class="btn" href="${esc(login.toString())}">Use another account</a></p></div></section>`;
 }
 
 function loadDemo() {
@@ -264,6 +368,10 @@ function buildStats() {
 }
 function render() {
   if (!state.wedding) return;
+  if (!demo && state.authorized && state.wedding.seatingSchemaVersion !== 2) {
+    shell.innerHTML = `<section class="card head"><div><p class="eyebrow">Seating setup required</p><h1>Ask the event owner to prepare this seating plan</h1><p class="muted">The owner needs to open this event's dashboard once so its existing seat assignments can be moved to the secure seating workspace.</p></div></section>`;
+    return;
+  }
   if (state.wedding.seatingEnabled === false) {
     shell.innerHTML = `<section class="card head"><div><p class="eyebrow">Seating unavailable</p><h1>Seating is disabled</h1><p class="muted">The event owner has disabled seating for this event.</p></div></section>`;
     return;
@@ -276,7 +384,7 @@ function render() {
     ? `${cap(state.role)} manager`
     : `Read-only ${cap(state.role)} status`;
   const publicSummary = !state.editable;
-  shell.innerHTML = `<section class="card head"><div><p class="eyebrow">Live event seating</p><h1>${esc(title)}</h1><p class="muted">${publicSummary ? "Guest status totals for this event." : "Manage your permitted guest side. Changes sync instantly."}</p></div><span class="badge ${state.editable ? "" : "readonly"}">${accessLabel}</span></section>
+  shell.innerHTML = `<section class="card head"><div><p class="eyebrow">Live event seating</p><h1>${esc(title)}</h1><p class="muted">${publicSummary ? `${esc(summaryFreshness())} Public totals are updated by an event organizer.` : "Manage your permitted guest side. Changes sync instantly."}</p></div><span class="badge ${state.editable ? "" : "readonly"}">${accessLabel}</span></section>
   <section class="stats" aria-label="Guest statistics">${stat(s.total, "Guest invitations")}${stat(s.invited, "People invited")}${stat(s.confirmed, "Coming")}${stat(s.declined, "Declined")}${stat(s.pending, "Pending")}${stat(s.sent, "Invitations sent")}${stat(s.seated, "People seated")}${stat(s.unseated, "Unseated people")}</section>
   ${publicSummary ? `<section class="card guest-card"><h2>Guest status</h2><p class="muted">Names, contact details, and individual seat assignments are available only to authorized event staff.</p></section>` : `<section class="card workspace-card"><h2>Seating layout</h2><p class="muted">Tap a chair to assign, move, swap, or unassign its occupant.</p><div class="toolbar"><button class="btn" data-zoom="in" aria-label="Zoom in">Zoom in</button><button class="btn" data-zoom="out" aria-label="Zoom out">Zoom out</button><button class="btn" data-zoom="fit">Fit layout</button><button class="btn" data-zoom="reset">Reset</button></div><div class="map-viewport" id="mapViewport"><div class="map-world" id="mapWorld">${renderTables()}</div></div></section>
   <section class="card guest-card"><h2>Guest list</h2><p class="muted">Your permitted guest side, including additional guests.</p><div class="roster">${renderRoster()}</div></section>`}`;
@@ -284,6 +392,11 @@ function render() {
 }
 function stat(value, label) {
   return `<div class="stat"><strong>${Number(value) || 0}</strong><span>${esc(label)}</span></div>`;
+}
+function summaryFreshness() {
+  const value = state.summaryUpdatedAt?.toDate?.() || (state.summaryUpdatedAt ? new Date(state.summaryUpdatedAt) : null);
+  if (!value || Number.isNaN(value.getTime())) return "Counts may be waiting for the event owner to update projections.";
+  return `Counts last updated ${new Intl.DateTimeFormat(undefined, { dateStyle: "medium", timeStyle: "short" }).format(value)}.`;
 }
 function publicViewStats() {
   const side = isCelebrationEvent(state.wedding)
@@ -550,24 +663,21 @@ async function mutate(type, source, destination = {}) {
       mutateDemo(type, source, destination);
       return;
     }
-    const change = httpsCallable(state.services.functions, "mutateSideSeating");
-    await change({
+    await mutateSeating({
+      api: { doc, runTransaction, serverTimestamp },
+      db: state.services.db,
       weddingId: state.weddingId,
+      uid: state.currentUser.uid,
+      permission: state.permission,
       type,
-      source: type === "assign"
-        ? { guestId: source.guestId, partyMemberIndex: source.partyMemberIndex }
-        : { tableId: source.tableId, chairId: source.chairId },
-      destination: type === "unassign" ? {} : {
-        tableId: destination.tableId,
-        chairId: destination.chairId,
-      },
+      source,
+      destination,
     });
     state.action = null;
-    await refreshSideSeatingData();
     toast(type === "swap" ? "Seats swapped." : type === "unassign" ? "Seat unassigned." : "Seating saved.");
   } catch (error) {
-    console.error(error?.code || "seating-unavailable");
-    toast("Could not save the seating change. Refresh and try again.");
+    console.error(error?.code || "seating-unavailable", error);
+    toast(error?.message || "Could not save the seating change. Check your connection and try again.");
   } finally {
     state.pending = false;
     render();

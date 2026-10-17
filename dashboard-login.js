@@ -123,8 +123,17 @@ function setSubmitLoading(isLoading) {
 }
 
 function redirectAfterLogin() {
-  // Every password sign-in starts in the workspace. Opening an event is a
-  // separate choice made from All Events after the account's access is loaded.
   isRedirecting = true;
+  const weddingId = params.get("wedding")?.trim() || "";
+  const requestedSide = params.get("side")?.trim().toLowerCase() || "";
+  if (weddingId && params.get("workspace") === "side") {
+    const target = new URL("./side.html", window.location.href);
+    target.searchParams.set("wedding", weddingId);
+    if (["bride", "groom", "family", "all"].includes(requestedSide)) {
+      target.searchParams.set("side", requestedSide);
+    }
+    window.location.replace(target.toString());
+    return;
+  }
   window.location.replace("./all-events.html");
 }

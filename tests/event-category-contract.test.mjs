@@ -16,11 +16,10 @@ test("event creation collects a category and disables hidden identity fields", a
 });
 
 test("celebration dashboard hides side controls and creates neutral guest values", async () => {
-  const [js, rules, functions] = await Promise.all([read("dashboard.js"), read("firestore.rules"), read("functions/index.js")]);
+  const [js, rules] = await Promise.all([read("dashboard.js"), read("firestore.rules")]);
   assert.match(js, /usesSides \? selectInput\("side"/);
   assert.match(js, /existingGuest\?\.side \|\| "general"/);
   assert.match(js, /: "general";/);
   assert.match(rules, /side == "general"/);
-  assert.match(functions, /if \(side === "general"\) return "general"/);
-  assert.match(functions, /eventCategory === "celebration"/);
+  assert.match(rules, /category == "celebration"/);
 });

@@ -1,72 +1,30 @@
 import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import test from "node:test";
-import vm from "node:vm";
 
 const source = await readFile(new URL("../dashboard.js", import.meta.url), "utf8");
-const bootstrap = source.slice(source.indexOf("async function bootstrapDashboard()"), source.indexOf("function isWeddingOwner()"));
+const seating = await readFile(new URL("../seating-firestore.js", import.meta.url), "utf8");
 
-function fixture(owner = true) {
-  const events = [];
-  let reject;
-  const pending = new Promise((_, fail) => { reject = fail; });
-  const state = {
-    services: { db: {}, functions: {} }, mode: "live", weddingId: "isolated-wedding",
-    currentUser: { uid: "isolated-owner" }, listenerGeneration: 0,
-  };
-  const context = vm.createContext({
-    state, requestedSeatingSide: "", accountSeatingEditorMode: false, doc: () => ({}),
-    can: (permission) => permission === "canEditGuests" && owner,
-    collection: () => ({}),
-    getDocs: () => { events.push("call"); return pending; },
-    getDoc: async () => ({ exists: () => true, data: () => ({ canViewDashboard: true, canEditGuests: owner }), id: "isolated-wedding" }),
-    rememberWeddingId() {}, hydrateHallObjects: () => [], isWeddingOwner: () => owner,
-    showDashboard: () => events.push("show"), renderAll: () => events.push("render"),
-    startWeddingListener: () => events.push("wedding-listener"),
-    startListeners: () => events.push("data-listeners"),
-    startSeatingAccessListener: () => events.push("access-listener"),
-    httpsCallable: (functions, name) => {
-      assert.equal(functions, state.services.functions);
-      assert.equal(name, "normalizeSeatingGuestSides");
-      return (data) => {
-        assert.equal(data.weddingId, "isolated-wedding");
-        events.push("call");
-        return pending;
-      };
-    },
-    console: { error: (...args) => events.push(["error", ...args]) },
-    showToast: (...args) => events.push(["toast", ...args]),
-  });
-  vm.runInContext(bootstrap, context);
-  return { context, state, events, reject };
-}
-
-test("dashboard finishes bootstrap while normalization is pending and reports rejection", async () => {
-  const f = fixture();
-  await f.context.bootstrapDashboard();
-  assert.deepEqual(f.events, ["show", "render", "wedding-listener", "data-listeners", "access-listener", "call"]);
-  const error = Object.assign(new Error("internal"), { code: "functions/internal" });
-  f.reject(error);
-  await new Promise(setImmediate);
-  assert.equal(f.events.find(e => e[0] === "error")[2], error);
-  const toast = f.events.find(e => e[0] === "toast");
-  assert.match(toast[1], /could not update all legacy guest side assignments/);
-  assert.equal(toast[2], "error");
+test("owner dashboard migrates legacy seating once before using canonical seat documents", () => {
+  assert.match(source, /void ensureSeatingSchema\(\)/);
+  assert.match(source, /migrateLegacySeating\(/);
+  assert.match(source, /state\.wedding = \{ \.\.\.state\.wedding, seatingSchemaVersion: 2 \}/);
+  assert.match(seating, /if \(eventSnapshot\.data\(\)\.seatingSchemaVersion === 2\) return \{ migrated: 0 \}/);
+  assert.match(seating, /seatAssignments/);
+  assert.match(seating, /seatedPeople/);
+  assert.match(seating, /seatingSchemaVersion: 2/);
+  assert.doesNotMatch(source, /httpsCallable|getFunctions|normalizeSeatingGuestSides/);
 });
 
-test("non-owner dashboard never calls normalization", async () => {
-  const f = fixture(false);
-  await f.context.bootstrapDashboard();
-  assert.ok(f.events.includes("data-listeners"));
-  assert.ok(!f.events.includes("call"));
-});
-
-test("late normalization failures are logged without notifying a disposed session", async () => {
-  const f = fixture();
-  await f.context.bootstrapDashboard();
-  f.state.listenerGeneration++;
-  f.reject(new Error("unavailable"));
-  await new Promise(setImmediate);
-  assert.ok(f.events.some(e => e[0] === "error"));
-  assert.ok(!f.events.some(e => e[0] === "toast"));
+test("dashboard maintains private guest projections and an owner repair action", () => {
+  assert.match(source, /async function syncPublicStats\(/);
+  assert.match(source, /"publicSummary", "summary"/);
+  assert.match(source, /"publicStats", "summary"/);
+  assert.match(source, /buildSeatingGuestProjection\(guest\)/);
+  assert.match(source, /buildCheckinGuestProjection\(guest, tables\)/);
+  assert.match(source, /"seatingGuests", id/);
+  assert.match(source, /"checkinGuests", id/);
+  assert.match(source, /data-action="repair-event-projections"/);
+  assert.match(source, /Repair projections/);
+  assert.match(source, /updatedAt: serverTimestamp\(\)/);
 });

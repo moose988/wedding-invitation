@@ -125,6 +125,12 @@ export async function saveInvitationRsvp(context, status, additionalGuests, mess
     const rsvpMessage = message === undefined ? String(context.guest.rsvpMessage || "").trim() : message.trim();
     const tokenRef = doc(db, "weddings", context.weddingId, "publicGuests", context.guestToken);
     const guestRef = doc(db, "weddings", context.weddingId, "guests", context.guestId);
+    const seatingGuestRef = doc(db, "weddings", context.weddingId, "seatingGuests", context.guestId);
+    const checkinGuestRef = doc(db, "weddings", context.weddingId, "checkinGuests", context.guestId);
+    const [seatingGuestSnapshot, checkinGuestSnapshot] = await Promise.all([
+      getDoc(seatingGuestRef).catch(() => null),
+      getDoc(checkinGuestRef).catch(() => null),
+    ]);
     const batch = writeBatch(db);
     const rsvpPatch = {
       rsvpStatus: normalizedStatus,
@@ -134,6 +140,15 @@ export async function saveInvitationRsvp(context, status, additionalGuests, mess
     };
     batch.update(tokenRef, rsvpPatch);
     batch.update(guestRef, rsvpPatch);
+    if (seatingGuestSnapshot?.exists()) batch.update(seatingGuestRef, {
+      rsvpStatus: normalizedStatus,
+      additionalGuests: additionalGuestCount,
+      updatedAt: serverTimestamp(),
+    });
+    if (checkinGuestSnapshot?.exists()) batch.update(checkinGuestRef, {
+      rsvpStatus: normalizedStatus,
+      updatedAt: serverTimestamp(),
+    });
     await batch.commit();
     context.guest = {
       ...context.guest,

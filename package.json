@@ -4,8 +4,7 @@
   "type": "module",
   "scripts": {
     "test": "node --test",
-    "test:security": "firebase emulators:exec --only firestore --project demo-wedding-security \"node --test tests/event-settings-firestore.test.mjs tests/firestore-security.test.mjs\"",
-    "test:functions": "node scripts/run-functions-emulator-tests.js"
+    "test:security": "firebase emulators:exec --only firestore --project demo-wedding-security \"node --test tests/event-settings-firestore.test.mjs tests/firestore-security.test.mjs\""
   },
   "devDependencies": {
     "@firebase/rules-unit-testing": "5.0.1",

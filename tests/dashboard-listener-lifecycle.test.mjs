@@ -9,7 +9,7 @@ test("dashboard snapshots replace ID-keyed guest and table collections", async (
   const dashboard = await read("dashboard.js");
 
   assert.match(dashboard, /state\.guests = uniqueRowsById\(snapshot\.docs\.map/);
-  assert.match(dashboard, /const nextTables = hydrateTables\(\s*uniqueRowsById\(snapshot\.docs\.map/s);
+  assert.match(dashboard, /const layoutTables = uniqueRowsById\(snapshot\.docs\.map[\s\S]*?const nextTables = hydrateTables\(\s*state\.seatAssignmentsReady \? projectSeatAssignments\(layoutTables/s);
   assert.match(dashboard, /state\.tables = nextTables;[\s\S]*?if \(state\.layoutPositionSavePending\) return/);
   assert.match(dashboard, /id: docSnapshot\.id/);
   assert.match(dashboard, /const byId = new Map\(\)/);
@@ -79,9 +79,9 @@ test("wedding list discovers from the private index and authorizes each canonica
 
   assert.match(weddings, /collection\(state\.services\.db, "users", state\.user\.uid, "weddingAccess"\)/);
   assert.match(weddings, /doc\(state\.services\.db, "weddings", entry\.id, "dashboardUsers", state\.user\.uid\)/);
-  assert.match(weddings, /membership\.data\(\)\.canViewDashboard !== true/);
+  assert.match(weddings, /permissions\.canViewDashboard !== true/);
   assert.match(weddings, /getDoc\(doc\(state\.services\.db, "weddings", entry\.id\)\)/);
-  assert.match(weddings, /if \(permissions\.seatingOnly === true\) \{[\s\S]*?return \{ \.\.\.eventSummary, id: entry\.id, isOwner: false, seatingOnly: true, allowedSide: permissions\.allowedSide \|\| "restricted" \};[\s\S]*?const snapshot = await getDoc/);
+  assert.match(weddings, /if \(permissions\.seatingOnly === true\) \{[\s\S]*?return \{ \.\.\.eventSummary, id: entry\.id, isOwner: false, seatingOnly: true, allowedSide: permissions\.allowedSide \|\| "restricted" \};/);
   assert.match(weddings, /state\.weddings = replaceRowsById\(indexed\.filter\(Boolean\)\)/);
   const discovery = weddings.slice(weddings.indexOf("async function refreshWorkspaceEvents"), weddings.indexOf("function replaceRowsById"));
   assert.doesNotMatch(discovery, /httpsCallable|collectionGroup|where\("status",\s*"==",\s*"active"\)/);
@@ -105,11 +105,14 @@ test("wedding action menus obey hidden state and close consistently", async () =
   assert.match(weddings, /closeActionMenus\(menu\); menu\.hidden = !shouldOpen/);
 });
 
-test("successful password login starts at All Events even from an event link", async () => {
+test("successful password login preserves side workspace context and otherwise opens All Events", async () => {
   const login = await read("dashboard-login.js");
 
   assert.match(login, /window\.location\.replace\("\.\/all-events\.html"\)/);
-  assert.doesNotMatch(login, /params\.get\("wedding"\)|redirectToDashboard/);
+  assert.match(login, /params\.get\("wedding"\)/);
+  assert.match(login, /params\.get\("workspace"\) === "side"/);
+  assert.match(login, /target\.searchParams\.set\("wedding", weddingId\)/);
+  assert.match(login, /target\.searchParams\.set\("side", requestedSide\)/);
   assert.doesNotMatch(login, /seatingOnlyMode/);
 });
 

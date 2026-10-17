@@ -38,11 +38,11 @@ test("omitting the optional additional-guest count preserves the current value",
 });
 
 test("public invitation documents allow exact capability gets but never listing", () => {
-  assert.match(rules, /function invitationEventExists\(weddingId\)[\s\S]*?return exists\(/);
+  assert.match(rules, /function invitationEventExists\(weddingId\)[\s\S]*?return eventAvailable\(weddingId\)/);
   assert.match(rules, /match \/publicGuests\/\{guestToken\}[\s\S]*?allow get: if isActiveInvitationToken\(weddingId, guestToken\) \|\| canReadInvitationTokenRecord\(weddingId, guestToken\);\s*allow list: if false/);
   assert.match(rules, /match \/invitationTokens\/\{token\}[\s\S]*?allow get: if canReadInvitationTokenRecord\(weddingId, token\);\s*allow list: if canManageGuestRecords\(weddingId\)/);
   assert.match(rules, /match \/invitationSecrets\/\{guestId\}[\s\S]*?allow get: if canManageInvitationForGuest\(weddingId, guestId\)/);
-  assert.match(rules, /match \/publicSummary\/\{docId\}[\s\S]*?allow get: if docId == "summary" && isPublicWedding\(weddingId\)/);
+  assert.match(rules, /match \/publicSummary\/\{docId\}[\s\S]*?allow get: if docId == "summary" && \(isPublicWedding\(weddingId\) \|\| isEventOwner\(weddingId\) \|\| canReadSeating\(weddingId\)\)/);
   assert.match(dashboard, /"publicGuests", token/);
 });
 

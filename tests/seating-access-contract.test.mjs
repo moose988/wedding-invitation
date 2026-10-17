@@ -6,53 +6,61 @@ import { buildAuthRouteUrl } from "../firebase-service-scopes.js";
 const root = new URL("../", import.meta.url);
 const read = (name) => readFile(new URL(name, root), "utf8");
 
-test("Groom and Bride side links require authenticated, side-scoped seating access", async () => {
-  const dashboard = await read("dashboard.js");
-  const login = await read("dashboard-login.js");
-
-  assert.match(dashboard, /\["bride", "groom"\]\.includes\(side\)/);
-  assert.match(dashboard, /dashboard-login\.html\?\$\{managerParams\.toString\(\)\}/);
-  assert.doesNotMatch(dashboard, /seatingOnly: "1"/);
-  assert.match(dashboard, /requestedSeatingSide && allowedSide !== "all" && requestedSeatingSide !== allowedSide/);
-  assert.match(login, /window\.location\.replace\("\.\/all-events\.html"\)/);
-  assert.doesNotMatch(login, /Event Seating Editor|Open seating editor|seatingOnlyMode/);
-  assert.equal(buildAuthRouteUrl("./dashboard.html", {
-    weddingId: "event-42",
-    side: "bride",
-  }), "./dashboard.html?wedding=event-42&side=bride");
+test("side links route through email/password sign-in and membership decides access", async () => {
+  const [dashboard, login, side, scopes, rules] = await Promise.all([
+    read("dashboard.js"), read("dashboard-login.js"), read("side.js"),
+    read("firebase-service-scopes.js"), read("firestore.rules"),
+  ]);
+  assert.match(dashboard, /workspace: "side"/);
+  assert.match(login, /signInWithEmailAndPassword\(services\.auth, email, password\)/);
+  assert.match(login, /params\.get\("workspace"\) === "side"/);
+  assert.match(side, /auth\.authStateReady\(\)/);
+  assert.match(side, /"dashboardUsers", user\.uid/);
+  assert.match(side, /permission\.allowedSide/);
+  assert.doesNotMatch(side, /httpsCallable|signInWithCustomToken|setInterval/);
+  assert.doesNotMatch(scopes, /seatingEditor|seating-only Firebase Auth/);
+  assert.match(rules, /function seatingMemberMayReadSide\(weddingId, side\)/);
+  assert.match(rules, /function seatingMemberMayEditSide\(weddingId, side\)/);
+  assert.match(rules, /allowedSide == "all"/);
+  assert.match(rules, /allowedSide in \["bride", "groom", "family"\]/);
+  assert.match(rules, /category == "celebration" \? side == "general" : side != "general"/);
+  assert.equal(buildAuthRouteUrl("./dashboard.html", { weddingId: "event-42", side: "bride" }),
+    "./dashboard.html?wedding=event-42&side=bride");
+  assert.equal(buildAuthRouteUrl("./dashboard-login.html", { weddingId: "event-42", side: "bride", workspace: "side" }),
+    "./dashboard-login.html?wedding=event-42&side=bride&workspace=side");
 });
 
-test("seat-only guest writes are restricted to seating fields and the allowed side", async () => {
-  const [rules, dashboard] = await Promise.all([read("firestore.rules"), read("dashboard.js")]);
-
-  assert.match(rules, /function isSeatingOnlyDashboardAccount/);
-  assert.match(rules, /request\.auth\.token\.get\("seatingEditor", false\) == true/);
-  assert.match(rules, /request\.auth\.token\.get\("seatingWeddingId", ""\) == weddingId/);
-  assert.match(rules, /data\.get\("seatingOnly", false\) == true/);
-  assert.match(rules, /allowedSide in \["bride", "groom", "all"\]/);
-  assert.match(rules, /allowedSide == "all"\s*\|\| normalizedGuestSide\(guest\) == dashboardUser\(weddingId\)\.data\.allowedSide/);
-  assert.match(rules, /function canManageGuestRecords\(weddingId\)[\s\S]*?data\.get\("seatingOnly", false\) != true/);
-  assert.match(rules, /function isGuestSeatingUpdate\(weddingId\)[\s\S]*?return canEditSeating\(weddingId\) &&\s*!isSeatingOnlyDashboardAccount\(weddingId\)/);
-  assert.match(rules, /allow update: if canManageSeatingLayout\(weddingId\) &&\s*!isSeatingOnlyDashboardAccount\(weddingId\)/);
-  assert.match(rules, /eventCategory", "wedding_engagement"\) == "wedding_engagement"/);
-  assert.match(rules, /function seatingAccountMayReadGuest/);
-  assert.match(rules, /category == "celebration"\s*\? \(side == "general" \|\| unchangedSide\)/);
-  assert.match(rules, /allow create, delete: if canManageSeatingLayout\(weddingId\) &&\s*!isSeatingOnlyDashboardAccount\(weddingId\)/);
-  assert.match(rules, /allow update: if canManageSeatingLayout\(weddingId\) &&\s*!isSeatingOnlyDashboardAccount\(weddingId\)/);
-  assert.match(dashboard, /function canManageSeatingLayout\(\)\s*\{\s*const explicitLayoutAccess = state\.permissions\?\.canManageSeatingLayout === true;/);
-  assert.doesNotMatch(dashboard + rules, /girl@gmail\.com/);
-  const sideMutation = (await read("functions/index.js")).slice(
-    (await read("functions/index.js")).indexOf("exports.mutateSideSeating"),
-  );
-  assert.match(sideMutation, /sideMatches\(sourceGuest, access\.role\)/);
-  assert.match(sideMutation, /sideMatches\(otherGuest, access\.role\)/);
-  assert.match(sideMutation, /partyMemberIndex/);
-  assert.match(sideMutation, /personKeys\.has\(key\)/);
+test("legacy editor-token URLs only route to account sign-in", async () => {
+  const [dashboard, side] = await Promise.all([read("dashboard.js"), read("side.js")]);
+  assert.match(dashboard, /params\.has\("token"\)/);
+  assert.match(dashboard, /message: "account-sign-in-required"/);
+  assert.match(side, /function renderLegacyEditorRoute\(\)/);
+  assert.match(side, /This seating link has been retired/);
+  assert.match(side, /Sign in with the account the event owner authorized/);
 });
 
-test("Family remains a public status page and cannot receive a manager link", async () => {
-  const dashboard = await read("dashboard.js");
+test("canonical seat and person records enforce side, person, and chair identity", async () => {
+  const [rules, seating, side] = await Promise.all([
+    read("firestore.rules"), read("seating-firestore.js"), read("side.js"),
+  ]);
+  assert.match(seating, /export async function mutateSeating\(/);
+  for (const action of ["assign", "move", "swap", "unassign"]) assert.ok(seating.includes(`"${action}"`));
+  assert.match(seating, /runTransaction/);
+  assert.match(seating, /seatedPersonRef/);
+  assert.match(seating, /destinationOccupancy\.data\(\)\.occupied === true/);
+  assert.match(rules, /function validSeatAssignment\(/);
+  assert.match(rules, /function validSeatedPerson\(/);
+  assert.match(rules, /let guestAfter = getAfter\(guestPath\)\.data/);
+  assert.match(rules, /data\.partyMemberIndex <= guestAfter\.additionalGuests/);
+  assert.match(rules, /seatingMemberMayEditSide\(weddingId, resource\.data\.side\)/);
+  assert.match(side, /mutateSeating\(/);
+  assert.doesNotMatch(`${side}\n${seating}`, /httpsCallable|getFunctions|cloudfunctions\.net/);
+});
 
-  assert.match(dashboard, /if \(\["bride", "groom"\]\.includes\(side\) && state\.mode !== "demo"\)/);
-  assert.match(dashboard, /`side\.html\?\$\{linkParams\.toString\(\)\}`/);
+test("family access remains read-only and seating-disabled events cannot be edited", async () => {
+  const [side, seating, rules] = await Promise.all([read("side.js"), read("seating-firestore.js"), read("firestore.rules")]);
+  assert.match(side, /permission\.canEditSeating === true && allowed !== "family"/);
+  assert.match(seating, /allowedSide.*family/);
+  assert.match(seating, /seatingEnabled === false/);
+  assert.match(rules, /get\("seatingEnabled", true\) == true/);
 });

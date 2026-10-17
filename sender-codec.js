@@ -35,6 +35,7 @@ export function createSenderPayload({ weddingId, coupleName, side, guests, event
     sid: senderId || "",
     ...(eventCategory ? { cat: eventCategory } : {}),
     g: (guests || []).map((guest) => ({
+      i: guest.id || "",
       n: guest.fullName || "",
       p: guest.phone || "",
       s: guest.side || "",

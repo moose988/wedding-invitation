@@ -2,306 +2,308 @@ import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import test from "node:test";
 import { createInvitationTokenService } from "../invitations/shared/invitation-token-service.js";
+import { migrateLegacySeating, mutateSeating } from "../seating-firestore.js";
 
 const emulatorAvailable = Boolean(process.env.FIRESTORE_EMULATOR_HOST);
 
-test("Firestore rules enforce event, guest, seating, invitation, and check-in boundaries", {
+const event = (ownerUserId, eventTitle = "Test event") => ({
+  ownerUserId, eventTitle, eventCategory: "wedding_engagement", status: "active",
+  eventDateISO: "2027-05-20T18:00:00.000Z", venueEn: "Test venue",
+  seatingEnabled: true, seatingSchemaVersion: 2,
+});
+
+const membership = (userId, overrides = {}) => ({
+  userId, email: `${userId}@example.test`, role: "member",
+  canViewDashboard: false, canEditGuests: false, canEditSeating: false,
+  canCheckIn: false, canManageUsers: false, canEditEventDetails: false,
+  seatingOnly: false, allowedSide: "all", ...overrides,
+});
+
+const guest = (id, side) => ({
+  fullName: `${id} Guest`, phone: "971500000001", side,
+  additionalGuests: 1, additionalGuestAllowance: 2, rsvpStatus: "pending", rsvpMessage: "",
+  tableId: "", tableName: "", seatNumber: "", seatingAssignments: [],
+  checkedIn: false, checkedInAt: null, notes: "private organizer note",
+  inviteSentAt: null, reminderSentAt: null,
+});
+
+const seatingGuest = (id, side) => ({ fullName: `${id} Guest`, side, additionalGuests: 1, rsvpStatus: "pending" });
+
+const checkinGuest = (id, side) => ({
+  guestId: id, fullName: `${id} Guest`, phone: "971500000001", side,
+  rsvpStatus: "pending", tableId: "", tableName: "", seatNumber: "",
+  checkedIn: false, checkedInAt: null,
+});
+
+test("Spark Firestore rules and direct client workflows enforce event, seating, RSVP, sender, and check-in boundaries", {
   skip: emulatorAvailable ? false : "Run with the Firestore Emulator to verify security rules.",
 }, async () => {
   const [{ assertFails, assertSucceeds, initializeTestEnvironment }, firestore] = await Promise.all([
-    import("@firebase/rules-unit-testing"),
-    import("firebase/firestore"),
+    import("@firebase/rules-unit-testing"), import("firebase/firestore"),
   ]);
   const rules = await readFile(new URL("../firestore.rules", import.meta.url), "utf8");
   const env = await initializeTestEnvironment({ projectId: "demo-wedding-security", firestore: { rules } });
-  const guestData = (side) => ({
-    fullName: `${side} guest`, phone: "", side, additionalGuests: 1, additionalGuestAllowance: 2,
-    rsvpStatus: "pending", rsvpMessage: "", tableId: "", tableName: "", seatNumber: "",
-    seatingAssignments: [], checkedIn: false, checkedInAt: null, notes: "",
-    inviteSentAt: null, reminderSentAt: null, createdAt: new Date(), updatedAt: new Date(),
-  });
-  const guestPath = (eventId, id) => `weddings/${eventId}/guests/${id}`;
-  const tablePath = (eventId, id) => `weddings/${eventId}/tables/${id}`;
+  const api = {
+    doc: firestore.doc, runTransaction: firestore.runTransaction,
+    serverTimestamp: firestore.serverTimestamp,
+  };
 
   try {
+    // The owner can create the event and its own authoritative membership in
+    // one batch. No self-promotion write is required after event creation.
+    const ownerBootstrap = env.authenticatedContext("owner-a").firestore();
+    const bootstrap = firestore.writeBatch(ownerBootstrap);
+    bootstrap.set(firestore.doc(ownerBootstrap, "weddings/event-a"), event("owner-a", "A & B"));
+    bootstrap.set(firestore.doc(ownerBootstrap, "weddings/event-a/dashboardUsers/owner-a"), {
+      ...membership("owner-a", {
+        canViewDashboard: true, canEditGuests: true, canEditSeating: true,
+        canCheckIn: true, canManageUsers: true, canEditEventDetails: true,
+      }),
+      createdAt: firestore.serverTimestamp(), updatedAt: firestore.serverTimestamp(),
+    });
+    await assertSucceeds(bootstrap.commit());
+    await assertSucceeds(firestore.getDoc(firestore.doc(ownerBootstrap, "weddings/event-a")));
+
     await env.withSecurityRulesDisabled(async (context) => {
       const db = context.firestore();
-      for (const eventId of ["event-a", "event-b"]) {
-        await firestore.setDoc(firestore.doc(db, `weddings/${eventId}`), {
-          ownerUserId: eventId === "event-a" ? "owner-a" : "owner-b",
-          eventCategory: "wedding_engagement", eventTitle: eventId, status: "active",
-          eventDateISO: "2027-05-20T18:00:00.000Z", venueEn: "Test venue",
+      await firestore.setDoc(firestore.doc(db, "weddings/event-b"), event("owner-b", "Other event"));
+      await firestore.setDoc(firestore.doc(db, "weddings/event-a/publicSummary/summary"), {
+        eventId: "event-a", eventTitle: "A & B", coupleName: "A & B", eventCategory: "wedding_engagement",
+        seatingEnabled: true, seatingSchemaVersion: 2, stats: { total: 3, bride: 2, groom: 1 }, updatedAt: new Date(),
+      });
+      await firestore.setDoc(firestore.doc(db, "weddings/event-a/publicStats/summary"), {
+        eventId: "event-a", eventCategory: "wedding_engagement", stats: { total: 3 }, updatedAt: new Date(),
+      });
+      for (const [uid, role] of [
+        ["bride-a", membership("bride-a", { canViewDashboard: true, canEditSeating: true, seatingOnly: true, allowedSide: "bride" })],
+        ["bride-b", membership("bride-b", { canViewDashboard: true, canEditSeating: true, seatingOnly: true, allowedSide: "bride" })],
+        ["groom-seat", membership("groom-seat", { canViewDashboard: true, canEditSeating: true, seatingOnly: true, allowedSide: "groom" })],
+        ["groom-checkin", membership("groom-checkin", { canCheckIn: true, allowedSide: "groom" })],
+        ["guest-editor", membership("guest-editor", { canViewDashboard: true, canEditGuests: true })],
+      ]) await firestore.setDoc(firestore.doc(db, `weddings/event-a/dashboardUsers/${uid}`), role);
+
+      for (const [id, side] of [["bride-1", "bride"], ["bride-2", "bride"], ["groom-1", "groom"]]) {
+        await firestore.setDoc(firestore.doc(db, `weddings/event-a/guests/${id}`), {
+          ...guest(id, side), createdAt: new Date(), updatedAt: new Date(),
         });
-        await firestore.setDoc(firestore.doc(db, `weddings/${eventId}/publicSummary/summary`), { eventTitle: eventId });
+        await firestore.setDoc(firestore.doc(db, `weddings/event-a/seatingGuests/${id}`), seatingGuest(id, side));
+        await firestore.setDoc(firestore.doc(db, `weddings/event-a/checkinGuests/${id}`), checkinGuest(id, side));
       }
-      for (const [uid, permissions] of [
-        ["owner-a", { canViewDashboard: true, canManageUsers: true, canEditGuests: true, canEditSeating: true, canManageSeatingLayout: true, canCheckIn: true, allowedSide: "all" }],
-        ["guest-editor-a", { canViewDashboard: true, canEditGuests: true }],
-        ["bride-seat-a", { canViewDashboard: true, canEditGuests: true, canEditSeating: true, canManageSeatingLayout: true, seatingOnly: true, allowedSide: "bride" }],
-        ["groom-checkin-a", { canCheckIn: true, allowedSide: "groom" }],
-      ]) {
-        await firestore.setDoc(firestore.doc(db, `weddings/event-a/dashboardUsers/${uid}`), { ...permissions, userId: uid });
-      }
-      await firestore.setDoc(firestore.doc(db, "weddings/event-a/guests/bride-1"), guestData("bride"));
-      const legacyBrideGuest = guestData("bride");
-      delete legacyBrideGuest.additionalGuestAllowance;
-      await firestore.setDoc(firestore.doc(db, "weddings/event-a/guests/bride-2"), legacyBrideGuest);
-      await firestore.setDoc(firestore.doc(db, "weddings/event-a/guests/groom-1"), guestData("groom"));
       await firestore.setDoc(firestore.doc(db, "weddings/event-a/tables/table-1"), {
-        name: "Table 1", capacity: 8, seatCount: 8, x: 20, y: 20, width: 180, height: 180,
-        shape: "round", chairs: [], guestIds: [], updatedAt: new Date(),
+        name: "Table 1", capacity: 3, seatCount: 3, x: 20, y: 20, width: 180, height: 180,
+        shape: "round", chairs: [
+          { id: "chair-1", seatNumber: 1, x: 25, y: 25 },
+          { id: "chair-2", seatNumber: 2, x: 75, y: 25 },
+          { id: "chair-3", seatNumber: 3, x: 75, y: 75 },
+        ], updatedAt: new Date(),
       });
-      await firestore.setDoc(firestore.doc(db, "weddings/event-a/publicGuests/legacy-token"), {
-        guestId: "bride-1", fullName: "Private name", phone: "private", guestToken: "legacy-token",
-      });
-      await firestore.setDoc(firestore.doc(db, "weddings/event-a/publicStats/summary"), { guestCount: 2 });
-      const capability = "A".repeat(43);
-      const capabilityExpiry = new Date("2020-01-01T00:00:00.000Z");
-      await firestore.setDoc(firestore.doc(db, `weddings/event-a/invitationSecrets/bride-1`), {
-        token: capability, status: "active", purpose: "guest-invitation", version: 1,
-        expiresAt: capabilityExpiry, createdAt: new Date(), updatedAt: new Date(),
-      });
-      await firestore.setDoc(firestore.doc(db, `weddings/event-a/invitationTokens/${capability}`), {
-        guestId: "bride-1", status: "active", purpose: "guest-invitation", version: 1,
-        expiresAt: capabilityExpiry, createdAt: new Date(), updatedAt: new Date(),
-      });
-      await firestore.setDoc(firestore.doc(db, `weddings/event-a/publicGuests/${capability}`), {
-        eventId: "event-a", wedding: { eventTitle: "event-a" },
-        guest: { fullName: "bride guest", additionalGuestAllowance: 2 },
-        rsvpStatus: "pending", additionalGuests: 1, rsvpMessage: "", expiresAt: capabilityExpiry, updatedAt: new Date(),
-      });
-      await firestore.setDoc(firestore.doc(db, "invitationAccessTokens/hash"), { weddingId: "event-a", guestId: "bride-1" });
-      await firestore.setDoc(firestore.doc(db, "senderSessions/hash"), {
-        weddingId: "event-a", purpose: "whatsapp-sender", guestIds: ["bride-1"], status: "active",
-      });
+      for (const chairId of ["chair-1", "chair-2", "chair-3"]) {
+        await firestore.setDoc(firestore.doc(db, `weddings/event-a/seatOccupancy/table-1~${chairId}`), {
+          weddingId: "event-a", tableId: "table-1", chairId, occupied: false, updatedAt: new Date(),
+        });
+      }
     });
 
+    const brideA = env.authenticatedContext("bride-a").firestore();
+    const brideB = env.authenticatedContext("bride-b").firestore();
+    const groomSeat = env.authenticatedContext("groom-seat").firestore();
+    const checkin = env.authenticatedContext("groom-checkin").firestore();
     const anonymous = env.unauthenticatedContext().firestore();
-    await assertFails(firestore.getDoc(firestore.doc(anonymous, "weddings/event-a")));
-    await assertFails(firestore.getDoc(firestore.doc(anonymous, guestPath("event-a", "bride-1"))));
-    await assertFails(firestore.getDocs(firestore.collection(anonymous, "weddings/event-a/guests")));
-    await assertFails(firestore.getDoc(firestore.doc(anonymous, tablePath("event-a", "table-1"))));
-    await assertFails(firestore.getDoc(firestore.doc(anonymous, "weddings/event-a/publicGuests/legacy-token")));
-    const validInvitationPath = "weddings/event-a/publicGuests/" + "A".repeat(43);
-    await env.withSecurityRulesDisabled(async (context) => {
-      await firestore.updateDoc(firestore.doc(context.firestore(), "weddings/event-a"), { status: "completed" });
-    });
-    await assertSucceeds(firestore.getDoc(firestore.doc(anonymous, validInvitationPath)));
-    await assertFails(firestore.getDocs(firestore.collection(anonymous, "weddings/event-a/publicGuests")));
-    await assertFails(firestore.getDoc(firestore.doc(anonymous, "weddings/event-b/publicGuests/" + "A".repeat(43))));
-    await assertFails(firestore.updateDoc(firestore.doc(anonymous, validInvitationPath), {
-      rsvpStatus: "confirmed", additionalGuests: 3, updatedAt: firestore.serverTimestamp(),
+
+    await assertSucceeds(firestore.getDoc(firestore.doc(brideA, "weddings/event-a/dashboardUsers/bride-a")));
+    await assertFails(firestore.getDoc(firestore.doc(brideA, "weddings/event-a")));
+    await assertFails(firestore.getDoc(firestore.doc(brideA, "weddings/event-b")));
+    await assertFails(firestore.getDoc(firestore.doc(brideA, "weddings/event-a/guests/bride-1")));
+    await assertSucceeds(firestore.getDoc(firestore.doc(brideA, "weddings/event-a/seatingGuests/bride-1")));
+    await assertFails(firestore.getDoc(firestore.doc(brideA, "weddings/event-a/seatingGuests/groom-1")));
+    await assertFails(firestore.getDocs(firestore.query(
+      firestore.collection(brideA, "weddings/event-a/seatingGuests"), firestore.where("side", "==", "groom"),
+    )));
+    await assertSucceeds(firestore.getDoc(firestore.doc(brideA, "weddings/event-a/seatAssignments/table-1~chair-1")));
+    await assertFails(firestore.setDoc(firestore.doc(brideA, "weddings/event-a/dashboardUsers/bride-a"), {
+      ...membership("bride-a", { canViewDashboard: true, canManageUsers: true, seatingOnly: true, allowedSide: "all" }),
     }));
-    const deniedStandaloneRsvp = firestore.writeBatch(anonymous);
-    deniedStandaloneRsvp.update(firestore.doc(anonymous, validInvitationPath), {
-      rsvpStatus: "confirmed", additionalGuests: 2, rsvpMessage: "Looking forward to it.",
-      updatedAt: firestore.serverTimestamp(),
+
+    // Simultaneous clients compete for the same chair. Transaction conflict
+    // retries plus deterministic seat/person documents allow only one winner.
+    const assignment = (db, uid, guestId, chairId = "chair-1", partyMemberIndex = 0) => mutateSeating({
+      api, db, uid, weddingId: "event-a", permission: { canEditSeating: true, allowedSide: "bride" },
+      type: "assign", source: { guestId, partyMemberIndex },
+      destination: { tableId: "table-1", chairId },
     });
-    await assertFails(deniedStandaloneRsvp.commit());
-    const rsvpBatch = firestore.writeBatch(anonymous);
+    const raced = await Promise.allSettled([
+      assignment(brideA, "bride-a", "bride-1"), assignment(brideB, "bride-b", "bride-2"),
+    ]);
+    assert.equal(raced.filter((result) => result.status === "fulfilled").length, 1);
+    assert.equal(raced.filter((result) => result.status === "rejected").length, 1);
+    const occupiedSeat = await firestore.getDoc(firestore.doc(brideA, "weddings/event-a/seatAssignments/table-1~chair-1"));
+    assert.ok(["bride-1", "bride-2"].includes(occupiedSeat.data().guestId));
+    await assert.rejects(assignment(groomSeat, "groom-seat", "bride-1", "chair-2"), /other side|permissions|denied|unavailable/i);
+
+    // Additional guests obey the RSVP party size. Exercise assign, move, swap,
+    // and unassign against the same canonical seat/person records.
+    await assignment(brideA, "bride-a", occupiedSeat.data().guestId, "chair-2", 1);
+    await mutateSeating({ api, db: brideA, uid: "bride-a", weddingId: "event-a",
+      permission: { canEditSeating: true, allowedSide: "bride" }, type: "move",
+      source: { tableId: "table-1", chairId: "chair-2" },
+      destination: { tableId: "table-1", chairId: "chair-3" } });
+    await mutateSeating({ api, db: brideA, uid: "bride-a", weddingId: "event-a",
+      permission: { canEditSeating: true, allowedSide: "bride" }, type: "swap",
+      source: { tableId: "table-1", chairId: "chair-1" },
+      destination: { tableId: "table-1", chairId: "chair-3" } });
+    await mutateSeating({ api, db: brideA, uid: "bride-a", weddingId: "event-a",
+      permission: { canEditSeating: true, allowedSide: "bride" }, type: "unassign",
+      source: { tableId: "table-1", chairId: "chair-1" } });
+    const clearedChair = await firestore.getDoc(firestore.doc(brideA, "weddings/event-a/seatAssignments/table-1~chair-1"));
+    assert.equal(clearedChair.exists(), false);
+    assert.equal((await firestore.getDoc(firestore.doc(brideA, "weddings/event-a/seatOccupancy/table-1~chair-1"))).data().occupied, false);
+
+    // A legacy layout assignment can be migrated by the event owner once; its
+    // table/chair identity survives and its nested mirrors are then cleared.
+    await env.withSecurityRulesDisabled(async (context) => {
+      const db = context.firestore();
+      await firestore.updateDoc(firestore.doc(db, "weddings/event-a"), { seatingSchemaVersion: 1 });
+      for (const guestId of ["bride-1", "bride-2", "groom-1"]) {
+        await firestore.deleteDoc(firestore.doc(db, `weddings/event-a/seatedPeople/${guestId}~main`));
+      }
+      for (const chairId of ["chair-1", "chair-2"]) {
+        await firestore.deleteDoc(firestore.doc(db, `weddings/event-a/seatAssignments/table-1~${chairId}`));
+        await firestore.updateDoc(firestore.doc(db, `weddings/event-a/seatOccupancy/table-1~${chairId}`), { occupied: false });
+      }
+      await firestore.deleteDoc(firestore.doc(db, "weddings/event-a/seatAssignments/table-1~chair-3"));
+      await firestore.updateDoc(firestore.doc(db, "weddings/event-a/seatOccupancy/table-1~chair-3"), { occupied: false });
+      await firestore.updateDoc(firestore.doc(db, "weddings/event-a/tables/table-1"), {
+        chairs: [
+          { id: "chair-1", seatNumber: 1, x: 25, y: 25, assignment: { guestId: "bride-1", partyMemberIndex: 0 } },
+          { id: "chair-2", seatNumber: 2, x: 75, y: 25 },
+          { id: "chair-3", seatNumber: 3, x: 75, y: 75 },
+        ], guestIds: ["bride-1"],
+      });
+      await firestore.updateDoc(firestore.doc(db, "weddings/event-a/guests/bride-1"), {
+        seatingAssignments: [{ tableId: "table-1", chairId: "chair-1", partyMemberIndex: 0 }],
+      });
+    });
+    const ownerApi = { ...firestore };
+    const migrationResult = await migrateLegacySeating({ api: ownerApi, db: ownerBootstrap, weddingId: "event-a", uid: "owner-a" });
+    assert.equal(migrationResult.migrated, 1);
+    const migratedTable = await firestore.getDoc(firestore.doc(ownerBootstrap, "weddings/event-a/tables/table-1"));
+    assert.equal(migratedTable.data().chairs[0].id, "chair-1");
+    assert.equal(Object.hasOwn(migratedTable.data().chairs[0], "assignment"), false);
+    assert.equal((await migrateLegacySeating({ api: ownerApi, db: ownerBootstrap, weddingId: "event-a", uid: "owner-a" })).migrated, 0);
+
+    // Stable token creation remains client-side and survives a fresh service
+    // instance. The bearer reads exactly one minimized public projection.
+    const token = Buffer.from(new Uint8Array(32).fill(41)).toString("base64url");
+    const scope = {
+      uid: "owner-a", weddingId: "event-a", guestId: "bride-1",
+      wedding: { eventTitle: "A & B", eventCategory: "wedding_engagement", eventDateISO: "2027-05-20T18:00:00.000Z" },
+      tables: [],
+    };
+    const service = createInvitationTokenService({ db: ownerBootstrap, firestore, tokenFactory: () => token });
+    const tokenCopied = await service.ensure(scope);
+    assert.equal(await service.ensure(scope), tokenCopied);
+    const freshService = createInvitationTokenService({ db: ownerBootstrap, firestore, tokenFactory: () => "B".repeat(43) });
+    assert.equal(await freshService.ensure(scope), tokenCopied);
+    const invitationRef = firestore.doc(anonymous, `weddings/event-a/publicGuests/${token}`);
+    const publicInvitation = await assertSucceeds(firestore.getDoc(invitationRef));
+    assert.equal(publicInvitation.data().guest.fullName, "bride-1 Guest");
+    assert.equal(Object.hasOwn(publicInvitation.data(), "phone"), false);
+    assert.equal(Object.hasOwn(publicInvitation.data(), "guestId"), false);
+    await assertFails(firestore.getDocs(firestore.collection(anonymous, "weddings/event-a/publicGuests")));
+    await assertFails(firestore.getDoc(firestore.doc(anonymous, "weddings/event-a/guests/bride-1")));
+
+    // Invitation RSVP updates the canonical guest and the exact-token public
+    // projection in the same commit; allowance and field limits are enforced.
+    const rsvp = firestore.writeBatch(anonymous);
     const rsvpPatch = {
-      rsvpStatus: "confirmed", additionalGuests: 2, rsvpMessage: "Looking forward to it.",
+      rsvpStatus: "confirmed", additionalGuests: 2, rsvpMessage: "See you there!",
       updatedAt: firestore.serverTimestamp(),
     };
-    rsvpBatch.update(firestore.doc(anonymous, validInvitationPath), rsvpPatch);
-    rsvpBatch.update(firestore.doc(anonymous, guestPath("event-a", "bride-1")), rsvpPatch);
-    await assertSucceeds(rsvpBatch.commit());
-    await assertFails(firestore.getDoc(firestore.doc(anonymous, guestPath("event-a", "bride-1"))));
-    let persistedRsvp;
-    await env.withSecurityRulesDisabled(async (context) => {
-      persistedRsvp = await firestore.getDoc(firestore.doc(context.firestore(), validInvitationPath));
-    });
-    assert.equal(persistedRsvp.data().rsvpStatus, "confirmed");
-    assert.equal(persistedRsvp.data().additionalGuests, 2);
-    const owner = env.authenticatedContext("owner-a").firestore();
-    const longLivedService = createInvitationTokenService({ db: owner, firestore });
-    const longLivedScope = { uid: "owner-a", weddingId: "event-a", guestId: "bride-1", tables: [] };
-    assert.equal(await longLivedService.ensure(longLivedScope), "A".repeat(43));
-    let longLivedProjection;
-    await env.withSecurityRulesDisabled(async (context) => {
-      longLivedProjection = await firestore.getDoc(firestore.doc(context.firestore(), validInvitationPath));
-    });
-    assert.equal(longLivedProjection.data().expiresAt, null);
-    assert.equal(longLivedProjection.data().rsvpStatus, "confirmed");
-    await env.withSecurityRulesDisabled(async (context) => {
-      await firestore.updateDoc(firestore.doc(context.firestore(), "weddings/event-a"), { status: "active" });
-    });
-    await assertFails(firestore.updateDoc(firestore.doc(anonymous, validInvitationPath), {
-      phone: "971500000000", updatedAt: firestore.serverTimestamp(),
-    }));
-    await assertFails(firestore.updateDoc(firestore.doc(anonymous, validInvitationPath), {
-      guest: firestore.deleteField(), updatedAt: firestore.serverTimestamp(),
-    }));
-    await assertFails(firestore.getDoc(firestore.doc(anonymous, "weddings/event-a/invitationSecrets/bride-1")));
-    await assertFails(firestore.getDoc(firestore.doc(anonymous, "weddings/event-a/invitationTokens/" + "A".repeat(43))));
-    await assertFails(firestore.getDoc(firestore.doc(anonymous, "weddings/event-a/publicStats/summary")));
-    await assertFails(firestore.getDoc(firestore.doc(anonymous, "invitationAccessTokens/hash")));
-    await assertFails(firestore.getDoc(firestore.doc(anonymous, "senderSessions/hash")));
-    await assertFails(firestore.setDoc(firestore.doc(anonymous, "senderSessions/forged"), { purpose: "whatsapp-sender" }));
-    await assertSucceeds(firestore.getDoc(firestore.doc(anonymous, "weddings/event-a/publicSummary/summary")));
+    rsvp.update(invitationRef, rsvpPatch);
+    rsvp.update(firestore.doc(anonymous, "weddings/event-a/guests/bride-1"), rsvpPatch);
+    await assertSucceeds(rsvp.commit());
+    const overAllowance = firestore.writeBatch(anonymous);
+    const invalidPatch = { ...rsvpPatch, additionalGuests: 3, updatedAt: firestore.serverTimestamp() };
+    overAllowance.update(invitationRef, invalidPatch);
+    overAllowance.update(firestore.doc(anonymous, "weddings/event-a/guests/bride-1"), invalidPatch);
+    await assertFails(overAllowance.commit());
 
-    const eventAEditor = env.authenticatedContext("guest-editor-a").firestore();
-    await assertSucceeds(firestore.getDoc(firestore.doc(eventAEditor, guestPath("event-a", "bride-1"))));
-    await assertFails(firestore.getDoc(firestore.doc(eventAEditor, "weddings/event-b")));
-    await assertFails(firestore.getDoc(firestore.doc(eventAEditor, guestPath("event-b", "bride-1"))));
-    await assertFails(firestore.updateDoc(firestore.doc(eventAEditor, guestPath("event-a", "bride-1")), { guestToken: "forged" }));
-    await assertFails(firestore.updateDoc(firestore.doc(eventAEditor, guestPath("event-a", "bride-1")), { ownerUserId: "attacker" }));
-    await assertFails(firestore.updateDoc(firestore.doc(eventAEditor, guestPath("event-a", "bride-1")), { side: firestore.deleteField() }));
-    await assertFails(firestore.updateDoc(firestore.doc(eventAEditor, "weddings/event-a"), {
-      ownerUserId: firestore.deleteField(), updatedAt: firestore.serverTimestamp(),
-    }));
-    await assertFails(firestore.deleteDoc(firestore.doc(eventAEditor, "weddings/event-a")));
-
-    const brideSeat = env.authenticatedContext("bride-seat-a").firestore();
-    await assertSucceeds(firestore.getDoc(firestore.doc(brideSeat, guestPath("event-a", "bride-1"))));
-    await assertFails(firestore.getDoc(firestore.doc(brideSeat, guestPath("event-a", "groom-1"))));
-    await assertSucceeds(firestore.getDoc(firestore.doc(brideSeat, "weddings/event-a/invitationSecrets/bride-1")));
-    await assertFails(firestore.getDoc(firestore.doc(brideSeat, "weddings/event-a/invitationSecrets/groom-1")));
-    await assertFails(firestore.getDocs(firestore.collection(brideSeat, "weddings/event-a/invitationSecrets")));
-    const brideInvitationService = createInvitationTokenService({ db: brideSeat, firestore });
-    assert.equal(await brideInvitationService.ensure({ uid: "bride-seat-a", weddingId: "event-a", guestId: "bride-1", tables: [] }), "A".repeat(43));
-    let restrictedTokenByte = 90;
-    const restrictedIssueService = createInvitationTokenService({
-      db: brideSeat,
-      firestore,
-      tokenFactory: () => Buffer.from(new Uint8Array(32).fill(++restrictedTokenByte)).toString("base64url"),
-    });
-    const restrictedToken = await restrictedIssueService.ensure({
-      uid: "bride-seat-a", weddingId: "event-a", guestId: "bride-2",
-      tables: Array.from({ length: 7 }, (_, tableIndex) => ({
-        id: `table-${tableIndex + 1}`, name: `Table ${tableIndex + 1}`, shape: "round",
-        x: 50, y: 50, width: 180, height: 180, rotation: 0, seatCount: 15,
-        chairs: Array.from({ length: 15 }, (_, chairIndex) => ({
-          id: `chair-${chairIndex + 1}`, seatNumber: chairIndex + 1, x: 50, y: 50, rotation: 0,
-        })),
-      })),
-      wedding: {
-        eventTitle: "event-a", eventCategory: "wedding_engagement", eventDateISO: "2027-05-20T18:00:00.000Z",
-        hallObjects: Array.from({ length: 3 }, (_, index) => ({ id: `object-${index}`, type: "stage", label: "Stage" })),
-        schedule: Array.from({ length: 5 }, (_, index) => ({ titleEn: `Schedule ${index}`, timeEn: "18:00" })),
-      },
-    });
-    const restrictedInvitation = await firestore.getDoc(firestore.doc(anonymous, `weddings/event-a/publicGuests/${restrictedToken}`));
-    assert.equal(restrictedInvitation.data().guest.additionalGuestAllowance, 1);
-    await assert.rejects(
-      brideInvitationService.ensure({ uid: "bride-seat-a", weddingId: "event-a", guestId: "groom-1", tables: [] }),
-      /permission-denied|Missing or insufficient permissions/i,
+    // A check-in account can resolve the active token index and the matching
+    // side-scoped check-in projection, then change check-in state only.
+    await assertFails(firestore.getDoc(firestore.doc(checkin, `weddings/event-a/invitationTokens/${token}`)));
+    await assertSucceeds(firestore.getDoc(firestore.doc(checkin, "weddings/event-a/checkinGuests/groom-1")));
+    await assertFails(firestore.getDoc(firestore.doc(checkin, "weddings/event-a/checkinGuests/bride-1")));
+    const checkinQuery = firestore.query(
+      firestore.collection(checkin, "weddings/event-a/checkinGuests"), firestore.where("side", "==", "groom"),
     );
-    await assertFails(firestore.getDoc(firestore.doc(brideSeat, tablePath("event-a", "table-1"))));
-    await assertFails(firestore.updateDoc(firestore.doc(brideSeat, guestPath("event-a", "bride-1")), {
-      rsvpStatus: "confirmed", updatedAt: firestore.serverTimestamp(),
-    }));
-    await assertFails(firestore.updateDoc(firestore.doc(brideSeat, guestPath("event-a", "bride-1")), {
-      phone: "971500000000", updatedAt: firestore.serverTimestamp(),
-    }));
-    await assertFails(firestore.updateDoc(firestore.doc(brideSeat, guestPath("event-a", "groom-1")), {
-      tableId: "table-1", updatedAt: firestore.serverTimestamp(),
-    }));
-    await assertFails(firestore.updateDoc(firestore.doc(brideSeat, tablePath("event-a", "table-1")), {
-      chairs: [{ guestId: "groom-1" }], guestIds: ["groom-1"], updatedAt: firestore.serverTimestamp(),
-    }));
-
-    const groomCheckin = env.authenticatedContext("groom-checkin-a").firestore();
-    await assertFails(firestore.getDoc(firestore.doc(groomCheckin, guestPath("event-a", "groom-1"))));
-    await assertFails(firestore.getDocs(firestore.collection(groomCheckin, "weddings/event-a/guests")));
-    await assertFails(firestore.getDoc(firestore.doc(groomCheckin, guestPath("event-a", "bride-1"))));
-    await assertFails(firestore.getDoc(firestore.doc(groomCheckin, "weddings/event-a")));
-    await assertSucceeds(firestore.updateDoc(firestore.doc(groomCheckin, guestPath("event-a", "groom-1")), {
+    await assertSucceeds(firestore.getDocs(checkinQuery));
+    await assertFails(firestore.getDocs(firestore.collection(anonymous, "weddings/event-a/checkinGuests")));
+    await assertFails(firestore.getDoc(firestore.doc(anonymous, `weddings/event-a/invitationTokens/${token}`)));
+    await assertSucceeds(firestore.updateDoc(firestore.doc(checkin, "weddings/event-a/checkinGuests/groom-1"), {
       checkedIn: true, checkedInAt: firestore.serverTimestamp(), updatedAt: firestore.serverTimestamp(),
     }));
-    await assertFails(firestore.updateDoc(firestore.doc(groomCheckin, guestPath("event-a", "groom-1")), {
-      rsvpStatus: "confirmed", updatedAt: firestore.serverTimestamp(),
-    }));
+    await assertFails(firestore.updateDoc(firestore.doc(checkin, "weddings/event-a/checkinGuests/groom-1"), { phone: "attacker" }));
 
-    await assertSucceeds(firestore.getDoc(firestore.doc(owner, "weddings/event-a")));
-    await assertSucceeds(firestore.updateDoc(firestore.doc(owner, guestPath("event-a", "bride-1")), {
-      fullName: "Updated bride guest", updatedAt: firestore.serverTimestamp(),
-    }));
-    await assertSucceeds(firestore.setDoc(firestore.doc(owner, guestPath("event-a", "new-guest")), {
-      ...guestData("family"), fullName: "New guest",
-      createdAt: firestore.serverTimestamp(), updatedAt: firestore.serverTimestamp(),
-    }));
-    await assertFails(firestore.updateDoc(firestore.doc(owner, guestPath("event-a", "bride-1")), {
-      inventedProtectedValue: true, updatedAt: firestore.serverTimestamp(),
-    }));
-    await assertSucceeds(firestore.updateDoc(firestore.doc(owner, guestPath("event-a", "bride-1")), {
-      rsvpMessage: firestore.deleteField(), updatedAt: firestore.serverTimestamp(),
-    }));
-    await assertFails(firestore.updateDoc(firestore.doc(owner, guestPath("event-a", "bride-1")), {
-      side: firestore.deleteField(), updatedAt: firestore.serverTimestamp(),
-    }));
-    const persistedGuest = await firestore.getDoc(firestore.doc(owner, guestPath("event-a", "bride-1")));
-    assert.equal(persistedGuest.data().fullName, "Updated bride guest");
-    assert.equal(Object.hasOwn(persistedGuest.data(), "inventedProtectedValue"), false);
-    assert.equal(Object.hasOwn(persistedGuest.data(), "rsvpMessage"), false);
-    assert.equal(persistedGuest.data().side, "bride");
-    await assertSucceeds(firestore.updateDoc(firestore.doc(owner, tablePath("event-a", "table-1")), {
-      chairs: [], guestIds: [], updatedAt: firestore.serverTimestamp(),
-    }));
-    await assertFails(firestore.deleteDoc(firestore.doc(owner, "weddings/event-a")));
-    await assertFails(firestore.setDoc(firestore.doc(owner, "weddings/event-a/publicGuests/new-token"), {
-      guestToken: "new-token", guestId: "bride-1",
-    }));
-    const issuedToken = "B".repeat(43);
-    const expiry = new Date("2027-08-18T18:00:00.000Z");
-    const issueBatch = firestore.writeBatch(owner);
-    issueBatch.set(firestore.doc(owner, `weddings/event-a/invitationSecrets/groom-1`), {
-      token: issuedToken, status: "active", purpose: "guest-invitation", version: 1,
-      expiresAt: expiry, createdAt: firestore.serverTimestamp(), updatedAt: firestore.serverTimestamp(),
+    const groomToken = Buffer.from(new Uint8Array(32).fill(42)).toString("base64url");
+    const groomTokenService = createInvitationTokenService({
+      db: ownerBootstrap, firestore, tokenFactory: () => groomToken,
     });
-    issueBatch.set(firestore.doc(owner, `weddings/event-a/invitationTokens/${issuedToken}`), {
-      guestId: "groom-1", status: "active", purpose: "guest-invitation", version: 1,
-      expiresAt: expiry, createdAt: firestore.serverTimestamp(), updatedAt: firestore.serverTimestamp(),
-    });
-    issueBatch.set(firestore.doc(owner, `weddings/event-a/publicGuests/${issuedToken}`), {
-      eventId: "event-a", wedding: { eventTitle: "event-a" },
-      guest: {
-        fullName: "groom guest", additionalGuestAllowance: 2, seatingAssignments: [],
-        tableId: "", tableName: "", seatNumber: "",
-      },
-      rsvpStatus: "pending", additionalGuests: 1, rsvpMessage: "", expiresAt: expiry,
+    const groomScope = { ...scope, guestId: "groom-1" };
+    assert.equal(await groomTokenService.ensure(groomScope), groomToken);
+    await assertSucceeds(firestore.getDoc(firestore.doc(checkin, `weddings/event-a/invitationTokens/${groomToken}`)));
+    await assertSucceeds(firestore.getDoc(firestore.doc(anonymous, `weddings/event-a/publicGuests/${groomToken}`)));
+
+    // Sender recipients are stored under a strong random capability in small
+    // chunks. A bearer may get the capability and exact chunk, never list.
+    const senderToken = Buffer.from(new Uint8Array(32).fill(77)).toString("base64url");
+    const senderRef = firestore.doc(ownerBootstrap, `weddings/event-a/senderCapabilities/${senderToken}`);
+    await assertSucceeds(firestore.setDoc(senderRef, {
+      weddingId: "event-a", purpose: "whatsapp-sender", status: "preparing", createdBy: "owner-a",
+      side: "bride", eventTitle: "A & B", eventCategory: "wedding_engagement", recipientCount: 1,
+      chunkCount: 1, expiresAt: null, createdAt: firestore.serverTimestamp(), updatedAt: firestore.serverTimestamp(),
+    }));
+    await assertSucceeds(firestore.setDoc(firestore.doc(ownerBootstrap, `weddings/event-a/senderCapabilities/${senderToken}/recipients/0000`), {
+      weddingId: "event-a", capabilityId: senderToken, chunkIndex: 0,
+      recipients: [{ i: "bride-1", n: "bride-1 Guest", p: "971500000001", s: "bride", t: token }],
+      createdAt: firestore.serverTimestamp(),
+    }));
+    await assertSucceeds(firestore.updateDoc(senderRef, { status: "active", updatedAt: firestore.serverTimestamp() }));
+    const publicSenderRef = firestore.doc(anonymous, `weddings/event-a/senderCapabilities/${senderToken}`);
+    await assertSucceeds(firestore.getDoc(publicSenderRef));
+    await assertSucceeds(firestore.getDoc(firestore.doc(anonymous, `weddings/event-a/senderCapabilities/${senderToken}/recipients/0000`)));
+    await assertFails(firestore.getDocs(firestore.collection(anonymous, "weddings/event-a/senderCapabilities")));
+    await assertFails(firestore.getDocs(firestore.collection(anonymous, `weddings/event-a/senderCapabilities/${senderToken}/recipients`)));
+
+    const senderRecipient = { i: "bride-1", n: "bride-1 Guest", p: "971500000001", s: "bride", t: token };
+    const senderInviteUrl = new URL("https://weddinginvitaion-b4f36.web.app/index.html?wedding=event-a");
+    senderInviteUrl.hash = new URLSearchParams({ guest: senderRecipient.t, recipient: senderRecipient.i }).toString();
+    const senderHash = new URLSearchParams(senderInviteUrl.hash.slice(1));
+    assert.equal(senderHash.get("guest"), token);
+    assert.equal(senderHash.get("recipient"), senderRecipient.i);
+    const senderRsvp = firestore.writeBatch(anonymous);
+    const senderRsvpPatch = {
+      rsvpStatus: "confirmed", additionalGuests: 1, rsvpMessage: "Sender link RSVP works.",
       updatedAt: firestore.serverTimestamp(),
-    });
-    await assertSucceeds(issueBatch.commit());
-    const issuedPublic = await firestore.getDoc(firestore.doc(anonymous, `weddings/event-a/publicGuests/${issuedToken}`));
-    assert.equal(issuedPublic.data().guest.fullName, "groom guest");
-    assert.equal(Object.hasOwn(issuedPublic.data(), "phone"), false);
-    assert.equal(Object.hasOwn(issuedPublic.data(), "guestId"), false);
-
-    let tokenByte = 0;
-    const tokenFactory = () => {
-      const bytes = new Uint8Array(32);
-      bytes.fill(++tokenByte);
-      return Buffer.from(bytes).toString("base64url");
     };
-    const serviceA = createInvitationTokenService({ db: owner, firestore, tokenFactory });
-    const serviceB = createInvitationTokenService({ db: owner, firestore, tokenFactory });
-    const issueScope = { uid: "owner-a", weddingId: "event-a", guestId: "bride-1", tables: [] };
-    const [firstToken, concurrentToken] = await Promise.all([
-      serviceA.ensure(issueScope), serviceB.ensure(issueScope),
-    ]);
-    assert.equal(firstToken, concurrentToken);
-    assert.equal(firstToken.length, 43);
-    assert.equal(await serviceA.ensure(issueScope), firstToken);
-    await serviceA.revoke(issueScope);
-    await assert.rejects(serviceA.ensure(issueScope), /unavailable/i);
-    const regenRequestId = "request-identifier-0001";
-    const regeneratedToken = await serviceA.regenerate(issueScope, regenRequestId);
-    assert.notEqual(regeneratedToken, firstToken);
-    assert.equal(await serviceA.regenerate(issueScope, regenRequestId), regeneratedToken);
-    await assertFails(firestore.getDoc(firestore.doc(anonymous, `weddings/event-a/publicGuests/${firstToken}`)));
-    await assertSucceeds(firestore.getDoc(firestore.doc(anonymous, `weddings/event-a/publicGuests/${regeneratedToken}`)));
-    const copiedInvitationUrl = new URL("index.html", "http://127.0.0.1:8000/dashboard.html?wedding=event-a");
-    copiedInvitationUrl.searchParams.set("wedding", "event-a");
-    copiedInvitationUrl.hash = new URLSearchParams({ guest: regeneratedToken, recipient: "bride-1" }).toString();
-    assert.match(copiedInvitationUrl.href, /wedding=event-a#guest=[A-Za-z0-9_-]{43}&recipient=bride-1$/);
-    const pastedUrl = new URL(copiedInvitationUrl.href);
-    const pastedToken = new URLSearchParams(pastedUrl.hash.slice(1)).get("guest");
-    assert.equal(pastedUrl.searchParams.get("wedding"), "event-a");
-    assert.equal(pastedToken, regeneratedToken);
-    const openedInvitation = await firestore.getDoc(firestore.doc(anonymous, `weddings/event-a/publicGuests/${pastedToken}`));
-    assert.equal(openedInvitation.data().eventId, "event-a");
-    assert.equal(openedInvitation.data().guest.fullName, "Updated bride guest");
+    senderRsvp.update(firestore.doc(anonymous, `weddings/event-a/publicGuests/${senderHash.get("guest")}`), senderRsvpPatch);
+    senderRsvp.update(firestore.doc(anonymous, `weddings/event-a/guests/${senderHash.get("recipient")}`), senderRsvpPatch);
+    await assertSucceeds(senderRsvp.commit());
+
+    // Revocation removes the invitation projection and blocks the token index;
+    // sender revocation blocks both the capability and its recipient chunks.
+    await service.revoke(scope);
+    await assertFails(firestore.getDoc(invitationRef));
+    await assertFails(firestore.getDoc(firestore.doc(checkin, `weddings/event-a/invitationTokens/${token}`)));
+    await groomTokenService.revoke(groomScope);
+    await assertFails(firestore.getDoc(firestore.doc(checkin, `weddings/event-a/invitationTokens/${groomToken}`)));
+    await assertSucceeds(firestore.updateDoc(senderRef, { status: "revoked", updatedAt: firestore.serverTimestamp() }));
+    await assertFails(firestore.getDoc(publicSenderRef));
+    await assertFails(firestore.getDoc(firestore.doc(anonymous, `weddings/event-a/senderCapabilities/${senderToken}/recipients/0000`)));
+
+    const summary = await assertSucceeds(firestore.getDoc(firestore.doc(anonymous, "weddings/event-a/publicSummary/summary")));
+    assert.deepEqual(summary.data().stats, { total: 3, bride: 2, groom: 1 });
+    await assertFails(firestore.getDoc(firestore.doc(anonymous, "weddings/event-a/publicStats/summary")));
+    await assertFails(firestore.getDoc(firestore.doc(brideA, "weddings/event-a/publicStats/summary")));
   } finally {
     await env.cleanup();
   }

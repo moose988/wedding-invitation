@@ -56,22 +56,21 @@ test("each custom invitation design routes through the public data initializer",
   }
 });
 
-test("planner sessions are isolated by tab while token editors and invitations stay separate", () => {
-  assert.match(firebase, /resolveFirebaseApp\(\{ getApps, initializeApp \}, config, "seating-editor"\)/);
+test("planner sessions are tab-scoped and public invitations stay separate", () => {
   assert.match(firebase, /getConfiguredApp\("planner-session"\)/);
   assert.match(firebase, /initializeAuth\(app, \{ persistence: browserSessionPersistence \}\)/);
   assert.match(firebase, /resolveFirebaseApp\(\{ getApps, initializeApp \}, config, "public-invitation"\)/);
-  assert.match(dashboard, /initializeFirebaseServicesForRoute\([\s\S]*?seatingEditor: state\.secureEditorMode/);
+  assert.match(dashboard, /initializeFirebaseServicesForRoute\(\{\}, \{ dashboard: initFirebase \}\)/);
   assert.match(dashboard, /await waitForFirebaseSessionPersistence\(state\.services\)/);
   assert.match(login, /initializeFirebaseServicesForRoute\([\s\S]*?\{ dashboard: initFirebase \}/);
   assert.match(login, /servicesReady = waitForFirebaseSessionPersistence\(services\)/);
   assert.match(dashboard, /state\.permissions\.seatingOnly === true/);
-  assert.match(dashboard, /requestedSeatingSide && allowedSide !== "all" && requestedSeatingSide !== allowedSide/);
-  assert.match(side, /initializeFirebaseServicesForRoute\([\s\S]*?seatingEditor: Boolean\(editorToken\)/);
-  assert.match(side, /signInWithCustomToken\(services\.auth/);
+  assert.match(side, /state\.services\.auth\.authStateReady\(\)/);
+  assert.match(side, /dashboardUsers", user\.uid/);
+  assert.doesNotMatch(side, /signInWithCustomToken|httpsCallable|setInterval/);
+  assert.doesNotMatch(firebase, /firebase\/functions|httpsCallable|getFunctions/);
   assert.match(dashboard, /signOut\(state\.services\.auth\)/);
-  assert.doesNotMatch(dashboard, /accountSeatingEditorMode/);
-  assert.doesNotMatch(login, /seatingOnlyMode/);
+  assert.match(login, /params\.get\("workspace"\) === "side"/);
 });
 
 test("only explicit dashboard action signs out and login preserves restored sessions", () => {
@@ -80,7 +79,7 @@ test("only explicit dashboard action signs out and login preserves restored sess
   assert.match(dashboard, /await signOut\(state\.services\.auth\)/);
 });
 
-test("default and named Firebase apps resolve correctly in either initialization order", () => {
+test("default and public Firebase apps resolve correctly in either initialization order", () => {
   const apps = [];
   const api = {
     getApps: () => [...apps],
@@ -91,13 +90,13 @@ test("default and named Firebase apps resolve correctly in either initialization
     },
   };
   const config = { projectId: "test-project" };
-  const seating = resolveFirebaseApp(api, config, "seating-editor");
+  const publicApp = resolveFirebaseApp(api, config, "public-invitation");
   const dashboard = resolveFirebaseApp(api, config);
 
-  assert.equal(seating.name, "seating-editor");
+  assert.equal(publicApp.name, "public-invitation");
   assert.equal(dashboard.name, "[DEFAULT]");
-  assert.notEqual(seating, dashboard);
-  assert.equal(resolveFirebaseApp(api, config, "seating-editor"), seating);
+  assert.notEqual(publicApp, dashboard);
+  assert.equal(resolveFirebaseApp(api, config, "public-invitation"), publicApp);
   assert.equal(resolveFirebaseApp(api, config), dashboard);
 
   const namedFirst = [{ name: "public-invitation" }];
@@ -108,35 +107,34 @@ test("default and named Firebase apps resolve correctly in either initialization
   assert.equal(defaultApp.name, "[DEFAULT]");
 });
 
-test("service caches and route selection keep dashboard and seating Auth, Firestore, and Functions together", () => {
+test("all authenticated routes use the same per-tab dashboard Auth session", () => {
   const cache = createScopedServiceCache();
   let dashboardCreates = 0;
-  let seatingCreates = 0;
+  let publicCreates = 0;
   const dashboardApp = { name: "[DEFAULT]" };
-  const seatingApp = { name: "seating-editor" };
   const createDashboard = () => {
     dashboardCreates += 1;
-    return { app: dashboardApp, auth: { app: dashboardApp }, db: { app: dashboardApp }, functions: { app: dashboardApp } };
+    return { app: dashboardApp, auth: { app: dashboardApp }, db: { app: dashboardApp } };
   };
-  const createSeating = () => {
-    seatingCreates += 1;
-    return { app: seatingApp, auth: { app: seatingApp }, db: { app: seatingApp }, functions: { app: seatingApp } };
+  const createPublic = () => {
+    publicCreates += 1;
+    return { app: { name: "public-invitation" }, db: {} };
   };
   const cachedDashboard = cache.get("dashboard", createDashboard);
-  const cachedSeating = cache.get("seating", createSeating);
+  const cachedPublic = cache.get("public", createPublic);
   assert.equal(cache.get("dashboard", createDashboard), cachedDashboard);
-  assert.equal(cache.get("seating", createSeating), cachedSeating);
+  assert.equal(cache.get("public", createPublic), cachedPublic);
   assert.equal(dashboardCreates, 1);
-  assert.equal(seatingCreates, 1);
+  assert.equal(publicCreates, 1);
 
   const select = (route) => initializeFirebaseServicesForRoute(route, {
     dashboard: () => cachedDashboard,
-    seating: () => cachedSeating,
+    public: () => cachedPublic,
   });
   assert.equal(select({}).auth.app, dashboardApp);
   assert.equal(select({ seatingOnly: true }).auth.app, dashboardApp);
-  assert.equal(select({ seatingEditor: true }).db.app, seatingApp);
-  assert.equal(select({ seatingOnly: true }).functions.app, dashboardApp);
+  assert.equal(select({ seatingEditor: true }).auth.app, dashboardApp);
+  assert.equal(select({}).db.app, dashboardApp);
 });
 
 test("seating service readiness blocks until session persistence has completed", async () => {
@@ -157,7 +155,7 @@ test("seating service readiness blocks until session persistence has completed",
   assert.equal(resolved, true);
 });
 
-test("successful login always opens All Events, regardless of event-link context", () => {
+test("successful login preserves the authorized event workspace context", () => {
   const dashboardUrl = buildAuthRouteUrl("./dashboard.html", {
     weddingId: "event-42",
     side: "bride",
@@ -165,12 +163,14 @@ test("successful login always opens All Events, regardless of event-link context
   const loginUrl = buildAuthRouteUrl("./dashboard-login.html", {
     weddingId: "event-42",
     side: "groom",
+    workspace: "side",
     message: "access-denied",
   });
   assert.equal(dashboardUrl, "./dashboard.html?wedding=event-42&side=bride");
-  assert.equal(loginUrl, "./dashboard-login.html?wedding=event-42&side=groom&message=access-denied");
+  assert.equal(loginUrl, "./dashboard-login.html?wedding=event-42&side=groom&workspace=side&message=access-denied");
   assert.equal(buildAuthRouteUrl("./dashboard.html", { weddingId: "event-42", side: "admin" }), "./dashboard.html?wedding=event-42");
-  assert.match(login, /window\.location\.replace\("\.\/all-events\.html"\)/);
-  assert.doesNotMatch(login, /redirectToDashboard|params\.get\("wedding"\)/);
-  assert.doesNotMatch(dashboard, /seatingOnly: accountSeatingEditorMode/);
+  assert.match(login, /params\.get\("workspace"\) === "side"/);
+  assert.match(login, /target\.searchParams\.set\("wedding", weddingId\)/);
+  assert.doesNotMatch(login, /signOut\(/);
+  assert.doesNotMatch(dashboard, /httpsCallable|getFunctions/);
 });

@@ -49,6 +49,6 @@ test("invitation tokens have no client-side event-date expiry", async () => {
   assert.match(await (await import("node:fs/promises")).readFile(new URL("../invitations/shared/invitation-token-service.js", import.meta.url), "utf8"), /if \(action === "ensure" && oldToken\)/);
   assert.equal(typeof tokenService.createInvitationTokenService, "function");
   assert.match(await (await import("node:fs/promises")).readFile(new URL("../invitations/shared/invitation-token-service.js", import.meta.url), "utf8"), /expiresAt: null/);
-  assert.match(rules, /function invitationEventExists\(weddingId\)[\s\S]*?return exists\(/);
+  assert.match(rules, /function invitationEventExists\(weddingId\)[\s\S]*?return eventAvailable\(weddingId\)/);
   assert.doesNotMatch(rules, /request\.time < record\.data\.expiresAt/);
 });

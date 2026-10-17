@@ -1,4 +1,4 @@
-import { collection, doc, getDoc, getDocs, initFirebase, isFirebaseConfigured, onAuthStateChanged, serverTimestamp, setDoc, signOut, updateDoc, writeBatch } from "./firebase-config.js?v=20261016-tab-session-isolation-1";
+import { collection, deleteDoc, doc, getDoc, getDocs, initFirebase, isFirebaseConfigured, limit, onAuthStateChanged, query, serverTimestamp, setDoc, signOut, updateDoc, writeBatch } from "./firebase-config.js?v=20261016-tab-session-isolation-1";
 import { EVENT_CATEGORIES, getEventCategory, getEventDisplayTitle, isCelebrationEvent } from "./event-utils.js";
 import { paginateRows } from "./workspace-pagination.js";
 
@@ -79,9 +79,21 @@ async function refreshWorkspaceEvents(generation = state.snapshotGeneration) {
     const indexed = await Promise.all(access.docs.map(async (entry) => {
       try {
         const membership = await getDoc(doc(state.services.db, "weddings", entry.id, "dashboardUsers", state.user.uid));
-        if (!membership.exists() || membership.data().canViewDashboard !== true) return null;
         const permissions = membership.data();
         const eventSummary = entry.data();
+        if (!membership.exists()) {
+          // A deletion interrupted after membership cleanup remains resumable
+          // through the owner's private index until the parent and index are
+          // removed. A stale index for an already deleted event is harmless.
+          if (eventSummary.ownerUserId !== state.user.uid) return null;
+          const ownerEvent = await getDoc(doc(state.services.db, "weddings", entry.id));
+          if (!ownerEvent.exists() || ownerEvent.data().ownerUserId !== state.user.uid) {
+            await deleteDoc(doc(state.services.db, "users", state.user.uid, "weddingAccess", entry.id)).catch(() => {});
+            return null;
+          }
+          return { ...ownerEvent.data(), id: ownerEvent.id, isOwner: true, cleanupPending: ownerEvent.data().deleting === true };
+        }
+        if (permissions.canViewDashboard !== true) return null;
         // Seating-only accounts receive only their own index metadata. Do not
         // fetch the full event document (which contains organizer settings).
         if (permissions.seatingOnly === true) {
@@ -299,5 +311,108 @@ function indexData(data) { return Object.fromEntries(Object.entries({ eventCateg
 async function setArchived(wedding) { const status = wedding.status === "archived" ? "draft" : "archived"; try { await updateDoc(doc(state.services.db,"weddings",wedding.id), { status, updatedAt:serverTimestamp() }); await setDoc(doc(state.services.db,"users",state.user.uid,"weddingAccess",wedding.id), { status, updatedAt:serverTimestamp() }, {merge:true}); void refreshWorkspaceEvents(); } catch (_) { flash("We could not update this event. Please try again."); } }
 async function duplicate(wedding) { const { id, stats, legacy, isOwner, seatingOnly, allowedSide, createdAt, updatedAt, completedAt, statusBeforeCompletion, ...source } = wedding; const title = `${getEventDisplayTitle(wedding)} (Copy)`; const copy = { ...source, seatingEnabled:wedding.seatingEnabled !== false, eventTitle:title, status:"draft", ownerUserId:state.user.uid, createdAt:serverTimestamp(), updatedAt:serverTimestamp() }; if (!isCelebrationEvent(wedding)) copy.coupleName = title; try { const ref = doc(collection(state.services.db,"weddings")); const batch = writeBatch(state.services.db); batch.set(ref, copy); batch.set(doc(state.services.db,"weddings",ref.id,"dashboardUsers",state.user.uid), { userId:state.user.uid, email:state.user.email || "", canViewDashboard:true, canEditGuests:true, canEditSeating:true, canCheckIn:true, canManageUsers:true, role:"owner", createdAt:serverTimestamp(), updatedAt:serverTimestamp() }); batch.set(doc(state.services.db,"users",state.user.uid,"weddingAccess",ref.id), { ...indexData(copy), weddingId:ref.id, ownerUserId:state.user.uid, createdAt:serverTimestamp(), updatedAt:serverTimestamp() }); await batch.commit(); flash("Event setup duplicated as a draft."); void refreshWorkspaceEvents(); } catch (e) { console.error(e); flash("We could not duplicate this event."); } }
 function openDelete(wedding) { state.deleteId=wedding.id; el.deletePhrase.textContent=`DELETE ${wedding.id}`; el.deleteConfirmation.value=""; el.deleteError.textContent=""; el.deleteDialog.showModal(); }
-async function deleteWedding(event) { event.preventDefault(); const phrase=`DELETE ${state.deleteId}`; if (el.deleteConfirmation.value !== phrase) { el.deleteError.textContent=`Type “${phrase}” exactly to delete.`; return; } try { await httpsCallable(state.services.functions,"deleteWedding")({ weddingId:state.deleteId, confirmation:phrase }); el.deleteDialog.close(); void refreshWorkspaceEvents(); } catch (error) { console.error(error); el.deleteError.textContent="We could not delete this event. Only its owner can do this."; } }
+async function deleteEventCollection(weddingId, collectionId) {
+  const source = collection(state.services.db, "weddings", weddingId, collectionId);
+  while (true) {
+    const snapshot = await getDocs(query(source, limit(400)));
+    if (snapshot.empty) return;
+    const batch = writeBatch(state.services.db);
+    snapshot.docs.forEach((item) => batch.delete(item.ref));
+    await batch.commit();
+  }
+}
+
+async function deleteWedding(event) {
+  event.preventDefault();
+  const weddingId = state.deleteId;
+  const phrase = `DELETE ${weddingId}`;
+  if (el.deleteConfirmation.value !== phrase) {
+    el.deleteError.textContent = `Type “${phrase}” exactly to delete.`;
+    return;
+  }
+  const submit = el.deleteForm.querySelector('[type="submit"]');
+  submit.disabled = true;
+  el.deleteError.textContent = "Checking event ownership…";
+  try {
+    const eventRef = doc(state.services.db, "weddings", weddingId);
+    const eventSnapshot = await getDoc(eventRef);
+    if (!eventSnapshot.exists()) {
+      await deleteDocIfPresent(["users", state.user.uid, "weddingAccess", weddingId]);
+      state.weddings = state.weddings.filter((item) => item.id !== weddingId);
+      el.deleteDialog.close();
+      render();
+      flash("The event was already removed. Its workspace index is now cleared.");
+      return;
+    }
+    if (eventSnapshot.data().ownerUserId !== state.user?.uid) {
+      throw new Error("Only the event owner can delete this event.");
+    }
+    const membersSnapshot = await getDocs(collection(state.services.db, "weddings", weddingId, "dashboardUsers"));
+    const memberIds = new Set([state.user.uid, ...membersSnapshot.docs.map((item) => item.id)]);
+
+    // This first write makes every invitation and sender capability unusable
+    // before any subcollection cleanup begins. The owner can resume if a batch
+    // later fails or the browser closes.
+    if (eventSnapshot.data().deleting !== true) {
+      await updateDoc(eventRef, { deleting: true, updatedAt: serverTimestamp() });
+    }
+    el.deleteError.textContent = "Invalidating and removing event data… keep this page open.";
+
+    const senderCapabilities = await getDocs(collection(state.services.db, "weddings", weddingId, "senderCapabilities"));
+    for (const capability of senderCapabilities.docs) {
+      await deleteEventCollectionPath(["weddings", weddingId, "senderCapabilities", capability.id, "recipients"]);
+    }
+
+    const childCollections = [
+      "seatingAccess", "tables", "guests", "seatingGuests", "checkinGuests",
+      "seatAssignments", "seatOccupancy", "seatedPeople", "invitationSecrets",
+      "invitationTokens", "publicGuests", "publicSummary", "publicStats",
+      "seatingMigrations", "eventMaintenance", "senderCapabilities",
+    ];
+    for (const collectionId of childCollections) {
+      await deleteEventCollection(weddingId, collectionId);
+    }
+
+    // Workspace indexes are private to each user. The deletion rule permits
+    // the event owner to clean those known member indexes after invalidation.
+    // Remove delegated workspace hints while preserving the owner's own index
+    // and membership until all event data is gone. This keeps retries reachable.
+    for (const userId of memberIds) {
+      if (userId !== state.user.uid) await deleteDocIfPresent(["users", userId, "weddingAccess", weddingId]);
+    }
+    for (const userId of memberIds) {
+      if (userId !== state.user.uid) await deleteDocIfPresent(["weddings", weddingId, "dashboardUsers", userId]);
+    }
+    await deleteDocIfPresent(["weddings", weddingId, "dashboardUsers", state.user.uid]);
+    await deleteDocIfPresent(["weddings", weddingId]);
+    // This is the owner's own index, so it remains deletable after the parent
+    // disappears and is removed only after the event cleanup has completed.
+    await deleteDocIfPresent(["users", state.user.uid, "weddingAccess", weddingId]);
+    el.deleteDialog.close();
+    state.weddings = state.weddings.filter((item) => item.id !== weddingId);
+    render();
+    flash("Event and its known data were deleted.");
+  } catch (error) {
+    console.error("Event cleanup stopped; the owner can retry to resume it.", error);
+    el.deleteError.textContent = `${error?.message || "Event cleanup could not finish."} The event has been marked unavailable and you can retry this cleanup.`;
+  } finally {
+    submit.disabled = false;
+  }
+}
+
+async function deleteEventCollectionPath(path) {
+  while (true) {
+    const source = collection(state.services.db, ...path);
+    const snapshot = await getDocs(query(source, limit(400)));
+    if (snapshot.empty) return;
+    const batch = writeBatch(state.services.db);
+    snapshot.docs.forEach((item) => batch.delete(item.ref));
+    await batch.commit();
+  }
+}
+
+async function deleteDocIfPresent(path) {
+  const ref = doc(state.services.db, ...path);
+  await deleteDoc(ref);
+}
 function timestampValue(value) { return value?.toMillis?.() || value?.seconds * 1000 || (value ? new Date(value).getTime() : 0); } function formatEvent(value) { const date=new Date(value); return Number.isNaN(+date) ? "Event date to be set" : new Intl.DateTimeFormat(undefined,{dateStyle:"medium",timeStyle:"short"}).format(date); } function formatRelative(value) { const ms=Date.now()-timestampValue(value); if (!ms) return "just now"; const days=Math.floor(ms/86400000); return days <= 0 ? "today" : days === 1 ? "yesterday" : `${days} days ago`; } function escape(value) { const node=document.createElement("span"); node.textContent=value; return node.innerHTML; } function flash(message) { el.workspaceStatus.textContent=message; }

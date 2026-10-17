@@ -19,17 +19,17 @@ export function createScopedServiceCache() {
 }
 
 export function initializeFirebaseServicesForRoute(route, initializers) {
-  // Password-authenticated dashboard accounts all share the planner session.
-  // Their per-event permissions determine which dashboard views they can use.
-  // Only custom-token seating editors need an isolated Firebase Auth session.
-  return route.seatingEditor === true ? initializers.seating() : initializers.dashboard();
+  // Every signed-in workspace uses the same named, tab-scoped password session.
+  // Event membership documents, never a URL role hint, determine access.
+  return initializers.dashboard();
 }
 
-export function buildAuthRouteUrl(base, { weddingId = "", side = "", message = "", demo = false } = {}) {
+export function buildAuthRouteUrl(base, { weddingId = "", side = "", message = "", demo = false, workspace = "" } = {}) {
   const params = new URLSearchParams();
   if (weddingId) params.set("wedding", weddingId);
   if (["bride", "groom", "family"].includes(side)) params.set("side", side);
   if (demo) params.set("demo", "1");
+  if (workspace === "side") params.set("workspace", "side");
   if (message) params.set("message", message);
   const query = params.toString();
   return query ? `${base}?${query}` : base;

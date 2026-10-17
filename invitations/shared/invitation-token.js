@@ -39,7 +39,7 @@ function validColor(value) {
 }
 
 export function buildInvitationProjection(weddingId, wedding = {}, guest = {}, tables = []) {
-  const sourceTables = (Array.isArray(tables) ? tables : []).slice(0, 200);
+  const sourceTables = wedding.seatingEnabled === false ? [] : (Array.isArray(tables) ? tables : []).slice(0, 200);
   const tableIds = new Map(sourceTables.map((table, index) => [String(table.id || ""), `t${index + 1}`]));
   const projectedTables = sourceTables.map((table, index) => {
     const chairs = Array.isArray(table.chairs) ? table.chairs.slice(0, 250).map((chair, chairIndex) => ({

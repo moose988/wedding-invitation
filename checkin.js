@@ -1,13 +1,16 @@
 import {
+  collection,
   doc,
   getDoc,
   initFirebase,
   isFirebaseConfigured,
-  httpsCallable,
   onAuthStateChanged,
+  onSnapshot,
+  query,
   serverTimestamp,
   signInWithEmailAndPassword,
-  updateDoc,
+  where,
+  writeBatch,
 } from "./firebase-config.js?v=20261016-tab-session-isolation-1";
 import { getEventDisplayTitle } from "./event-utils.js";
 
@@ -57,6 +60,8 @@ const state = {
   unsubGuests: null,
   unsubAuth: null,
   guestFetchGeneration: 0,
+  unsubMembership: null,
+  authStateSeen: false,
   initialized: false,
 };
 
@@ -99,6 +104,7 @@ async function init() {
 
   state.services = initFirebase();
   await state.services.persistenceReady;
+  await state.services.auth.authStateReady();
   elements.weddingTitle.textContent = "Check-In Console";
   const stats = await getDoc(doc(state.services.db, "weddings", state.weddingId, "publicSummary", "summary")).catch(() => null);
   if (stats?.exists()) {
@@ -106,65 +112,142 @@ async function init() {
     elements.weddingTitle.textContent = `${getEventDisplayTitle(state.wedding)} · Check-In`;
   }
 
+  await handleAuthChange(state.services.auth.currentUser);
   state.unsubAuth?.();
-  state.unsubAuth = onAuthStateChanged(state.services.auth, async (user) => {
-    state.currentUser = user;
-    state.unsubGuests?.();
-    state.unsubGuests = null;
-    state.permissions = null;
-    state.guest = null;
-    state.guests = [];
-    elements.counter.textContent = "";
+  state.unsubAuth = onAuthStateChanged(state.services.auth, handleAuthChange);
+}
+
+async function handleAuthChange(user) {
+  if (state.authStateSeen && state.currentUser?.uid === user?.uid && (state.permissions || !user)) return;
+  state.authStateSeen = true;
+  state.currentUser = user || null;
+  state.unsubGuests?.();
+  state.unsubMembership?.();
+  state.unsubGuests = state.unsubMembership = null;
+  state.permissions = null;
+  state.guest = null;
+  state.guests = [];
+  elements.counter.textContent = "";
+  renderGuestCard();
+  renderManualSearchResults();
+  if (!user) {
+    elements.authGate.hidden = false;
+    elements.app.hidden = true;
+    elements.authStatus.textContent = "Sign in with an authorized event account to scan or search guests.";
+    return;
+  }
+  const memberRef = doc(state.services.db, "weddings", state.weddingId, "dashboardUsers", user.uid);
+  try {
+    const permissionDoc = await getDoc(memberRef);
+    if (state.currentUser?.uid !== user.uid) return;
+    if (!permissionDoc.exists() || permissionDoc.data().canCheckIn !== true) {
+      throw new Error("This account does not have check-in access.");
+    }
+    applyCheckinPermissions(permissionDoc.data());
+    state.unsubMembership = onSnapshot(memberRef, (snapshot) => {
+      if (state.currentUser?.uid !== user.uid) return;
+      if (!snapshot.exists() || snapshot.data().canCheckIn !== true) {
+        revokeCheckinAccess();
+        return;
+      }
+      applyCheckinPermissions(snapshot.data());
+    }, () => revokeCheckinAccess());
+    state.unsubGuests = subscribeCheckinGuests();
+    if (state.guestToken) void resolveCheckinToken(state.guestToken, user.uid);
+  } catch (error) {
+    if (state.currentUser?.uid !== user.uid) return;
+    elements.app.hidden = true;
+    elements.authGate.hidden = false;
+    elements.authStatus.textContent = error.message || "This account does not have check-in access.";
+  }
+}
+
+function applyCheckinPermissions(permission) {
+  const allowedSide = String(permission.allowedSide || "all").toLowerCase();
+  if (!permission.canCheckIn || !["all", "bride", "groom", "family"].includes(allowedSide)) {
+    revokeCheckinAccess();
+    return;
+  }
+  const previousSide = state.permissions?.allowedSide;
+  state.permissions = { ...permission, allowedSide };
+  if (state.unsubGuests && previousSide && previousSide !== allowedSide) {
+    state.unsubGuests();
+    state.unsubGuests = subscribeCheckinGuests();
+  }
+  elements.authGate.hidden = true;
+  elements.app.hidden = false;
+  elements.manualSearchPanel.hidden = false;
+  renderManualSearchResults();
+}
+
+function revokeCheckinAccess() {
+  state.unsubGuests?.();
+  state.unsubGuests = null;
+  state.permissions = null;
+  state.guests = [];
+  state.guest = null;
+  elements.app.hidden = true;
+  elements.authGate.hidden = false;
+  elements.authStatus.textContent = "This account no longer has check-in access.";
+  renderGuestCard();
+  renderManualSearchResults();
+}
+
+function subscribeCheckinGuests() {
+  const guests = collection(state.services.db, "weddings", state.weddingId, "checkinGuests");
+  const allowedSide = state.permissions?.allowedSide || "all";
+  const source = allowedSide === "all" ? guests : query(guests, where("side", "==", allowedSide));
+  const userId = state.currentUser?.uid;
+  return onSnapshot(source, (snapshot) => {
+    if (state.currentUser?.uid !== userId || !state.permissions) return;
+    state.guests = snapshot.docs.map((item) => ({ ...item.data(), id: item.id }));
+    elements.counter.textContent = `Checked in ${state.guests.filter((guest) => guest.checkedIn).length} of ${state.guests.length} guests`;
+    if (state.guest) {
+      const updated = state.guests.find((guest) => guest.id === state.guest.id);
+      if (updated) state.guest = updated;
+      else if (!checkinSideAllowed(state.guest.side, state.permissions?.allowedSide)) state.guest = null;
+    }
     renderGuestCard();
     renderManualSearchResults();
-    if (!user) {
-      elements.authGate.hidden = false;
-      elements.app.hidden = true;
-      elements.authStatus.textContent = "Sign in with an authorized event account to scan or search guests.";
-      return;
-    }
-
-    let permissionDoc;
-    try {
-      permissionDoc = await getDoc(
-        doc(state.services.db, "weddings", state.weddingId, "dashboardUsers", user.uid)
-      );
-    } catch {
-      if (state.currentUser?.uid !== user.uid) return;
-      elements.app.hidden = true;
-      elements.authGate.hidden = false;
-      elements.authStatus.textContent = "This account does not have check-in access.";
-      return;
-    }
-    if (state.currentUser?.uid !== user.uid) return;
-
-    if (!permissionDoc.exists() || !permissionDoc.data().canCheckIn) {
-      elements.app.hidden = true;
-      elements.authGate.hidden = false;
-      elements.authStatus.textContent = "This account does not have check-in access.";
-      return;
-    }
-
-    state.permissions = permissionDoc.data();
-    elements.authGate.hidden = true;
-    elements.app.hidden = false;
-    elements.manualSearchPanel.hidden = false;
-    startGuestRefresh();
-    if (state.guestToken) {
-      try {
-        const resolve = httpsCallable(state.services.functions, "resolveCheckinGuest");
-        const result = await resolve({ weddingId: state.weddingId, token: state.guestToken });
-        if (state.currentUser?.uid !== user.uid) return;
-        state.guest = { ...result.data, id: result.data.guestId };
-        if (window.location.hash) history.replaceState(null, "", `${window.location.pathname}${window.location.search}`);
-        renderGuestCard();
-      } catch {
-        state.guest = null;
-        renderGuestCard();
-        showToast("This check-in link is unavailable.", "error");
-      }
-    }
+  }, (error) => {
+    console.error("Check-in guest access was revoked or could not be refreshed.", error?.code || "unavailable");
+    revokeCheckinAccess();
   });
+}
+
+function checkinSideAllowed(guestSide, allowedSide) {
+  return allowedSide === "all" || normalizeCheckinSide(guestSide) === allowedSide;
+}
+
+function normalizeCheckinSide(value) {
+  const side = String(value || "").trim().toLowerCase();
+  if (side === "bride") return "bride";
+  if (side === "groom" || side === "both" || side === "shared") return "groom";
+  if (side === "general") return "general";
+  return "family";
+}
+
+async function resolveCheckinToken(token, expectedUid) {
+  if (!/^[A-Za-z0-9_-]{43}$/.test(token || "")) {
+    showToast("This check-in link is unavailable.", "error");
+    return;
+  }
+  try {
+    const tokenRecord = await getDoc(doc(state.services.db, "weddings", state.weddingId, "invitationTokens", token));
+    if (!tokenRecord.exists() || state.currentUser?.uid !== expectedUid) throw new Error("Unavailable");
+    const guestId = tokenRecord.data().guestId;
+    if (typeof guestId !== "string" || !guestId) throw new Error("Unavailable");
+    const guestSnapshot = await getDoc(doc(state.services.db, "weddings", state.weddingId, "checkinGuests", guestId));
+    if (!guestSnapshot.exists() || state.currentUser?.uid !== expectedUid) throw new Error("Unavailable");
+    state.guest = { ...guestSnapshot.data(), id: guestSnapshot.id };
+    if (window.location.hash) history.replaceState(null, "", `${window.location.pathname}${window.location.search}`);
+    renderGuestCard();
+  } catch {
+    if (state.currentUser?.uid !== expectedUid) return;
+    state.guest = null;
+    renderGuestCard();
+    showToast("This check-in link is unavailable.", "error");
+  }
 }
 
 function loadDemoCheckin(message = "Preview mode is on. Firebase setup can be added later.") {
@@ -228,45 +311,15 @@ function bindEvents() {
 
 function startGuestRefresh() {
   state.unsubGuests?.();
-  const userId = state.currentUser?.uid;
-  const weddingId = state.weddingId;
-  const generation = ++state.guestFetchGeneration;
-  const refresh = async () => {
-    try {
-      const result = await httpsCallable(state.services.functions, "getCheckinGuestList")({ weddingId });
-      if (generation !== state.guestFetchGeneration || state.currentUser?.uid !== userId || state.weddingId !== weddingId) return;
-      state.guests = Array.isArray(result.data?.guests) ? result.data.guests : [];
-      const checkedInCount = state.guests.filter((guest) => guest.checkedIn).length;
-      elements.counter.textContent = `Checked in ${checkedInCount} of ${state.guests.length} guests`;
-      if (state.guest) {
-        const currentGuest = state.guests.find((guest) => guest.id === state.guest.id);
-        state.guest = currentGuest || null;
-        renderGuestCard();
-      }
-      renderManualSearchResults();
-    } catch (error) {
-      if (generation !== state.guestFetchGeneration || state.currentUser?.uid !== userId) return;
-      console.error("Check-in guest access was revoked or could not be refreshed.", error?.code || "unavailable");
-      state.guest = null;
-      state.guests = [];
-      state.permissions = null;
-      elements.counter.textContent = "Guest access unavailable";
-      renderGuestCard();
-      renderManualSearchResults();
-    }
-  };
-  void refresh();
-  const timer = window.setInterval(refresh, 30_000);
-  state.unsubGuests = () => {
-    state.guestFetchGeneration += 1;
-    window.clearInterval(timer);
-  };
+  state.unsubGuests = subscribeCheckinGuests();
 }
 
 function disposeListeners() {
   state.unsubGuests?.();
+  state.unsubMembership?.();
   state.unsubAuth?.();
   state.unsubGuests = null;
+  state.unsubMembership = null;
   state.unsubAuth = null;
 }
 
@@ -351,11 +404,19 @@ async function checkInGuest(guestId) {
       showToast("Guest checked in successfully.", "success");
       return;
     }
-    await updateDoc(doc(state.services.db, "weddings", state.weddingId, "guests", guestId), {
+    const checkedInAt = serverTimestamp();
+    const batch = writeBatch(state.services.db);
+    batch.update(doc(state.services.db, "weddings", state.weddingId, "guests", guestId), {
       checkedIn: true,
-      checkedInAt: serverTimestamp(),
+      checkedInAt,
       updatedAt: serverTimestamp(),
     });
+    batch.update(doc(state.services.db, "weddings", state.weddingId, "checkinGuests", guestId), {
+      checkedIn: true,
+      checkedInAt,
+      updatedAt: serverTimestamp(),
+    });
+    await batch.commit();
     guest.checkedIn = true;
     renderGuestCard();
     showToast("Guest checked in successfully.", "success");

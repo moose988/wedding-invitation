@@ -8,10 +8,8 @@ import {
   initializeAuth,
   onAuthStateChanged,
   signInWithEmailAndPassword,
-  signInWithCustomToken,
   signOut,
 } from "https://www.gstatic.com/firebasejs/12.19.0/firebase-auth.js";
-import { getFunctions, httpsCallable } from "https://www.gstatic.com/firebasejs/12.19.0/firebase-functions.js";
 import {
   addDoc,
   collection,
@@ -70,8 +68,6 @@ export function initFirebase() {
     const { app, config } = getConfiguredApp("planner-session");
     const auth = initializeAuth(app, { persistence: browserSessionPersistence });
     const db = getFirestore(app);
-    // Match the backend's default Cloud Functions region explicitly.
-    const functions = getFunctions(app, "us-central1");
     const persistenceReady = auth.authStateReady();
 
     isSupported()
@@ -82,7 +78,7 @@ export function initFirebase() {
         console.warn("Firebase Analytics could not be started.", error);
       });
 
-    return { app, auth, db, functions, config, persistenceReady };
+    return { app, auth, db, config, persistenceReady };
   });
 }
 
@@ -96,26 +92,7 @@ export function initPublicFirebase() {
 
     const config = { ...defaultConfig, ...(window.FIREBASE_CONFIG || {}) };
     const app = resolveFirebaseApp({ getApps, initializeApp }, config, "public-invitation");
-    return { app, db: getFirestore(app), functions: getFunctions(app, "us-central1"), config };
-  });
-}
-
-// One-time seating links exchange for a narrowly scoped custom token. Keep that
-// identity on its own named app so it cannot replace a planner session.
-export function initSeatingEditorFirebase() {
-  return serviceCache.get("seating-editor", () => {
-    if (!isFirebaseConfigured()) {
-      throw new Error("Firebase config is missing. Add window.FIREBASE_CONFIG in firebase-config.js.");
-    }
-
-    const config = { ...defaultConfig, ...(window.FIREBASE_CONFIG || {}) };
-    const app = resolveFirebaseApp({ getApps, initializeApp }, config, "seating-editor");
-    const auth = initializeAuth(app, { persistence: browserSessionPersistence });
-    const db = getFirestore(app);
-    const functions = getFunctions(app, "us-central1");
-    const persistenceReady = auth.authStateReady();
-
-    return { app, auth, db, functions, config, persistenceReady };
+    return { app, db: getFirestore(app), config };
   });
 }
 
@@ -135,9 +112,7 @@ export {
   serverTimestamp,
   setDoc,
   signInWithEmailAndPassword,
-  signInWithCustomToken,
   signOut,
-  httpsCallable,
   updateDoc,
   where,
   writeBatch,

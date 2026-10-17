@@ -6,7 +6,6 @@ import {
   getDoc,
   getDocs,
   initFirebase,
-  initSeatingEditorFirebase,
   isFirebaseConfigured,
   onAuthStateChanged,
   onSnapshot,
@@ -14,9 +13,7 @@ import {
   runTransaction,
   serverTimestamp,
   setDoc,
-  signInWithCustomToken,
   signOut,
-  httpsCallable,
   updateDoc,
   where,
   writeBatch,
@@ -30,6 +27,7 @@ import { createShareUrl } from "./share-link.js";
 import { exportGuests } from "./export.js";
 import { buildInvitationProjection, generateInvitationToken, isValidInvitationToken } from "./invitations/shared/invitation-token.js";
 import { createInvitationTokenService } from "./invitations/shared/invitation-token-service.js";
+import { projectSeatAssignments, migrateLegacySeating, seatAssignmentRef, seatedPersonRef, seatOccupancyRef } from "./seating-firestore.js";
 import { canViewSeatingAccountPage, resolveSeatingAccountPage } from "./dashboard-access.js";
 import { eventUsesGuestSides, getDefaultGuestSide, getEventDisplayTitle, isCelebrationEvent } from "./event-utils.js";
 import { attemptEventSettingsSave, bindEventSettingsFieldTracking, bindEventSettingsSubmit, canEditEventSettings, commitEventSettingsBatch, eventSettingsFeedback, eventSettingsHaveChanges, isEventSettingsSaveDisabled, updateEventSettingsSaveControl } from "./event-settings-state.js";
@@ -46,13 +44,13 @@ import {
 } from "./seating-utils.js?v=20261012-seating-refresh-2";
 
 const params = new URLSearchParams(window.location.search);
-const secureSeatingEditorMode = params.get("seatingEditor") === "1";
+const legacySeatingEditorRoute = params.get("seatingEditor") === "1";
 const requestedSeatingSide = ["bride", "groom", "family"].includes(
   params.get("side"),
 )
   ? params.get("side")
   : "";
-const seatingEditorMode = secureSeatingEditorMode;
+const seatingEditorMode = false;
 const lastWeddingStorageKey = "da3wa:lastDashboardWeddingId";
 const demoDashboardStorageKey = "da3wa:demoDashboardState:v4";
 const dashboardSidebarStorageKey = "da3wa:dashboardSidebarCollapsed:v1";
@@ -770,7 +768,7 @@ const demoSeedGuests = [...demoGuests, ...seatingTestGuests];
 const state = {
   weddingId: params.get("wedding") || "",
   editorMode: seatingEditorMode,
-  secureEditorMode: secureSeatingEditorMode,
+  secureEditorMode: false,
   editorLinkToken: params.get("token") || "",
   editorRole: "",
   // Demo data is opt-in only. A wedding ID that happens to contain "demo"
@@ -789,6 +787,9 @@ const state = {
   invitationTokenService: null,
   invitationResponseUnsubscribers: new Map(),
   tables: [],
+  seatAssignments: [],
+  seatOccupancy: [],
+  seatAssignmentsReady: false,
   hallObjects: createHallObjects(),
   selectedHallObjectId: "",
   selectedGuestId: "",
@@ -856,12 +857,20 @@ const state = {
   eventLifecycleMessage: "",
   unsubGuests: null,
   unsubTables: null,
+  unsubSeatAssignments: null,
+  unsubSeatOccupancy: null,
+  unsubSenderCapabilities: null,
   unsubWedding: null,
   unsubSeatingAccess: null,
   unsubAuth: null,
   initialized: false,
   listenerGeneration: 0,
   seatingAccess: { bride: null, groom: null, family: null },
+  senderCapabilities: [],
+  projectionSyncPromise: null,
+  projectionSyncAgain: false,
+  projectionSyncSignature: "",
+  projectionSyncError: "",
 };
 
 const elements = {
@@ -927,17 +936,22 @@ async function init() {
     return;
   }
 
+  if (legacySeatingEditorRoute || params.has("token")) {
+    window.location.replace(buildAuthRouteUrl("./dashboard-login.html", {
+      weddingId: state.weddingId,
+      side: requestedSeatingSide || "bride",
+      workspace: "side",
+      message: "account-sign-in-required",
+    }));
+    return;
+  }
+
   if (!isFirebaseConfigured()) {
     redirectToLogin("firebase-not-configured");
     return;
   }
 
-  state.services = initializeFirebaseServicesForRoute(
-    {
-      seatingEditor: state.secureEditorMode,
-    },
-    { dashboard: initFirebase, seating: initSeatingEditorFirebase },
-  );
+  state.services = initializeFirebaseServicesForRoute({}, { dashboard: initFirebase });
   try {
     await waitForFirebaseSessionPersistence(state.services);
   } catch (error) {
@@ -946,19 +960,14 @@ async function init() {
     return;
   }
 
-  if (state.secureEditorMode) {
-    await bootstrapSeatingEditor();
-    return;
-  }
-
   state.unsubAuth?.();
   state.unsubAuth = onAuthStateChanged(state.services.auth, async (user) => {
     const previousUserId = state.currentUser?.uid || "";
     if (previousUserId && user?.uid !== previousUserId) {
       clearInvitationTokenCache();
-      state.unsubGuests?.(); state.unsubTables?.(); state.unsubWedding?.(); state.unsubSeatingAccess?.();
+      state.unsubGuests?.(); state.unsubTables?.(); state.unsubSeatAssignments?.(); state.unsubSeatOccupancy?.(); state.unsubSenderCapabilities?.(); state.unsubWedding?.();
       state.listenerGeneration += 1;
-      state.guests = []; state.tables = []; state.wedding = null; state.permissions = null;
+      state.guests = []; state.tables = []; state.seatAssignments = []; state.seatOccupancy = []; state.seatAssignmentsReady = false; state.wedding = null; state.permissions = null;
       if (user) {
         window.location.replace("./all-events.html");
         return;
@@ -1094,6 +1103,9 @@ function bindEvents() {
   document.addEventListener("keydown", handleDocumentKeydown);
   if (elements.pageContent) {
     bindEventSettingsSubmit(elements.pageContent, (event) => void saveEventSettings(event));
+    elements.pageContent.addEventListener("submit", (event) => {
+      if (event.target?.id === "seatingAccountPermissionForm") void saveSeatingAccountPermission(event);
+    });
   }
   elements.guestModal?.addEventListener("click", handleDialogBackdropClick);
   elements.bulkAddModal?.addEventListener("click", handleDialogBackdropClick);
@@ -1374,66 +1386,16 @@ function updateEventSettingsDraftState(settingsField) {
   if (error) error.textContent = "";
 }
 
-async function bootstrapSeatingEditor() {
-  try {
-    let user = state.services.auth.currentUser;
-    if (state.editorLinkToken) {
-      await state.services.persistenceReady;
-      const exchange = httpsCallable(
-        state.services.functions,
-        "exchangeSeatingEditorLink",
-      );
-      const result = await exchange({ token: state.editorLinkToken });
-      await signInWithCustomToken(state.services.auth, result.data.customToken);
-      window.history.replaceState(null, "", "./dashboard.html?seatingEditor=1");
-      user = state.services.auth.currentUser;
-    }
-    if (!user) {
-      throw new Error("This access link has expired or been revoked.");
-    }
-    const token = await user.getIdTokenResult(true);
-    const claims = token.claims;
-    if (
-      !claims.seatingEditor ||
-      !["bride", "groom", "family"].includes(claims.seatingRole) ||
-      !claims.seatingWeddingId
-    ) {
-      throw new Error("This access link has expired or been revoked.");
-    }
-    state.currentUser = user;
-    state.weddingId = claims.seatingWeddingId;
-    state.editorRole = claims.seatingRole;
-    // Family link sessions are deliberately view-only. Bride and Groom have
-    // occupancy controls, while Firestore separately limits secure-link
-    // table writes to chair assignment fields.
-    state.permissions = {
-      role: claims.seatingRole,
-      canEditSeating: ["bride", "groom"].includes(claims.seatingRole),
-    };
-    const weddingSnapshot = await getDoc(doc(state.services.db, "weddings", state.weddingId));
-    if (!weddingSnapshot.exists()) throw new Error("This event is no longer available.");
-    state.wedding = { ...weddingSnapshot.data(), id: weddingSnapshot.id };
-    state.activeView = "seating";
-    showDashboard();
-    renderAll();
-    startWeddingListener();
-    startListeners();
-  } catch (error) {
-    console.error(error);
-    showEditorAccessError();
-  }
-}
-
 function showEditorAccessError() {
   elements.dashboardApp.hidden = false;
   elements.dashboardSidebar.hidden = true;
   elements.pageEyebrow.textContent = "Seating access";
   elements.pageTitle.textContent = "Access unavailable";
   elements.pageDescription.textContent =
-    "Your access link has expired or been revoked.";
+    "Seating access now uses your event account.";
   elements.globalActions.innerHTML = "";
   elements.pageContent.innerHTML =
-    '<section class="share-page"><article class="share-card"><h3>Your seating editor link is unavailable</h3><p>Please ask the dashboard owner to generate a new link.</p></article></section>';
+    '<section class="share-page"><article class="share-card"><h3>Sign in with an authorized event account</h3><p>Ask the event owner to add or update your account permissions, then use the event-specific sign-in link.</p><a class="da3wa-button da3wa-button--primary" href="./dashboard-login.html">Open sign-in</a></article></section>';
 }
 
 function showDashboardBootstrapError(error) {
@@ -1752,26 +1714,69 @@ async function bootstrapDashboard() {
   renderAll();
   startWeddingListener();
   startListeners();
-  startSeatingAccessListener();
+  startSenderCapabilitiesListener();
+  void ensureSeatingSchema();
+  void syncPublicStats();
   // A migration outage must not delay dashboard rendering or live data.
   void normalizeGuestSidesInBackground();
 }
 
+function startSenderCapabilitiesListener() {
+  state.unsubSenderCapabilities?.();
+  state.unsubSenderCapabilities = null;
+  state.senderCapabilities = [];
+  if (!isWeddingOwner()) return;
+  state.unsubSenderCapabilities = onSnapshot(
+    collection(state.services.db, "weddings", state.weddingId, "senderCapabilities"),
+    (snapshot) => {
+      state.senderCapabilities = snapshot.docs.map((item) => ({ id: item.id, ...item.data() }));
+      if (state.activeView === "share") renderActiveView();
+    },
+    (error) => console.error("Sender capability access could not be refreshed.", error),
+  );
+}
+
+async function ensureSeatingSchema() {
+  if (!isWeddingOwner() || state.mode !== "live") return;
+  try {
+    const result = await migrateLegacySeating({
+      api: { doc, getDoc, getDocs, collection, runTransaction, serverTimestamp, writeBatch, updateDoc, setDoc },
+      db: state.services.db,
+      weddingId: state.weddingId,
+      uid: state.currentUser.uid,
+    });
+    state.seatingMigrationError = "";
+    if (result.migrated) showToast(`Moved ${result.migrated} existing seat assignments into the protected seating workspace.`, "success");
+    state.wedding = { ...state.wedding, seatingSchemaVersion: 2 };
+    void syncPublicStats();
+  } catch (error) {
+    console.error("Seating preparation could not be completed.", error);
+    state.seatingMigrationError = error?.message || "Seating preparation could not be completed.";
+    showToast(state.seatingMigrationError, "error");
+  }
+}
+
 async function normalizeGuestSidesInBackground() {
-  if (!can("canEditGuests") || state.mode !== "live") return;
+  if (!isWeddingOwner() || state.mode !== "live") return;
   const generation = state.listenerGeneration;
   try {
     const guestsSnapshot = await getDocs(
       collection(state.services.db, "weddings", state.weddingId, "guests"),
     );
-    const legacyGuests = guestsSnapshot.docs.filter((guestDoc) =>
-      isLegacyBothGuestSide(guestDoc.data().side),
-    );
+    const legacyGuests = guestsSnapshot.docs.filter((guestDoc) => {
+      const side = guestDoc.data().side;
+      const desiredSide = isCelebrationEvent(state.wedding)
+        ? "general"
+        : (normalizeGuestSide(side) === "general" ? "family" : normalizeGuestSide(side));
+      return side !== desiredSide;
+    });
     for (let offset = 0; offset < legacyGuests.length; offset += 400) {
       const batch = writeBatch(state.services.db);
       legacyGuests.slice(offset, offset + 400).forEach((guestDoc) => {
         batch.update(guestDoc.ref, {
-          side: "groom",
+          side: isCelebrationEvent(state.wedding)
+            ? "general"
+            : (normalizeGuestSide(guestDoc.data().side) === "general" ? "family" : normalizeGuestSide(guestDoc.data().side)),
           updatedAt: serverTimestamp(),
         });
       });
@@ -1780,7 +1785,7 @@ async function normalizeGuestSidesInBackground() {
     if (generation !== state.listenerGeneration) return;
     if (legacyGuests.length) {
       showToast(
-        `Updated ${legacyGuests.length} legacy guest side assignment${legacyGuests.length === 1 ? "" : "s"} to Groom.`,
+        `Normalized ${legacyGuests.length} legacy guest side assignment${legacyGuests.length === 1 ? "" : "s"}.`,
         "success",
       );
     }
@@ -1810,36 +1815,20 @@ function canViewEventSettings() {
   return state.mode === "demo" || canEditEventDetails();
 }
 
-function canManageSeatingAccess() {
-  return isWeddingOwner() || state.permissions?.canManageUsers === true;
-}
-
-function startSeatingAccessListener() {
-  state.unsubSeatingAccess?.();
-  state.unsubSeatingAccess = null;
-  if (!canManageSeatingAccess()) {
-    state.seatingAccess = { bride: null, groom: null, family: null };
-    return;
-  }
-  state.unsubSeatingAccess = onSnapshot(
-    collection(state.services.db, "weddings", state.weddingId, "seatingAccess"),
-    (snapshot) => {
-      const next = { bride: null, groom: null, family: null };
-      snapshot.docs.forEach((item) => {
-        if (["bride", "groom", "family"].includes(item.id))
-          next[item.id] = { id: item.id, ...item.data() };
-      });
-      state.seatingAccess = next;
-      if (state.activeView === "share") renderActiveView();
-    },
-  );
-}
-
 function startListeners() {
   state.unsubGuests?.();
   state.unsubTables?.();
+  state.unsubSeatAssignments?.();
+  state.unsubSeatOccupancy?.();
+  state.unsubSenderCapabilities?.();
   state.unsubGuests = null;
   state.unsubTables = null;
+  state.unsubSeatAssignments = null;
+  state.unsubSeatOccupancy = null;
+  state.unsubSenderCapabilities = null;
+  state.seatAssignmentsReady = false;
+  state.seatAssignments = [];
+  state.seatOccupancy = [];
   const generation = ++state.listenerGeneration;
   state.loadingGuests = true;
   state.loadingTables = true;
@@ -1862,6 +1851,7 @@ function startListeners() {
         id: docSnapshot.id,
         side: normalizeGuestSide(docSnapshot.data().side),
       })), "Firestore guest");
+      if (state.seatAssignmentsReady) state.guests = syncGuestSeatingSummaries(state.guests, state.tables);
       state.guests = state.guests.map((guest) => {
         const cachedToken = state.invitationTokenCache.get(guest.id);
         return cachedToken ? { ...guest, guestToken: cachedToken } : guest;
@@ -1889,13 +1879,15 @@ function startListeners() {
     collection(state.services.db, "weddings", state.weddingId, "tables"),
     (snapshot) => {
       if (generation !== state.listenerGeneration) return;
-      const nextTables = hydrateTables(
-        uniqueRowsById(snapshot.docs.map((docSnapshot) => ({
+      const layoutTables = uniqueRowsById(snapshot.docs.map((docSnapshot) => ({
           ...docSnapshot.data(),
           id: docSnapshot.id,
-        })), "Firestore table"),
+        })), "Firestore table");
+      const nextTables = hydrateTables(
+        state.seatAssignmentsReady ? projectSeatAssignments(layoutTables, state.seatAssignments, state.seatOccupancy) : layoutTables,
       );
       state.tables = nextTables;
+      if (state.seatAssignmentsReady) state.guests = syncGuestSeatingSummaries(state.guests, state.tables);
       state.selectedTableId =
         state.selectedTableId || state.tables[0]?.id || "";
       state.loadingTables = false;
@@ -1903,6 +1895,39 @@ function startListeners() {
       renderAll();
       refreshAssignmentCandidatesAfterSnapshot();
       void syncPublicStats();
+    },
+    (error) => handleSeatingListenerError(error),
+  );
+
+  const seatCollection = collection(state.services.db, "weddings", state.weddingId, "seatAssignments");
+  const seatQuery = state.editorMode && state.editorRole !== "all"
+    ? query(seatCollection, where("side", "==", state.editorRole))
+    : seatCollection;
+  state.unsubSeatAssignments = onSnapshot(
+    seatQuery,
+    (snapshot) => {
+      if (generation !== state.listenerGeneration) return;
+      state.seatAssignments = snapshot.docs;
+      state.seatAssignmentsReady = true;
+      const layoutTables = state.tables.map((table) => ({ ...table }));
+      state.tables = hydrateTables(projectSeatAssignments(layoutTables, state.seatAssignments, state.seatOccupancy));
+      state.guests = syncGuestSeatingSummaries(state.guests, state.tables);
+      renderAll();
+      refreshAssignmentCandidatesAfterSnapshot();
+      void syncPublicStats();
+    },
+    (error) => handleSeatingListenerError(error),
+  );
+  state.unsubSeatOccupancy = onSnapshot(
+    collection(state.services.db, "weddings", state.weddingId, "seatOccupancy"),
+    (snapshot) => {
+      if (generation !== state.listenerGeneration) return;
+      state.seatOccupancy = snapshot.docs;
+      const layoutTables = state.tables.map((table) => ({ ...table }));
+      state.tables = hydrateTables(projectSeatAssignments(layoutTables, state.seatAssignments, state.seatOccupancy));
+      state.guests = syncGuestSeatingSummaries(state.guests, state.tables);
+      renderAll();
+      refreshAssignmentCandidatesAfterSnapshot();
     },
     (error) => handleSeatingListenerError(error),
   );
@@ -2111,11 +2136,17 @@ function disposeDashboardListeners() {
   state.listenerGeneration += 1;
   state.unsubGuests?.();
   state.unsubTables?.();
+  state.unsubSeatAssignments?.();
+  state.unsubSeatOccupancy?.();
+  state.unsubSenderCapabilities?.();
   state.unsubWedding?.();
   state.unsubSeatingAccess?.();
   state.unsubAuth?.();
   state.unsubGuests = null;
   state.unsubTables = null;
+  state.unsubSeatAssignments = null;
+  state.unsubSeatOccupancy = null;
+  state.unsubSenderCapabilities = null;
   state.unsubWedding = null;
   state.unsubSeatingAccess = null;
   state.unsubAuth = null;
@@ -2186,80 +2217,172 @@ function editorGuestSideValues(role) {
       ];
 }
 
-function buildPublicStatsPayload() {
-  if (isCelebrationEvent(state.wedding)) {
-    const guests = state.guests;
-    const confirmed = guests.filter((guest) => guest.rsvpStatus === "confirmed");
-    const members = {
-      invited: guests.length,
-      seats: guests.reduce((sum, guest) => sum + getPartySize(guest), 0),
+function buildPublicStatsPayload(guests = state.guests, tables = state.tables, wedding = state.wedding) {
+  const makeStats = (rows) => {
+    const confirmed = rows.filter((guest) => guest.rsvpStatus === "confirmed");
+    return {
+      invited: rows.length,
+      seats: rows.reduce((sum, guest) => sum + getPartySize(guest), 0),
       confirmed: confirmed.length,
       confirmedSeats: confirmed.reduce((sum, guest) => sum + getPartySize(guest), 0),
-      pending: guests.filter((guest) => !["confirmed", "declined"].includes(guest.rsvpStatus)).length,
-      declined: guests.filter((guest) => guest.rsvpStatus === "declined").length,
-      seated: guests.filter((guest) => getGuestAssignedSeats(guest.id).length > 0).length,
-      invitesSent: guests.filter((guest) => guest.inviteSentAt || guest.reminderSentAt).length,
+      pending: rows.filter((guest) => !["confirmed", "declined"].includes(guest.rsvpStatus)).length,
+      declined: rows.filter((guest) => guest.rsvpStatus === "declined").length,
+      seated: rows.filter((guest) => getGuestAssignedSeats(guest.id, tables).length > 0).length,
+      invitesSent: rows.filter((guest) => guest.inviteSentAt || guest.reminderSentAt).length,
     };
-    const roster = guests.map((guest) => ({
-      id: guest.id, n: guest.fullName || "",
-      r: ["confirmed", "declined"].includes(guest.rsvpStatus) ? guest.rsvpStatus : "pending",
-      p: getPartySize(guest),
-      seats: getGuestAssignedSeats(guest.id).map((assignment) => ({ t: assignment.tableName || "", n: Number(assignment.seatNumber) || 0 })),
-    }));
-    return { eventCategory: "celebration", eventTitle: getEventDisplayTitle(state.wedding), all: members, roster: { all: roster } };
-  }
-  const sides = {};
-  const roster = {};
-  ["groom", "bride", "family"].forEach((side) => {
-    const guests = state.guests.filter((guest) => sideViewMatches(guest, side));
-    const confirmed = guests.filter(
-      (guest) => guest.rsvpStatus === "confirmed",
-    );
-    sides[side] = {
-      invited: guests.length,
-      seats: guests.reduce((sum, guest) => sum + getPartySize(guest), 0),
-      confirmed: confirmed.length,
-      confirmedSeats: confirmed.reduce(
-        (sum, guest) => sum + getPartySize(guest),
-        0,
-      ),
-      pending: guests.filter(
-        (guest) => !["confirmed", "declined"].includes(guest.rsvpStatus),
-      ).length,
-      declined: guests.filter((guest) => guest.rsvpStatus === "declined")
-        .length,
-      seated: guests.filter(
-        (guest) => getGuestAssignedSeats(guest.id).length > 0,
-      ).length,
-      invitesSent: guests.filter(
-        (guest) => guest.inviteSentAt || guest.reminderSentAt,
-      ).length,
-    };
-    roster[side] = guests.map((guest) => ({
-      id: guest.id,
-      n: guest.fullName || "",
-      r: ["confirmed", "declined"].includes(guest.rsvpStatus)
-        ? guest.rsvpStatus
-        : "pending",
-      p: getPartySize(guest),
-      seats: getGuestAssignedSeats(guest.id).map((assignment) => ({
-        t: assignment.tableName || "",
-        n: Number(assignment.seatNumber) || 0,
-      })),
-    }));
-  });
-  return { eventCategory: "wedding_engagement", eventTitle: getEventDisplayTitle(state.wedding), coupleName: state.wedding?.coupleName || "", sides, roster };
+  };
+  if (isCelebrationEvent(wedding)) return { eventCategory: "celebration", all: makeStats(guests) };
+  return {
+    eventCategory: "wedding_engagement",
+    sides: Object.fromEntries(["groom", "bride", "family"].map((side) => [
+      side, makeStats(guests.filter((guest) => sideViewMatches(guest, side))),
+    ])),
+  };
 }
 
-let lastPublicStatsJson = "";
+function buildSeatingGuestProjection(guest) {
+  return {
+    fullName: String(guest.fullName || "Guest").slice(0, 160),
+    side: normalizeGuestSide(guest.side),
+    additionalGuests: Math.max(0, Math.min(10, Number(guest.additionalGuests || 0))),
+    rsvpStatus: ["confirmed", "declined"].includes(guest.rsvpStatus) ? guest.rsvpStatus : "pending",
+  };
+}
 
-// Publishes side-level stats to a public doc the standalone side.html pages
-// read. Runs on every snapshot delivery; the JSON compare keeps it from
-// writing unless something actually changed.
-async function syncPublicStats() {
-  // Public aggregates are generated by the Admin SDK trigger. Browser-written
-  // summaries would let any dashboard member publish fabricated guest data.
-  return;
+function buildCheckinGuestProjection(guest, tables) {
+  const assignments = getGuestAssignedSeats(guest.id, tables).sort((a, b) => Number(a.partyMemberIndex) - Number(b.partyMemberIndex));
+  const primary = assignments.find((assignment) => Number(assignment.partyMemberIndex) === 0) || assignments[0];
+  const table = primary && tables.find((item) => item.id === primary.tableId);
+  return {
+    guestId: guest.id,
+    fullName: String(guest.fullName || "Guest").slice(0, 160),
+    phone: String(guest.phone || "").slice(0, 40),
+    side: normalizeGuestSide(guest.side),
+    rsvpStatus: ["confirmed", "declined"].includes(guest.rsvpStatus) ? guest.rsvpStatus : "pending",
+    tableId: primary?.tableId || "",
+    tableName: String(primary?.tableName || table?.name || "").slice(0, 100),
+    seatNumber: primary ? String(primary.seatNumber) : "",
+    checkedIn: guest.checkedIn === true,
+    checkedInAt: guest.checkedInAt || null,
+  };
+}
+
+function projectionJson(value) {
+  return JSON.stringify(value, (_key, item) => item?.toMillis ? item.toMillis() : item);
+}
+
+async function commitProjectionWrites(db, writes) {
+  for (let offset = 0; offset < writes.length; offset += 400) {
+    const batch = writeBatch(db);
+    writes.slice(offset, offset + 400).forEach((write) => {
+      if (write.type === "delete") batch.delete(write.ref);
+      else batch.set(write.ref, { ...write.data, updatedAt: serverTimestamp() }, { merge: false });
+    });
+    await batch.commit();
+  }
+}
+
+// The event owner repairs projections in the browser. Public summaries contain
+// counts only; exact guest invitations and authorized staff projections remain
+// separate documents with their own rules. A second pass catches listener
+// changes that arrived while a repair was running.
+async function syncPublicStats({ force = false } = {}) {
+  if (state.mode !== "live" || !isWeddingOwner() || !state.weddingId || state.loadingGuests || state.loadingTables || !state.seatAssignmentsReady) return;
+  state.projectionSyncAgain = true;
+  if (state.projectionSyncPromise) return state.projectionSyncPromise;
+  state.projectionSyncPromise = (async () => {
+    while (state.projectionSyncAgain) {
+      state.projectionSyncAgain = false;
+      const generation = state.listenerGeneration;
+      const weddingId = state.weddingId;
+      const wedding = { ...state.wedding };
+      const guests = state.guests.map((guest) => ({ ...guest }));
+      const tables = state.tables.map((table) => ({ ...table, chairs: (table.chairs || []).map((chair) => ({ ...chair })) }));
+      if (!guests.length && state.firestoreGuestCount > 0) continue;
+      const stats = buildPublicStatsPayload(guests, tables, wedding);
+      const publicSummary = {
+        eventId: weddingId,
+        eventTitle: getEventDisplayTitle(wedding).slice(0, 160),
+        coupleName: String(wedding.coupleName || "").slice(0, 160),
+        eventCategory: wedding.eventCategory === "celebration" ? "celebration" : "wedding_engagement",
+        seatingEnabled: wedding.seatingEnabled !== false,
+        seatingSchemaVersion: Number(wedding.seatingSchemaVersion || 2),
+        stats,
+      };
+      const publicStats = { eventId: weddingId, eventCategory: publicSummary.eventCategory, stats };
+      const guestById = new Map(guests.map((guest) => [guest.id, guest]));
+      const seatingData = guests.map((guest) => [guest.id, buildSeatingGuestProjection(guest)]);
+      const checkinData = guests.map((guest) => [guest.id, buildCheckinGuestProjection(guest, tables)]);
+      const invitationSecrets = await getDocs(collection(state.services.db, "weddings", weddingId, "invitationSecrets"));
+      const invitationData = [];
+      const activeSecrets = invitationSecrets.docs.filter((snapshot) => {
+        const data = snapshot.data();
+        return data.status === "active" && isValidInvitationToken(data.token) && guestById.has(snapshot.id);
+      });
+      for (let offset = 0; offset < activeSecrets.length; offset += 20) {
+        const chunk = activeSecrets.slice(offset, offset + 20);
+        const results = await Promise.all(chunk.map(async (secretSnapshot) => {
+          const guest = guestById.get(secretSnapshot.id);
+          const token = secretSnapshot.data().token;
+          const [indexSnapshot, publicSnapshot] = await Promise.all([
+            getDoc(doc(state.services.db, "weddings", weddingId, "invitationTokens", token)),
+            getDoc(doc(state.services.db, "weddings", weddingId, "publicGuests", token)),
+          ]);
+          if (!indexSnapshot.exists() || indexSnapshot.data().status !== "active" || indexSnapshot.data().guestId !== guest.id ||
+              (!publicSnapshot.exists() && !state.projectionRepairRequested)) return null;
+          const expiresAt = indexSnapshot.data().expiresAt || null;
+          if (expiresAt && expiresAt.toMillis?.() <= Date.now()) return null;
+          const current = { ...guest, ...buildGuestSeatingPatchFromTables(guest, tables, false) };
+          const projection = buildInvitationProjection(weddingId, wedding, current, tables);
+          const response = publicSnapshot.exists() ? publicSnapshot.data() : {};
+          return [token, {
+            ...projection,
+            rsvpStatus: ["confirmed", "declined"].includes(response.rsvpStatus || guest.rsvpStatus) ? (response.rsvpStatus || guest.rsvpStatus) : "pending",
+            additionalGuests: Math.max(0, Math.min(Number(guest.additionalGuestAllowance ?? guest.additionalGuests ?? 0), Number(response.additionalGuests ?? guest.additionalGuests ?? 0), 10)),
+            rsvpMessage: String(response.rsvpMessage ?? guest.rsvpMessage ?? "").slice(0, 1000),
+            expiresAt,
+          }];
+        }));
+        invitationData.push(...results.filter(Boolean));
+      }
+      const [oldSeating, oldCheckin] = await Promise.all([
+        getDocs(collection(state.services.db, "weddings", weddingId, "seatingGuests")),
+        getDocs(collection(state.services.db, "weddings", weddingId, "checkinGuests")),
+      ]);
+      if (generation !== state.listenerGeneration || weddingId !== state.weddingId) {
+        state.projectionSyncAgain = true;
+        continue;
+      }
+      const signature = projectionJson({ publicSummary, publicStats, seatingData, checkinData, invitationData });
+      if (!force && signature === state.projectionSyncSignature) continue;
+      const writes = [];
+      for (const [id, data] of seatingData) writes.push({ ref: doc(state.services.db, "weddings", weddingId, "seatingGuests", id), data });
+      for (const [id, data] of checkinData) writes.push({ ref: doc(state.services.db, "weddings", weddingId, "checkinGuests", id), data });
+      const guestIds = new Set(guests.map((guest) => guest.id));
+      oldSeating.docs.filter((snapshot) => !guestIds.has(snapshot.id)).forEach((snapshot) => writes.push({ type: "delete", ref: snapshot.ref }));
+      oldCheckin.docs.filter((snapshot) => !guestIds.has(snapshot.id)).forEach((snapshot) => writes.push({ type: "delete", ref: snapshot.ref }));
+      for (const [token, data] of invitationData) writes.push({ ref: doc(state.services.db, "weddings", weddingId, "publicGuests", token), data });
+      await commitProjectionWrites(state.services.db, writes);
+      if (generation !== state.listenerGeneration || weddingId !== state.weddingId) {
+        state.projectionSyncAgain = true;
+        continue;
+      }
+      const summaryBatch = writeBatch(state.services.db);
+      summaryBatch.set(doc(state.services.db, "weddings", weddingId, "publicSummary", "summary"), { ...publicSummary, updatedAt: serverTimestamp() });
+      summaryBatch.set(doc(state.services.db, "weddings", weddingId, "publicStats", "summary"), { ...publicStats, updatedAt: serverTimestamp() });
+      await summaryBatch.commit();
+      state.projectionSyncSignature = signature;
+      state.projectionSyncError = "";
+      state.projectionRepairRequested = false;
+    }
+  })().catch((error) => {
+    state.projectionSyncError = error?.message || "Projection repair failed.";
+    console.error("Event projections could not be synchronized.", error?.code || "unavailable", error);
+  }).finally(() => {
+    state.projectionSyncPromise = null;
+    if (state.projectionSyncAgain) void syncPublicStats();
+  });
+  return state.projectionSyncPromise;
 }
 
 function showDashboard() {
@@ -3313,7 +3436,7 @@ function renderCheckinPage() {
 function renderSharePage() {
   elements.pageContent.innerHTML = `
     <section class="share-page">
-      ${isSeatingEnabled() && eventUsesGuestSides(state.wedding) ? renderSeatingAccessCard() : ""}
+      ${isSeatingEnabled() ? renderSeatingAccessCard() : ""}
       ${renderSenderCard()}
     </section>
   `;
@@ -3807,7 +3930,7 @@ function renderSenderCard() {
       <div class="sender-option">
         <div class="sender-option__copy">
           <strong>${escapeHtml(label)}</strong>
-          <span>${count} guest${count === 1 ? "" : "s"} ready to invite${note ? ` · ${escapeHtml(note)}` : ""}${count > 150 ? " · long list — the link may be too large for some messaging apps" : ""}</span>
+          <span>${count} guest${count === 1 ? "" : "s"} ready to invite${note ? ` · ${escapeHtml(note)}` : ""}</span>
         </div>
         <div class="sender-option__actions">
           ${actionButton("Open", "open-sender", !count, "secondary", side)}
@@ -3822,9 +3945,32 @@ function renderSenderCard() {
       <div class="sender-options">
         ${eventUsesGuestSides(state.wedding) ? `${senderOption("Groom side", "groom")}${senderOption("Bride side", "bride")}${familyCount ? senderOption("Family", "family", "family guests appear only here and in All guests") : ""}${senderOption("All guests", "all")}` : senderOption("All guests", "all")}
       </div>
+      <p class="da3wa-form-hint">Anyone who receives a sender link can see the selected guests' names and phone numbers and share their invitation links. You can revoke active links below.</p>
       ${excluded ? `<p class="da3wa-form-hint">${excluded} guest${excluded === 1 ? " is" : "s are"} excluded for a missing phone number or invitation link.</p>` : ""}
+      ${renderActiveSenderCapabilities()}
     </article>
   `;
+}
+
+function renderActiveSenderCapabilities() {
+  if (!isWeddingOwner()) return "";
+  const active = state.senderCapabilities.filter((item) => item.status === "active" && item.purpose === "whatsapp-sender");
+  if (!active.length) return "";
+  return `<div class="sender-options"><h4>Active sender links</h4>${active.map((item) => `<div class="sender-option"><div class="sender-option__copy"><strong>${escapeHtml(item.side || "all")} · ${Number(item.recipientCount) || 0} recipients</strong><span>Created ${escapeHtml(formatTimestamp(item.createdAt))}</span></div><div class="sender-option__actions">${actionButton("Revoke", "revoke-sender-capability", false, "danger", item.id)}</div></div>`).join("")}</div>`;
+}
+
+async function revokeSenderCapability(capabilityId) {
+  if (!isWeddingOwner() || !/^[A-Za-z0-9_-]{43}$/.test(capabilityId || "")) return;
+  if (!window.confirm("Revoke this WhatsApp sender link? It will stop working immediately.")) return;
+  try {
+    await updateDoc(doc(state.services.db, "weddings", state.weddingId, "senderCapabilities", capabilityId), {
+      status: "revoked", updatedAt: serverTimestamp(),
+    });
+    showToast("Sender link revoked.", "success");
+  } catch (error) {
+    console.error("Sender link could not be revoked.", error);
+    showToast("Could not revoke this sender link. Check your owner access and try again.", "error");
+  }
 }
 
 function renderExportsPage() {
@@ -3987,153 +4133,71 @@ function renderGuestCardActions(guest) {
 }
 
 function renderSeatingAccessCard() {
-  if (!canManageSeatingAccess()) return "";
-  const loginLink = seatingAccountLoginLink();
-  return `
-    <article class="share-card share-card--sender">
-      <h3>Bride &amp; Groom seating sign-in</h3>
-      <code>${escapeHtml(loginLink)}</code>
-      <div class="sender-option__actions">
-        ${actionButton("Copy sign-in link", "copy-seating-login", false, "primary")}
-        <a class="da3wa-button da3wa-button--secondary" href="${escapeAttribute(loginLink)}" target="_blank" rel="noopener">Open sign-in</a>
-      </div>
-    </article>`;
-  /* Legacy Cloud Function link controls are retained below temporarily, but
-     are unreachable while account-based seating access is in use. */
+  if (!isWeddingOwner()) return "";
+  const roles = eventUsesGuestSides(state.wedding)
+    ? [["bride", "Bride side"], ["groom", "Groom side"]]
+    : [["all", "All guests"]];
   const card = (role, label) => {
-    const access = state.seatingAccess[role];
-    const status =
-      access?.status === "active"
-        ? "Active"
-        : access?.status === "revoked"
-          ? "Revoked"
-          : "Not Created";
-    const created = access?.regeneratedAt || access?.createdAt;
-    const when = created ? formatTimestamp(created) : "—";
-    const hasLink = Boolean(access?.status === "active");
-    return `
-      <article class="sender-option seating-access-card">
-        <div class="sender-option__copy">
-          <strong>${label}</strong>
-          <span>${status} · ${access?.status === "active" ? "Created / regenerated" : "Last updated"}: ${escapeHtml(when)}</span>
-        </div>
-        <div class="sender-option__actions">
-          ${!access || access.status === "revoked" ? actionButton("Generate secure editor link", "generate-seating-access", false, "primary", role) : ""}
-          ${hasLink ? actionButton("Copy link", "copy-seating-access", false, "secondary", role) : ""}
-          ${hasLink ? actionButton("Open link", "open-seating-access", false, "secondary", role) : ""}
-          ${access?.status === "active" ? actionButton("Regenerate link", "regenerate-seating-access", false, "secondary", role) : ""}
-          ${access?.status === "active" ? actionButton("Revoke access", "revoke-seating-access", false, "danger", role) : ""}
-        </div>
-      </article>`;
+    const loginLink = seatingAccountLoginLink(role);
+    return `<article class="sender-option"><div class="sender-option__copy"><strong>${label}</strong><span>Sign-in link for an account already authorized on this event.</span><code>${escapeHtml(loginLink)}</code></div><div class="sender-option__actions">${actionButton("Copy sign-in link", "copy-seating-login", false, "secondary", role)}<a class="da3wa-button da3wa-button--secondary" href="${escapeAttribute(loginLink)}" target="_blank" rel="noopener">Open sign-in</a></div></article>`;
   };
-  return `
-    <article class="share-card share-card--sender">
-      <p class="da3wa-eyebrow">Wedding Seating Access</p>
-      <h3>Secure side-specific seating-editor links</h3>
-      <p>Only the wedding owner can create, copy, regenerate, or revoke these links. Bride and Groom links can manage every guest's chair in the shared plan; Family links are strictly read-only.</p>
-      <div class="sender-options">${card("bride", "Bride")}${card("groom", "Groom")}${card("family", "Family")}</div>
-    </article>`;
+  const allowedSides = eventUsesGuestSides(state.wedding)
+    ? '<option value="bride">Bride</option><option value="groom">Groom</option><option value="all">All sides</option><option value="family">Family · read-only</option>'
+    : '<option value="all">All guests</option><option value="read-only-all">All guests · read-only</option>';
+  return `<article class="share-card share-card--sender"><p class="da3wa-eyebrow">Account-based seating access</p><h3>Share a ${eventUsesGuestSides(state.wedding) ? "side-specific" : "guest seating"} sign-in link</h3><p>These links only carry the event and workspace context. Firestore checks the signed-in account's event membership and allowed side.</p><div class="sender-options">${roles.map(([role, label]) => card(role, label)).join("")}</div><h3>Manage a seating account</h3><p>Enter the UID of an existing Firebase email/password account. Find it in Firebase Console → Authentication → Users. Family access is read-only.</p><form class="seating-account-form" id="seatingAccountPermissionForm"><label>Firebase Auth UID<input name="userId" required maxlength="128" autocomplete="off" /></label><label>Allowed side<select name="allowedSide">${allowedSides}</select></label><button class="da3wa-button da3wa-button--primary" name="operation" value="save" type="submit">Save seating permission</button><button class="da3wa-button da3wa-button--danger" name="operation" value="revoke" type="submit">Revoke seating access</button><p class="form-status" data-seating-account-status role="status"></p></form><h3>Repair event projections</h3><p>Rebuild invitation, seating, check-in, and public count documents from this event. Public counts show the time of the last successful update.</p><button class="da3wa-button da3wa-button--secondary" type="button" data-action="repair-event-projections" ${state.projectionSyncPromise ? 'disabled aria-disabled="true"' : ""}>${state.projectionSyncPromise ? "Repair running…" : "Repair projections"}</button>${state.projectionSyncError ? `<p class="form-status is-error" role="status">${escapeHtml(state.projectionSyncError)}</p>` : ""}</article>`;
 }
 
-function seatingAccountLoginLink() {
-  const params = new URLSearchParams({
-    wedding: state.weddingId,
-    linkRevision: "all-sides-20261001",
-  });
+function seatingAccountLoginLink(role = "all") {
+  const params = new URLSearchParams({ wedding: state.weddingId, side: role, workspace: "side" });
   return new URL(`dashboard-login.html?${params.toString()}`, window.location.href).toString();
 }
 
-function seatingEditorLink(token) {
-  // Secure side links open the mobile seating workspace. The token is still
-  // exchanged for a custom Auth token by the page; token claims, never query
-  // parameters, determine the role and permissions.
-  return new URL(
-    `side.html?token=${encodeURIComponent(token)}`,
-    window.location.href,
-  ).toString();
-}
-
-// The Bride and Groom cards in "Side status pages" intentionally use the
-// same signed, revocable manager links as the Seating Access card.  Family
-// keeps the ordinary public status URL because it is read-only.
-async function openOrCreateSideManagerLink(role, shouldOpen) {
-  if (!["bride", "groom"].includes(role)) {
+async function saveSeatingAccountPermission(event) {
+  event.preventDefault();
+  const form = event.currentTarget;
+  const status = form.querySelector("[data-seating-account-status]");
+  const userId = String(form.elements.userId.value || "").trim();
+  const selectedSide = String(form.elements.allowedSide.value || "");
+  const readOnly = selectedSide === "family" || selectedSide === "read-only-all";
+  const allowedSide = selectedSide === "read-only-all" ? "all" : selectedSide;
+  const operation = event.submitter?.value || "save";
+  const allowedSelection = eventUsesGuestSides(state.wedding)
+    ? ["bride", "groom", "all", "family"].includes(selectedSide)
+    : ["all", "read-only-all"].includes(selectedSide);
+  if (!isWeddingOwner() || !/^[A-Za-z0-9_-]{1,128}$/.test(userId) || userId === state.currentUser?.uid || !allowedSelection) {
+    status.textContent = "Enter another Firebase Auth UID and choose a side.";
     return;
   }
-  const access = state.seatingAccess[role];
-  if (access?.status === "active") {
-    await manageSeatingAccess(role, shouldOpen ? "open" : "reveal");
-    return;
-  }
-  await manageSeatingAccess(role, "generate");
-  if (shouldOpen) {
-    await manageSeatingAccess(role, "open");
-  }
-}
-
-async function manageSeatingAccess(role, action) {
-  if (!canManageSeatingAccess() || !["bride", "groom", "family"].includes(role)) {
-    showToast(
-      "Only the event owner can manage seating editor access.",
-      "error",
-    );
-    return;
-  }
-  if (
-    action === "revoke" &&
-    !window.confirm(
-      `Revoke the ${role} seating-editor link? It will stop working immediately.`,
-    )
-  )
-    return;
+  const memberRef = doc(state.services.db, "weddings", state.weddingId, "dashboardUsers", userId);
   try {
-    const call = httpsCallable(
-      state.services.functions,
-      "manageSeatingEditorAccess",
-    );
-    const result = await call({
-      weddingId: state.weddingId,
-      role,
-      action: action === "open" ? "reveal" : action,
-    });
-    if (result.data?.token) {
-      const link = seatingEditorLink(result.data.token);
-      if (action === "open") {
-        window.open(link, "_blank", "noopener");
-        showToast("Secure editor link opened.", "success");
-      } else {
-        await copyText(link);
-        showToast(
-          action === "reveal"
-            ? "Secure editor link copied."
-            : `${role[0].toUpperCase()}${role.slice(1)} editor link created and copied.`,
-          "success",
-        );
-      }
-      state.seatingAccess[role] = {
-        ...(state.seatingAccess[role] || {}),
-        role,
-        status: "active",
-        regeneratedAt: new Date(),
-      };
-    } else {
-      state.seatingAccess[role] = {
-        ...(state.seatingAccess[role] || {}),
-        status: "revoked",
-        link: "",
-      };
-      showToast(
-        `${role[0].toUpperCase()}${role.slice(1)} editor access revoked.`,
-        "success",
-      );
+    const existing = await getDoc(memberRef);
+    if (operation === "revoke") {
+      if (!existing.exists()) { status.textContent = "No seating membership exists for that UID."; return; }
+      if (!window.confirm("Remove this account's event membership? This revokes its access immediately.")) return;
+      await deleteDoc(memberRef);
+      status.textContent = "Event membership removed.";
+      showToast("Seating account access revoked.", "success");
+      return;
     }
-    renderActiveView();
+    if (existing.exists() && existing.data().seatingOnly !== true && !window.confirm("This UID already has broader event permissions. Replace them with seating-only access?")) return;
+    await setDoc(memberRef, {
+      userId,
+      role: "seating",
+      seatingOnly: true,
+      allowedSide,
+      canViewDashboard: readOnly,
+      canEditGuests: false,
+      canEditSeating: !readOnly,
+      canCheckIn: false,
+      canManageUsers: false,
+      ...(existing.exists() && existing.data().createdAt ? { createdAt: existing.data().createdAt } : { createdAt: serverTimestamp() }),
+      updatedAt: serverTimestamp(),
+    }, { merge: false });
+    status.textContent = "Seating permission saved. Share the matching sign-in link.";
+    showToast("Seating account permission saved.", "success");
   } catch (error) {
-    console.error(error);
-    showToast(
-      "We could not update seating editor access. Please try again.",
-      "error",
-    );
+    console.error("Seating account permission could not be saved.", error);
+    status.textContent = "Permission update failed. Check the UID and your owner access, then try again.";
   }
 }
 
@@ -5021,7 +5085,7 @@ async function handleAction(action, dataset, event = null) {
         await copyText(await buildSenderLink(dataset.id || "all"));
       } catch (error) {
         console.error("Could not create a sender link.", error?.code || "unavailable");
-        showToast("Could not prepare the sender link. Check event access and try again.", "error");
+        showToast(senderCapabilityError(error), "error");
       }
       return;
     case "open-side-view": {
@@ -5129,29 +5193,20 @@ async function handleAction(action, dataset, event = null) {
       );
       return;
     case "copy-seating-login":
-      await copyText(seatingAccountLoginLink());
+      await copyText(seatingAccountLoginLink(dataset.id || "all"));
       return;
-    case "generate-seating-access":
-      await manageSeatingAccess(dataset.id, "generate");
+    case "revoke-sender-capability":
+      await revokeSenderCapability(dataset.id);
       return;
-    case "regenerate-seating-access":
-      if (
-        window.confirm(
-          `Regenerate this link? The previous ${dataset.id} link will stop working immediately.`,
-        )
-      ) {
-        await manageSeatingAccess(dataset.id, "regenerate");
-      }
+    case "repair-event-projections": {
+      if (!isWeddingOwner()) return;
+      state.projectionRepairRequested = true;
+      showToast("Updating invitation, seating, check-in, and public count data…", "info");
+      await syncPublicStats({ force: true });
+      showToast(state.projectionSyncError ? "Projection repair did not finish. Check your connection and owner access." : "Event projections updated.", state.projectionSyncError ? "error" : "success");
+      renderActiveView();
       return;
-    case "revoke-seating-access":
-      await manageSeatingAccess(dataset.id, "revoke");
-      return;
-    case "copy-seating-access":
-      await manageSeatingAccess(dataset.id, "reveal");
-      return;
-    case "open-seating-access":
-      await manageSeatingAccess(dataset.id, "open");
-      return;
+    }
     case "copy-preview": {
       const guest = state.guests[0];
       let token = guest?.guestToken;
@@ -5881,17 +5936,209 @@ async function getLiveTableRefs() {
 }
 
 async function getLiveTablesInTransaction(transaction, tableRefs) {
+  if (!state.seatAssignmentsReady) {
+    throw new Error("Seating data is still loading. Wait a moment, then try again.");
+  }
   const tableSnapshots = await Promise.all(
     tableRefs.map((tableRef) => transaction.get(tableRef)),
   );
-  return hydrateTables(
-    tableSnapshots
-      .filter((tableSnapshot) => tableSnapshot.exists())
-      .map((tableSnapshot) => ({
-        ...tableSnapshot.data(),
-        id: tableSnapshot.id,
-      })),
-  );
+  const layoutTables = tableSnapshots
+    .filter((tableSnapshot) => tableSnapshot.exists())
+    .map((tableSnapshot) => ({ ...tableSnapshot.data(), id: tableSnapshot.id }));
+  return hydrateTables(projectSeatAssignments(layoutTables, state.seatAssignments, state.seatOccupancy));
+}
+
+function seatSlotMap(tables) {
+  const slots = new Map();
+  for (const table of tables || []) {
+    for (const chair of table.chairs || []) {
+      const chairId = String(chair.id || "");
+      if (!chairId) continue;
+      const key = `${table.id}\u0000${chairId}`;
+      slots.set(key, { table, chair, assignment: getChairAssignment(table.id, chair) });
+    }
+  }
+  return slots;
+}
+
+function seatPersonKey(assignment) {
+  return `${assignment.guestId}\u0000${assignment.personKey || personKeyForIndex(assignment.partyMemberIndex)}`;
+}
+
+function sameSeatPerson(left, right) {
+  return Boolean(left && right)
+    && left.guestId === right.guestId
+    && Number(left.partyMemberIndex) === Number(right.partyMemberIndex)
+    && (left.personKey || personKeyForIndex(left.partyMemberIndex)) === (right.personKey || personKeyForIndex(right.partyMemberIndex));
+}
+
+async function persistCanonicalSeatDiff(transaction, beforeTables, afterTables) {
+  const before = seatSlotMap(beforeTables);
+  const after = seatSlotMap(afterTables);
+  const keys = new Set([...before.keys(), ...after.keys()]);
+  const changed = [...keys].filter((key) => {
+    const oldSlot = before.get(key);
+    const newSlot = after.get(key);
+    if (!oldSlot || !newSlot) return true;
+    if (!sameSeatPerson(oldSlot.assignment, newSlot.assignment)) return true;
+    return Boolean(oldSlot.assignment && Number(oldSlot.chair.seatNumber) !== Number(newSlot.chair.seatNumber));
+  });
+  if (!changed.length) return;
+
+  const parsed = changed.map((key) => {
+    const [tableId, chairId] = key.split("\u0000");
+    const oldSlot = before.get(key) || null;
+    const newSlot = after.get(key) || null;
+    const oldAssignment = oldSlot?.assignment || null;
+    const newAssignment = newSlot?.assignment || null;
+    return {
+      key, tableId, chairId, oldSlot, newSlot, oldAssignment, newAssignment,
+      seatRef: doc(state.services.db, "weddings", state.weddingId, "seatAssignments", `${tableId}~${chairId}`),
+      occupancyRef: doc(state.services.db, "weddings", state.weddingId, "seatOccupancy", `${tableId}~${chairId}`),
+    };
+  });
+  const personEntries = new Map();
+  for (const item of parsed) {
+    for (const assignment of [item.oldAssignment, item.newAssignment]) {
+      if (!assignment) continue;
+      const personKey = assignment.personKey || personKeyForIndex(assignment.partyMemberIndex);
+      const personId = `${assignment.guestId}\u0000${personKey}`;
+      const entry = personEntries.get(personId) || {
+        guestId: assignment.guestId,
+        personKey,
+        ref: doc(state.services.db, "weddings", state.weddingId, "seatedPeople", `${assignment.guestId}~${personKey}`),
+        oldLocations: [],
+        newLocation: null,
+      };
+      if (assignment === item.oldAssignment) entry.oldLocations.push({ tableId: item.tableId, chairId: item.chairId });
+      if (assignment === item.newAssignment) {
+        if (entry.newLocation && (entry.newLocation.tableId !== item.tableId || entry.newLocation.chairId !== item.chairId)) {
+          throw new Error("One party member is assigned to more than one chair.");
+        }
+        entry.newLocation = { tableId: item.tableId, chairId: item.chairId, side: "" };
+      }
+      personEntries.set(personId, entry);
+    }
+  }
+  const guestIds = [...new Set(parsed.map((item) => item.newAssignment?.guestId).filter(Boolean))];
+  const guestRefs = guestIds.map((guestId) => doc(state.services.db, "weddings", state.weddingId, "seatingGuests", guestId));
+  const readRefs = [
+    ...parsed.flatMap((item) => [item.seatRef, item.occupancyRef]),
+    ...[...personEntries.values()].map((entry) => entry.ref),
+    ...guestRefs,
+  ];
+  const snapshots = await Promise.all(readRefs.map((ref) => transaction.get(ref)));
+  let cursor = 0;
+  const seatSnapshots = new Map();
+  const occupancySnapshots = new Map();
+  parsed.forEach((item) => {
+    seatSnapshots.set(item.key, snapshots[cursor++]);
+    occupancySnapshots.set(item.key, snapshots[cursor++]);
+  });
+  const personSnapshots = new Map();
+  [...personEntries.keys()].forEach((key) => personSnapshots.set(key, snapshots[cursor++]));
+  const seatingGuests = new Map();
+  guestIds.forEach((guestId) => {
+    const snapshot = snapshots[cursor++];
+    if (!snapshot.exists()) throw new Error("A guest's seating record is missing. Ask the event owner to repair seating.");
+    seatingGuests.set(guestId, snapshot.data());
+  });
+
+  for (const item of parsed) {
+    const seatSnapshot = seatSnapshots.get(item.key);
+    const occupancySnapshot = occupancySnapshots.get(item.key);
+    if (item.oldAssignment) {
+      if (!seatSnapshot.exists() || !sameSeatPerson(seatSnapshot.data(), item.oldAssignment)) {
+        throw new Error("A chair changed on another device. Review the refreshed seating plan and try again.");
+      }
+      if (!occupancySnapshot.exists() || occupancySnapshot.data().occupied !== true) {
+        throw new Error("The seating occupancy records are out of sync. Ask the event owner to repair seating.");
+      }
+    } else if (seatSnapshot.exists() || (occupancySnapshot.exists() && occupancySnapshot.data().occupied === true)) {
+      throw new Error("A chair was assigned on another device. Review the refreshed seating plan and try again.");
+    }
+    if (item.newAssignment) {
+      const guest = seatingGuests.get(item.newAssignment.guestId);
+      const index = Number(item.newAssignment.partyMemberIndex);
+      if (!Number.isInteger(index) || index < 0 || index > Number(guest.additionalGuests || 0)) {
+        throw new Error("That party member is no longer included in the RSVP.");
+      }
+      item.newAssignment.side = normalizeGuestSide(guest.side);
+      const entry = personEntries.get(seatPersonKey(item.newAssignment));
+      if (entry?.newLocation) entry.newLocation.side = item.newAssignment.side;
+    }
+  }
+
+  for (const [personId, entry] of personEntries) {
+    const snapshot = personSnapshots.get(personId);
+    if (entry.oldLocations.length > 1) throw new Error("A party member appears in more than one seat record. Ask the event owner to repair seating.");
+    if (entry.oldLocations.length) {
+      const oldLocation = entry.oldLocations[0];
+      if (!snapshot?.exists() || snapshot.data().tableId !== oldLocation.tableId || snapshot.data().chairId !== oldLocation.chairId) {
+        throw new Error("A party member's seat binding changed on another device. Refresh and try again.");
+      }
+    } else if (snapshot?.exists() && (!entry.newLocation || snapshot.data().tableId !== entry.newLocation.tableId || snapshot.data().chairId !== entry.newLocation.chairId)) {
+      throw new Error("That party member already has a chair. Refresh the seating plan.");
+    }
+    if (snapshot?.exists() && entry.newLocation
+      && (snapshot.data().tableId !== entry.newLocation.tableId || snapshot.data().chairId !== entry.newLocation.chairId)
+      && !entry.oldLocations.some((location) => location.tableId === snapshot.data().tableId && location.chairId === snapshot.data().chairId)) {
+      throw new Error("That party member already has a chair. Refresh the seating plan.");
+    }
+  }
+
+  for (const item of parsed) {
+    if (!item.newSlot) {
+      transaction.delete(item.seatRef);
+      transaction.delete(item.occupancyRef);
+      continue;
+    }
+    if (!item.newAssignment) {
+      transaction.delete(item.seatRef);
+      transaction.set(item.occupancyRef, {
+        weddingId: state.weddingId, tableId: item.tableId, chairId: item.chairId,
+        occupied: false, updatedAt: serverTimestamp(),
+      });
+      continue;
+    }
+    const assignment = item.newAssignment;
+    const personKey = assignment.personKey || personKeyForIndex(assignment.partyMemberIndex);
+    const side = assignment.side || normalizeGuestSide(seatingGuests.get(assignment.guestId).side);
+    transaction.set(item.seatRef, {
+      weddingId: state.weddingId, tableId: item.tableId, chairId: item.chairId,
+      guestId: assignment.guestId, partyMemberIndex: Number(assignment.partyMemberIndex), personKey,
+      side, seatNumber: Number(item.newSlot.chair.seatNumber || assignment.seatNumber || 0),
+      updatedAt: serverTimestamp(),
+    });
+    transaction.set(item.occupancyRef, {
+      weddingId: state.weddingId, tableId: item.tableId, chairId: item.chairId,
+      occupied: true, updatedAt: serverTimestamp(),
+    });
+  }
+  for (const entry of personEntries.values()) {
+    if (!entry.newLocation) {
+      transaction.delete(entry.ref);
+      continue;
+    }
+    const guest = seatingGuests.get(entry.guestId);
+    transaction.set(entry.ref, {
+      weddingId: state.weddingId, guestId: entry.guestId, personKey: entry.personKey,
+      tableId: entry.newLocation.tableId, chairId: entry.newLocation.chairId,
+      side: entry.newLocation.side || normalizeGuestSide(guest.side),
+      updatedAt: serverTimestamp(),
+    });
+  }
+}
+
+function stripTableOccupancy(table) {
+  return {
+    ...table,
+    chairs: (table.chairs || []).map((chair) => {
+      const { assignment: _assignment, guestId: _guestId, status: _status, ...layout } = chair;
+      return layout;
+    }),
+    guestIds: [],
+  };
 }
 
 // A party is represented by one real guest document. Every chair belonging to
@@ -6372,42 +6619,116 @@ async function updateGuest(guestId, payload) {
 
 async function persistGuestAndInvitation(guestId, payload) {
   const guestRef = doc(state.services.db, "weddings", state.weddingId, "guests", guestId);
-  const token = state.invitationTokenCache.get(guestId);
-  if (!can("canEditGuests") || !isValidInvitationToken(token)) {
+  if (!can("canEditGuests")) {
     await updateDoc(guestRef, payload);
     return;
   }
+  const token = state.invitationTokenCache.get(guestId);
   const weddingId = state.weddingId;
-  const secretRef = doc(state.services.db, "weddings", weddingId, "invitationSecrets", guestId);
-  const indexRef = doc(state.services.db, "weddings", weddingId, "invitationTokens", token);
-  const publicRef = doc(state.services.db, "weddings", weddingId, "publicGuests", token);
+  const seatingGuestRef = doc(state.services.db, "weddings", weddingId, "seatingGuests", guestId);
+  const checkinGuestRef = doc(state.services.db, "weddings", weddingId, "checkinGuests", guestId);
+  const currentAssignments = (state.seatAssignments || []).map((snapshot) => snapshot.data())
+    .filter((assignment) => assignment.guestId === guestId);
+  if ("side" in payload && !state.seatAssignmentsReady) {
+    throw new Error("Seating data is still loading. Wait a moment, then try again.");
+  }
+  const assignmentRefs = currentAssignments.map((assignment) =>
+    doc(state.services.db, "weddings", weddingId, "seatAssignments", `${assignment.tableId}~${assignment.chairId}`));
+  const bindingRefs = currentAssignments.map((assignment) => {
+    const personKey = assignment.personKey || personKeyForIndex(assignment.partyMemberIndex);
+    return doc(state.services.db, "weddings", weddingId, "seatedPeople", `${guestId}~${personKey}`);
+  });
+  const hasToken = isValidInvitationToken(token);
+  const secretRef = hasToken ? doc(state.services.db, "weddings", weddingId, "invitationSecrets", guestId) : null;
+  const indexRef = hasToken ? doc(state.services.db, "weddings", weddingId, "invitationTokens", token) : null;
+  const publicRef = hasToken ? doc(state.services.db, "weddings", weddingId, "publicGuests", token) : null;
   await runTransaction(state.services.db, async (transaction) => {
-    const [guestSnapshot, weddingSnapshot, secretSnapshot, indexSnapshot, publicSnapshot] = await Promise.all([
-      transaction.get(guestRef), transaction.get(doc(state.services.db, "weddings", weddingId)),
-      transaction.get(secretRef), transaction.get(indexRef), transaction.get(publicRef),
-    ]);
+    const refs = [guestRef, doc(state.services.db, "weddings", weddingId),
+      ...assignmentRefs, ...bindingRefs, ...(hasToken ? [secretRef, indexRef, publicRef] : [])];
+    const snapshots = await Promise.all(refs.map((ref) => transaction.get(ref)));
+    let offset = 0;
+    const guestSnapshot = snapshots[offset++];
+    const weddingSnapshot = snapshots[offset++];
+    const assignmentSnapshots = snapshots.slice(offset, offset + assignmentRefs.length); offset += assignmentRefs.length;
+    const bindingSnapshots = snapshots.slice(offset, offset + bindingRefs.length); offset += bindingRefs.length;
+    const secretSnapshot = hasToken ? snapshots[offset++] : null;
+    const indexSnapshot = hasToken ? snapshots[offset++] : null;
+    const publicSnapshot = hasToken ? snapshots[offset++] : null;
     if (!guestSnapshot.exists() || !weddingSnapshot.exists()) throw new Error("Guest unavailable.");
     const current = guestSnapshot.data();
     const updated = { ...current, ...payload };
+    const maxAssignedIndex = Math.max(-1, ...currentAssignments.map((assignment) => Number(assignment.partyMemberIndex || 0)));
+    if (Number(updated.additionalGuests || 0) < maxAssignedIndex) {
+      throw new Error("Unassign additional party members before reducing the RSVP party size.");
+    }
     transaction.update(guestRef, payload);
-    if (!secretSnapshot.exists() || !indexSnapshot.exists() || !publicSnapshot.exists() ||
-        secretSnapshot.data().status !== "active" || secretSnapshot.data().token !== token ||
-        indexSnapshot.data().status !== "active" || indexSnapshot.data().guestId !== guestId) return;
-    const projection = buildInvitationProjection(weddingId, weddingSnapshot.data(), updated, state.tables);
-    transaction.update(publicRef, {
-      ...projection,
+    const normalizedSide = normalizeGuestSide(updated.side);
+    if (current.side !== updated.side) {
+      currentAssignments.forEach((assignment, index) => {
+        const seatSnapshot = assignmentSnapshots[index];
+        const bindingSnapshot = bindingSnapshots[index];
+        if (!seatSnapshot.exists() || !bindingSnapshot.exists()
+          || seatSnapshot.data().guestId !== guestId
+          || bindingSnapshot.data().guestId !== guestId
+          || bindingSnapshot.data().tableId !== assignment.tableId
+          || bindingSnapshot.data().chairId !== assignment.chairId) {
+          throw new Error("A seating record changed while the guest side was being updated. Refresh and try again.");
+        }
+        transaction.update(assignmentRefs[index], { side: normalizedSide, updatedAt: serverTimestamp() });
+        transaction.update(bindingRefs[index], { side: normalizedSide, updatedAt: serverTimestamp() });
+      });
+    }
+    transaction.set(seatingGuestRef, {
+      fullName: String(updated.fullName || "Guest").slice(0, 160),
+      side: normalizedSide,
+      additionalGuests: Math.max(0, Math.min(10, Number(updated.additionalGuests || 0))),
       rsvpStatus: ["confirmed", "declined"].includes(updated.rsvpStatus) ? updated.rsvpStatus : "pending",
-      additionalGuests: Math.max(0, Math.min(10, Number(updated.additionalGuests) || 0)),
-      rsvpMessage: typeof updated.rsvpMessage === "string" ? updated.rsvpMessage.slice(0, 1000) : "",
-      expiresAt: null,
       updatedAt: serverTimestamp(),
     });
+    const assignments = getGuestAssignedSeats(guestId).sort((a, b) => a.partyMemberIndex - b.partyMemberIndex);
+    const primary = assignments.find((assignment) => assignment.partyMemberIndex === 0) || assignments[0];
+    transaction.set(checkinGuestRef, {
+      guestId,
+      fullName: String(updated.fullName || "Guest").slice(0, 160),
+      phone: String(updated.phone || "").slice(0, 40),
+      side: normalizedSide,
+      rsvpStatus: ["confirmed", "declined"].includes(updated.rsvpStatus) ? updated.rsvpStatus : "pending",
+      tableId: primary?.tableId || "",
+      tableName: primary?.tableName || "",
+      seatNumber: primary ? String(primary.seatNumber) : "",
+      checkedIn: updated.checkedIn === true,
+      checkedInAt: updated.checkedInAt || null,
+      updatedAt: serverTimestamp(),
+    });
+    if (secretSnapshot?.exists() && indexSnapshot?.exists() && publicSnapshot?.exists()
+      && secretSnapshot.data().status === "active" && secretSnapshot.data().token === token
+      && indexSnapshot.data().status === "active" && indexSnapshot.data().guestId === guestId) {
+      const projectedGuest = { ...updated, ...buildGuestSeatingPatchFromTables(updated, state.tables, false) };
+      const projection = buildInvitationProjection(weddingId, weddingSnapshot.data(), projectedGuest, state.tables);
+      transaction.update(publicRef, {
+        ...projection,
+        rsvpStatus: ["confirmed", "declined"].includes(updated.rsvpStatus) ? updated.rsvpStatus : "pending",
+        additionalGuests: Math.max(0, Math.min(10, Number(updated.additionalGuests) || 0)),
+        rsvpMessage: typeof updated.rsvpMessage === "string" ? updated.rsvpMessage.slice(0, 1000) : "",
+        expiresAt: null,
+        updatedAt: serverTimestamp(),
+      });
+    }
   });
 }
 
 async function deleteGuest(guestId) {
   if (!can("canEditGuests")) {
     showToast("Your role does not allow guest deletion.", "error");
+    return;
+  }
+
+  if (!state.seatAssignmentsReady) {
+    showToast("Seating data is still loading. Wait a moment, then try again.", "error");
+    return;
+  }
+  if (getGuestAssignedSeats(guestId).length && !can("canEditSeating")) {
+    showToast("Unassign this guest's seats before deleting the guest.", "error");
     return;
   }
 
@@ -6429,42 +6750,31 @@ async function deleteGuest(guestId) {
   }
 
   try {
-    const batch = writeBatch(state.services.db);
-    const secretRef = doc(state.services.db, "weddings", state.weddingId, "invitationSecrets", guestId);
-    const secretSnapshot = await getDoc(secretRef);
-    if (secretSnapshot.exists()) {
-      const secret = secretSnapshot.data();
-      if (isValidInvitationToken(secret.token)) {
-        const indexRef = doc(state.services.db, "weddings", state.weddingId, "invitationTokens", secret.token);
-        const publicRef = doc(state.services.db, "weddings", state.weddingId, "publicGuests", secret.token);
-        const [indexSnapshot, publicSnapshot] = await Promise.all([getDoc(indexRef), getDoc(publicRef)]);
-        if (indexSnapshot.exists()) batch.delete(indexRef);
-        if (publicSnapshot.exists()) batch.delete(publicRef);
-      }
-      batch.delete(secretRef);
-    }
-    const nextTables = clearGuestFromTables(state.tables, guestId);
+    let nextTables = [];
     const nextGuests = state.guests.filter((guest) => guest.id !== guestId);
-    nextTables.forEach((table) => {
-      batch.update(
-        doc(state.services.db, "weddings", state.weddingId, "tables", table.id),
-        {
-          chairs: table.chairs,
-          guestIds: [
-            ...new Set(
-              table.chairs
-                .map((chair) => getChairAssignment(table.id, chair)?.guestId)
-                .filter(Boolean),
-            ),
-          ],
-          updatedAt: serverTimestamp(),
-        },
-      );
+    const tableRefs = await getLiveTableRefs();
+    await runTransaction(state.services.db, async (transaction) => {
+      const liveTables = await getLiveTablesInTransaction(transaction, tableRefs);
+      const guestRef = doc(state.services.db, "weddings", state.weddingId, "guests", guestId);
+      const secretRef = doc(state.services.db, "weddings", state.weddingId, "invitationSecrets", guestId);
+      const [guestSnapshot, secretSnapshot] = await Promise.all([transaction.get(guestRef), transaction.get(secretRef)]);
+      if (!guestSnapshot.exists()) throw new Error("This guest no longer exists.");
+      const secret = secretSnapshot.exists() ? secretSnapshot.data() : null;
+      const token = isValidInvitationToken(secret?.token) ? secret.token : "";
+      const indexRef = token ? doc(state.services.db, "weddings", state.weddingId, "invitationTokens", token) : null;
+      const publicRef = token ? doc(state.services.db, "weddings", state.weddingId, "publicGuests", token) : null;
+      const [indexSnapshot, publicSnapshot] = token
+        ? await Promise.all([transaction.get(indexRef), transaction.get(publicRef)])
+        : [null, null];
+      nextTables = clearGuestFromTables(liveTables, guestId);
+      await persistCanonicalSeatDiff(transaction, liveTables, nextTables);
+      transaction.delete(guestRef);
+      transaction.delete(doc(state.services.db, "weddings", state.weddingId, "seatingGuests", guestId));
+      transaction.delete(doc(state.services.db, "weddings", state.weddingId, "checkinGuests", guestId));
+      if (secretSnapshot.exists()) transaction.delete(secretRef);
+      if (indexSnapshot?.exists()) transaction.delete(indexRef);
+      if (publicSnapshot?.exists()) transaction.delete(publicRef);
     });
-    batch.delete(
-      doc(state.services.db, "weddings", state.weddingId, "guests", guestId),
-    );
-    await batch.commit();
     state.invitationTokenCache.delete(guestId);
     state.invitationResponseUnsubscribers.get(guestId)?.();
     state.invitationResponseUnsubscribers.delete(guestId);
@@ -6472,6 +6782,7 @@ async function deleteGuest(guestId) {
     state.guests = syncGuestSeatingSummaries(nextGuests, state.tables);
     state.selectedSeatId = "";
     renderAll();
+    void syncPublicStats();
     showToast("Guest deleted.", "success");
   } catch (error) {
     console.error(error);
@@ -6583,9 +6894,9 @@ async function saveTable(event) {
 
   try {
     if (state.selectedTableId) {
-      let affectedGuestIds = [];
       let nextTables = [];
       let nextGuests = [];
+      const tableRefs = await getLiveTableRefs();
       await runTransaction(state.services.db, async (transaction) => {
         const tableRef = doc(
           state.services.db,
@@ -6594,14 +6905,12 @@ async function saveTable(event) {
           "tables",
           state.selectedTableId,
         );
-        const liveSnapshot = await transaction.get(tableRef);
-        if (!liveSnapshot.exists())
+        const liveTables = await getLiveTablesInTransaction(transaction, tableRefs);
+        const liveTable = liveTables.find((table) => table.id === state.selectedTableId);
+        if (!liveTable)
           throw new Error(
             "This table no longer exists. The seating plan has been refreshed.",
           );
-        const liveTable = hydrateTables([
-          { ...liveSnapshot.data(), id: liveSnapshot.id },
-        ])[0];
         const livePayload = createPlannerTable({
           ...payload,
           x: liveTable.x,
@@ -6620,58 +6929,33 @@ async function saveTable(event) {
             "This table changed and now has occupied chairs that prevent the requested capacity.",
           );
         }
-        affectedGuestIds = [
-          ...new Set(
-            liveAssignments
-              .map((assignment) => assignment.guestId)
-              .filter(Boolean),
-          ),
-        ];
-        nextTables = hydrateTables(
-          state.tables.map((table) =>
-            table.id === state.selectedTableId ? livePayload : table,
-          ),
-        );
+        nextTables = hydrateTables(liveTables.map((table) => table.id === state.selectedTableId ? livePayload : table));
         nextGuests = syncGuestSeatingSummaries(state.guests, nextTables);
+        await persistCanonicalSeatDiff(transaction, liveTables, nextTables);
         transaction.update(tableRef, {
-          ...livePayload,
+          ...stripTableOccupancy(livePayload),
           updatedAt: serverTimestamp(),
-        });
-        affectedGuestIds.forEach((guestId) => {
-          const nextGuest = nextGuests.find((guest) => guest.id === guestId);
-          if (nextGuest)
-            transaction.update(
-              doc(
-                state.services.db,
-                "weddings",
-                state.weddingId,
-                "guests",
-                guestId,
-              ),
-              buildGuestSeatingPatch(nextGuest),
-            );
         });
       });
       state.tables = nextTables;
       state.guests = nextGuests;
-      for (const guestId of affectedGuestIds) {
-        const nextGuest = nextGuests.find((guest) => guest.id === guestId);
-        if (nextGuest) {
-        }
-      }
     } else {
-      const tableRef = doc(
-        collection(state.services.db, "weddings", state.weddingId, "tables"),
-      );
-      await setDoc(tableRef, {
-        ...payload,
-        id: tableRef.id,
-        createdAt: serverTimestamp(),
-        updatedAt: serverTimestamp(),
+      const tableRef = doc(state.services.db, "weddings", state.weddingId, "tables", payload.id);
+      await runTransaction(state.services.db, async (transaction) => {
+        await persistCanonicalSeatDiff(transaction, [], [payload]);
+        transaction.set(tableRef, {
+          ...stripTableOccupancy(payload),
+          id: tableRef.id,
+          createdAt: serverTimestamp(),
+          updatedAt: serverTimestamp(),
+        });
       });
+      state.tables = hydrateTables([...state.tables, payload]);
     }
     state.dirtyTableForm = false;
     elements.tableModal.close();
+    renderAll();
+    void syncPublicStats();
     showToast("Table saved successfully.", "success");
   } catch (error) {
     console.error(error);
@@ -6709,15 +6993,19 @@ async function duplicateTable(table) {
   }
 
   try {
-    const tableRef = doc(
-      collection(state.services.db, "weddings", state.weddingId, "tables"),
-    );
-    await setDoc(tableRef, {
-      ...duplicated,
-      id: tableRef.id,
-      createdAt: serverTimestamp(),
-      updatedAt: serverTimestamp(),
+    const tableRef = doc(state.services.db, "weddings", state.weddingId, "tables", duplicated.id);
+    await runTransaction(state.services.db, async (transaction) => {
+      await persistCanonicalSeatDiff(transaction, [], [duplicated]);
+      transaction.set(tableRef, {
+        ...stripTableOccupancy(duplicated),
+        id: tableRef.id,
+        createdAt: serverTimestamp(),
+        updatedAt: serverTimestamp(),
+      });
     });
+    state.tables = hydrateTables([...state.tables, duplicated]);
+    renderAll();
+    void syncPublicStats();
     showToast("Table duplicated.", "success");
   } catch (error) {
     console.error(error);
@@ -6812,83 +7100,29 @@ async function deleteTable(tableId) {
   }
 
   try {
-    let affectedGuestIds = [];
+    let nextTables = [];
     let nextGuests = [];
+    const tableRefs = await getLiveTableRefs();
     await runTransaction(state.services.db, async (transaction) => {
-      const liveTableSnapshot = await transaction.get(
-        doc(state.services.db, "weddings", state.weddingId, "tables", tableId),
-      );
-      if (!liveTableSnapshot.exists())
+      const liveTables = await getLiveTablesInTransaction(transaction, tableRefs);
+      const liveTable = liveTables.find((table) => table.id === tableId);
+      if (!liveTable)
         throw new Error(
           "This table was changed by another editor. The seating plan has been refreshed.",
         );
-      const liveTable = hydrateTables([
-        { ...liveTableSnapshot.data(), id: liveTableSnapshot.id },
-      ])[0];
-      affectedGuestIds = [
-        ...new Set(
-          getAllAssignments([liveTable])
-            .map((assignment) => assignment.guestId)
-            .filter(Boolean),
-        ),
-      ];
-      const guestSnapshots = await Promise.all(
-        affectedGuestIds.map((guestId) =>
-          transaction.get(
-            doc(
-              state.services.db,
-              "weddings",
-              state.weddingId,
-              "guests",
-              guestId,
-            ),
-          ),
-        ),
-      );
-      const liveGuests = guestSnapshots
-        .filter((snapshot) => snapshot.exists())
-        .map((snapshot) => ({
-          ...snapshot.data(),
-          id: snapshot.id,
-          ref: snapshot.ref,
-        }));
-      nextGuests = liveGuests.map(({ ref, ...guest }) => {
-        const assignments = (guest.seatingAssignments || []).filter(
-          (assignment) => assignment.tableId !== tableId,
-        );
-        const primary =
-          assignments.find(
-            (assignment) => Number(assignment.partyMemberIndex) === 0,
-          ) || assignments[0];
-        const nextGuest = {
-          ...guest,
-          seatingAssignments: assignments,
-          tableId: primary?.tableId || "",
-          tableName: primary?.tableName || "",
-          seatNumber: primary ? String(primary.seatNumber) : "",
-        };
-        return nextGuest;
-      });
-      nextGuests.forEach((nextGuest, index) => {
-        transaction.update(
-          liveGuests[index].ref,
-          buildGuestSeatingPatch(nextGuest),
-        );
-      });
-      transaction.delete(liveTableSnapshot.ref);
+      nextTables = liveTables.filter((table) => table.id !== tableId);
+      nextGuests = syncGuestSeatingSummaries(state.guests, nextTables);
+      await persistCanonicalSeatDiff(transaction, liveTables, nextTables);
+      transaction.delete(doc(state.services.db, "weddings", state.weddingId, "tables", tableId));
     });
-    const nextTables = hydrateTables(
-      state.tables.filter((item) => item.id !== tableId),
-    );
-    state.guests = state.guests.map(
-      (guest) => nextGuests.find((item) => item.id === guest.id) || guest,
-    );
+    state.guests = nextGuests;
     state.tables = nextTables;
     state.selectedTableId = state.tables[0]?.id || "";
     state.selectedSeatId = "";
     state.activeModalOperation = "";
     elements.tableDeleteModal?.close();
     renderAll();
+    void syncPublicStats();
     showToast("Table deleted.", "success");
   } catch (error) {
     console.error(error);
@@ -7635,12 +7869,10 @@ async function savePartyAssignment(guest, selectedChairs, movingParty = false) {
   let savedGuests = null;
   const tableRefs = await getLiveTableRefs();
   await runTransaction(state.services.db, async (transaction) => {
-    const guestSnapshot = await transaction.get(
-      doc(state.services.db, "weddings", state.weddingId, "guests", guest.id),
-    );
+    const guestSnapshot = await transaction.get(doc(state.services.db, "weddings", state.weddingId, "seatingGuests", guest.id));
     if (!guestSnapshot.exists()) {
       throw new Error(
-        "This guest no longer exists. The seating plan has been refreshed.",
+        "This guest's seating record is missing. Ask the event owner to repair seating.",
       );
     }
     const liveGuest = {
@@ -7699,46 +7931,7 @@ async function savePartyAssignment(guest, selectedChairs, movingParty = false) {
     const nextGuests = syncGuestSeatingSummaries(liveGuests, nextTables);
     savedTables = hydrateTables(nextTables, nextGuests);
     savedGuests = nextGuests;
-    // Only write the tables whose chairs were actually changed. Updating the
-    // whole floor plan makes a simple seating action needlessly large and can
-    // exceed the Firestore rule-evaluation budget for seating-only accounts.
-    const changedTableIds = new Set(
-      selectedChairs.map((item) => item.tableId),
-    );
-    if (movingParty) {
-      getGuestAssignedSeats(liveGuest.id, liveTables).forEach((assignment) => {
-        changedTableIds.add(assignment.tableId);
-      });
-    }
-    nextTables
-      .filter((table) => changedTableIds.has(table.id))
-      .forEach((table) => {
-        transaction.update(
-          doc(state.services.db, "weddings", state.weddingId, "tables", table.id),
-          {
-            chairs: table.chairs,
-            guestIds: [
-              ...new Set(
-                table.chairs
-                  .map((chair) => getChairAssignment(table.id, chair)?.guestId)
-                  .filter(Boolean),
-              ),
-            ],
-            updatedAt: serverTimestamp(),
-          },
-        );
-      });
-    const nextGuest = nextGuests.find((item) => item.id === liveGuest.id);
-    transaction.update(
-      doc(
-        state.services.db,
-        "weddings",
-        state.weddingId,
-        "guests",
-        liveGuest.id,
-      ),
-      buildGuestSeatingPatch(nextGuest),
-    );
+    await persistCanonicalSeatDiff(transaction, liveTables, nextTables);
   });
   if (savedTables && savedGuests) {
     state.tables = savedTables;
@@ -8121,15 +8314,10 @@ async function clearPartyAssignments(guestId, expectedSignature = "") {
         "This party changed on another device. Review the refreshed seating plan and confirm again.",
       );
     }
+    const seatingGuestSnapshot = await transaction.get(doc(state.services.db, "weddings", state.weddingId, "seatingGuests", guestId));
+    if (!seatingGuestSnapshot.exists()) throw new Error("This guest's seating record is missing. Ask the event owner to repair seating.");
     nextTables = clearGuestFromTables(liveTables, guestId);
-    const guestSnapshot = await transaction.get(
-      doc(state.services.db, "weddings", state.weddingId, "guests", guestId),
-    );
-    if (!guestSnapshot.exists())
-      throw new Error(
-        "This party no longer exists. The seating plan has been refreshed.",
-      );
-    const liveGuest = { ...guestSnapshot.data(), id: guestSnapshot.id };
+    const liveGuest = { ...(state.guests.find((guest) => guest.id === guestId) || {}), ...seatingGuestSnapshot.data(), id: guestId };
     nextGuests = state.guests.map((guest) =>
       guest.id === guestId
         ? {
@@ -8139,33 +8327,7 @@ async function clearPartyAssignments(guestId, expectedSignature = "") {
           }
         : guest,
     );
-    // A full-party clear affects only the tables with one of its assigned
-    // chairs. Avoid rewriting untouched tables in this atomic transaction.
-    const affectedTableIds = new Set(
-      liveParty.assignments.map((assignment) => assignment.tableId),
-    );
-    nextTables
-      .filter((table) => affectedTableIds.has(table.id))
-      .forEach((table) => {
-      transaction.update(
-        doc(state.services.db, "weddings", state.weddingId, "tables", table.id),
-        {
-          chairs: table.chairs,
-          guestIds: [
-            ...new Set(
-              table.chairs
-                .map((chair) => getChairAssignment(table.id, chair)?.guestId)
-                .filter(Boolean),
-            ),
-          ],
-          updatedAt: serverTimestamp(),
-        },
-      );
-      });
-    transaction.update(
-      guestSnapshot.ref,
-      buildGuestSeatingPatch(nextGuests.find((guest) => guest.id === guestId)),
-    );
+    await persistCanonicalSeatDiff(transaction, liveTables, nextTables);
   });
   state.tables = hydrateTables(nextTables, nextGuests);
   state.guests = nextGuests;
@@ -8318,42 +8480,17 @@ async function unassignSingleSeat(tableId, chairId) {
     if (!liveAssignment || liveAssignment.guestId !== guestId) {
       throw new Error("The selected chair has changed. Refresh and try again.");
     }
+    const seatingGuestSnapshot = await transaction.get(doc(state.services.db, "weddings", state.weddingId, "seatingGuests", guestId));
+    if (!seatingGuestSnapshot.exists()) throw new Error("This guest's seating record is missing. Ask the event owner to repair seating.");
     const nextTables = clearSeatFromTables(liveTables, tableId, chairId);
-    const guestSnapshot = await transaction.get(
-      doc(state.services.db, "weddings", state.weddingId, "guests", guestId),
-    );
-    if (!guestSnapshot.exists()) {
-      throw new Error(
-        "The guest no longer exists. The seating plan has been refreshed.",
-      );
-    }
-    const liveGuest = { ...guestSnapshot.data(), id: guestSnapshot.id };
+    const liveGuest = { ...(state.guests.find((guest) => guest.id === guestId) || {}), ...seatingGuestSnapshot.data(), id: guestId };
     const liveGuests = state.guests.map((guest) =>
       guest.id === liveGuest.id ? { ...guest, ...liveGuest } : guest,
     );
     const nextGuests = syncGuestSeatingSummaries(liveGuests, nextTables);
     savedTables = hydrateTables(nextTables, nextGuests);
     savedGuests = nextGuests;
-    const nextTable = nextTables.find((table) => table.id === tableId);
-    transaction.update(
-      doc(state.services.db, "weddings", state.weddingId, "tables", tableId),
-      {
-        chairs: nextTable.chairs,
-        guestIds: [
-          ...new Set(
-            nextTable.chairs
-              .map((chair) => getChairAssignment(tableId, chair)?.guestId)
-              .filter(Boolean),
-          ),
-        ],
-        updatedAt: serverTimestamp(),
-      },
-    );
-    const nextGuest = nextGuests.find((guest) => guest.id === guestId);
-    transaction.update(
-      doc(state.services.db, "weddings", state.weddingId, "guests", guestId),
-      buildGuestSeatingPatch(nextGuest),
-    );
+    await persistCanonicalSeatDiff(transaction, liveTables, nextTables);
   });
   if (savedTables && savedGuests) {
     state.tables = savedTables;
@@ -8501,12 +8638,10 @@ async function movePartyToTable(guestId, destinationTableId) {
   let savedGuests = null;
   const tableRefs = await getLiveTableRefs();
   await runTransaction(state.services.db, async (transaction) => {
-    const guestSnapshot = await transaction.get(
-      doc(state.services.db, "weddings", state.weddingId, "guests", guestId),
-    );
+    const guestSnapshot = await transaction.get(doc(state.services.db, "weddings", state.weddingId, "seatingGuests", guestId));
     if (!guestSnapshot.exists()) {
       throw new Error(
-        "This party no longer exists. The seating plan has been refreshed.",
+        "This guest's seating record is missing. Ask the event owner to repair seating.",
       );
     }
     const liveGuest = {
@@ -8522,47 +8657,7 @@ async function movePartyToTable(guestId, destinationTableId) {
     const nextGuests = syncGuestSeatingSummaries(liveGuests, nextTables);
     savedTables = hydrateTables(nextTables, nextGuests);
     savedGuests = nextGuests;
-    const affectedTableIds = new Set([
-      destinationTableId,
-      ...getGuestAssignedSeats(liveGuest.id, liveTables).map(
-        (assignment) => assignment.tableId,
-      ),
-    ]);
-    nextTables
-      .filter((table) => affectedTableIds.has(table.id))
-      .forEach((table) => {
-        transaction.update(
-          doc(
-            state.services.db,
-            "weddings",
-            state.weddingId,
-            "tables",
-            table.id,
-          ),
-          {
-            chairs: table.chairs,
-            guestIds: [
-              ...new Set(
-                table.chairs
-                  .map((chair) => getChairAssignment(table.id, chair)?.guestId)
-                  .filter(Boolean),
-              ),
-            ],
-            updatedAt: serverTimestamp(),
-          },
-        );
-      });
-    const nextGuest = nextGuests.find((item) => item.id === liveGuest.id);
-    transaction.update(
-      doc(
-        state.services.db,
-        "weddings",
-        state.weddingId,
-        "guests",
-        liveGuest.id,
-      ),
-      buildGuestSeatingPatch(nextGuest),
-    );
+    await persistCanonicalSeatDiff(transaction, liveTables, nextTables);
   });
   if (savedTables && savedGuests) {
     state.tables = savedTables;
@@ -8663,29 +8758,7 @@ async function syncTablesAndGuests() {
     return;
   }
 
-  if (!state.tables.length || !can("canEditSeating")) {
-    return;
-  }
-
-  const nextTables = hydrateTables(state.tables.map((table) => ({ ...table })));
-  const batch = writeBatch(state.services.db);
-  nextTables.forEach((table) => {
-    batch.update(
-      doc(state.services.db, "weddings", state.weddingId, "tables", table.id),
-      {
-        chairs: table.chairs,
-        guestIds: [
-          ...new Set(
-            table.chairs
-              .map((chair) => getChairAssignment(table.id, chair)?.guestId)
-              .filter(Boolean),
-          ),
-        ],
-        updatedAt: serverTimestamp(),
-      },
-    );
-  });
-  await batch.commit();
+  if (isWeddingOwner()) void syncPublicStats();
 }
 
 async function handleExport(type) {
@@ -9566,17 +9639,77 @@ async function buildSenderLink(side = "all") {
     });
     return new URL(`send.html?demo=1#data=${encodeSenderPayload(payload)}`, window.location.href).toString();
   }
-  const guests = getSenderGuests(side);
-  await Promise.all(guests.map((guest) => ensureGuestInvitationToken(guest.id)));
-  const result = await httpsCallable(state.services.functions, "createSenderSession")({
-    weddingId: state.weddingId,
-    side,
-    guestIds: guests.map((guest) => guest.id),
-  });
-  if (!/^[A-Za-z0-9_-]{43}$/.test(result.data?.token || "")) {
-    throw new Error("Sender link creation failed.");
+  if (!can("canEditGuests") || state.permissions?.seatingOnly === true) {
+    throw new Error("Only an authorized event organizer can create a WhatsApp sender link.");
   }
-  return new URL(`send.html#session=${encodeURIComponent(result.data.token)}`, window.location.href).toString();
+  const guests = getSenderGuests(side);
+  if (!guests.length) throw new Error("There are no recipients in this selection.");
+  const tokens = await Promise.all(guests.map((guest) => ensureGuestInvitationToken(guest.id)));
+  const recipients = guests.map((guest, index) => {
+    const token = tokens[index] || state.invitationTokenCache.get(guest.id);
+    if (!isValidInvitationToken(token)) throw new Error(`Invitation for ${guest.fullName || "a selected guest"} is unavailable.`);
+    return {
+      i: guest.id,
+      n: String(guest.fullName || "Guest").slice(0, 160),
+      p: normalizeWhatsAppPhone(guest.phone),
+      s: normalizeGuestSide(guest.side),
+      t: token,
+    };
+  }).filter((recipient) => recipient.p);
+  if (!recipients.length) throw new Error("The selected guests do not have usable phone numbers.");
+  if (recipients.length > 2000) throw new Error("A sender link can include at most 2,000 recipients. Split this selection into smaller groups.");
+
+  const token = generateInvitationToken();
+  const capabilityRef = doc(state.services.db, "weddings", state.weddingId, "senderCapabilities", token);
+  const chunkSize = 20;
+  const chunkCount = Math.ceil(recipients.length / chunkSize);
+  await setDoc(capabilityRef, {
+    weddingId: state.weddingId,
+    purpose: "whatsapp-sender",
+    status: "preparing",
+    createdBy: state.currentUser.uid,
+    side,
+    eventTitle: getEventDisplayTitle(state.wedding),
+    eventCategory: state.wedding?.eventCategory === "celebration" ? "celebration" : "wedding_engagement",
+    recipientCount: recipients.length,
+    chunkCount,
+    expiresAt: null,
+    createdAt: serverTimestamp(),
+    updatedAt: serverTimestamp(),
+  });
+  try {
+    for (let offset = 0; offset < recipients.length; offset += chunkSize) {
+      const chunkIndex = Math.floor(offset / chunkSize);
+      const chunkId = String(chunkIndex).padStart(4, "0");
+      const batch = writeBatch(state.services.db);
+      batch.set(doc(state.services.db, "weddings", state.weddingId, "senderCapabilities", token, "recipients", chunkId), {
+        weddingId: state.weddingId,
+        capabilityId: token,
+        chunkIndex,
+        recipients: recipients.slice(offset, offset + chunkSize),
+        createdAt: serverTimestamp(),
+      });
+      await batch.commit();
+    }
+    await updateDoc(capabilityRef, { status: "active", updatedAt: serverTimestamp() });
+  } catch (error) {
+    try {
+      const chunks = await getDocs(collection(state.services.db, "weddings", state.weddingId, "senderCapabilities", token, "recipients"));
+      for (let offset = 0; offset < chunks.docs.length; offset += 400) {
+        const batch = writeBatch(state.services.db);
+        chunks.docs.slice(offset, offset + 400).forEach((chunk) => batch.delete(chunk.ref));
+        await batch.commit();
+      }
+      await deleteDoc(capabilityRef);
+    } catch (cleanupError) {
+      console.error("An incomplete sender capability needs owner cleanup.", cleanupError?.code || "unavailable");
+    }
+    throw error;
+  }
+  const link = new URL("send.html", window.location.href);
+  link.searchParams.set("wedding", state.weddingId);
+  link.hash = new URLSearchParams({ capability: token }).toString();
+  return link.toString();
 }
 
 async function openSenderLink(side = "all") {
@@ -9593,8 +9726,14 @@ async function openSenderLink(side = "all") {
   } catch (error) {
     senderWindow?.close();
     console.error("Could not create a sender link.", error?.code || "unavailable");
-    showToast("Could not prepare the sender link. Check event access and try again.", "error");
+    showToast(senderCapabilityError(error), "error");
   }
+}
+
+function senderCapabilityError(error) {
+  if (error?.code === "permission-denied") return "Firestore denied sender-link access. Ask the event owner to review your event permissions.";
+  if (["unavailable", "network-request-failed", "deadline-exceeded"].includes(error?.code)) return "The network could not save the sender link. Check your connection and try again.";
+  return error?.message || "Could not prepare the sender link.";
 }
 
 function buildSideViewLink(side) {
@@ -9603,7 +9742,7 @@ function buildSideViewLink(side) {
   // used for the managers, and the dashboard repeats the wedding + side
   // context after sign-in.
   if (["bride", "groom"].includes(side) && state.mode !== "demo") {
-    const managerParams = new URLSearchParams({ wedding: state.weddingId, side });
+    const managerParams = new URLSearchParams({ wedding: state.weddingId, side, workspace: "side" });
     return new URL(
       `dashboard-login.html?${managerParams.toString()}`,
       window.location.href,

@@ -1,149 +1,69 @@
 # Event Invitation Platform
 
-A bilingual event dashboard and digital invitation app backed by Firebase
-Authentication, Cloud Firestore, and Cloud Functions. Event IDs remain readable;
-they are identifiers, not credentials.
+A bilingual invitation and event dashboard built for Firebase Spark using Firebase Authentication, Cloud Firestore, and a Vercel-hosted static frontend. Live browser workflows do not require Cloud Functions, billing, paid APIs, or a local web server. Event IDs are identifiers, not credentials.
 
 ## Main routes
 
 - `all-events.html` — events available to the signed-in dashboard account.
-- `dashboard.html` — event settings, guests, invitations, seating, exports, and
-  organizer actions.
-- `index.html` — guest invitation and RSVP.
-- `side.html` — public aggregate status page or authenticated seating view,
-  depending on the route and account.
+- `dashboard.html` — event settings, guests, invitations, seating, exports, and organizer actions.
+- `index.html` — public guest invitation and RSVP.
+- `side.html` — public family summary or an authenticated, side-scoped seating workspace.
 - `checkin.html` — authenticated check-in and search.
 - `send.html` — delegated WhatsApp sender workflow.
 
-Invitation designs are code-owned. The shared invitation data module loads a
-server-projected guest and event; individual designs do not read Firestore
-collections directly.
+## Access and data model
 
-## Access model
+Event permissions live in `weddings/{eventId}/dashboardUsers/{uid}` and are checked by Firestore rules. Event owners create their root event and owner membership together. Email addresses, URL parameters, browser storage, and UI state do not grant access. Bride/groom links open the email/password sign-in page with event context; after sign-in, `side.html` reads the signed-in UID's membership. Family seating access is read-only. Seating disabled on an event also disables seating reads and writes for side accounts.
 
-| Principal | Access |
-| --- | --- |
-| Event owner | Event settings, guests, invitations, users, exports, seating, check-in, and deletion. |
-| Dashboard member | Only the event permissions in `weddings/{eventId}/dashboardUsers/{uid}`. |
-| Seating-only member | Assigned side through server-checked seating operations; cannot edit guests or check in. |
-| Seating editor link | One event and role, exchanged for a versioned Firebase custom token; revocation is checked on data access. |
-| Guest invitation holder | One event and guest invitation; may view the projected invitation and submit RSVP. |
-| Check-in member | Search or scan only for the allowed side and update check-in fields only. |
-| Public family page | Event title and aggregate counts from `publicSummary/summary`. |
-| Demo mode | Synthetic fixture data in the browser; it does not fall through to live Firebase data. |
+The signed-in dashboard uses Firebase `browserSessionPersistence` in the `planner-session` app scope. Public invitations use a separate unauthenticated Firestore app and never sign in or sign out dashboard accounts.
 
-The WhatsApp sender link is a separate, 24-hour delegated capability. Its URL
-contains only a random token; the server rechecks the creator's event
-permission and the selected invitations each time the page opens or refreshes.
-Organizers can revoke a sender capability. Anyone holding it can see the
-selected names and phone numbers and share those invitations until expiry or
-revocation. Encoded roster payloads work only for explicit synthetic demo
-routes. See [SECURITY.md](./SECURITY.md).
+Seating uses layout in `tables`, canonical per-chair assignments in `seatAssignments`, per-person uniqueness bindings in `seatedPeople`, and PII-free occupied/empty markers in `seatOccupancy`. A Firestore transaction performs each assign, move, swap, or unassign operation. Existing table and chair IDs and coordinates are retained by the owner-run, resumable schema migration.
 
-## Invitation access
+## Invitations and RSVP
 
-Live guest links use a 256-bit random token in the URL fragment:
+Each guest's invitation token is 256-bit random data generated in the browser and saved to `invitationSecrets`, `invitationTokens`, and an exact-token `publicGuests` projection. Copying an active invitation reuses its token. The URL carries `#guest=<token>&recipient=<guestId>`; RSVP updates the canonical guest and token projection in one Firestore batch, and rules validate the actual additional-guest allowance. Anonymous readers cannot list invitations or read the private guest roster, phone numbers, notes, or account memberships.
 
-```text
-index.html?wedding={readableEventId}#guest={43-character-token}
-```
+Invitation data is a token-addressed projection, not a live read of event or guest collections. Owners can refresh projections from the dashboard. Old encrypted server-only token values cannot be recovered locally without the original server encryption secret; those guests need a newly issued invitation if no active browser-generated token exists.
 
-The raw token is not stored in the guest document. Cloud Functions store a
-SHA-256 lookup digest and an AES-GCM encrypted owner-recovery copy in
-server-only collections. The invitation callable verifies token format,
-purpose, event, guest, active status, version, and expiry on every read and
-RSVP. RSVP writes only the allowed RSVP fields and enforces that guest's actual
-additional-guest allowance. Invitation access does not authorize check-in,
-seating, or dashboard access.
+## WhatsApp sender links
 
-Organizers can reuse the same active link from the dashboard. Revocation removes
-its lookup record; regeneration issues a new token and invalidates the old one.
-Tokens expire 90 days after the event date, or earlier when an event is
-completed or deleted. Old legacy links are not accepted as a fallback.
+Organizers create a random Firestore capability and store only the selected recipients in child documents of at most 20 recipients each. Sender pages read the exact capability and exact chunk documents; anonymous list queries are denied. The recipient records include names, normalized phone numbers, sides, and their invitation URLs. Anyone holding a sender link can see the selected recipient names, phone numbers, and invitation links until an organizer revokes the capability or deletes the event. Links currently have no automatic expiry; revoke them from the dashboard when they are no longer needed. Demo mode may still use a URL-encoded synthetic payload, but live sender links do not contain a base64 roster.
 
-The guest projection includes event invitation content and the seat-map data
-needed by the invitation. It excludes the guest's phone number, internal guest
-ID, other guests, member permissions, and raw token records. The public family
-page is a separate aggregate projection.
+## Check-in and projections
 
-## Firebase data
+Check-in requires a signed-in event account with `canCheckIn`. Token scanning resolves a current invitation through the private token index, then reads the side-scoped `checkinGuests` projection. The bearer invitation never grants check-in access. Owners maintain `publicSummary`, `publicStats`, and the minimal seating/check-in projections from dashboard writes and can run **Repair projections** for an existing event. Public summaries contain counts only and show their last-updated time; projected values may lag until an authorized owner session refreshes them.
 
-Dashboard data lives under:
+## Local setup and tests
 
-```text
-weddings/{eventId}
-weddings/{eventId}/guests/{guestId}
-weddings/{eventId}/tables/{tableId}
-weddings/{eventId}/dashboardUsers/{uid}
-weddings/{eventId}/seatingAccess/{role}
-weddings/{eventId}/publicSummary/summary
-```
-
-Private invitation records live in server-only top-level collections:
-
-```text
-invitationSecrets/{hashedEventGuestKey}
-invitationAccessTokens/{sha256Token}
-invitationRateLimits/{windowAndHmacIp}
-senderSessions/{sha256Token}
-checkinRosterRateLimits/{windowAndHashedUidEvent}
-```
-
-Firestore rules deny client access to those collections. Public reads of full
-events, guest documents, tables, old guest mirrors, and `publicStats` are denied.
-Sensitive callable responses also carry `Cache-Control: no-store`; the Functions
-emulator suite verifies this response header.
-
-## Local setup and checks
-
-Use Node.js 22 or newer. Firestore, Auth, Functions, and Hosting emulator runs
-also require Java 21 or newer.
+Install Node.js 22 or newer, Java 21 or newer, and the Firebase CLI. In Windows PowerShell:
 
 ```powershell
 npm ci
-npm --prefix functions ci
-node --test
-firebase emulators:exec --only firestore --project demo-wedding-security "node --test --test-reporter=tap tests/event-settings-firestore.test.mjs tests/firestore-security.test.mjs"
-npm run test:functions
-npm audit
-npm audit --prefix functions
+$env:JAVA_HOME = 'C:\Program Files\Microsoft\jdk-21.0.12.101-hotspot'
+$env:Path = "$env:JAVA_HOME\bin;$env:Path"
+npm test
+npm run test:security
 ```
 
-The Functions emulator runner creates a short-lived local encryption key for
-tests, then removes it. Never replace an existing `functions/.secret.local`
-file automatically. The emulator fixtures use synthetic events and accounts.
+The security command starts only the Firestore emulator. It does not connect to or modify production data.
 
-Run the Hosting header release gate after deploying to a non-production test
-site by setting `HOSTING_SECURITY_TEST_URL` to its base URL, then running:
+## Firebase Console setup and deployment
+
+1. Confirm the project is on the Spark plan and Cloud Firestore is initialized. Firebase Hosting is not used for production.
+2. In Firebase Console → Authentication → Sign-in method, enable **Email/Password**. Add authorized customer accounts and grant event access through the dashboard's account permission controls.
+3. Sign in to the Firebase CLI and select the intended project:
 
 ```powershell
-$env:HOSTING_SECURITY_TEST_URL = "https://your-test-site.web.app"
-node --test tests/hosting-headers.test.mjs
+firebase login
+firebase use weddinginvitaion-b4f36
 ```
 
-## Deployment
+4. Deploy only the Firestore rules and index configuration to Firebase:
 
-Deployment order, migration gates, backups, rollback boundaries, and the
-current readiness assessment are in [RELEASE.md](./RELEASE.md). Do not deploy
-the rules before the compatible Functions and Hosting client are available.
-Never deploy permissive rules as a compatibility bridge.
-
-Required server-only secrets:
-
-```text
-INVITATION_TOKEN_ENCRYPTION_KEY
-SEATING_LINK_ENCRYPTION_KEY
+```powershell
+firebase deploy --only firestore:rules,firestore:indexes --project weddinginvitaion-b4f36
 ```
 
-Use different random values with at least 32 bytes of entropy. Configure them
-through Firebase Secret Manager; do not put them in browser config, source,
-logs, or test reports. Firebase Web API configuration in `firebase-config.js`
-is public client configuration, not a service-account credential.
+The existing Vercel project `wedding-invitation-nlsf` is connected to `moose988/wedding-invitation` on `main`; pushing the tested frontend commit to `main` triggers its production deployment. Do not deploy Firebase Hosting or Functions. Firestore rules and index configuration are deployed separately from Vercel.
 
-## Event categories
-
-Events use `eventCategory: "wedding_engagement" | "celebration"`. Wedding
-events keep Bride/Groom sides; celebration guests use `side: "general"`.
-Missing event categories remain compatible as wedding events. See
-`event-utils.js` and the event settings in the dashboard for the canonical
-schema.
+After deployment, an event owner should open each existing event dashboard once to run seating migration, then select **Repair projections** to refresh the public summary, invitation documents, and minimal seating/check-in projections. Verify the repaired event and two-account seating access before sending links.

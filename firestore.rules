@@ -692,10 +692,22 @@ service cloud.firestore {
         ]) && validGuestDocumentFields(data, true);
     }
 
-    // Customers edit legacy guest records in the same transaction as their
-    // seating and check-in mirrors. Validate the supported schema once while
-    // leaving pre-existing retired fields untouched, to keep that transaction
-    // inside Firestore's rule evaluation budget.
+    // Legacy guest records can contain values that no longer match the editor
+    // schema. Keep the common name/phone path small: validate only those edits,
+    // retain check-in state, and leave every retired field unchanged.
+    function validBasicGuestDetailUpdate(data) {
+      let changed = data.diff(resource.data).affectedKeys();
+      return changed.hasOnly(["fullName", "phone", "updatedAt"])
+        && changed.hasAny(["fullName", "phone"])
+        && (!changed.hasAny(["fullName"]) || (data.fullName is string && data.fullName.size() > 0 && data.fullName.size() <= 160))
+        && (!changed.hasAny(["phone"]) || (data.phone is string && data.phone.size() <= 40))
+        && data.get("checkedIn", false) == resource.data.get("checkedIn", false)
+        && data.get("checkedInAt", null) == resource.data.get("checkedInAt", null)
+        && data.updatedAt == request.time;
+    }
+
+    // Other guest edits validate the complete supported shape. New records use
+    // validGuestDocument; legacy detail-only edits use the narrow path above.
     function validCustomerGuestUpdate(weddingId, guestId, data) {
       let changed = data.diff(resource.data).affectedKeys();
       let checkedInAt = data.get("checkedInAt", null);
@@ -998,7 +1010,8 @@ service cloud.firestore {
           (!request.resource.data.keys().hasAny(["updatedAt"]) || request.resource.data.updatedAt == request.time);
         allow delete: if canManageGuestRecords(weddingId);
         allow update: if (canManageGuestRecords(weddingId)
-            && validCustomerGuestUpdate(weddingId, guestId, request.resource.data))
+            && (validBasicGuestDetailUpdate(request.resource.data)
+              || validCustomerGuestUpdate(weddingId, guestId, request.resource.data)))
           || (!isCustomer(weddingId) && canManageGuestRecords(weddingId) &&
             (!isCustomer(weddingId) || !request.resource.data.diff(resource.data).affectedKeys().hasAny(["checkedIn", "checkedInAt"])) &&
             validLegacyGuestDocumentUpdate(request.resource.data) &&

@@ -50,7 +50,7 @@ test("actual guest-save and shared publishing paths remain bounded, live and iso
       for (const uid of ["customer", "admin"]) await api.setDoc(ref(seed, "dashboardUsers", uid), { ...customerMembership(uid, `${uid}@example.test`, new Date()), ...(uid === "admin" ? { role: "admin", canCheckIn: true, canManageUsers: true } : {}) });
       await api.setDoc(ref(seed, "tables", "t"), table);
       for (let index = 0; index < 30; index++) {
-        const id = `g${index}`, row = index === 2 ? { ...guest, additionalGuests: 10, additionalGuestAllowance: 10 } : index === 1 ? { ...guest, checkedIn: true, checkedInAt: "Today, 8:12 PM", qrCodeValue: "retired-value", fullNameAr: "Legacy name", token: "retired-value" } : guest;
+        const id = `g${index}`, row = index === 2 ? { ...guest, additionalGuests: 10, additionalGuestAllowance: 10 } : index === 1 ? { ...guest, notes: { retiredImport: "preserve unchanged" }, checkedIn: true, checkedInAt: "Today, 8:12 PM", qrCodeValue: "retired-value", fullNameAr: "Legacy name", token: "retired-value", retiredImportMetadata: { source: "legacy" } } : guest;
         await api.setDoc(ref(seed, "guests", id), row);
         await api.setDoc(ref(seed, "seatingGuests", id), seatingGuestData(row));
         await api.setDoc(ref(seed, "checkinGuests", id), checkinGuestData(id, row));
@@ -92,14 +92,23 @@ test("actual guest-save and shared publishing paths remain bounded, live and iso
     assert.equal(spy.counts.publicGuestWrites, 1);
     assert.deepEqual((await api.getDoc(ref(db, "publicGuests", token))).data().wedding, legacyWedding);
     const thirtyCounts = { ...spy.counts };
+    // Owners can edit imported legacy guests even when untouched legacy values
+    // no longer fit today's schema; those fields must survive byte-for-byte.
+    await edit("g1", { fullName: "Edited legacy record" }, adminPublisher, admin);
+    assert.equal(adminPublisher.publicationError, null);
+    const legacyAfterOwnerEdit = (await api.getDoc(ref(db, "guests", "g1"))).data();
+    assert.deepEqual(legacyAfterOwnerEdit.notes, { retiredImport: "preserve unchanged" });
+    assert.deepEqual(legacyAfterOwnerEdit.retiredImportMetadata, { source: "legacy" });
+    assert.equal(legacyAfterOwnerEdit.checkedInAt, "Today, 8:12 PM");
     spy.reset();
     await edit("g0", { phone: "440000000001" });
     assert.equal(spy.counts.reads, 1); assert.equal(spy.counts.bindingsRead, 0); assert.equal(spy.counts.publicGuestWrites, 0);
-    for (const [id, patch] of [["g1", { fullName: "Edited legacy record" }], ["g3", { additionalGuestAllowance: 4 }], ["g3", { additionalGuestAllowance: 1 }], ["g3", { rsvpStatus: "declined" }], ["g3", { side: "groom" }], ["g2", { fullName: "Edited eleven-person party" }], ["g2", { side: "groom" }]]) {
+    for (const [id, patch] of [["g1", { phone: "440000000004" }], ["g3", { additionalGuestAllowance: 4 }], ["g3", { additionalGuestAllowance: 1 }], ["g3", { rsvpStatus: "declined" }], ["g3", { side: "groom" }], ["g2", { fullName: "Edited eleven-person party" }], ["g2", { side: "groom" }]]) {
       await edit(id, patch); assert.equal(p.publicationError, null);
     }
     const legacy = (await api.getDoc(ref(db, "guests", "g1"))).data();
     assert.equal(legacy.checkedInAt, "Today, 8:12 PM"); assert.equal(legacy.qrCodeValue, "retired-value"); assert.equal(legacy.fullNameAr, "Legacy name");
+    assert.deepEqual(legacy.notes, { retiredImport: "preserve unchanged" }); assert.deepEqual(legacy.retiredImportMetadata, { source: "legacy" });
     assert.equal((await api.getDoc(ref(db, "seatAssignments", "t~c11"))).data().side, "groom");
     assert.equal((await api.getDoc(ref(anonymous, "publicGuests", partyToken))).data().guest.seatingAssignments.length, 11);
     await assert.rejects(edit("g2", { additionalGuestAllowance: 9 }), /Unassign/);

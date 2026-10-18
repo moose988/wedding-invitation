@@ -12,8 +12,11 @@ export function validInvitation(data, weddingId) {
   return data?.eventId === weddingId && data.wedding && data.guest && ["pending", "confirmed", "declined"].includes(data.rsvpStatus);
 }
 
-export function composeInvitation(context, invitation, shared, scene, layouts, venue) {
+export function composeInvitation(context, invitation, shared, scene, layouts, venue, scheduleRows = null) {
   let wedding = { ...invitation.wedding, ...(shared || {}) };
+  if (shared?.scheduleCount !== undefined) wedding.schedule = scheduleRows
+    ? scheduleRows.map((row) => row.data()).filter((item) => item.index < shared.scheduleCount).sort((a, b) => a.index - b.index)
+    : [];
   const useShared = scene?.version === 1 || invitation.wedding.canonicalLayout === true;
   if (useShared && layouts && venue) wedding = { ...wedding, canonicalLayout: true,
     tables: layouts.map((row) => { const table = { ...row.data(), id: row.id }; return { ...table, chairs: generateTableChairs(table.shape, table.seatCount, table.width, table.height, [], table.id) }; }),
@@ -34,12 +37,13 @@ export function composeInvitation(context, invitation, shared, scene, layouts, v
   return { ...context, wedding: { id: context.weddingId, ...wedding }, guest };
 }
 
-export function createInvitationSubscription({ api, db, context, onChange, onError }) {
-  let active = true, invitation = null, shared = null, scene = null, layouts = null, venue = null;
+export function createInvitationSubscription({ api, db, context, onChange, onError, includeSchedule = true, includeVenue = true }) {
+  let active = true, invitation = null, shared = null, scene = null, layouts = null, venue = includeVenue ? null : [], scheduleRows = null;
   const stops = [], layoutStops = [];
   let layoutGeneration = 0;
+  let scheduleStop = null, scheduleGeneration = 0;
   const ref = (...parts) => api.doc(db, "weddings", context.weddingId, ...parts);
-  function dispose() { if (!active) return; active = false; [...stops, ...layoutStops].forEach((stop) => stop()); }
+  function dispose() { if (!active) return; active = false; [...stops, ...layoutStops].forEach((stop) => stop()); scheduleStop?.(); }
   function fail(error, capability = false) {
     if (!active) return;
     const normalized = invitationReadError(error);
@@ -53,12 +57,20 @@ export function createInvitationSubscription({ api, db, context, onChange, onErr
     if (needsLayout && !layoutStops.length) {
       const generation = ++layoutGeneration;
       layoutStops.push(api.onSnapshot(api.collection(db, "weddings", context.weddingId, "publicLayouts"), (rows) => { if (active && generation === layoutGeneration) { layouts = rows.docs; emit(); } }, (error) => { if (generation === layoutGeneration) fail(error); }));
-      layoutStops.push(api.onSnapshot(api.collection(db, "weddings", context.weddingId, "publicVenue"), (rows) => { if (active && generation === layoutGeneration) { venue = rows.docs; emit(); } }, (error) => { if (generation === layoutGeneration) fail(error); }));
+      if (includeVenue) layoutStops.push(api.onSnapshot(api.collection(db, "weddings", context.weddingId, "publicVenue"), (rows) => { if (active && generation === layoutGeneration) { venue = rows.docs; emit(); } }, (error) => { if (generation === layoutGeneration) fail(error); }));
     } else if (!needsLayout && layoutStops.length) {
       layoutGeneration++;
-      layoutStops.splice(0).forEach((stop) => stop()); layouts = null; venue = null;
+      layoutStops.splice(0).forEach((stop) => stop()); layouts = null; venue = includeVenue ? null : [];
     }
-    onChange(composeInvitation(context, invitation, shared, scene, layouts, venue));
+    if (includeSchedule && shared?.scheduleCount > 0 && !scheduleStop) {
+      const generation = ++scheduleGeneration;
+      scheduleStop = api.onSnapshot(api.collection(db, "weddings", context.weddingId, "publicSchedule"), (rows) => {
+        if (active && generation === scheduleGeneration) { scheduleRows = rows.docs; emit(); }
+      }, (error) => { if (generation === scheduleGeneration) fail(error); });
+    } else if (!(shared?.scheduleCount > 0) && scheduleStop) {
+      scheduleGeneration++; scheduleStop(); scheduleStop = null; scheduleRows = null;
+    }
+    onChange(composeInvitation(context, invitation, shared, scene, layouts, venue, scheduleRows));
   }
   stops.push(api.onSnapshot(ref("publicGuests", context.guestToken), (snapshot) => {
     if (!active) return;

@@ -106,7 +106,7 @@ export function buildInvitationProjection(weddingId, wedding = {}, guest = {}, t
       invitationLanguage: wedding.invitationLanguage === "ar" ? "ar" : "en",
       showInvitationQr: wedding.showInvitationQr !== false,
       seatingEnabled: wedding.seatingEnabled !== false,
-      schedule: canonicalLayout ? (wedding.schedule || []) : Array.isArray(wedding.schedule) ? wedding.schedule.slice(0, 12).map((item) => ({
+      schedule: canonicalLayout ? [] : Array.isArray(wedding.schedule) ? wedding.schedule.slice(0, 12).map((item) => ({
         titleEn: text(item?.titleEn, 160), titleAr: text(item?.titleAr, 160),
         timeEn: text(item?.timeEn, 80), timeAr: text(item?.timeAr, 80),
         descriptionEn: text(item?.descriptionEn, 500), descriptionAr: text(item?.descriptionAr, 500),

@@ -420,7 +420,7 @@ async function deleteWedding(event) {
       "seatingAccess", "tables", "guests", "seatingGuests", "checkinGuests",
       "seatAssignments", "seatOccupancy", "seatedPeople", "invitationSecrets",
       "invitationTokens", "publicGuests", "publicSummary", "publicStats",
-      "publicEvent", "publicScene", "publicLayouts", "publicVenue",
+      "publicEvent", "publicScene", "publicLayouts", "publicVenue", "publicSchedule",
       "seatingMigrations", "eventMaintenance", "senderCapabilities",
     ];
     for (const collectionId of childCollections) {

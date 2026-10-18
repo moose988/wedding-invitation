@@ -444,13 +444,15 @@ service cloud.firestore {
       return guest.get("additionalGuestAllowance", guest.get("additionalGuests", 0));
     }
 
-    function validPublicScheduleAt(projected, source, index) {
+    function validLegacyPublicScheduleAt(projected, source, index) {
       return projected.size() <= index || projected[index] == { "titleEn": source[index].get("titleEn", ""), "titleAr": source[index].get("titleAr", ""), "time": source[index].get("time", ""), "timeEn": source[index].get("timeEn", ""), "timeAr": source[index].get("timeAr", ""), "descriptionEn": source[index].get("descriptionEn", ""), "descriptionAr": source[index].get("descriptionAr", "") };
     }
 
     function canonicalSharedEvent(weddingId, data) {
       let event = getAfter(/databases/$(database)/documents/weddings/$(weddingId)).data;
-      return data == {
+      let items = event.get("schedule", []);
+      let hasSharedSchedule = data.keys().hasAny(["scheduleCount"]);
+      let expected = {
           "eventTitle": event.get("eventTitle", ""),
           "coupleName": event.get("coupleName", ""),
           "brideName": event.get("brideName", ""),
@@ -475,21 +477,23 @@ service cloud.firestore {
           "showInvitationQr": event.get("showInvitationQr", true),
           "seatingEnabled": event.get("seatingEnabled", true),
           "schedule": data.schedule, "updatedAt": request.time
-        }
-        && data.schedule is list && data.schedule.size() <= 12
-        && data.schedule.size() == event.get("schedule", []).size()
-        && validPublicScheduleAt(data.schedule, event.get("schedule", []), 0)
-          && validPublicScheduleAt(data.schedule, event.get("schedule", []), 1)
-          && validPublicScheduleAt(data.schedule, event.get("schedule", []), 2)
-          && validPublicScheduleAt(data.schedule, event.get("schedule", []), 3)
-          && validPublicScheduleAt(data.schedule, event.get("schedule", []), 4)
-          && validPublicScheduleAt(data.schedule, event.get("schedule", []), 5)
-          && validPublicScheduleAt(data.schedule, event.get("schedule", []), 6)
-          && validPublicScheduleAt(data.schedule, event.get("schedule", []), 7)
-          && validPublicScheduleAt(data.schedule, event.get("schedule", []), 8)
-          && validPublicScheduleAt(data.schedule, event.get("schedule", []), 9)
-          && validPublicScheduleAt(data.schedule, event.get("schedule", []), 10)
-          && validPublicScheduleAt(data.schedule, event.get("schedule", []), 11);
+        };
+      return data.diff(expected).affectedKeys().hasOnly(["scheduleCount"])
+        && ((hasSharedSchedule && data.scheduleCount == items.size() && data.scheduleCount <= 12 && data.schedule == [])
+          || (!hasSharedSchedule && data.schedule is list && data.schedule.size() == items.size() && items.size() <= 12
+            && (!exists(/databases/$(database)/documents/weddings/$(weddingId)/publicEvent/details) || !resource.data.keys().hasAny(["scheduleCount"]))
+            && validLegacyPublicScheduleAt(data.schedule, items, 0)
+            && validLegacyPublicScheduleAt(data.schedule, items, 1)
+            && validLegacyPublicScheduleAt(data.schedule, items, 2)
+            && validLegacyPublicScheduleAt(data.schedule, items, 3)
+            && validLegacyPublicScheduleAt(data.schedule, items, 4)
+            && validLegacyPublicScheduleAt(data.schedule, items, 5)
+            && validLegacyPublicScheduleAt(data.schedule, items, 6)
+            && validLegacyPublicScheduleAt(data.schedule, items, 7)
+            && validLegacyPublicScheduleAt(data.schedule, items, 8)
+            && validLegacyPublicScheduleAt(data.schedule, items, 9)
+            && validLegacyPublicScheduleAt(data.schedule, items, 10)
+            && validLegacyPublicScheduleAt(data.schedule, items, 11)));
     }
 
     function canonicalCustomerInvitation(weddingId, token, data) {
@@ -508,7 +512,7 @@ service cloud.firestore {
           "subtitleEn": event.get("subtitleEn", ""), "subtitleAr": event.get("subtitleAr", ""),
           "invitationMessageEn": event.get("invitationMessageEn", ""), "invitationMessageAr": event.get("invitationMessageAr", ""),
           "invitationLanguage": event.get("invitationLanguage", "en"), "showInvitationQr": event.get("showInvitationQr", true),
-          "seatingEnabled": event.get("seatingEnabled", true), "schedule": event.get("schedule", [])
+          "seatingEnabled": event.get("seatingEnabled", true), "schedule": []
         } || (exists(/databases/$(database)/documents/weddings/$(weddingId)/publicGuests/$(token))
           && data.wedding == resource.data.wedding))
         && canonicalPublicAssignments(data.guest.seatingAssignments, guest.get("seatingAssignments", []))
@@ -1146,6 +1150,29 @@ service cloud.firestore {
         allow create, update: if docId == "state" && (isEventOwner(weddingId) || canManageSeatingLayout(weddingId))
           && request.resource.data == { "version": 1, "updatedAt": request.time };
         allow delete: if isEventDeletingOwner(weddingId);
+      }
+
+      // Validate one schedule item per write rather than evaluating twelve
+      // nested maps in every event/settings write. Only public strings survive.
+      match /publicSchedule/{docId} {
+        allow get, list: if eventAvailable(weddingId);
+        function canonicalScheduleItem() {
+          let index = request.resource.data.index;
+          let items = getAfter(/databases/$(database)/documents/weddings/$(weddingId)).data.get("schedule", []);
+          let item = items[index];
+          return index is int && index >= 0 && index < items.size() && docId == string(index)
+            && request.resource.data == {
+              "index": index, "titleEn": item.get("titleEn", ""), "titleAr": item.get("titleAr", ""),
+              "time": item.get("time", ""), "timeEn": item.get("timeEn", ""), "timeAr": item.get("timeAr", ""),
+              "descriptionEn": item.get("descriptionEn", ""), "descriptionAr": item.get("descriptionAr", ""), "updatedAt": request.time
+            }
+            && request.resource.data.titleEn is string && request.resource.data.titleAr is string
+            && request.resource.data.time is string && request.resource.data.timeEn is string && request.resource.data.timeAr is string
+            && request.resource.data.descriptionEn is string && request.resource.data.descriptionAr is string;
+        }
+        allow create, update: if (isEventOwner(weddingId) || canEditEventDetails(weddingId) || canManageSeatingLayout(weddingId)) && canonicalScheduleItem();
+        allow delete: if isEventDeletingOwner(weddingId) || ((isEventOwner(weddingId) || canEditEventDetails(weddingId) || canManageSeatingLayout(weddingId))
+          && resource.data.index >= getAfter(/databases/$(database)/documents/weddings/$(weddingId)).data.get("schedule", []).size());
       }
 
       match /publicVenue/{docId} {

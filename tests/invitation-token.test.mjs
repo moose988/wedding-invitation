@@ -52,3 +52,11 @@ test("invitation tokens have no client-side event-date expiry", async () => {
   assert.match(rules, /function invitationEventExists\(weddingId\)[\s\S]*?return eventAvailable\(weddingId\)/);
   assert.doesNotMatch(rules, /request\.time < record\.data\.expiresAt/);
 });
+
+test("shared-layout capabilities never duplicate private schedule metadata", () => {
+  const wedding = { schedule: [{ titleEn: "Public item", notes: "private schedule metadata" }] };
+  const guest = { fullName: "Synthetic guest", seatingAssignments: [] };
+  const projection = buildInvitationProjection("event-a", wedding, guest, [], { canonicalLayout: true });
+  assert.deepEqual(projection.wedding.schedule, []);
+  assert.equal(JSON.stringify(projection).includes("private schedule metadata"), false);
+});

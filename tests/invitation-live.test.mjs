@@ -2,13 +2,13 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { createInvitationSubscription, composeInvitation, invitationReadError } from "../invitations/shared/invitation-live.js";
 
-function source() {
+function source(options = {}) {
   const subscriptions = [], changes = [], errors = [];
   const api = { doc: (_db, ...parts) => parts.join("/"), collection: (_db, ...parts) => parts.join("/"), onSnapshot(path, next, error) {
     const item = { path, next, error, active: true }; subscriptions.push(item); return () => { item.active = false; };
   } };
   const context = { weddingId: "event", guestToken: "synthetic-only", guestId: "g" };
-  const dispose = createInvitationSubscription({ api, db: {}, context, onChange: (value) => changes.push(value), onError: (error) => errors.push(error) });
+  const dispose = createInvitationSubscription({ api, db: {}, context, onChange: (value) => changes.push(value), onError: (error) => errors.push(error), ...options });
   const send = (suffix, data, missing = false) => subscriptions.findLast((item) => item.active && item.path.endsWith(suffix)).next(Array.isArray(data) ? { docs: data.map(([id, value]) => ({ id, data: () => value })) } : { exists: () => !missing, data: () => data });
   return { subscriptions, changes, errors, dispose, send };
 }
@@ -69,4 +69,34 @@ test("existing embedded invitations reconcile canonical personal seat IDs and pu
   assert.equal(value.guest.seatingAssignments[0].tableId, "stable-id");
   assert.equal(value.guest.seatingAssignments[0].tableName, "Renamed table");
   assert.equal(legacy.guest.seatingAssignments[0].tableId, "t");
+});
+
+test("public schedule subscribes only when needed, stays stable across RSVP and discards old callbacks", () => {
+  const s = source(); s.send("publicGuests/synthetic-only", capability);
+  s.send("publicEvent/details", { scheduleCount: 1, schedule: [] });
+  s.send("publicSchedule", [["0", { index: 0, titleEn: "Current public item" }]]);
+  assert.equal(s.changes.at(-1).wedding.schedule[0].titleEn, "Current public item");
+  const count = s.subscriptions.length;
+  for (let index = 0; index < 10; index++) s.send("publicGuests/synthetic-only", { ...capability, rsvpMessage: `Response ${index}` });
+  assert.equal(s.subscriptions.length, count);
+  const old = s.subscriptions.find((item) => item.path.endsWith("publicSchedule"));
+  s.send("publicEvent/details", { scheduleCount: 0, schedule: [] });
+  assert.equal(old.active, false); assert.equal(s.changes.at(-1).wedding.schedule.length, 0);
+  const before = s.changes.length;
+  old.next({ docs: [{ id: "0", data: () => ({ index: 0, titleEn: "Obsolete" }) }] });
+  assert.equal(s.changes.length, before);
+  s.dispose(); assert.equal(s.subscriptions.filter((item) => item.active).length, 0);
+});
+
+test("summary-only designs omit unused venue and schedule subscriptions and survive seating toggles", () => {
+  const s = source({ includeVenue: false, includeSchedule: false });
+  s.send("publicGuests/synthetic-only", capability);
+  s.send("publicEvent/details", { scheduleCount: 12 });
+  assert.equal(s.subscriptions.length, 4);
+  assert.equal(s.subscriptions.some((item) => /publicVenue|publicSchedule/.test(item.path)), false);
+  s.send("publicEvent/details", { seatingEnabled: false });
+  s.send("publicEvent/details", { seatingEnabled: true });
+  s.send("publicLayouts", [["t", { name: "Current seat summary", shape: "round", width: 180, height: 180, seatCount: 3 }]]);
+  assert.equal(s.changes.at(-1).guest.tableName, "Current seat summary");
+  s.dispose(); assert.equal(s.subscriptions.filter((item) => item.active).length, 0);
 });

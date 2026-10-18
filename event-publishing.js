@@ -1,5 +1,5 @@
-import { buildInvitationProjection, isValidInvitationToken } from "./invitations/shared/invitation-token.js";
-import { checkinGuestData, seatingGuestData } from "./guest-edit.js?v=20261018-guest-invitation-regressions-1";
+import { buildInvitationProjection, isValidInvitationToken } from "./invitations/shared/invitation-token.js?v=20261018-guest-invitation-regressions-2";
+import { checkinGuestData, seatingGuestData } from "./guest-edit.js?v=20261018-guest-invitation-regressions-2";
 
 function comparable(value) {
   if (Array.isArray(value)) return value.map(comparable);
@@ -13,8 +13,12 @@ const scheduleFields = ["titleEn", "titleAr", "time", "timeEn", "timeAr", "descr
 export function publicEventData(event) {
   const defaults = { eventCategory: "wedding_engagement", invitationLanguage: "en", showInvitationQr: true, seatingEnabled: true, schedule: [] };
   const data = Object.fromEntries(publicEventFields.map((key) => [key, event[key] ?? defaults[key] ?? ""]));
-  data.schedule = (event.schedule || []).slice(0, 12).map((item) => Object.fromEntries(scheduleFields.map((key) => [key, typeof item[key] === "string" ? item[key] : ""])));
+  data.schedule = [];
+  data.scheduleCount = (event.schedule || []).length;
   return data;
+}
+export function publicScheduleData(item, index) {
+  return { index, ...Object.fromEntries(scheduleFields.map((key) => [key, typeof item[key] === "string" ? item[key] : ""])) };
 }
 export function publicTableData(table, previous = {}, before = table) {
   const defaults = { name: "Table", shape: "round", x: 20, y: 20, width: 180, height: 180, rotation: 0, seatCount: 0, tableColor: "", borderColor: "", chairColor: "" };
@@ -150,7 +154,29 @@ export function createEventPublisher({ api, db, weddingId, isCurrent = () => tru
     });
   }
 
-  async function publishScene({ venue = false, repair = false } = {}) {
+  async function publishSchedule() {
+    current();
+    const [event, previous] = await Promise.all([api.getDoc(ref()), api.getDocs(api.collection(db, "weddings", weddingId, "publicSchedule"))]);
+    current();
+    if (!event.exists()) return;
+    const items = event.data().schedule || [];
+    if (items.length > 12 || previous.size > 12) throw Object.assign(new Error("Schedule repair is limited to twelve public items."), { code: "failed-precondition" });
+    const ids = new Set([...items.map((_, index) => String(index)), ...previous.docs.map((row) => row.id)]);
+    for (const id of ids) {
+      current();
+      await api.runTransaction(db, async (transaction) => {
+        const target = ref("publicSchedule", id);
+        const [fresh, old] = await Promise.all([transaction.get(ref()), transaction.get(target)]);
+        const index = Number(id), rows = fresh.data()?.schedule || [];
+        current();
+        if (index >= rows.length) { if (old.exists()) transaction.delete(target); return; }
+        const data = publicScheduleData(rows[index], index);
+        if (!old.exists() || !projectionEqual(old.data(), data)) transaction.set(target, { ...data, updatedAt: api.serverTimestamp() });
+      });
+    }
+  }
+
+  async function publishScene({ venue = false, schedule = false, repair = false } = {}) {
     current(); beforePublish(); current();
     if (!initialized || repair) {
       const marker = await api.getDoc(ref("publicScene", "state"));
@@ -158,6 +184,7 @@ export function createEventPublisher({ api, db, weddingId, isCurrent = () => tru
         // Explicit save/repair only. Resuming rechecks actual content and skips
         // completed documents; it never touches guests, tokens or responses.
         await publishEvent();
+        await publishSchedule();
         const [tables, old] = await Promise.all([api.getDocs(api.collection(db, "weddings", weddingId, "tables")), api.getDocs(api.collection(db, "weddings", weddingId, "publicLayouts"))]);
         if (tables.size > 200 || old.size > 200) throw Object.assign(new Error("This scene exceeds the bounded repair size. Publish a scoped layout repair."), { code: "failed-precondition" });
         for (const id of new Set([...tables.docs.map((row) => row.id), ...old.docs.map((row) => row.id)])) await publishTable(id);
@@ -171,6 +198,7 @@ export function createEventPublisher({ api, db, weddingId, isCurrent = () => tru
       initialized = true;
     }
     if (venue) await publishVenue();
+    if (schedule) await publishSchedule();
   }
 
   return { publishGuest, publishScene, publishTable, publishVenue, repairGuest };

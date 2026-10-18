@@ -73,6 +73,10 @@ updates use `guest-edit.js` and `dashboard-persistence.js` to synchronize only a
 they never require an administrator's open dashboard. Public table geometry is
 stored separately in `publicLayouts`, with each document checked against its
 canonical table. `publicVenue` contains only the canonical venue layout.
+`publicSchedule` contains at most twelve individually validated public items;
+private schedule metadata is excluded. The reader subscribes to it only when
+the event advertises a nonempty shared schedule. Shared event settings retain
+compatibility with earlier projections and do not downgrade once upgraded.
 Invitation projections validate event fields and guest values against canonical
 documents, strip private assignment fields, and retain the existing token and
 fragment URL. The public reader supports both existing projections and the new

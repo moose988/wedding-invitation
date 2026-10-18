@@ -1,4 +1,4 @@
-import { getInvitationParams, invitationCheckinUrl, invitationSeatingEnabled, loadInvitationContext, saveInvitationRsvp, subscribeToInvitation } from "../../shared/invitation-data.js?v=20261018-guest-invitation-regressions-1";
+import { getInvitationParams, invitationCheckinUrl, invitationSeatingEnabled, loadInvitationContext, saveInvitationRsvp, subscribeToInvitation } from "../../shared/invitation-data.js?v=20261018-guest-invitation-regressions-2";
 import { escapeHtml, formatEventDate, guestSeat, setDocumentTitle } from "../../shared/invitation-utils.js";
 import { buildSatelliteMapEmbedUrl } from "../../shared/map-embed.js";
 import { getEventDisplayTitle, isCelebrationEvent } from "../../../event-utils.js";
@@ -18,7 +18,7 @@ async function boot() {
   try {
     context = await loadInvitationContext(getInvitationParams());
     render();
-    unsubscribeInvitation = subscribeToInvitation(context, (next) => { context = next; render(); }, showError);
+    unsubscribeInvitation = subscribeToInvitation(context, (next) => { context = next; render(); }, showError, { schedule: false, venue: false });
     window.addEventListener("pagehide", () => unsubscribeInvitation?.(), { once: true });
   } catch (error) { showError(error); }
 }

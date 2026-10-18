@@ -1,5 +1,5 @@
-import { createEventPublisher } from "./event-publishing.js?v=20261018-guest-invitation-regressions-1";
-export { publicTableData as publicTableLayout } from "./event-publishing.js?v=20261018-guest-invitation-regressions-1";
+import { createEventPublisher } from "./event-publishing.js?v=20261018-guest-invitation-regressions-2";
+export { publicTableData as publicTableLayout } from "./event-publishing.js?v=20261018-guest-invitation-regressions-2";
 
 // Compatibility/explicit repair entry point. Never called by render/listeners.
 // One invocation repairs at most 50 explicitly selected guests (or one page).

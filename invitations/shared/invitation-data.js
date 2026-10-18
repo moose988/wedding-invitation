@@ -8,8 +8,8 @@ import {
   serverTimestamp,
   writeBatch,
 } from "../../firebase-config.js";
-import { isValidInvitationToken } from "./invitation-token.js";
-import { composeInvitation, createInvitationSubscription, invitationReadError } from "./invitation-live.js?v=20261018-guest-invitation-regressions-1";
+import { isValidInvitationToken } from "./invitation-token.js?v=20261018-guest-invitation-regressions-2";
+import { composeInvitation, createInvitationSubscription, invitationReadError } from "./invitation-live.js?v=20261018-guest-invitation-regressions-2";
 
 const INVITATION_TOKEN_PATTERN = /^[A-Za-z0-9_-]{43}$/;
 
@@ -53,13 +53,13 @@ export async function loadInvitationContext({ weddingId, guestToken, guestId = "
 
 // Listen to the exact capability document. Revocation/deletion is delivered by
 // Firestore, and the unsubscribe is owned by the invitation page lifecycle.
-export function subscribeToInvitation(context, onChange, onError = console.error) {
+export function subscribeToInvitation(context, onChange, onError = console.error, options = {}) {
   if (!isFirebaseConfigured() || !context?.weddingId || !isValidInvitationToken(context?.guestToken || "")) {
     queueMicrotask(() => onError(invitationReadError({ code: "not-found" })));
     return () => {};
   }
   const { db } = initPublicFirebase();
-  const stop = createInvitationSubscription({ api: { doc, collection, onSnapshot }, db, context, onChange, onError });
+  const stop = createInvitationSubscription({ api: { doc, collection, onSnapshot }, db, context, onChange, onError, includeSchedule: options.schedule !== false, includeVenue: options.venue !== false });
   const dispose = () => { stop(); window.removeEventListener("pagehide", dispose); };
   window.addEventListener("pagehide", dispose, { once: true });
   return dispose;

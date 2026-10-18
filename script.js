@@ -1,5 +1,5 @@
 import { isFirebaseConfigured } from "./firebase-config.js";
-import { getInvitationParams, loadInvitationContext, saveInvitationRsvp, subscribeToInvitation } from "./invitations/shared/invitation-data.js?v=20261018-guest-invitation-regressions-1";
+import { getInvitationParams, loadInvitationContext, saveInvitationRsvp, subscribeToInvitation } from "./invitations/shared/invitation-data.js?v=20261018-guest-invitation-regressions-2";
 import { invitationRefreshIsCurrent, invitationRsvpStorageKey, invitationRsvpView } from "./invitations/shared/rsvp-state.js";
 import { buildSatelliteMapEmbedUrl } from "./invitations/shared/map-embed.js";
 import { buildInvitationCalendar } from "./invitations/shared/calendar.js";
@@ -15,7 +15,7 @@ import {
   normalizeTableShape,
   resolveTableName,
 } from "./seating-utils.js?v=20261012-seating-refresh-2";
-import { invitationSeatingEnabled } from "./invitations/shared/invitation-data.js?v=20261018-guest-invitation-regressions-1";
+import { invitationSeatingEnabled } from "./invitations/shared/invitation-data.js?v=20261018-guest-invitation-regressions-2";
 import { getEventDisplayTitle, isCelebrationEvent } from "./event-utils.js";
 
 const demoWedding = {
@@ -346,6 +346,7 @@ async function boot() {
           if (error.transient) { showInvitationConnectionError(error.message); return; }
           renderInvitationAccessError("This invitation is no longer available. Please ask the couple for a new link.");
         },
+        { schedule: Boolean(document.getElementById("scheduleMount")) },
       );
       window.addEventListener("pagehide", () => state.unsubGuest?.(), { once: true });
     } catch (error) {

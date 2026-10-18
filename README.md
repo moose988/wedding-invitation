@@ -26,7 +26,7 @@ Seating uses layout in `tables`, canonical per-chair assignments in `seatAssignm
 
 Each guest's invitation token is 256-bit random data generated in the browser and saved to `invitationSecrets`, `invitationTokens`, and an exact-token `publicGuests` projection. Copying an active invitation reuses its token. The URL carries `#guest=<token>&recipient=<guestId>`; RSVP updates the canonical guest and token projection in one Firestore batch, and rules validate the actual additional-guest allowance. Anonymous readers cannot list invitations or read the private guest roster, phone numbers, notes, or account memberships.
 
-Personal invitation data is an exact-token projection. Sanitized shared event details, table geometry, and venue objects live in `publicEvent`, `publicLayouts`, and `publicVenue`; invitation listeners merge them with existing embedded projections. Saved settings/layouts update the same invitation URL without regenerating its token. Anonymous clients never read the private event or roster. Explicit owner repair is bounded and skips unchanged content.
+Personal invitation data is an exact-token projection. Sanitized shared event details, table geometry, venue objects and schedule items live in `publicEvent`, `publicLayouts`, `publicVenue` and `publicSchedule`; invitation listeners merge them with existing embedded projections. Each schedule item is validated separately to keep a twelve-item schedule within Firestore's evaluation budget. Saved settings/layouts update the same invitation URL without regenerating its token. Anonymous clients never read the private event or roster. Explicit owner repair is bounded and skips unchanged content.
 
 ## WhatsApp sender links
 

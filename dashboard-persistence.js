@@ -1,4 +1,4 @@
-import { createEventPublisher, projectionEqual, publicEventData, publicTableData } from "./event-publishing.js?v=20261018-guest-invitation-regressions-1";
+import { createEventPublisher, projectionEqual, publicEventData, publicTableData } from "./event-publishing.js?v=20261018-guest-invitation-regressions-2";
 
 const invitationFields = new Set(["fullName", "side", "additionalGuests", "additionalGuestAllowance", "rsvpStatus", "rsvpMessage", "seatingAssignments", "tableId", "tableName", "seatNumber"]);
 
@@ -6,18 +6,19 @@ const invitationFields = new Set(["fullName", "side", "additionalGuests", "addit
 // rendering and navigation use the raw read API and cannot schedule a write.
 export function createDashboardPersistence({ api, db, weddingId, checkinRead = false, isCurrent = () => true, onPublishFailure = () => {}, beforeCanonical = () => {}, beforePublish = () => {} }) {
   const publisher = createEventPublisher({ api, db, weddingId, isCurrent, beforePublish });
-  const pending = { guests: new Map(), scene: false, venue: false, repair: false };
+  const pending = { guests: new Map(), scene: false, venue: false, schedule: false, repair: false };
   let sceneRevision = 0;
   const markGuest = (id, seating, repair = false) => pending.guests.set(id, { seating: seating || pending.guests.get(id)?.seating || false, repair: repair || pending.guests.get(id)?.repair || false });
   let publishing = null, lastError = null;
   const current = () => { if (!isCurrent()) throw Object.assign(new Error("This editing session has ended."), { code: "cancelled" }); };
   function collect(intents, reads = new Map()) {
-    for (const { type, ref, data = {} } of intents) {
+    for (const { type, ref, data = {}, publishSchedule = false } of intents) {
       const parts = ref.path.split("/");
       if (parts[0] !== "weddings" || parts[1] !== weddingId) continue;
       const kind = parts[2], id = parts[3];
       if (!kind || kind === "tables") { pending.scene = true; sceneRevision += 1; }
       if (!kind && "hallObjects" in data) pending.venue = true;
+      if (!kind && publishSchedule) pending.schedule = true;
       if (kind === "guests" && type !== "set" && Object.keys(data).some((key) => invitationFields.has(key))) {
         markGuest(id, false);
       }
@@ -36,8 +37,8 @@ export function createDashboardPersistence({ api, db, weddingId, checkinRead = f
       for (let pass = 0; pass < 2 && isCurrent(); pass++) {
         const scene = pending.scene, venue = pending.venue, revision = sceneRevision;
         if (scene) {
-          await publisher.publishScene({ venue, repair: pending.repair });
-          if (revision === sceneRevision) { pending.scene = false; pending.venue = false; pending.repair = false; }
+          await publisher.publishScene({ venue, schedule: pending.schedule, repair: pending.repair });
+          if (revision === sceneRevision) { pending.scene = false; pending.venue = false; pending.schedule = false; pending.repair = false; }
         }
         const jobs = [...pending.guests].slice(0, 50);
         for (const [id, job] of jobs) {
@@ -70,6 +71,7 @@ export function createDashboardPersistence({ api, db, weddingId, checkinRead = f
       const previous = await transaction.get(target);
       if (intent.type === "delete") { if (previous.exists()) staged.push({ type: "delete", ref: target }); continue; }
       const next = intent.type === "update" || intent.options?.merge ? { ...before.data(), ...intent.data } : intent.data;
+      if (!parts[2]) intent.publishSchedule = !previous.exists() || previous.data().scheduleCount === undefined || !projectionEqual(before.data()?.schedule || [], next.schedule || []);
       const projected = parts[2] === "tables" ? publicTableData(next, previous.data(), before.data()) : publicEventData(next);
       if (!previous.exists() || !projectionEqual(previous.data(), projected)) staged.push({ type: "set", ref: target, data: { ...projected, updatedAt: api.serverTimestamp() } });
     }

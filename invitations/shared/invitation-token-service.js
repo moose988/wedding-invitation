@@ -2,8 +2,8 @@ import {
   buildInvitationProjection,
   generateInvitationToken,
   isValidInvitationToken,
-} from "./invitation-token.js";
-import { projectionEqual } from "../../event-publishing.js?v=20261018-guest-invitation-regressions-1";
+} from "./invitation-token.js?v=20261018-guest-invitation-regressions-2";
+import { projectionEqual } from "../../event-publishing.js?v=20261018-guest-invitation-regressions-2";
 
 function invitationRefs(api, db, weddingId, guestId, token = "") {
   const wedding = api.doc(db, "weddings", weddingId);

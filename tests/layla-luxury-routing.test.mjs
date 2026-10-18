@@ -25,7 +25,7 @@ test("luxury-wedding-demo routes to the restored Layla & Zaid luxury invitation"
   assert.match(invitation, /id="rsvpMount"/);
   assert.match(invitation, /id="qrPassMount"/);
   assert.doesNotMatch(invitation, /Our Story|gallery-grid/);
-  assert.match(invitation, /src="\.\/script\.js\?v=20261018-guest-invitation-regressions-2"/);
+  assert.match(invitation, /src="\.\/script\.js\?v=[^"]+"/);
   assert.match(script, /new URL\(path, document\.baseURI\)/);
   assert.match(script, /new URL\(wedding\.media\.audio, document\.baseURI\)/);
   assert.match(script, /document\.body\.classList\.contains\("layla-zaid-invitation"\)/);

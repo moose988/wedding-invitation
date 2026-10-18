@@ -23,11 +23,26 @@ test("stable production, local, Firebase Hosting, and custom origins stay unchan
     "http://127.0.0.1:8000/dashboard.html?wedding=event-a",
     "https://weddinginvitaion-b4f36.web.app/dashboard.html?wedding=event-a",
     "https://invites.example.test/dashboard.html?wedding=event-a",
+    "https://events.qdsystems.ae/dashboard.html?wedding=event-a",
   ];
 
   for (const source of sources) {
     assert.equal(createShareUrl("index.html", source).origin, new URL(source).origin);
   }
+});
+
+test("share links generated on the events subdomain stay there with URL credentials intact", () => {
+  const url = createShareUrl(
+    "index.html?wedding=event-a",
+    "https://events.qdsystems.ae/dashboard.html?wedding=event-a",
+  );
+  url.hash = new URLSearchParams({ guest: "synthetic-token", recipient: "guest-a" }).toString();
+
+  assert.equal(url.origin, "https://events.qdsystems.ae");
+  assert.equal(url.pathname, "/index.html");
+  assert.equal(url.searchParams.get("wedding"), "event-a");
+  assert.equal(new URLSearchParams(url.hash.slice(1)).get("guest"), "synthetic-token");
+  assert.equal(new URLSearchParams(url.hash.slice(1)).get("recipient"), "guest-a");
 });
 
 test("non-preview lookalike domains are not rewritten", () => {

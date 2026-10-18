@@ -9,6 +9,7 @@ import {
   defaultTableWidth,
   generateTableChairs,
   getSeatPlanFrameBounds,
+  getSeatPlanFocusBounds,
   normalizeTableShape,
   resolveTableName,
   summarizePartySeating,
@@ -127,6 +128,23 @@ test("invitation party keys highlight only that party and frame seats across tab
   assert.ok(bounds.minX < 110 && bounds.minY < 108);
   assert.ok(bounds.maxX > 850 && bounds.maxY > 650);
   assert.equal(getSeatPlanFrameBounds([], []), null);
+});
+
+test("invitation focus bounds include only assigned table contexts, persisted chair positions, rotations, and zero coordinates", () => {
+  const tables = [
+    { id: "assigned", x: 0, y: 0, width: 200, height: 100, rotation: 90, seatCount: 2,
+      chairs: [{ seatNumber: 1, x: 0, y: 50 }, { seatNumber: 2, x: 100, y: 50 }] },
+    { id: "unassigned", x: 90, y: 90, width: 500, height: 500, seatCount: 1,
+      chairs: [{ seatNumber: 1, x: 50, y: 0 }] },
+  ];
+  const focus = getSeatPlanFocusBounds(tables, [{ tableId: "assigned", seatNumber: 1 }], 1100, 900);
+  assert.ok(focus);
+  assert.ok(focus.minX < 0);
+  assert.ok(focus.minY < 0);
+  assert.ok(focus.maxX < 300);
+  assert.ok(focus.maxY < 300);
+  assert.equal(getSeatPlanFocusBounds(tables, [{ tableId: "missing", seatNumber: 1 }]), null);
+  assert.equal(getSeatPlanFocusBounds(tables, []), null);
 });
 
 test("dashboard table editor and guest filters use the shared compatibility and party rules", async () => {

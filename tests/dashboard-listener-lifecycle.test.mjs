@@ -72,8 +72,11 @@ test("dashboard navigation and seating toolbar keep the requested operational or
   assert.match(dashboard, /setPlannerZoom\(state\.plannerZoom - 0\.05\)/);
   assert.match(dashboard, /renderPlannerStatCard\(state\.tables\.length, "Tables"\)/);
   assert.match(dashboard, /class="planner-canvas-controls"[\s\S]*?actionButton\("Add table"/);
-  assert.match(dashboard, /data-action="planner-refresh" aria-label="Refresh seating data"/);
-  assert.match(dashboard, /case "planner-refresh":[\s\S]*?startListeners\(\)/);
+  assert.match(html, /class="da3wa-topbar"/);
+  assert.match(dashboard, /data-action="refresh-dashboard" aria-label="Refresh current view"/);
+  assert.match(dashboard, /async function refreshDashboardData\([\s\S]*?getDocs\(guestSource\)[\s\S]*?renderAll\(\)/);
+  assert.match(dashboard, /function dashboardHasUnsavedChanges\([\s\S]*?dirtyGuestForm[\s\S]*?dirtyTableForm[\s\S]*?layoutPositionSavePending/);
+  assert.doesNotMatch(dashboard, /data-action="planner-refresh"|case "planner-refresh"|case "reload-dashboard"/);
 });
 
 test("wedding list discovers from the private index and authorizes each canonical document", async () => {

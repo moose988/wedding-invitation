@@ -1,5 +1,5 @@
 /* Compatibility entry point for tools that load this design stylesheet directly. */
-@import url("../../../styles.css?v=20261012-seating-refresh-2");
+@import url("../../../styles.css?v=20261018-seating-map-focus-1");
 
 /* Typography is deliberately scoped to Layla & Zaid's public invitation. */
 body.layla-zaid-invitation {

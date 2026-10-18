@@ -21,6 +21,7 @@ const functionSources = [
   extractFunction("calculateGuestDirectoryCounts", "hydrateHallObjects"),
   extractFunction("calculateDashboardStats", "calculateAttention"),
   extractFunction("calculateAttention", "deriveRecentActivity"),
+  extractFunction("getTableUsableSeatCapacity", "deriveRecentActivity"),
   extractFunction("deriveRecentActivity", "calculateSideStats"),
   extractFunction("calculateSideStats", "emptySideBucket"),
   extractFunction("emptySideBucket", "getFilteredGuests"),
@@ -79,6 +80,7 @@ function makeHarness(guests, tables, { seatingEnabled = true, checkInEnabled = t
     countAssignedSeats: (selectedTables) => selectedTables.reduce((sum, table) => sum + (table.chairs || []).filter((chair) => chair.guestId).length, 0),
     isSeatingEnabled: () => seatingEnabled,
     isInvitationQrEnabled: () => checkInEnabled,
+    canViewDashboardPage: () => true,
     eventUsesGuestSides: () => true,
     getEventDisplayTitle: (wedding) => wedding?.eventTitle || "Test event",
     formatEventDate: () => "Dec 28, 2026",
@@ -152,12 +154,20 @@ test("overview calculations use invitations for RSVP and capacity counts use ind
 
   context.renderOverviewPage();
   const html = context.elements.pageContent.innerHTML;
-  assert.match(html, /Total invited[\s\S]*?<div class="kpi-card__value">5<\/div>[\s\S]*?9 people total/);
-  assert.match(html, /Confirmed[\s\S]*?<div class="kpi-card__value">3<\/div>[\s\S]*?60% of parties/);
-  assert.match(html, /Seating attention[\s\S]*?<div class="kpi-card__value">2<\/div>[\s\S]*?67% of confirmed/);
-  assert.match(html, /Assigned seats<\/span><\/div>[\s\S]*?<strong>2<\/strong><span>Confirmed parties needing seats/);
-  assert.match(html, /1 declined guest still seated/);
-  assert.match(html, /Guest distribution/);
+  assert.match(html, /overview-total--invitations[\s\S]*?<strong>5<\/strong><span>Invitations/);
+  assert.match(html, /overview-total--people[\s\S]*?<strong>9<\/strong><span>Maximum invited people/);
+  assert.match(html, /4 extra guest places/);
+  assert.match(html, /overview-response--confirmed/);
+  assert.match(html, /overview-response--pending/);
+  assert.match(html, /overview-response--declined/);
+  assert.match(html, /Counted per invitation/);
+  assert.match(html, /data-rsvp="confirmed"/);
+  assert.match(html, /data-rsvp="pending"/);
+  assert.match(html, /data-rsvp="declined"/);
+  assert.match(html, /class="overview-issue overview-issue--missing-seats"[\s\S]*?<strong class="overview-issue__count" aria-label="2 invitations">2<\/strong>/);
+  assert.match(html, /class="overview-issue overview-issue--conflict"[\s\S]*?<strong class="overview-issue__count" aria-label="1 invitation">1<\/strong>/);
+  assert.match(html, /role="progressbar" aria-label="Seat assignment capacity"/);
+  assert.doesNotMatch(html, /Guest distribution|Recent activity|Response progress/);
 });
 
 test("empty overview has zero denominators, no false attention, and no NaN percentages", () => {
@@ -169,10 +179,57 @@ test("empty overview has zero denominators, no false attention, and no NaN perce
   assert.equal(stats.withoutSeatPct, 0);
   assert.deepEqual(Array.from(context.calculateAttention([], [], true)), []);
   context.renderOverviewPage();
-  assert.match(elements.pageContent.innerHTML, /Total invited[\s\S]*?<div class="kpi-card__value">0<\/div>/);
+  assert.match(elements.pageContent.innerHTML, /overview-total--invitations[\s\S]*?<strong>0<\/strong><span>Invitations/);
+  assert.match(elements.pageContent.innerHTML, /overview-total--people[\s\S]*?<strong>0<\/strong><span>Maximum invited people/);
   assert.doesNotMatch(elements.pageContent.innerHTML, /NaN|Infinity/);
   assert.match(elements.pageContent.innerHTML, /Everything is in good shape/);
-  assert.match(elements.pageContent.innerHTML, /No recent activity yet/);
+  assert.doesNotMatch(elements.pageContent.innerHTML, /Recent activity|No recent activity/);
+});
+
+test("blocked chairs reduce usable capacity and over-capacity totals stay negative", () => {
+  const guests = [
+    { id: "party-a", fullName: "Party A", phone: "1", rsvpStatus: "confirmed", additionalGuests: 1 },
+    { id: "party-b", fullName: "Party B", phone: "2", rsvpStatus: "confirmed", additionalGuests: 0 },
+    { id: "party-c", fullName: "Party C", phone: "3", rsvpStatus: "confirmed", additionalGuests: 0 },
+  ];
+  const tables = [{
+    id: "table-a",
+    seatCount: 4,
+    chairs: [
+      { id: "seat-1", seatNumber: 1, guestId: "party-a", partyMemberIndex: 0 },
+      { id: "seat-2", seatNumber: 2, guestId: "party-a", partyMemberIndex: 1 },
+      { id: "seat-3", seatNumber: 3, guestId: "party-b", partyMemberIndex: 0 },
+      { id: "seat-4", seatNumber: 4, status: "blocked", guestId: "party-c", partyMemberIndex: 0 },
+    ],
+  }];
+  const { context } = makeHarness(guests, tables);
+  const stats = context.calculateDashboardStats(guests, tables);
+  assert.equal(stats.totalSeats, 3);
+  assert.equal(stats.assignedSeats, 4);
+  assert.equal(stats.remainingSeats, -1);
+  assert.ok(Array.from(context.calculateAttention(guests, tables, true)).some((issue) => issue.kind === "capacity"));
+  context.renderOverviewPage();
+  const html = context.elements.pageContent.innerHTML;
+  assert.match(html, /aria-valuetext="4 assigned of 3 usable seats"/);
+  assert.match(html, /<strong>-1<\/strong><span>Available seats/);
+  assert.match(html, /style="width:100%"[\s\S]*?<strong>133%<\/strong>/);
+  assert.match(html, /1 assigned seat is over usable capacity/);
+});
+
+test("zero usable seating capacity avoids an invalid progressbar range", () => {
+  const guest = { id: "guest-a", fullName: "Guest A", phone: "1", rsvpStatus: "pending" };
+  const tables = [{
+    id: "table-a",
+    seatCount: 1,
+    chairs: [{ id: "seat-a", status: "blocked", guestId: "guest-a", partyMemberIndex: 0 }],
+  }];
+  const { context, elements } = makeHarness([guest], tables);
+  context.renderOverviewPage();
+  const html = elements.pageContent.innerHTML;
+  assert.match(html, /role="img" aria-label="Seat assignment capacity: 1 assigned seat and zero usable seats"/);
+  assert.match(html, /1 assigned seat with no usable capacity/);
+  assert.match(html, /Seat assignment<\/span><strong>Over capacity<\/strong>/);
+  assert.doesNotMatch(html, /aria-valuemax="0"|NaN|Infinity/);
 });
 
 test("missing RSVP status and numeric-string companion counts produce Overview inconsistencies", () => {
@@ -195,8 +252,8 @@ test("missing RSVP status and numeric-string companion counts produce Overview i
   assert.equal(stats.pending, 0);
   assert.equal(sides.bride.pending, 1);
   context.renderOverviewPage();
-  assert.match(elements.pageContent.innerHTML, /3 people total/);
-  assert.match(elements.pageContent.innerHTML, /Pending<\/span>[\s\S]*?<td data-label="Pending">1<\/td>/);
+  assert.match(elements.pageContent.innerHTML, /overview-total--people[\s\S]*?<strong>3<\/strong><span>Maximum invited people/);
+  assert.match(elements.pageContent.innerHTML, /data-rsvp="pending"/);
 });
 
 test("recent activity is a current-timestamp summary and can label a non-RSVP edit as an RSVP", () => {

@@ -11,7 +11,7 @@
       rel="stylesheet"
     />
     <link rel="stylesheet" href="./styles.css?v=20261012-seating-refresh-2" />
-    <link rel="stylesheet" href="./dashboard.css?v=20261016-unassign-seat-inline-confirm" />
+    <link rel="stylesheet" href="./dashboard.css?v=20261018-shared-dashboard-header-1" />
   </head>
   <body class="dashboard-body">
     <main class="da3wa-shell">
@@ -43,7 +43,6 @@
         </aside>
 
         <button class="da3wa-button da3wa-button--secondary da3wa-sidebar-expand" type="button" id="desktopSidebarExpandButton" aria-controls="dashboardSidebar" aria-expanded="false" hidden>Show navigation</button>
-        <button class="da3wa-icon-button da3wa-seating-mobile-nav" type="button" id="seatingMobileNavButton" aria-controls="dashboardSidebar" aria-expanded="false" aria-label="Open navigation" hidden>☰</button>
 
         <div class="da3wa-main">
           <header class="da3wa-topbar">
@@ -57,10 +56,10 @@
                 <p class="da3wa-eyebrow" id="pageEyebrow">Dashboard</p>
                 <h1 id="pageTitle">Overview</h1>
                 <p id="pageDescription"></p>
+                <div class="da3wa-live-indicator" id="liveIndicator" role="status" aria-live="polite" hidden></div>
               </div>
             </div>
             <div class="da3wa-topbar__actions">
-              <div class="da3wa-live-indicator" id="liveIndicator"></div>
               <div class="da3wa-topbar__action-row" id="globalActions"></div>
             </div>
           </header>

@@ -12,9 +12,10 @@ import {
   defaultTableWidth,
   getContrastingTextColor,
   getSeatPlanFrameBounds,
+  getSeatPlanFocusBounds,
   normalizeTableShape,
   resolveTableName,
-} from "./seating-utils.js?v=20261012-seating-refresh-2";
+} from "./seating-utils.js?v=20261018-invitation-seat-map";
 import { invitationSeatingEnabled } from "./invitations/shared/invitation-data.js?v=20261018-guest-invitation-regressions-2";
 import { getEventDisplayTitle, isCelebrationEvent } from "./event-utils.js";
 
@@ -166,7 +167,7 @@ const laylaCopy = {
   deadline: { en: "Kindly reply by", ar: "يرجى الرد قبل" },
   dear: { en: "Dear", ar: "عزيزنا" },
   mySeats: { en: "My seats", ar: "مقاعدي" }, fit: { en: "Fit", ar: "ملاءمة" },
-  seatLegend: { en: "Seats assigned to your party are highlighted in gold.", ar: "المقاعد المخصصة لمجموعتكم مميزة باللون الذهبي." },
+  seatLegend: { en: "Your party’s seats are marked in gold; other chairs are shown for context.", ar: "مقاعد مجموعتكم مميزة بالذهبي، وتظهر المقاعد الأخرى لتوضيح المخطط." },
   seatsPending: { en: "Your seats have not been assigned yet.", ar: "لم يتم تخصيص مقاعد لكم بعد." },
   yourTable: { en: "Your table", ar: "طاولتك" }, seatingEmpty: { en: "A seating map will appear here once the venue layout is published.", ar: "ستظهر خريطة المقاعد هنا عند نشر مخطط القاعة." },
 };
@@ -185,6 +186,8 @@ const state = {
   seatPlanTransform: { scale: 1, x: 0, y: 0 },
   seatPlanGesture: null,
   seatPlanHasFitted: false,
+  seatPlanViewMode: "fit",
+  seatPlanFocusedAssignments: [],
   firebaseReady: false,
   laylaLanguage: document.body?.classList.contains("layla-zaid-invitation") && localStorage.getItem(laylaLanguageStorageKey) === "ar" ? "ar" : "en",
   invitationOpening: false,
@@ -926,11 +929,16 @@ function renderSeatSection() {
   const assignments = getInvitationSeatAssignments(state.guest);
 
   if (document.body.classList.contains("layla-zaid-invitation")) {
+    const partyMembers = getInvitationPartyMembers(state.guest, assignments);
     document.getElementById("seatDetailsMount").innerHTML = `
       <div class="layla-seat-greeting">
         <h3 ${state.laylaLanguage === "ar" ? 'lang="ar" dir="rtl" class="rtl-copy"' : ""}>${laylaValue(`${laylaText("dear")} ${escapeHtml(state.guest.fullName || "Guest")}`, `${laylaText("dear")} ${escapeHtml(state.guest.fullName || "Guest")}`)}</h3>
       </div>
+      <div class="guest-seat-list guest-seat-list--party" aria-label="Your party seating assignments">
+        ${partyMembers.map(renderInvitationPartyMember).join("")}
+      </div>
     `;
+    bindInvitationPartySummary();
     renderSeatingMap(state.tables, assignments);
     return;
   }
@@ -948,6 +956,7 @@ function renderSeatSection() {
     `;
 
   renderSeatingMap(state.tables, assignments);
+  bindInvitationPartySummary();
 }
 
 function getInvitationPartyMembers(guest, assignments) {
@@ -965,11 +974,21 @@ function getInvitationPartyMembers(guest, assignments) {
 function renderInvitationPartyMember(member) {
   const assignment = member.assignment;
   return `
-    <article class="guest-seat-party-member ${assignment ? "is-assigned" : "is-unassigned"}">
+    <button class="guest-seat-party-member ${assignment ? "is-assigned" : "is-unassigned"}" type="button" data-party-member-index="${member.index}" ${assignment ? "" : "disabled"} aria-label="${escapeAttribute(assignment ? `${member.label}, ${assignment.tableName || "Table"}, chair ${assignment.seatNumber}. Focus on map.` : `${member.label}, seat not assigned yet.`)}">
       <strong>${escapeHtml(member.label)}</strong>
       <span>${assignment ? `${escapeHtml(assignment.tableName || "Table")} · Chair ${escapeHtml(String(assignment.seatNumber))}` : "Seat not assigned yet"}</span>
-    </article>
+    </button>
   `;
+}
+
+function bindInvitationPartySummary() {
+  document.querySelectorAll("[data-party-member-index]").forEach((button) => {
+    button.addEventListener("click", () => {
+      const index = Number(button.dataset.partyMemberIndex);
+      const member = getInvitationPartyMembers(state.guest, getInvitationSeatAssignments(state.guest))[index];
+      if (member?.assignment) centerInvitationSeats([member.assignment]);
+    });
+  });
 }
 
 function renderSeatingMap(tables, assignments = []) {
@@ -983,7 +1002,7 @@ function renderSeatingMap(tables, assignments = []) {
     return;
   }
 
-  state.seatPlanHasFitted = false;
+  document.getElementById("seatPlanViewport")?._seatPlanResizeObserver?.disconnect();
   const assignedTableIds = new Set(assignments.map((assignment) => assignment.tableId));
   const assignedSeatKeys = buildSeatAssignmentKeys(assignments);
   map.innerHTML = `
@@ -1023,7 +1042,7 @@ function renderSeatingMap(tables, assignments = []) {
     .join("")}
       </div>
     </div>
-    <p class="seat-plan-caption" role="status">${assignments.length ? `<span class="seat-plan-caption__swatch" aria-hidden="true"></span>${isLaylaInvitation() ? laylaText("seatLegend") : "Seats assigned to your party are highlighted."}` : (isLaylaInvitation() ? laylaText("seatsPending") : "Your seats have not been assigned yet.")}</p>
+    <p class="seat-plan-caption" role="status">${assignments.length ? `<span class="seat-plan-caption__swatch" aria-hidden="true"></span>${isLaylaInvitation() ? laylaText("seatLegend") : "Your party’s seats are marked in gold; other chairs are shown for context."}` : (isLaylaInvitation() ? laylaText("seatsPending") : "Your seats have not been assigned yet.")}</p>
   `;
   bindSeatPlanInteractions();
   requestAnimationFrame(() => fitInvitationSeatingPlan(false));
@@ -1121,13 +1140,15 @@ function getTableAuthoritativeSeatAssignments(guest) {
 function renderInvitationChair(table, chair, assignedSeatKeys, position = chair) {
   const key = `${table.id}::${chair.seatNumber}`;
   const isAssignedToInvite = assignedSeatKeys.has(key);
+  const hasSavedPosition = chair.x !== undefined && chair.x !== null && chair.y !== undefined && chair.y !== null && Number.isFinite(Number(chair.x)) && Number.isFinite(Number(chair.y));
+  const chairPosition = hasSavedPosition ? chair : position;
   return `
     <span
       class="seat-plan-chair ${isAssignedToInvite ? "is-yours is-occupied" : "is-empty"}"
-      style="left:${Number(position?.x ?? chair.x ?? 0)}%;top:${Number(position?.y ?? chair.y ?? 0)}%;--chair-rotation:${Number(position?.rotation || 0)}deg;--chair-color:${escapeAttribute(table.chairColor || "#24554a")};--chair-ink:${getContrastingTextColor(table.chairColor || "#24554a")};"
+      style="left:${Number(chairPosition?.x ?? 0)}%;top:${Number(chairPosition?.y ?? 0)}%;--chair-rotation:${Number(chairPosition?.rotation || 0)}deg;--chair-color:${escapeAttribute(table.chairColor || "#24554a")};--chair-ink:${getContrastingTextColor(table.chairColor || "#24554a")};"
       title="${escapeAttribute(`${isAssignedToInvite ? "Your party seat" : "Seat"} ${chair.seatNumber}`)}"
       aria-label="${escapeAttribute(`${isAssignedToInvite ? "Your party seat" : "Seat"} ${chair.seatNumber}`)}"
-    ><span>${escapeHtml(String(chair.seatNumber))}</span></span>
+    ><span>${escapeHtml(String(chair.seatNumber))}</span>${isAssignedToInvite ? '<span class="seat-plan-chair__marker" aria-hidden="true">✓</span>' : ""}</span>
   `;
 }
 
@@ -1140,7 +1161,7 @@ function renderInvitationHallObject(item) {
     ? `width:${width}px;height:${height}px;--dance-floor-fill:${escapeAttribute(item.fillColor || "#2F6F64")};--dance-floor-border:${escapeAttribute(item.borderColor || "#D7B56D")};--dance-floor-rotation:${rotation}deg;`
     : "";
   return `
-    <div class="seat-plan-object seat-plan-object--${escapeAttribute(item.type)}" style="left:${Number(item.x || 0)}%;top:${Number(item.y || 0)}%;${danceFloorStyle}">
+    <div class="seat-plan-object seat-plan-object--${escapeAttribute(item.type)}" style="left:${Number(item.x ?? 0)}%;top:${Number(item.y ?? 0)}%;${danceFloorStyle}">
       <span>${escapeHtml(item.label || item.type)}</span>
     </div>
   `;
@@ -1162,6 +1183,7 @@ function bindSeatPlanInteractions() {
     });
   };
   const zoomBy = (delta) => {
+    state.seatPlanViewMode = "manual";
     state.seatPlanTransform.scale = clamp(state.seatPlanTransform.scale + delta, 0.55, 2.5);
     applyTransform();
   };
@@ -1229,6 +1251,7 @@ function bindSeatPlanInteractions() {
     if (gesture.pointerId !== event.pointerId) {
       return;
     }
+    state.seatPlanViewMode = "manual";
     state.seatPlanTransform.x = gesture.x + event.clientX - gesture.startX;
     state.seatPlanTransform.y = gesture.y + event.clientY - gesture.startY;
     applyTransform();
@@ -1239,13 +1262,49 @@ function bindSeatPlanInteractions() {
       startGestureForActivePointers();
     });
   });
+  if (typeof ResizeObserver === "function") {
+    let lastWidth = viewport.clientWidth;
+    let lastHeight = viewport.clientHeight;
+    const observer = new ResizeObserver(() => {
+      const nextWidth = viewport.clientWidth;
+      const nextHeight = viewport.clientHeight;
+      if (!nextWidth || !nextHeight || (nextWidth === lastWidth && nextHeight === lastHeight)) return;
+      lastWidth = nextWidth;
+      lastHeight = nextHeight;
+      requestAnimationFrame(() => {
+        if (!viewport.isConnected) return;
+        if (state.seatPlanViewMode === "seats") {
+          centerInvitationSeats(state.seatPlanFocusedAssignments);
+        } else if (state.seatPlanViewMode === "fit") {
+          fitInvitationSeatingPlan(true);
+        } else {
+          const scale = state.seatPlanTransform.scale;
+          const centerX = (viewport.clientWidth / 2 - state.seatPlanTransform.x) / scale;
+          const centerY = (viewport.clientHeight / 2 - state.seatPlanTransform.y) / scale;
+          state.seatPlanTransform.x = Math.round(viewport.clientWidth / 2 - centerX * scale);
+          state.seatPlanTransform.y = Math.round(viewport.clientHeight / 2 - centerY * scale);
+          canvas.style.transform = `translate3d(${state.seatPlanTransform.x}px, ${state.seatPlanTransform.y}px, 0) scale(${scale})`;
+        }
+      });
+    });
+    observer.observe(viewport);
+    viewport._seatPlanResizeObserver = observer;
+  }
 }
 
 function fitInvitationSeatingPlan(reset = true) {
   const viewport = document.getElementById("seatPlanViewport");
   if (!viewport || (!reset && state.seatPlanHasFitted)) return;
   const canvasWidth = 1100;
-  const canvasHeight = 720;
+  const canvasHeight = 900;
+  if (reset) {
+    state.seatPlanViewMode = "fit";
+    state.seatPlanFocusedAssignments = [];
+  }
+  if (!viewport.clientWidth || !viewport.clientHeight) {
+    requestAnimationFrame(() => fitInvitationSeatingPlan(reset));
+    return;
+  }
   const padding = 18;
   const bounds = getInvitationPlanBounds(canvasWidth, canvasHeight);
   const scale = clamp(
@@ -1291,8 +1350,8 @@ function getInvitationPlanBounds(canvasWidth, canvasHeight) {
     const halfWidth = (Math.abs(Math.cos(radians)) * width + Math.abs(Math.sin(radians)) * height) / 2;
     const halfHeight = (Math.abs(Math.sin(radians)) * width + Math.abs(Math.cos(radians)) * height) / 2;
     addBox(
-      (Number(item.x || 50) / 100) * canvasWidth,
-      (Number(item.y || 50) / 100) * canvasHeight,
+      (Number(item.x ?? 50) / 100) * canvasWidth,
+      (Number(item.y ?? 50) / 100) * canvasHeight,
       halfWidth * 2 + 24,
       halfHeight * 2 + 24,
     );
@@ -1305,22 +1364,36 @@ function getInvitationPlanBounds(canvasWidth, canvasHeight) {
   return { minX, maxX, minY, maxY, width: maxX - minX, height: maxY - minY };
 }
 
-function centerInvitationSeats() {
+function centerInvitationSeats(assignments = getInvitationSeatAssignments(state.guest)) {
   const viewport = document.getElementById("seatPlanViewport");
   const canvas = document.getElementById("seatPlanCanvas");
-  const bounds = getSeatPlanFrameBounds(state.tables, getInvitationSeatAssignments(state.guest));
-  if (!viewport || !canvas || !bounds) return;
-  const boundsWidth = Math.max(1, bounds.maxX - bounds.minX);
-  const boundsHeight = Math.max(1, bounds.maxY - bounds.minY);
-  const scale = clamp(Math.min((viewport.clientWidth - 52) / boundsWidth, (viewport.clientHeight - 72) / boundsHeight), 0.28, 1.25);
-  const centerX = (bounds.minX + bounds.maxX) / 2;
-  const centerY = (bounds.minY + bounds.maxY) / 2;
-  state.seatPlanTransform = {
-    scale,
-    x: Math.round(viewport.clientWidth / 2 - centerX * scale),
-    y: Math.round(viewport.clientHeight / 2 - centerY * scale),
+  if (!viewport || !canvas || !assignments.length) return;
+  state.seatPlanViewMode = "seats";
+  state.seatPlanFocusedAssignments = assignments.map((assignment) => ({ ...assignment }));
+  const focus = () => {
+    const currentViewport = document.getElementById("seatPlanViewport");
+    const currentCanvas = document.getElementById("seatPlanCanvas");
+    if (!currentViewport || !currentCanvas) return;
+    if (!currentViewport.clientWidth || !currentViewport.clientHeight) {
+      requestAnimationFrame(focus);
+      return;
+    }
+    const bounds = getSeatPlanFocusBounds(state.tables, assignments, 1100, 900);
+    if (!bounds) return;
+    const boundsWidth = Math.max(1, bounds.maxX - bounds.minX);
+    const boundsHeight = Math.max(1, bounds.maxY - bounds.minY);
+    const scale = clamp(Math.min((currentViewport.clientWidth - 52) / boundsWidth, (currentViewport.clientHeight - 72) / boundsHeight), 0.28, 1.25);
+    const centerX = (bounds.minX + bounds.maxX) / 2;
+    const centerY = (bounds.minY + bounds.maxY) / 2;
+    state.seatPlanTransform = {
+      scale,
+      x: Math.round(currentViewport.clientWidth / 2 - centerX * scale),
+      y: Math.round(currentViewport.clientHeight / 2 - centerY * scale),
+    };
+    state.seatPlanHasFitted = true;
+    currentCanvas.style.transform = `translate3d(${state.seatPlanTransform.x}px, ${state.seatPlanTransform.y}px, 0) scale(${scale})`;
   };
-  canvas.style.transform = `translate(${state.seatPlanTransform.x}px, ${state.seatPlanTransform.y}px) scale(${scale})`;
+  requestAnimationFrame(focus);
 }
 
 function createHallObjects() {

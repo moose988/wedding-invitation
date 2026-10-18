@@ -14,8 +14,7 @@ function extractFunction(name, nextName) {
 
 const overviewSource = extractFunction("renderOverviewPage", "renderGuestPage");
 const attentionSource = extractFunction("calculateAttention", "deriveRecentActivity");
-const kpiSource = extractFunction("renderKpiCard", "renderDistributionRow");
-const distributionRowSource = extractFunction("renderDistributionRow", "progressRow");
+const usableSeatsSource = extractFunction("getTableUsableSeatCapacity", "deriveRecentActivity");
 
 function renderOverview({ seatingEnabled, checkInEnabled }) {
   const state = {
@@ -31,45 +30,38 @@ function renderOverview({ seatingEnabled, checkInEnabled }) {
     elements,
     isSeatingEnabled: () => seatingEnabled,
     isInvitationQrEnabled: () => checkInEnabled,
+    canViewDashboardPage: () => true,
     calculateDashboardStats: () => ({
       total: 3, totalPeople: 5, accompanyingGuests: 2,
       confirmed: 1, confirmedPct: 33, pending: 1, pendingPct: 33,
       declined: 1, declinedPct: 33, checkedIn: 1, checkinPct: 33,
-      withoutSeat: 1, withoutSeatPct: 100, assignedSeats: 1, remainingSeats: 1,
+      withoutSeat: 1, withoutSeatPct: 100, assignedSeats: 1, totalSeats: 2, remainingSeats: 1,
     }),
     calculateAttention: () => [],
-    deriveRecentActivity: () => [],
-    calculateSideStats: () => ({
-      groom: { guestCount: 1, confirmed: 1, pending: 0, seated: 0 },
-      bride: { guestCount: 1, confirmed: 0, pending: 1, seated: 0 },
-      other: { guestCount: 1, confirmed: 0, pending: 0, seated: 0 },
-    }),
-    eventUsesGuestSides: () => true,
+    normalizeAdditionalGuests: (value) => Math.max(0, Number(value) || 0),
     escapeHtml: (value) => String(value),
     getEventDisplayTitle: () => "Test event",
     prettifyShape: (value) => value,
     formatEventDate: () => "Dec 28, 2026",
-    progressRow: () => "",
   });
-  vm.runInContext(`${kpiSource}; ${distributionRowSource}; ${overviewSource}; renderOverviewPage();`, context);
+  vm.runInContext(`${usableSeatsSource}; ${overviewSource}; renderOverviewPage();`, context);
   return elements.pageContent.innerHTML;
 }
 
-test("overview summary reflects RSVP statuses and hides disabled feature summaries", () => {
+test("overview combines invitation counts and hides seating summary when seating is disabled", () => {
   const allEnabled = renderOverview({ seatingEnabled: true, checkInEnabled: true });
-  assert.match(allEnabled, /<p class="da3wa-eyebrow">Declined<\/p>[\s\S]*?<div class="kpi-card__value">1<\/div>/);
-  assert.match(allEnabled, /<p class="da3wa-eyebrow">Seating attention<\/p>[\s\S]*?<div class="kpi-card__value">1<\/div>/);
-  assert.match(allEnabled, /<p class="da3wa-eyebrow">Checked in<\/p>[\s\S]*?<div class="kpi-card__value">1<\/div>/);
-  assert.match(allEnabled, /Seating readiness/);
-  assert.match(allEnabled, /data-label="Seating"/);
+  assert.match(allEnabled, /overview-total--invitations[\s\S]*?<strong>3<\/strong><span>Invitations/);
+  assert.match(allEnabled, /data-rsvp="confirmed"/);
+  assert.match(allEnabled, /data-rsvp="pending"/);
+  assert.match(allEnabled, /data-rsvp="declined"/);
+  assert.match(allEnabled, /Open seating plan/);
+  assert.match(allEnabled, /data-action="nav-checkin">Check-in/);
+  assert.doesNotMatch(allEnabled, /Response progress|Guest distribution|Recent activity/);
 
   const disabledOptions = renderOverview({ seatingEnabled: false, checkInEnabled: false });
-  assert.match(disabledOptions, /<p class="da3wa-eyebrow">Declined<\/p>/);
-  assert.doesNotMatch(disabledOptions, /Seating attention/);
-  assert.doesNotMatch(disabledOptions, /Checked in/);
-  assert.doesNotMatch(disabledOptions, /Seating readiness/);
-  assert.doesNotMatch(disabledOptions, /data-label="Seating"/);
-  assert.match(disabledOptions, /overview-operational--no-seating/);
+  assert.match(disabledOptions, /data-rsvp="declined"/);
+  assert.doesNotMatch(disabledOptions, /Open seating plan|overviewSeatingTitle/);
+  assert.doesNotMatch(disabledOptions, /data-action="nav-checkin"/);
 });
 
 test("seating attention issues disappear when seating is disabled", () => {
@@ -87,9 +79,9 @@ test("seating attention issues disappear when seating is disabled", () => {
   const calculateAttention = vm.runInContext("calculateAttention", context);
   const enabled = calculateAttention(guests, [{ id: "full", seatCount: 1 }], true);
   const disabled = calculateAttention(guests, [{ id: "full", seatCount: 1 }], false);
-  assert.ok(enabled.some((issue) => /without tables/.test(issue.title)));
-  assert.ok(enabled.some((issue) => /over capacity/.test(issue.title)));
-  assert.ok(enabled.some((issue) => /still seated/.test(issue.title)));
-  assert.ok(!disabled.some((issue) => /without tables|over capacity|still seated/.test(issue.title)));
-  assert.ok(disabled.some((issue) => /pending RSVP/.test(issue.title)));
+  assert.ok(enabled.some((issue) => issue.kind === "missing-seats" && issue.unit === "invitations"));
+  assert.ok(enabled.some((issue) => issue.kind === "capacity" && issue.unit === "tables"));
+  assert.ok(enabled.some((issue) => issue.kind === "conflict" && issue.unit === "invitations"));
+  assert.ok(!disabled.some((issue) => ["missing-seats", "capacity", "conflict"].includes(issue.kind)));
+  assert.ok(disabled.some((issue) => issue.kind === "pending" && issue.rsvp === "pending"));
 });

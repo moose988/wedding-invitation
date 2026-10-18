@@ -4,7 +4,7 @@ import { isPlatformAdmin, redeemCustomerGrants } from "./account-access.js";
 import { EVENT_CATEGORIES, getEventCategory, getEventDisplayTitle, isCelebrationEvent } from "./event-utils.js";
 import { paginateRows } from "./workspace-pagination.js";
 
-const state = { services: null, user: null, weddings: [], workspaceLoaded: false, canSeeSampleInvitation: false, isAdmin: false, filter: "all", currentPage: 1, pageSize: 6, editId: "", deleteId: "", workspaceTimer: null, unsubscribeAuth: null, initialized: false, snapshotGeneration: 0, workspaceRequest: 0 };
+const state = { services: null, user: null, weddings: [], workspaceLoaded: false, canSeeSampleInvitation: false, isAdmin: false, roleResolved: false, filter: "all", currentPage: 1, pageSize: 6, editId: "", deleteId: "", workspaceTimer: null, unsubscribeAuth: null, initialized: false, snapshotGeneration: 0, workspaceRequest: 0 };
 const el = Object.fromEntries(["workspace","loadingState","userEmail","signOutButton","createWeddingButton","sampleInvitationPanel","workspaceControls","sampleInvitationUrl","searchInput","sortSelect","filterRow","workspaceStatus","retryLoadButton","weddingGrid","paginationControls","paginationStatus","emptyState","weddingDialog","weddingForm","formKicker","formTitle","formError","saveWeddingButton","categoryStep","eventFeaturesStep","eventInformationStep","continueEventButton","continueFeaturesButton","backEventButton","deleteDialog","deleteForm","deletePhrase","deleteConfirmation","deleteError"].map((id) => [id, document.getElementById(id)]));
 
 init();
@@ -13,6 +13,8 @@ function init() {
   state.initialized = true;
   if (!isFirebaseConfigured()) return showFatal("Firebase is not configured. Add your Firebase configuration before opening the workspace.");
   state.services = initFirebase();
+  // Keep role-dependent controls inaccessible until the authenticated role is known.
+  setEventControlsVisibility(false);
   // The sample invitation is an owner/admin demonstration tool. Keep it
   // hidden until the signed-in account's actual event permissions are read.
   el.sampleInvitationPanel.hidden = true;
@@ -54,16 +56,25 @@ function init() {
     if (state.user?.uid !== user?.uid) {
       state.weddings = [];
       state.canSeeSampleInvitation = false;
+      state.isAdmin = false;
+      state.roleResolved = false;
       el.sampleInvitationPanel.hidden = true;
       state.workspaceLoaded = false;
       state.currentPage = 1;
       state.workspaceRequest += 1;
-      if (user) render();
+      setEventControlsVisibility(false);
+      if (user) {
+        el.workspace.hidden = true;
+        el.loadingState.hidden = false;
+        el.loadingState.textContent = "Loading workspace…";
+        render();
+      }
     }
     if (!user) return location.replace(document.body.dataset.accountSurface === "customer" ? "./customer-login.html?message=session-required" : "./dashboard-login.html?message=session-required");
     state.user = user;
     try {
       state.isAdmin = await isPlatformAdmin(accountApi, state.services.db, user.uid);
+      state.roleResolved = true;
       try { await redeemCustomerGrants(accountApi, state.services.db, user); }
       catch (error) { el.workspaceStatus.textContent = "Your account is signed in. Event linking needs a retry or administrator assistance."; }
     } catch (error) { showFatal(`Account access could not be loaded (${error.code || "unavailable"}).`); return; }
@@ -71,6 +82,7 @@ function init() {
     const customerSurface = document.body.dataset.accountSurface === "customer";
     if (!state.isAdmin && !customerSurface) return location.replace("./customer-events.html");
     if (state.isAdmin && customerSurface) return location.replace("./all-events.html");
+    syncEventControls();
     el.createWeddingButton.hidden = !state.isAdmin;
     document.getElementById("verifyCustomerEmail")?.addEventListener("click", async () => {
       const status = document.getElementById("verificationStatus");
@@ -94,6 +106,27 @@ function init() {
 }
 
 function showFatal(message) { el.loadingState.textContent = message; }
+function isCustomerView() {
+  return state.roleResolved && !state.isAdmin && document.body.dataset.accountSurface === "customer";
+}
+function setEventControlsVisibility(visible) {
+  el.workspaceControls.hidden = !visible;
+  el.filterRow.hidden = !visible;
+}
+function syncEventControls() {
+  const customerView = isCustomerView();
+  if (customerView) {
+    // Ignore any values retained in this document from a prior account/session.
+    el.searchInput.value = "";
+    el.sortSelect.value = "event";
+    state.filter = "all";
+    state.currentPage = 1;
+    el.filterRow.querySelectorAll("[data-filter]").forEach((button) => {
+      button.classList.toggle("is-active", button.dataset.filter === "all");
+    });
+  }
+  setEventControlsVisibility(state.roleResolved && !customerView);
+}
 function watchWorkspace() {
   state.workspaceTimer && clearInterval(state.workspaceTimer);
   const generation = ++state.snapshotGeneration;
@@ -158,8 +191,7 @@ async function refreshWorkspaceEvents(generation = state.snapshotGeneration) {
     const onlySeating = state.weddings.length > 0 && state.weddings.every((wedding) => wedding.seatingOnly === true);
     el.createWeddingButton.hidden = !state.isAdmin;
     el.sampleInvitationPanel.hidden = !state.canSeeSampleInvitation;
-    el.workspaceControls.hidden = false;
-    el.filterRow.hidden = false;
+    syncEventControls();
     el.retryLoadButton.hidden = true;
     await enrichStats();
     render();
@@ -213,8 +245,10 @@ async function enrichStats() {
 
 function render() {
   closeActionMenus();
-  const term = el.searchInput.value.trim().toLowerCase();
+  const customerView = isCustomerView();
+  const term = customerView ? "" : el.searchInput.value.trim().toLowerCase();
   let rows = state.weddings.filter((w) => {
+    if (customerView) return true;
     const oldEvent = isOldEvent(w);
     const matchesFilter = state.filter === "all"
       ? w.status !== "archived"

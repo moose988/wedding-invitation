@@ -34,7 +34,11 @@ test("chosen chair colors survive state classes while other states remain outlin
 
 test("guest map keeps seat numbers, highlights only assigned party seats, and frames every assigned table", () => {
   assert.match(invitation, /buildSeatAssignmentKeys\(assignments\)/);
-  assert.match(invitation, /getSeatPlanFrameBounds\(state\.tables, getInvitationSeatAssignments\(state\.guest\)\)/);
+  assert.match(invitation, /getSeatPlanFocusBounds\(state\.tables, assignments, 1100, 900\)/);
+  assert.match(invitation, /state\.seatPlanHasFitted = true/);
+  assert.match(invitation, /seatPlanFocusedAssignments/);
+  assert.match(invitation, /hasSavedPosition/);
+  assert.match(invitation, /data-party-member-index/);
   assert.match(invitation, /<span>\$\{escapeHtml\(String\(chair\.seatNumber\)\)\}<\/span>/);
   assert.doesNotMatch(invitation, /assignment\?\.label\?\.replace\("Main Guest"/);
   assert.match(invitation, /Your seats have not been assigned yet/);

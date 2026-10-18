@@ -234,7 +234,7 @@ export function buildSeatAssignmentKeys(assignments = []) {
     .map((assignment) => `${assignment.tableId}::${assignment.seatNumber}`));
 }
 
-export function getSeatPlanFrameBounds(tables, assignments, canvasWidth = 1100, canvasHeight = 720, clearance = 28) {
+export function getSeatPlanFrameBounds(tables, assignments, canvasWidth = 1100, canvasHeight = 900, clearance = 28) {
   const tablesById = new Map(tables.map((table) => [String(table.id), table]));
   const positionCache = new Map();
   const points = assignments.flatMap((assignment) => {
@@ -249,8 +249,11 @@ export function getSeatPlanFrameBounds(tables, assignments, canvasWidth = 1100, 
       const count = table.chairs?.length || table.seatCount || table.capacity || 0;
       positionCache.set(table.id, buildChairPositions(table.shape, count, width, height));
     }
+    const chair = table.chairs?.find((item) => String(item.seatNumber) === String(assignment.seatNumber));
     const seatIndex = Math.max(0, Number(assignment.seatNumber) - 1);
-    const position = positionCache.get(table.id)[seatIndex];
+    const position = chair && chair.x !== null && chair.x !== undefined && chair.y !== null && chair.y !== undefined && Number.isFinite(Number(chair.x)) && Number.isFinite(Number(chair.y))
+      ? chair
+      : positionCache.get(table.id)[seatIndex];
     if (!position) return [];
     const localX = (position.x / 100) * width - width / 2;
     const localY = (position.y / 100) * height - height / 2;
@@ -265,5 +268,54 @@ export function getSeatPlanFrameBounds(tables, assignments, canvasWidth = 1100, 
     maxX: Math.max(...points.map((point) => point.x)) + clearance,
     minY: Math.min(...points.map((point) => point.y)) - clearance,
     maxY: Math.max(...points.map((point) => point.y)) + clearance,
+  };
+}
+
+/** Bounds the assigned chairs together with their tables, in rendered canvas coordinates. */
+export function getSeatPlanFocusBounds(tables, assignments, canvasWidth = 1100, canvasHeight = 900, chairSize = 34, padding = 20) {
+  const tablesById = new Map(tables.map((table) => [String(table.id), table]));
+  const boxes = [];
+  const addBox = (centerX, centerY, width, height) => boxes.push({
+    minX: centerX - width / 2,
+    maxX: centerX + width / 2,
+    minY: centerY - height / 2,
+    maxY: centerY + height / 2,
+  });
+
+  assignments.forEach((assignment) => {
+    const table = tablesById.get(String(assignment?.tableId));
+    if (!table) return;
+    const width = Number(table.width || defaultTableWidth(table.shape));
+    const height = Number(table.height || defaultTableHeight(table.shape));
+    const centerX = (Number(table.x ?? 50) / 100) * canvasWidth;
+    const centerY = (Number(table.y ?? 50) / 100) * canvasHeight;
+    const tableRotation = (Number(table.rotation || 0) * Math.PI) / 180;
+    const chair = table.chairs?.find((item) => String(item.seatNumber) === String(assignment.seatNumber));
+    const chairPositions = buildChairPositions(
+      table.shape,
+      table.chairs?.length || table.seatCount || table.capacity || 0,
+      width,
+      height,
+    );
+    const position = chair && chair.x !== null && chair.x !== undefined && chair.y !== null && chair.y !== undefined && Number.isFinite(Number(chair.x)) && Number.isFinite(Number(chair.y))
+      ? chair
+      : chairPositions[Math.max(0, Number(assignment.seatNumber) - 1)];
+    if (!position) return;
+    const halfWidth = (Math.abs(Math.cos(tableRotation)) * width + Math.abs(Math.sin(tableRotation)) * height) / 2;
+    const halfHeight = (Math.abs(Math.sin(tableRotation)) * width + Math.abs(Math.cos(tableRotation)) * height) / 2;
+    addBox(centerX, centerY, halfWidth * 2, halfHeight * 2);
+    const localX = (Number(position.x) / 100) * width - width / 2;
+    const localY = (Number(position.y) / 100) * height - height / 2;
+    const chairX = centerX + localX * Math.cos(tableRotation) - localY * Math.sin(tableRotation);
+    const chairY = centerY + localX * Math.sin(tableRotation) + localY * Math.cos(tableRotation);
+    addBox(chairX, chairY, chairSize, chairSize);
+  });
+
+  if (!boxes.length) return null;
+  return {
+    minX: Math.min(...boxes.map((box) => box.minX)) - padding,
+    maxX: Math.max(...boxes.map((box) => box.maxX)) + padding,
+    minY: Math.min(...boxes.map((box) => box.minY)) - padding,
+    maxY: Math.max(...boxes.map((box) => box.maxY)) + padding,
   };
 }

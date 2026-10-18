@@ -66,6 +66,18 @@ test("limited dashboard accounts can open only their explicitly granted sections
   assert.equal(canViewDashboardPage("overview", { ...permissions, canViewDashboard: false }), false);
 });
 
+test("Guest Summary is removed and old direct links fall back to Overview", async () => {
+  const [html, dashboard] = await Promise.all([
+    readFile(new URL("../dashboard.html", import.meta.url), "utf8"),
+    readFile(new URL("../dashboard.js", import.meta.url), "utf8"),
+  ]);
+  const permissions = { canViewDashboard: true };
+  assert.equal(canViewDashboardPage("guestSummary", permissions), false);
+  assert.equal(resolveDashboardPage("guestSummary", permissions), "overview");
+  assert.doesNotMatch(html, /data-nav-view="guestSummary"|Guest Summary/);
+  assert.doesNotMatch(dashboard, /renderGuestSummaryPage|canViewGuestSummary|guestSummary:/);
+});
+
 test("limited dashboard links are guarded and the owner control writes only event-scoped access", async () => {
   const [dashboard, rules, workspace] = await Promise.all([
     readFile(new URL("../dashboard.js", import.meta.url), "utf8"),

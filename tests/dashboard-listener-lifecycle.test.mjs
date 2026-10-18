@@ -72,6 +72,8 @@ test("dashboard navigation and seating toolbar keep the requested operational or
   assert.match(dashboard, /setPlannerZoom\(state\.plannerZoom - 0\.05\)/);
   assert.match(dashboard, /renderPlannerStatCard\(state\.tables\.length, "Tables"\)/);
   assert.match(dashboard, /class="planner-canvas-controls"[\s\S]*?actionButton\("Add table"/);
+  assert.match(dashboard, /data-action="planner-refresh" aria-label="Refresh seating data"/);
+  assert.match(dashboard, /case "planner-refresh":[\s\S]*?startListeners\(\)/);
 });
 
 test("wedding list discovers from the private index and authorizes each canonical document", async () => {

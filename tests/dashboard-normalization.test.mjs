@@ -18,7 +18,7 @@ test("dashboard does not migrate or normalize canonical records during navigatio
   assert.doesNotMatch(source, /httpsCallable|getFunctions|normalizeSeatingGuestSides/);
 });
 
-test("dashboard maintains private guest projections and an owner repair action", () => {
+test("dashboard maintains private guest projections without exposing manual repair controls", () => {
   assert.match(source, /async function syncPublicStats\(/);
   assert.match(source, /"publicSummary", "summary"/);
   assert.match(source, /"publicStats", "summary"/);
@@ -27,7 +27,6 @@ test("dashboard maintains private guest projections and an owner repair action",
   assert.match(source, /commitGuestEdit/);
   assert.match(guestEdit, /"seatingGuests", guestId/);
   assert.match(guestEdit, /"checkinGuests", guestId/);
-  assert.match(source, /data-action="repair-event-projections"/);
-  assert.match(source, /Repair projections/);
+  assert.doesNotMatch(source, /repair-event-projections|Repair projections|Manage a seating account/);
   assert.match(source, /updatedAt: serverTimestamp\(\)/);
 });

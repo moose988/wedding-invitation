@@ -112,7 +112,7 @@ test("sender introduction scrolls naturally and progress updates do not rebuild 
 test("mobile guest cards omit secondary guest details and keep footer actions for scanning", async () => {
   const [dashboard, css] = await Promise.all([read("dashboard.js"), read("dashboard.css")]);
   const card = extractFunction(dashboard, "renderGuestCard", "renderGuestCardActions");
-  const actions = extractFunction(dashboard, "renderGuestCardActions", "renderSeatingAccessCard");
+  const actions = extractFunction(dashboard, "renderGuestCardActions", "renderGuestInlineActions");
   const menu = extractFunction(dashboard, "renderGuestMenuToggle", "renderGuestRsvpSelect");
   const reservationBadge = extractFunction(dashboard, "renderReservationReadinessBadge", "handleAction");
 

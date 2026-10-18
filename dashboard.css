@@ -3278,6 +3278,17 @@ body.is-seating-view .planner-canvas-shell {
   font-size: 12px;
 }
 
+.planner-canvas-controls__actions > .planner-refresh-button {
+  width: 38px;
+  min-width: 38px;
+  padding: 0;
+}
+
+.planner-refresh-button svg {
+  width: 16px;
+  height: 16px;
+}
+
 .planner-canvas-viewport {
   position: relative;
   width: 100%;
@@ -4080,7 +4091,6 @@ body.is-seating-view .planner-canvas {
 .invitation-setting-toggle input:focus-visible { outline: 3px solid var(--da3wa-gold); outline-offset: 3px; }
 .da3wa-sidebar__nav [data-nav-view="seating"][hidden] { display: none; }
 .da3wa-sidebar__nav [data-nav-view="checkin"][hidden] { display: none; }
-.da3wa-sidebar__nav [data-nav-view="guestSummary"][hidden] { display: none; }
 .invitation-settings-card__status { margin: 0; font-size: 13px; }
 
 @media (max-width: 700px) {
@@ -4378,7 +4388,7 @@ body.is-seating-view .planner-canvas {
 @media (max-width: 700px) {
   .mobile-seating-map-tools {
     display: grid;
-    grid-template-columns: repeat(4, minmax(0, 1fr));
+    grid-template-columns: repeat(5, minmax(0, 1fr));
     width: 100%;
     align-items: stretch;
     gap: 6px;
@@ -4995,7 +5005,7 @@ body.is-seating-view .planner-canvas {
 @media (max-width: 700px) {
   .mobile-seating-map-tools {
     display: grid;
-    grid-template-columns: minmax(42px, 1fr) minmax(48px, 0.85fr) minmax(42px, 1fr) minmax(64px, 1.25fr);
+    grid-template-columns: repeat(5, minmax(0, 1fr));
     grid-auto-flow: column;
     grid-auto-rows: minmax(44px, auto);
     align-items: center;

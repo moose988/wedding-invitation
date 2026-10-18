@@ -76,11 +76,6 @@ const pageMeta = {
     description:
       "A live operational snapshot of guest progress, seating readiness, and on-the-day attention items.",
   },
-  guestSummary: {
-    eyebrow: "Guest overview",
-    title: "Guest Summary",
-    description: "A quick look at your guest list and RSVP replies.",
-  },
   guests: {
     eyebrow: "Guest management",
     title: "Guest Directory",
@@ -866,14 +861,12 @@ const state = {
   unsubTables: null,
   unsubSeatAssignments: null,
   unsubSeatOccupancy: null,
-  unsubSenderCapabilities: null,
   unsubWedding: null,
   unsubSeatingAccess: null,
   unsubAuth: null,
   initialized: false,
   listenerGeneration: 0,
   seatingAccess: { bride: null, groom: null, family: null },
-  senderCapabilities: [],
   projectionSyncPromise: null,
   projectionSyncAgain: false,
   projectionSyncSignature: "",
@@ -972,7 +965,7 @@ async function init() {
     const previousUserId = state.currentUser?.uid || "";
     if (previousUserId && user?.uid !== previousUserId) {
       clearInvitationTokenCache();
-      state.unsubGuests?.(); state.unsubTables?.(); state.unsubSeatAssignments?.(); state.unsubSeatOccupancy?.(); state.unsubSenderCapabilities?.(); state.unsubWedding?.();
+      state.unsubGuests?.(); state.unsubTables?.(); state.unsubSeatAssignments?.(); state.unsubSeatOccupancy?.(); state.unsubWedding?.();
       state.listenerGeneration += 1;
       state.guests = []; state.tables = []; state.seatAssignments = []; state.seatOccupancy = []; state.seatAssignmentsReady = false; state.wedding = null; state.permissions = null;
       if (user) {
@@ -1115,7 +1108,6 @@ function bindEvents() {
   if (elements.pageContent) {
     bindEventSettingsSubmit(elements.pageContent, (event) => void saveEventSettings(event));
     elements.pageContent.addEventListener("submit", (event) => {
-      if (event.target?.id === "seatingAccountPermissionForm") void saveSeatingAccountPermission(event);
 
     });
   }
@@ -1715,9 +1707,6 @@ async function bootstrapDashboard() {
     nextUrl.searchParams.delete("view");
     window.history.replaceState(null, "", nextUrl);
   }
-  if (state.activeView === "guestSummary" && !canViewGuestSummary()) {
-    state.activeView = "overview";
-  }
   if (state.activeView === "checkin" && !isInvitationQrEnabled()) {
     state.activeView = "overview";
     const nextUrl = new URL(window.location.href);
@@ -1739,25 +1728,9 @@ async function bootstrapDashboard() {
   renderAll();
   startWeddingListener();
   startListeners();
-  startSenderCapabilitiesListener();
   if (Number(state.wedding?.seatingSchemaVersion || 0) !== 2) showToast("This legacy seating plan needs an explicit owner repair before editing seats.", "info");
   // A migration outage must not delay dashboard rendering or live data.
 
-}
-
-function startSenderCapabilitiesListener() {
-  state.unsubSenderCapabilities?.();
-  state.unsubSenderCapabilities = null;
-  state.senderCapabilities = [];
-  if (!isWeddingOwner()) return;
-  state.unsubSenderCapabilities = onSnapshot(
-    collection(state.services.db, "weddings", state.weddingId, "senderCapabilities"),
-    (snapshot) => {
-      state.senderCapabilities = snapshot.docs.map((item) => ({ id: item.id, ...item.data() }));
-      if (state.activeView === "share") renderActiveView();
-    },
-    (error) => console.error("Sender capability access could not be refreshed.", error),
-  );
 }
 
 async function ensureSeatingSchema() {
@@ -1842,12 +1815,10 @@ function startListeners() {
   state.unsubTables?.();
   state.unsubSeatAssignments?.();
   state.unsubSeatOccupancy?.();
-  state.unsubSenderCapabilities?.();
   state.unsubGuests = null;
   state.unsubTables = null;
   state.unsubSeatAssignments = null;
   state.unsubSeatOccupancy = null;
-  state.unsubSenderCapabilities = null;
   state.seatAssignmentsReady = false;
   state.seatAssignments = [];
   state.seatOccupancy = [];
@@ -2059,7 +2030,6 @@ function disposeDashboardListeners() {
   state.unsubTables?.();
   state.unsubSeatAssignments?.();
   state.unsubSeatOccupancy?.();
-  state.unsubSenderCapabilities?.();
   state.unsubWedding?.();
   state.unsubSeatingAccess?.();
   state.unsubAuth?.();
@@ -2067,7 +2037,6 @@ function disposeDashboardListeners() {
   state.unsubTables = null;
   state.unsubSeatAssignments = null;
   state.unsubSeatOccupancy = null;
-  state.unsubSenderCapabilities = null;
   state.unsubWedding = null;
   state.unsubSeatingAccess = null;
   state.unsubAuth = null;
@@ -2076,7 +2045,7 @@ function disposeDashboardListeners() {
 function handleSeatingListenerError(error) {
   console.error(error);
   if (error?.code === "permission-denied") {
-    state.unsubGuests?.(); state.unsubTables?.(); state.unsubSeatAssignments?.(); state.unsubSeatOccupancy?.(); state.unsubSenderCapabilities?.();
+    state.unsubGuests?.(); state.unsubTables?.(); state.unsubSeatAssignments?.(); state.unsubSeatOccupancy?.();
     state.listenerGeneration += 1;
     document.querySelectorAll("dialog[open]").forEach((dialog) => dialog.close());
     closeGuestMenu({ restoreFocus: false });
@@ -2336,9 +2305,6 @@ function renderChrome() {
       if (button.dataset.navView === "checkin") {
         button.hidden = !isInvitationQrEnabled();
       }
-      if (button.dataset.navView === "guestSummary") {
-        button.hidden = !canViewGuestSummary() || state.editorMode;
-      }
     }
     if (button.dataset.navView === "settings") {
       button.hidden = button.hidden || !canViewEventSettings();
@@ -2499,7 +2465,6 @@ function switchView(view) {
     state.eventSettingsMessage = "";
   }
   if (state.editorMode && !state.permissions?.seatingOnly && view !== "seating") return;
-  if (view === "guestSummary" && !canViewGuestSummary()) return;
   if (view === "checkin" && !isInvitationQrEnabled()) return;
   if (view === "seating" && !isSeatingEnabled()) {
     showToast("Seating is disabled for this event.", "info");
@@ -2535,10 +2500,6 @@ function renderActiveView() {
     case "overview":
       renderOverviewPage();
       break;
-    case "guestSummary":
-      if (canViewGuestSummary()) renderGuestSummaryPage();
-      else renderOverviewPage();
-      break;
     case "guests":
       renderGuestPage();
       break;
@@ -2560,33 +2521,6 @@ function renderActiveView() {
     default:
       renderOverviewPage();
   }
-}
-
-function canViewGuestSummary() {
-  const role = String(state.permissions?.role || "").trim().toLowerCase();
-  return Boolean(
-    isWeddingOwner() || ["owner", "customer", "client"].includes(role),
-  );
-}
-
-function renderGuestSummaryPage() {
-  if (state.loadingGuests || state.loadingTables) {
-    elements.pageContent.innerHTML =
-      '<div class="da3wa-skeleton" aria-hidden="true"></div>';
-    return;
-  }
-
-  const stats = calculateDashboardStats(state.guests, state.tables);
-  elements.pageContent.innerHTML = `
-    <section class="overview-page guest-summary-page">
-      <section class="overview-kpis overview-kpis--no-seating" aria-label="Guest totals">
-        ${renderKpiCard("Total guests", stats.totalPeople, `${stats.total} invitations`, "Including additional guests")}
-        ${renderKpiCard("Confirmed", stats.confirmed, `${stats.confirmedPct}% of invitation groups`, "RSVP accepted")}
-        ${renderKpiCard("Awaiting reply", stats.pending, "Still need an RSVP", "Pending")}
-        ${renderKpiCard("Declined", stats.declined, `${stats.declinedPct}% of invitation groups`, "Unable to attend")}
-      </section>
-    </section>
-  `;
 }
 
 function renderOverviewPage() {
@@ -2931,6 +2865,7 @@ function renderSeatingPage() {
                 <span class="pill" data-zoom-percentage aria-live="polite">${Math.round(state.plannerZoom * 100)}%</span>
                 ${actionButton("Zoom in", "planner-zoom-in", state.plannerZoom >= 1.6)}
                 ${actionButton("Reset view", "planner-zoom-reset", false, "secondary")}
+                ${renderPlannerRefreshButton()}
               </div>
               ${actionButton("Add table", "open-add-table", !canManageSeatingLayout(), "primary")}
               ${actionButton("Add dance floor", "open-add-dance-floor", !canManageSeatingLayout(), "primary")}
@@ -2985,6 +2920,11 @@ function renderSeatingPage() {
   restorePlannerViewport();
 }
 
+function renderPlannerRefreshButton() {
+  const disabled = state.loadingGuests || state.loadingTables || state.saveState === "saving";
+  return `<button class="da3wa-button da3wa-button--secondary planner-refresh-button" type="button" data-action="planner-refresh" aria-label="Refresh seating data" title="Refresh seating data" ${disabled ? 'disabled aria-disabled="true"' : ""}><svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 7v5h-5M4 17v-5h5"/><path d="M5.6 9A7 7 0 0 1 18 6l2 2M4 16l2 2a7 7 0 0 0 12.4-3"/></svg></button>`;
+}
+
 function getPlannerMapWidth(viewportWidth) {
   return Math.max(Math.round(Math.max(1, viewportWidth) * 1.18), 1000);
 }
@@ -3009,7 +2949,7 @@ function renderMobileSeatingPage({ seatingStats, sideStats, isSaving }) {
   const editing = state.mobileSeatingMode === "edit";
   const seatedPeople = state.tables.reduce((sum, table) => sum + getTableAssignments(table.id).length, 0);
   const peopleNeedingSeats = state.guests.reduce((sum, guest) => sum + getGuestRemainingSeats(guest), 0);
-  const controls = `<div class="mobile-seating-map-tools" aria-label="Map zoom controls"><button class="da3wa-button da3wa-button--secondary" type="button" data-action="planner-zoom-out" ${state.plannerZoom <= 0.25 ? "disabled" : ""} aria-label="Zoom out">−</button><span class="pill" data-zoom-percentage aria-live="polite">${Math.round(state.plannerZoom * 100)}%</span><button class="da3wa-button da3wa-button--secondary" type="button" data-action="planner-zoom-in" ${state.plannerZoom >= 1.6 ? "disabled" : ""} aria-label="Zoom in">+</button><button class="da3wa-button da3wa-button--secondary" type="button" data-action="planner-zoom-reset">Fit all</button></div>`;
+  const controls = `<div class="mobile-seating-map-tools" aria-label="Map zoom controls"><button class="da3wa-button da3wa-button--secondary" type="button" data-action="planner-zoom-out" ${state.plannerZoom <= 0.25 ? "disabled" : ""} aria-label="Zoom out">−</button><span class="pill" data-zoom-percentage aria-live="polite">${Math.round(state.plannerZoom * 100)}%</span><button class="da3wa-button da3wa-button--secondary" type="button" data-action="planner-zoom-in" ${state.plannerZoom >= 1.6 ? "disabled" : ""} aria-label="Zoom in">+</button><button class="da3wa-button da3wa-button--secondary" type="button" data-action="planner-zoom-reset">Fit all</button>${renderPlannerRefreshButton()}</div>`;
   const canvas = `<div class="planner-canvas-viewport mobile-seating-map ${editing ? "is-editing" : ""}" id="plannerViewport" aria-label="Venue map" tabindex="0"><div class="planner-map-extent"><div class="planner-canvas" id="plannerCanvas" style="width:${state.plannerMapWidth}px;height:${state.plannerMapHeight}px;--planner-zoom:${state.plannerZoom};--planner-object-scale:${Math.min(1, 1 / state.plannerZoom)}"><div class="planner-canvas__floor"></div>${state.hallObjects.map(renderHallObject).join("")}${state.tables.length ? state.tables.map(renderPlannerTable).join("") : `<div class="da3wa-empty">No tables yet. Edit the floor plan to add one.</div>`}</div></div></div>`;
   const tables = state.tables.length ? state.tables.map((table) => {
     const occupied = getTableAssignments(table.id).length;
@@ -3315,7 +3255,6 @@ function renderCheckinPage() {
 function renderSharePage() {
   elements.pageContent.innerHTML = `
     <section class="share-page">
-      ${isSeatingEnabled() ? renderSeatingAccessCard() : ""}
       ${renderSenderCard()}
     </section>
   `;
@@ -3846,32 +3785,10 @@ function renderSenderCard() {
       <div class="sender-options">
         ${eventUsesGuestSides(state.wedding) ? `${senderOption("Groom side", "groom")}${senderOption("Bride side", "bride")}${familyCount ? senderOption("Family", "family", "family guests appear only here and in All guests") : ""}${senderOption("All guests", "all")}` : senderOption("All guests", "all")}
       </div>
-      <p class="da3wa-form-hint">Anyone who receives a sender link can see the selected guests' names and phone numbers and share their invitation links. You can revoke active links below.</p>
+      <p class="da3wa-form-hint">Anyone who receives a sender link can see the selected guests' names and phone numbers and share their invitation links. Share links only with people you trust.</p>
       ${excluded ? `<p class="da3wa-form-hint">${excluded} guest${excluded === 1 ? " is" : "s are"} excluded for a missing phone number or invitation link.</p>` : ""}
-      ${renderActiveSenderCapabilities()}
     </article>
   `;
-}
-
-function renderActiveSenderCapabilities() {
-  if (!isWeddingOwner()) return "";
-  const active = state.senderCapabilities.filter((item) => item.status === "active" && item.purpose === "whatsapp-sender");
-  if (!active.length) return "";
-  return `<div class="sender-options"><h4>Active sender links</h4>${active.map((item) => `<div class="sender-option"><div class="sender-option__copy"><strong>${escapeHtml(item.side || "all")} · ${Number(item.recipientCount) || 0} recipients</strong><span>Created ${escapeHtml(formatTimestamp(item.createdAt))}</span></div><div class="sender-option__actions">${actionButton("Revoke", "revoke-sender-capability", false, "danger", item.id)}</div></div>`).join("")}</div>`;
-}
-
-async function revokeSenderCapability(capabilityId) {
-  if (!isWeddingOwner() || !/^[A-Za-z0-9_-]{43}$/.test(capabilityId || "")) return;
-  if (!window.confirm("Revoke this WhatsApp sender link? It will stop working immediately.")) return;
-  try {
-    await updateDoc(doc(state.services.db, "weddings", state.weddingId, "senderCapabilities", capabilityId), {
-      status: "revoked", updatedAt: serverTimestamp(),
-    });
-    showToast("Sender link revoked.", "success");
-  } catch (error) {
-    console.error("Sender link could not be revoked.", error);
-    showToast("Could not revoke this sender link. Check your owner access and try again.", "error");
-  }
 }
 
 function renderExportsPage() {
@@ -4031,94 +3948,6 @@ function renderGuestCardActions(guest) {
       <span class="guest-quick-button__label">Edit</span>
     </button>
   `;
-}
-
-function renderSeatingAccessCard() {
-  if (!isWeddingOwner()) return "";
-  const roles = eventUsesGuestSides(state.wedding)
-    ? [["bride", "Bride side"], ["groom", "Groom side"]]
-    : [["all", "All guests"]];
-  const card = (role, label) => {
-    const loginLink = seatingAccountLoginLink(role);
-    return `<article class="sender-option"><div class="sender-option__copy"><strong>${label}</strong><span>Sign-in link for an account already authorized on this event.</span><code>${escapeHtml(loginLink)}</code></div><div class="sender-option__actions">${actionButton("Copy sign-in link", "copy-seating-login", false, "secondary", role)}<a class="da3wa-button da3wa-button--secondary" href="${escapeAttribute(loginLink)}" target="_blank" rel="noopener">Open sign-in</a></div></article>`;
-  };
-  const allowedSides = eventUsesGuestSides(state.wedding)
-    ? '<option value="bride">Bride</option><option value="groom">Groom</option><option value="all">All sides</option><option value="family">Family · read-only</option>'
-    : '<option value="all">All guests</option><option value="read-only-all">All guests · read-only</option>';
-  return `
-    <article class="share-card share-card--sender">
-      <p class="da3wa-eyebrow">Account-based access</p>
-      <h3>Share a ${eventUsesGuestSides(state.wedding) ? "side-specific" : "guest seating"} sign-in link</h3>
-      <p>These links only carry the event and workspace context. Firestore checks the signed-in account's event membership and allowed side.</p>
-      <div class="sender-options">${roles.map(([role, label]) => card(role, label)).join("")}</div>
-      <h3>Manage a seating account</h3>
-      <p>Enter the UID of an existing Firebase email/password account. Find it in Firebase Console → Authentication → Users. Family access is read-only.</p>
-      <form class="seating-account-form" id="seatingAccountPermissionForm">
-        <label>Firebase Auth UID<input name="userId" required maxlength="128" autocomplete="off" /></label>
-        <label>Allowed side<select name="allowedSide">${allowedSides}</select></label>
-        <button class="da3wa-button da3wa-button--primary" name="operation" value="save" type="submit">Save seating permission</button>
-        <button class="da3wa-button da3wa-button--danger" name="operation" value="revoke" type="submit">Revoke seating access</button>
-        <p class="form-status" data-seating-account-status role="status"></p>
-      </form>
-      <h3>Repair event projections</h3>
-      <p>Rebuild invitation, seating, check-in, and public count documents from this event. Public counts show the time of the last successful update.</p>
-      <button class="da3wa-button da3wa-button--secondary" type="button" data-action="repair-event-projections" ${state.projectionSyncPromise ? 'disabled aria-disabled="true"' : ""}>${state.projectionSyncPromise ? "Repair running…" : "Repair projections"}</button>
-      ${state.projectionSyncError ? `<p class="form-status is-error" role="status">${escapeHtml(state.projectionSyncError)}</p>` : ""}
-    </article>`;
-}
-
-function seatingAccountLoginLink(role = "all") {
-  const params = new URLSearchParams({ wedding: state.weddingId, side: role, workspace: "side" });
-  return new URL(`dashboard-login.html?${params.toString()}`, window.location.href).toString();
-}
-
-async function saveSeatingAccountPermission(event) {
-  event.preventDefault();
-  const form = event.target;
-  const status = form.querySelector("[data-seating-account-status]");
-  const userId = String(form.elements.userId.value || "").trim();
-  const selectedSide = String(form.elements.allowedSide.value || "");
-  const readOnly = selectedSide === "family" || selectedSide === "read-only-all";
-  const allowedSide = selectedSide === "read-only-all" ? "all" : selectedSide;
-  const operation = event.submitter?.value || "save";
-  const allowedSelection = eventUsesGuestSides(state.wedding)
-    ? ["bride", "groom", "all", "family"].includes(selectedSide)
-    : ["all", "read-only-all"].includes(selectedSide);
-  if (!isWeddingOwner() || !/^[A-Za-z0-9_-]{1,128}$/.test(userId) || userId === state.currentUser?.uid || !allowedSelection) {
-    status.textContent = "Enter another Firebase Auth UID and choose a side.";
-    return;
-  }
-  const memberRef = doc(state.services.db, "weddings", state.weddingId, "dashboardUsers", userId);
-  try {
-    const existing = await getDoc(memberRef);
-    if (operation === "revoke") {
-      if (!existing.exists()) { status.textContent = "No seating membership exists for that UID."; return; }
-      if (!window.confirm("Remove this account's event membership? This revokes its access immediately.")) return;
-      await deleteDoc(memberRef);
-      status.textContent = "Event membership removed.";
-      showToast("Seating account access revoked.", "success");
-      return;
-    }
-    if (existing.exists() && existing.data().seatingOnly !== true && !window.confirm("This UID already has broader event permissions. Replace them with seating-only access?")) return;
-    await setDoc(memberRef, {
-      userId,
-      role: "seating",
-      seatingOnly: true,
-      allowedSide,
-      canViewDashboard: readOnly,
-      canEditGuests: false,
-      canEditSeating: !readOnly,
-      canCheckIn: false,
-      canManageUsers: false,
-      ...(existing.exists() && existing.data().createdAt ? { createdAt: existing.data().createdAt } : { createdAt: serverTimestamp() }),
-      updatedAt: serverTimestamp(),
-    }, { merge: false });
-    status.textContent = "Seating permission saved. Share the matching sign-in link.";
-    showToast("Seating account permission saved.", "success");
-  } catch (error) {
-    console.error("Seating account permission could not be saved.", error);
-    status.textContent = "Permission update failed. Check the UID and your owner access, then try again.";
-  }
 }
 
 function renderGuestInlineActions(guest) {
@@ -5136,21 +4965,6 @@ async function handleAction(action, dataset, event = null) {
         ).toString(),
       );
       return;
-    case "copy-seating-login":
-      await copyText(seatingAccountLoginLink(dataset.id || "all"));
-      return;
-    case "revoke-sender-capability":
-      await revokeSenderCapability(dataset.id);
-      return;
-    case "repair-event-projections": {
-      if (!isWeddingOwner()) return;
-      state.projectionRepairRequested = true;
-      showToast("Updating invitation, seating, check-in, and public count data…", "info");
-      await syncPublicStats({ force: true });
-      showToast(state.projectionSyncError ? "Projection repair did not finish. Check your connection and owner access." : "Event projections updated.", state.projectionSyncError ? "error" : "success");
-      renderActiveView();
-      return;
-    }
     case "copy-preview": {
       const guest = state.guests[0];
       let token = guest?.guestToken;
@@ -5347,6 +5161,15 @@ async function handleAction(action, dataset, event = null) {
       return;
     case "planner-zoom-reset":
       resetPlannerView();
+      return;
+    case "planner-refresh":
+      if (state.saveState === "saving") return;
+      if (state.mode === "live") {
+        showToast("Refreshing seating data…", "info");
+        startListeners();
+      } else {
+        renderAll();
+      }
       return;
     case "mobile-set-seating-mode":
       state.mobileSeatingMode = dataset.mode === "edit" ? "edit" : "assign";

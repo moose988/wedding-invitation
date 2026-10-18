@@ -28,6 +28,14 @@ test("live sender links use a random Firestore capability and bounded recipient 
   assert.match(codec, /p: guest\.phone \|\| ""/);
 });
 
+test("Invitations keeps sender-link creation but omits active-link listing and revocation UI", () => {
+  assert.match(dashboard, /function renderSenderCard\(\)/);
+  assert.match(dashboard, /actionButton\("Open", "open-sender"/);
+  assert.match(dashboard, /actionButton\("Copy link", "copy-sender"/);
+  assert.doesNotMatch(dashboard, /Active sender links|renderActiveSenderCapabilities|revoke-sender-capability|startSenderCapabilitiesListener/);
+  assert.doesNotMatch(dashboard, /collection\(state\.services\.db, "weddings", state\.weddingId, "senderCapabilities"\)/);
+});
+
 test("sender URL recipient binding survives into the RSVP hash", () => {
   assert.match(senderPage, /function buildInviteLink\(guest\)[\s\S]*?credential\.recipient = guest\.i[\s\S]*?url\.hash = new URLSearchParams\(credential\)\.toString\(\)/);
   assert.match(senderPage, /https:\/\/wa\.me\/\$\{guest\.p\}/);

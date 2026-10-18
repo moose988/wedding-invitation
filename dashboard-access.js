@@ -33,7 +33,7 @@ export function canViewDashboardPage(view, permissions = {}) {
       permissions.canEditEventDetails === true ||
       permissions.canManageUsers === true;
   }
-  return ["overview", "guestSummary", "guests", "seating", "share", "exports", "checkin"].includes(view);
+  return ["overview", "guests", "seating", "share", "exports", "checkin"].includes(view);
 }
 
 export function resolveDashboardPage(requestedView, permissions = {}) {

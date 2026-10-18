@@ -738,11 +738,47 @@ function renderSchedule() {
   const items = Array.isArray(state.wedding?.schedule) ? state.wedding.schedule.filter((item) => item && (item.titleEn || item.titleAr)) : [];
   section.hidden = !items.length;
   mount.innerHTML = items.map((item, index) => {
-    const title = laylaValue(item.titleEn, item.titleAr);
-    const description = laylaValue(item.descriptionEn, item.descriptionAr);
-    const time = laylaValue(item.time, item.timeAr);
-    return `<li class="schedule-item" style="--item-index:${index}" ${state.laylaLanguage === "ar" ? 'lang="ar" dir="rtl"' : ""}><time class="schedule-item__time">${escapeHtml(time)}</time><span class="schedule-item__marker" aria-hidden="true"></span><div><h3>${escapeHtml(title)}</h3>${description ? `<p>${escapeHtml(description)}</p>` : ""}</div></li>`;
+    const arabic = isLaylaInvitation() && state.laylaLanguage === "ar";
+    const titleArabic = String(item.titleAr || "").trim() || getArabicScheduleFallback(item.titleEn);
+    const descriptionArabic = String(item.descriptionAr || "").trim() || getArabicScheduleFallback(item.descriptionEn);
+    const title = arabic ? (titleArabic || item.titleEn || "") : (item.titleEn || item.titleAr || "");
+    const description = arabic ? (descriptionArabic || item.descriptionEn || "") : (item.descriptionEn || item.descriptionAr || "");
+    const time = arabic
+      ? formatArabicScheduleTime(String(item.timeAr || "").trim() || item.timeEn || item.time)
+      : (item.timeEn || item.time || item.timeAr || "");
+    const titleLang = arabic ? (titleArabic ? ' lang="ar" dir="rtl"' : ' lang="en" dir="ltr"') : "";
+    const descriptionLang = arabic ? (descriptionArabic ? ' lang="ar" dir="rtl"' : ' lang="en" dir="ltr"') : "";
+    return `<li class="schedule-item${arabic ? " schedule-item--arabic" : ""}" style="--item-index:${index}" ${arabic ? 'lang="ar" dir="rtl"' : ""}><time class="schedule-item__time"${arabic ? ' lang="ar" dir="rtl"' : ""}>${escapeHtml(time)}</time><span class="schedule-item__marker" aria-hidden="true"></span><div class="schedule-item__copy"><h3${titleLang}>${escapeHtml(title)}</h3>${description ? `<p${descriptionLang}>${escapeHtml(description)}</p>` : ""}</div></li>`;
   }).join("");
+}
+
+const arabicScheduleFallbacks = new Map([
+  ["guest arrival", "استقبال الضيوف"],
+  ["welcome reception", "حفل استقبال الضيوف"],
+  ["welcome and arrival", "استقبال الضيوف"],
+  ["a celebration of love", "احتفال بالحب"],
+  ["wedding ceremony", "مراسم عقد القران"],
+  ["dinner", "العشاء"],
+  ["dinner and dancing", "العشاء والرقص"],
+  ["celebration and dancing", "الاحتفال والرقص"],
+  ["a warm welcome as everyone gathers", "نرحب بكم مع بداية الأمسية."],
+  ["join us for the wedding celebration", "انضموا إلينا للاحتفال بالزفاف."],
+  ["an evening of good food and joyful company", "أمسية من الطعام الطيب والرفقة الجميلة."],
+]);
+
+function getArabicScheduleFallback(value) {
+  const key = String(value || "").trim().toLocaleLowerCase("en")
+    .replace(/[’']/g, "")
+    .replace(/&/g, " and ")
+    .replace(/[^a-z0-9]+/g, " ")
+    .trim();
+  return arabicScheduleFallbacks.get(key) || "";
+}
+
+function formatArabicScheduleTime(value) {
+  return String(value || "")
+    .replace(/\b(a\.?m\.?|p\.?m\.?)(?=\s|$)/gi, (match) => /^a/i.test(match) ? "صباحًا" : "مساءً")
+    .replace(/[0-9]/g, (digit) => "٠١٢٣٤٥٦٧٨٩"[Number(digit)]);
 }
 
 function renderLocationMap() {

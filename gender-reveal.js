@@ -111,7 +111,7 @@ function localizedDate(event) {
 }
 
 function localizeCountries() {
-  const selected = elements.country.value || "971";
+  const selectedRegion = elements.country.value || "AE";
   let displayNames;
   try { displayNames = new Intl.DisplayNames([activeLanguage === "ar" ? "ar" : "en"], { type: "region" }); }
   catch { displayNames = null; }
@@ -119,15 +119,13 @@ function localizeCountries() {
   for (const [region, englishName, callingCode] of GENDER_REVEAL_COUNTRIES) {
     const option = document.createElement("option");
     const countryName = activeLanguage === "ar" ? (displayNames?.of(region) || englishName) : englishName;
-    option.value = callingCode;
+    option.value = region;
     option.textContent = `${countryName} (+${callingCode})`;
-    option.dataset.region = region;
-    option.selected = region === "AE" && !elements.country.dataset.touched;
+    option.dataset.callingCode = callingCode;
+    option.selected = region === selectedRegion;
     fragment.append(option);
   }
   elements.country.replaceChildren(fragment);
-  const sameCode = [...elements.country.options].find((option) => option.value === selected);
-  if (sameCode) sameCode.selected = true;
 }
 
 function renderLanguage() {
@@ -275,7 +273,6 @@ function startMusicFromGesture() {
   }
   elements.musicControls.hidden = false;
   elements.musicToggle.hidden = false;
-  elements.music.muted = false;
   try {
     const play = elements.music.play();
     if (play && typeof play.then === "function") {
@@ -322,6 +319,7 @@ function finishOpening(why = "") {
     elements.cover.hidden = true;
     elements.openingStage.hidden = true;
     elements.openingStage.classList.remove("is-leaving");
+    document.body.classList.remove("gr-opening-active");
     stopAndReleaseVideo();
   }, delay);
 }
@@ -334,6 +332,7 @@ function handleOpenInvitation() {
     finishOpening(!openingUrl ? "fallbackStatic" : "reducedMotion");
     return;
   }
+  document.body.classList.add("gr-opening-active");
   elements.openingStage.hidden = false;
   elements.openingVideo.poster = artworkUrl;
   elements.openingVideo.defaultMuted = true;
@@ -389,7 +388,7 @@ function playOpeningVideoFromGesture() {
 }
 
 function retryOpeningFromGesture() {
-  if (openingFinished || !introSequence || !elements.openingStage.hidden) return;
+  if (openingFinished || !introSequence || elements.openingStage.hidden) return;
   if (!introSequence.retry()) return;
   elements.openingVideo.defaultMuted = true;
   elements.openingVideo.muted = true;
@@ -415,6 +414,8 @@ function toggleMusic() {
 
 function validateForm() {
   const values = Object.fromEntries(new FormData(elements.form).entries());
+  values.countryRegion = values.countryCallingCode;
+  values.countryCallingCode = elements.country.selectedOptions[0]?.dataset.callingCode || "";
   const errors = genderRevealLocalValidation(values, normalizeInternationalPhone);
   for (const key of ["fullName", "phone", "attendance", "prediction", "message"]) setFieldError(key, errors[key] || "");
   if (Object.keys(errors).length) {
@@ -515,6 +516,7 @@ function cleanup() {
   elements.openingVideo.removeAttribute("src");
   elements.music.removeAttribute("src");
   elements.openingVideo.load();
+  document.body.classList.remove("gr-opening-active");
   elements.music.load();
 }
 

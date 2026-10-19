@@ -6,7 +6,7 @@
     <meta name="theme-color" content="#fbf5ed" />
     <meta name="referrer" content="no-referrer" />
     <title>Gender Reveal Party</title>
-    <link rel="stylesheet" href="./gender-reveal.css?v=mobile-playback-vinyl-1" />
+    <link rel="stylesheet" href="./gender-reveal.css?v=invitation-refine-10" />
   </head>
   <body class="gender-reveal-page">
     <div class="gr-app" id="genderRevealApp" aria-busy="true">
@@ -17,19 +17,20 @@
             <button type="button" data-language="en" aria-pressed="true">EN</button>
             <button type="button" data-language="ar" lang="ar" aria-pressed="false">عربي</button>
           </div>
-          <div class="gr-music" id="musicControls" hidden>
-            <button class="gr-vinyl-toggle" type="button" id="musicToggle" aria-label="Play event music" aria-pressed="false" data-state="paused" hidden>
-              <img class="gr-vinyl-toggle__record" src="./invitations/wedding-designs/layla-zaid/assets/wedding-vinyl-record.webp" alt="" aria-hidden="true" draggable="false" />
-              <svg class="gr-vinyl-toggle__indicator" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
-                <circle cx="12" cy="12" r="10" />
-                <path class="gr-vinyl-toggle__play-mark" d="M10 7.8a.8.8 0 0 1 1.22-.68l6.1 4.2a.82.82 0 0 1 0 1.36l-6.1 4.2A.8.8 0 0 1 10 16.2z" />
-                <path class="gr-vinyl-toggle__pause-mark" d="M8.1 7.5h2.7v9H8.1zm5.1 0h2.7v9h-2.7z" />
-              </svg>
-            </button>
-            <span class="gr-sr-only" id="musicStatus" role="status" aria-live="polite"></span>
-          </div>
         </div>
       </header>
+
+      <div class="gr-music" id="musicControls" hidden>
+        <button class="gr-vinyl-toggle" type="button" id="musicToggle" aria-label="Play event music" aria-controls="eventMusic" aria-pressed="false" data-state="paused" hidden>
+          <img class="gr-vinyl-toggle__record" src="./invitations/wedding-designs/layla-zaid/assets/wedding-vinyl-record.webp" alt="" aria-hidden="true" draggable="false" />
+          <svg class="gr-vinyl-toggle__indicator" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+            <circle cx="12" cy="12" r="10" />
+            <path class="gr-vinyl-toggle__play-mark" d="M10 7.8a.8.8 0 0 1 1.22-.68l6.1 4.2a.82.82 0 0 1 0 1.36l-6.1 4.2A.8.8 0 0 1 10 16.2z" />
+            <path class="gr-vinyl-toggle__pause-mark" d="M8.1 7.5h2.7v9H8.1zm5.1 0h2.7v9h-2.7z" />
+          </svg>
+        </button>
+        <span class="gr-sr-only" id="musicStatus" role="status" aria-live="polite"></span>
+      </div>
 
       <section class="gr-cover" id="cover" aria-labelledby="coverQuestion">
         <img class="gr-cover__art" id="coverArtwork" alt="" fetchpriority="high" decoding="async" />
@@ -39,8 +40,8 @@
           <h1 id="coverQuestion" data-copy="coverQuestion">Boy or Girl?</h1>
           <p class="gr-cover__message" id="coverMessage">A little surprise is on the way…</p>
           <p class="gr-cover__event-title" id="coverEventTitle">Gender Reveal Party</p>
-          <button class="gr-button gr-button--primary" id="openInvitation" type="button" disabled>
-            <span data-copy="openInvitation">Open invitation</span><span class="gr-button__arrow" aria-hidden="true">↗</span>
+          <button class="gr-button gr-button--open" id="openInvitation" type="button" disabled>
+            <span data-copy="openInvitation">Open invitation</span>
           </button>
           <p class="gr-page-status" id="pageStatus" role="status" aria-live="polite" data-copy="loading">Loading invitation…</p>
         </div>
@@ -52,9 +53,9 @@
         <img class="gr-opening__poster" id="openingPoster" alt="" />
         <video id="openingVideo" playsinline webkit-playsinline muted preload="none" disablepictureinpicture disableremoteplayback aria-label="Gender reveal invitation opening video"></video>
         <div class="gr-opening__tools">
-          <p class="gr-opening__status" id="openingStatus" role="status" aria-live="polite"></p>
-          <button class="gr-button gr-button--light" id="retryOpening" type="button" hidden><span data-copy="retryOpening">Retry video</span><span aria-hidden="true">↻</span></button>
           <button class="gr-button gr-button--light" id="skipOpening" type="button"><span data-copy="skip">Skip</span><span aria-hidden="true">→</span></button>
+          <button class="gr-button gr-button--light" id="retryOpening" type="button" hidden><span data-copy="retryOpening">Retry video</span><span aria-hidden="true">↻</span></button>
+          <p class="gr-sr-only gr-opening__status" id="openingStatus" role="status" aria-live="polite"></p>
         </div>
       </section>
 
@@ -68,6 +69,8 @@
           <p class="gr-closed-notice" id="closedNotice" role="status" hidden data-copy="closed">Responses are not open for this event.</p>
           <p class="gr-media-notice" id="mediaNotice" role="status" hidden></p>
         </section>
+
+        <img class="gr-decoration gr-decoration--teddy" src="./images/gender-reveal-teddy.png" width="900" height="1080" alt="" aria-hidden="true" loading="lazy" decoding="async" />
 
         <section class="gr-form-card" id="responseFormSection" aria-labelledby="formTitle" hidden>
           <div class="gr-section-heading">
@@ -138,11 +141,12 @@
           <p class="gr-results-status" id="resultsStatus" role="status" aria-live="polite" hidden></p>
         </section>
 
+        <img class="gr-decoration gr-decoration--toys" src="./images/gender-reveal-toys.png" width="1200" height="800" alt="" aria-hidden="true" loading="lazy" decoding="async" />
         <footer class="gr-footer"><span data-copy="madeWith">Made with care by</span> <a href="https://qdsystems.ae" target="_blank" rel="noopener noreferrer">QD Systems</a></footer>
       </main>
 
       <audio id="eventMusic" preload="none" loop></audio>
     </div>
-    <script type="module" src="./gender-reveal.js?v=mobile-playback-vinyl-1"></script>
+    <script type="module" src="./gender-reveal.js?v=release-20261020-1"></script>
   </body>
 </html>

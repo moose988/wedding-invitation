@@ -55,12 +55,19 @@ test("Excel cell values retain Arabic and neutralize formula-leading guest conte
 });
 
 test("public invitation defers video and audio sources until the open gesture", async () => {
-  const [html, script] = await Promise.all([
+  const [html, script, phoneSource, invitationCss] = await Promise.all([
     readFile(new URL("../gender-reveal.html", import.meta.url), "utf8"),
     readFile(new URL("../gender-reveal.js", import.meta.url), "utf8"),
+    readFile(new URL("../gender-reveal-phone.js", import.meta.url), "utf8"),
+    readFile(new URL("../gender-reveal.css", import.meta.url), "utf8"),
   ]);
   assert.match(html, /Boy or Girl\?/);
   assert.match(html, /Open invitation/);
+  assert.doesNotMatch(html, /gr-button__arrow/);
+  assert.match(html, /id="skipOpening"[\s\S]*?class="gr-sr-only gr-opening__status" id="openingStatus"/);
+  assert.match(invitationCss, /\.gr-opening__tools \{[\s\S]*?left: max\(20px, env\(safe-area-inset-left\)\)[\s\S]*?direction: ltr/);
+  assert.match(invitationCss, /\.gr-cover__content[\s\S]*?background: rgba\(255, 251, 245, \.42\)/);
+  assert.match(invitationCss, /\.gr-button--open[\s\S]*?0 0 18px rgba\(255, 250, 235, \.34\)/);
   assert.match(script, /ولد أم بنت؟/);
   assert.match(script, /افتح الدعوة/);
   assert.match(html, /playsinline webkit-playsinline muted preload="none" disablepictureinpicture disableremoteplayback/);
@@ -87,6 +94,24 @@ test("public invitation defers video and audio sources until the open gesture", 
   assert.match(script, /saveData/);
   assert.match(script, /createIntroSequence/);
   assert.match(script, /genderRevealSubmissionErrorKey/);
+  assert.match(invitationCss, /\.gr-opening video[\s\S]*?object-fit: cover/);
+  assert.match(invitationCss, /\.gr-music \{ position: fixed; z-index: 20; right: max\(18px, env\(safe-area-inset-right\)\); bottom: max\(18px, env\(safe-area-inset-bottom\)\); display: flex; align-items: center; \}/);
+  assert.doesNotMatch(invitationCss, /gr-music-lift|gr-mute-toggle/);
+  assert.doesNotMatch(script, /adjustMusicPosition|musicPositionFrame|toggleMusicMuted|addEventListener\("scroll"/);
+  assert.doesNotMatch(html, /id="musicMute"|gr-mute-toggle/);
+  assert.match(invitationCss, /\.gr-button--open[\s\S]*?backdrop-filter: blur/);
+  assert.match(invitationCss, /\.gr-invitation[\s\S]*?gender-reveal-details-bg\.webp/);
+  assert.match(invitationCss, /\.gr-decoration[\s\S]*?pointer-events: none/);
+  assert.match(invitationCss, /html \{ min-width: 0;/);
+  assert.match(script, /document\.body\.classList\.add\("gr-opening-active"\)/);
+  assert.match(script, /document\.body\.classList\.remove\("gr-opening-active"\)/);
+  assert.match(script, /function retryOpeningFromGesture\(\)[\s\S]*?elements\.openingStage\.hidden\) return/);
+  assert.match(script, /option\.value = region/);
+  assert.match(script, /option\.dataset\.callingCode = callingCode/);
+  assert.match(script, /elements\.country\.selectedOptions\[0\].*dataset\.callingCode/);
+  assert.match(phoneSource, /\["US", "United States", "1"\]/);
+  assert.match(html, /gender-reveal-teddy\.png[\s\S]*?alt=""/);
+  assert.match(html, /gender-reveal-toys\.png[\s\S]*?alt=""/);
 });
 
 test("dashboard styling is gender-scoped and presents assigned event responses read-only", async () => {
@@ -98,6 +123,7 @@ test("dashboard styling is gender-scoped and presents assigned event responses r
   assert.match(dashboard, /function renderGenderRevealResponsesPage/);
   assert.match(dashboard, /data-gender-response-search/);
   assert.match(dashboard, /data-gender-response-filter/);
+  assert.match(css, /@media \(max-width: 760px\)[\s\S]*?\.gr-stat--boy \{ order: 3; \}[\s\S]*?\.gr-stat--girl \{ order: 4; \}/);
   assert.match(dashboard, /Export Excel/);
   assert.match(dashboard, /phoneE164/);
   assert.match(dashboard, /function renderGenderRevealOverviewPage/);
@@ -105,7 +131,6 @@ test("dashboard styling is gender-scoped and presents assigned event responses r
   assert.match(dashboard, /!isGenderRevealEvent\(state\.wedding\) && state\.wedding\?\.seatingEnabled !== false/);
   assert.match(css, /body\.is-gender-reveal/);
   const invitationCss = await readFile(new URL("../gender-reveal.css", import.meta.url), "utf8");
-  assert.match(invitationCss, /\.gr-opening video[\s\S]*?object-fit: contain/);
   assert.match(invitationCss, /gr-vinyl-toggle\[data-state="playing"\][\s\S]*?animation: gr-record-spin/);
   assert.match(invitationCss, /prefers-reduced-motion: reduce[\s\S]*?gr-vinyl-toggle\[data-state="playing"\][\s\S]*?animation: none/);
   assert.doesNotMatch(css, /(?:^|\})\s*(?:\.guest-page|\.share-page|body\s*\{)/m);

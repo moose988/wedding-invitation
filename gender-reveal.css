@@ -32,9 +32,17 @@ button { color: inherit; }
 .gr-language { display: inline-flex; align-items: center; gap: 3px; padding: 4px; border: 1px solid rgba(189, 152, 99, .35); border-radius: 999px; background: rgba(255, 253, 249, .78); box-shadow: 0 4px 16px rgba(87, 67, 55, .08); backdrop-filter: blur(10px); }
 .gr-language button { min-width: 42px; min-height: 36px; border: 0; border-radius: 999px; background: transparent; color: #766a62; font-size: .8rem; font-weight: 700; cursor: pointer; }
 .gr-language button[aria-pressed="true"] { background: #765e4e; color: #fffaf4; }
-.gr-icon-button { display: inline-grid; width: 42px; height: 42px; place-items: center; border: 1px solid rgba(189, 152, 99, .4); border-radius: 50%; background: rgba(255, 253, 249, .84); box-shadow: 0 5px 18px rgba(87, 67, 55, .1); cursor: pointer; }
-.gr-icon-button svg { width: 21px; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
-.gr-icon-button[aria-pressed="true"] .gr-music-wave { display: none; }
+.gr-vinyl-toggle { position: relative; display: grid; width: 64px; height: 64px; flex: 0 0 64px; place-items: center; padding: 0; overflow: hidden; border: 0; border-radius: 50%; background: transparent; box-shadow: 0 8px 22px rgba(62, 48, 39, .2), 0 0 0 1px rgba(255, 255, 255, .5); cursor: pointer; }
+.gr-vinyl-toggle:focus-visible { outline: 3px solid rgba(119, 154, 177, .85); outline-offset: 3px; }
+.gr-vinyl-toggle__record { display: block; width: 100%; height: 100%; border-radius: 50%; object-fit: cover; object-position: center; filter: saturate(.92) contrast(1.06); }
+.gr-vinyl-toggle[data-state="playing"] .gr-vinyl-toggle__record { animation: gr-record-spin 3.2s linear infinite; }
+.gr-vinyl-toggle__indicator { position: absolute; inset: 50% auto auto 50%; width: 25px; height: 25px; overflow: visible; transform: translate(-50%, -50%); }
+.gr-vinyl-toggle__indicator circle { fill: rgba(251, 245, 237, .93); stroke: rgba(165, 145, 108, .56); stroke-width: .7; }
+.gr-vinyl-toggle__indicator path { fill: #423b3a; }
+.gr-vinyl-toggle__pause-mark { display: none; }
+.gr-vinyl-toggle[data-state="playing"] .gr-vinyl-toggle__play-mark { display: none; }
+.gr-vinyl-toggle[data-state="playing"] .gr-vinyl-toggle__pause-mark { display: block; }
+@keyframes gr-record-spin { to { transform: rotate(360deg); } }
 
 .gr-cover { position: relative; display: grid; min-height: max(690px, 100svh); place-items: start center; overflow: hidden; isolation: isolate; background: #f4e5d8; }
 .gr-cover__art { position: absolute; z-index: -2; inset: 0; width: 100%; height: 100%; object-fit: cover; object-position: 50% 60%; }
@@ -57,12 +65,12 @@ button { color: inherit; }
 .gr-cover__sparkle--one { top: 28%; left: 12%; font-size: 1.4rem; }
 .gr-cover__sparkle--two { top: 40%; right: 12%; font-size: 1.85rem; }
 
-.gr-opening { position: fixed; z-index: 10; inset: 0; display: grid; place-items: center; overflow: hidden; background: #f3e3d6; opacity: 1; transition: opacity .48s ease; }
+.gr-opening { position: fixed; z-index: 10; inset: 0; display: grid; width: 100%; height: 100vh; height: 100dvh; place-items: center; overflow: hidden; background: #f3e3d6; opacity: 1; transition: opacity .48s ease; }
 .gr-opening.is-leaving { opacity: 0; pointer-events: none; }
-.gr-opening__poster, .gr-opening video { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; }
-.gr-opening__poster { z-index: -1; }
-.gr-opening video { background: transparent; }
-.gr-opening__tools { position: absolute; right: max(20px, env(safe-area-inset-right)); bottom: max(24px, env(safe-area-inset-bottom)); left: max(20px, env(safe-area-inset-left)); display: flex; align-items: center; justify-content: space-between; gap: 16px; }
+.gr-opening__poster, .gr-opening video { position: absolute; inset: 0; width: 100%; height: 100%; }
+.gr-opening__poster { z-index: -1; object-fit: cover; object-position: center; }
+.gr-opening video { z-index: 0; background: #f3e3d6; object-fit: contain; object-position: center; }
+.gr-opening__tools { position: absolute; z-index: 1; right: max(20px, env(safe-area-inset-right)); bottom: max(24px, env(safe-area-inset-bottom)); left: max(20px, env(safe-area-inset-left)); display: flex; align-items: center; justify-content: flex-start; flex-wrap: wrap; gap: 10px; }
 .gr-opening__status { padding: 9px 14px; border-radius: 18px; background: rgba(255, 251, 245, .82); color: #5b4a42; font-size: .85rem; }
 .gr-button--light { min-width: 108px; border: 1px solid rgba(104, 81, 66, .22); background: rgba(255, 253, 249, .92); color: #594a42; box-shadow: 0 6px 20px rgba(62, 48, 39, .13); }
 
@@ -141,6 +149,9 @@ button { color: inherit; }
 
 @media (max-width: 600px) {
   .gr-topbar { padding-inline: 15px; }
+  .gr-topbar__actions { gap: 7px; }
+  .gr-vinyl-toggle { width: 54px; height: 54px; flex-basis: 54px; }
+  .gr-vinyl-toggle__indicator { width: 23px; height: 23px; }
   .gr-cover { min-height: 100svh; }
   .gr-cover__art { object-position: 50% 56%; }
   .gr-cover__content { width: calc(100% - 30px); margin-top: max(138px, 18svh); margin-bottom: 280px; padding: 25px 18px 27px; border-radius: 23px; }
@@ -164,4 +175,5 @@ button { color: inherit; }
 
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { scroll-behavior: auto !important; animation-duration: .01ms !important; animation-iteration-count: 1 !important; transition-duration: .01ms !important; }
+  .gr-vinyl-toggle[data-state="playing"] .gr-vinyl-toggle__record { animation: none; }
 }

@@ -21,8 +21,8 @@ const copy = {
     fullName: "Full name", phone: "International phone number", country: "Country calling code", attendance: "Will you attend?", attending: "Attending", notAttending: "Not attending",
     prediction: "What is your prediction?", boy: "Boy", girl: "Girl", message: "Message to the parents", optional: "Optional", messageHint: "Up to 1,000 characters.", submit: "Submit response", saving: "Saving your response…",
     saved: "Response saved", thankYou: "Thank you for sharing your prediction!", thankYouBody: "Your kind wishes mean so much.", resultsTitle: "The predictions so far", totalPredictions: (total) => `${total} ${total === 1 ? "prediction" : "predictions"}`,
-    skip: "Skip", videoLoading: "Opening your invitation…", videoSlow: "The animation is taking a while, so here is your invitation.", videoFailed: "The animation is unavailable. Here is your invitation.", reducedMotion: "Your invitation is ready.",
-    musicMute: "Mute music", musicUnmute: "Unmute music", musicBlocked: "Music could not start. Tap the sound button to try again.", musicPlaying: "Event music is playing.", musicUnavailable: "Event music is unavailable.",
+    skip: "Skip", retryOpening: "Retry video", videoLoading: "Opening your invitation…", videoSlow: "The video is taking longer to start. You can retry or skip.", videoFailed: "The video could not be played. You can retry or skip.", videoBlocked: "Your browser blocked video playback. Tap retry or skip.", reducedMotion: "Your invitation is ready.",
+    musicPlay: "Play event music", musicPause: "Pause event music", musicBlocked: "Music could not start. Tap the record to try again.", musicPlaying: "Event music is playing.", musicUnavailable: "Event music is unavailable.",
     closed: "Responses are not open for this event.", validationSummary: "Please correct the highlighted fields.", nameRequired: "Enter your full name.", nameTooLong: "Your name must be 120 characters or fewer.", phoneInvalid: "Enter a valid international phone number.", attendanceRequired: "Choose whether you will attend.", predictionRequired: "Choose boy or girl.", messageTooLong: "Your message must be 1,000 characters or fewer.",
     closedError: "Responses are not open for this event. Your draft is still here.", permissionOrDuplicateError: "We could not accept this response. This number may have been used already, or access was denied. Your form is still here; no existing response was changed.", quotaError: "The response service is temporarily at capacity. Your form is still here; please try again later.", networkError: "A network problem prevented saving. Your form is still here; check your connection and try again.", saveError: "We could not save your response. Your form is still here; please try again.",
     resultsError: "Your response was saved, but the prediction totals could not be loaded right now.", boyBar: "Boy predictions", girlBar: "Girl predictions", madeWith: "Made with care by", fallbackStatic: "The opening animation was skipped. Your invitation is ready.",
@@ -34,8 +34,8 @@ const copy = {
     fullName: "الاسم الكامل", phone: "رقم الهاتف الدولي", country: "رمز الاتصال الدولي", attendance: "هل ستحضر؟", attending: "سأحضر", notAttending: "لن أحضر",
     prediction: "ما توقعك؟", boy: "ولد", girl: "بنت", message: "رسالة إلى الوالدين", optional: "اختياري", messageHint: "حتى ١٬٠٠٠ حرف.", submit: "إرسال الرد", saving: "جارٍ حفظ ردك…",
     saved: "تم حفظ الرد", thankYou: "شكرًا لمشاركتنا توقعك!", thankYouBody: "تمنياتك الجميلة تعني لنا الكثير.", resultsTitle: "التوقعات حتى الآن", totalPredictions: (total) => `${new Intl.NumberFormat("ar").format(total)} ${total === 1 ? "توقع" : "توقعات"}`,
-    skip: "تخطي", videoLoading: "جارٍ فتح الدعوة…", videoSlow: "استغرق عرض الحركة وقتًا أطول، وهذه دعوتك.", videoFailed: "الحركة غير متاحة، وهذه دعوتك.", reducedMotion: "دعوتك جاهزة.",
-    musicMute: "كتم الموسيقى", musicUnmute: "تشغيل الصوت", musicBlocked: "تعذّر تشغيل الموسيقى. اضغط على زر الصوت للمحاولة مجددًا.", musicPlaying: "موسيقى الحفل تعمل.", musicUnavailable: "موسيقى الحفل غير متاحة.",
+    skip: "تخطي", retryOpening: "إعادة تشغيل الفيديو", videoLoading: "جارٍ فتح الدعوة…", videoSlow: "استغرق تشغيل الفيديو وقتًا أطول. يمكنك إعادة المحاولة أو التخطي.", videoFailed: "تعذّر تشغيل الفيديو. يمكنك إعادة المحاولة أو التخطي.", videoBlocked: "منع المتصفح تشغيل الفيديو. اضغط لإعادة المحاولة أو التخطي.", reducedMotion: "دعوتك جاهزة.",
+    musicPlay: "تشغيل موسيقى الحفل", musicPause: "إيقاف موسيقى الحفل مؤقتًا", musicBlocked: "تعذّر تشغيل الموسيقى. اضغط على الأسطوانة للمحاولة مجددًا.", musicPlaying: "موسيقى الحفل تعمل.", musicUnavailable: "موسيقى الحفل غير متاحة.",
     closed: "الردود غير متاحة لهذه المناسبة.", validationSummary: "يرجى تصحيح الحقول المحددة.", nameRequired: "أدخل اسمك الكامل.", nameTooLong: "يجب ألا يتجاوز الاسم ١٢٠ حرفًا.", phoneInvalid: "أدخل رقم هاتف دوليًا صحيحًا.", attendanceRequired: "اختر ما إذا كنت ستحضر.", predictionRequired: "اختر ولد أو بنت.", messageTooLong: "يجب ألا تتجاوز الرسالة ١٬٠٠٠ حرف.",
     closedError: "الردود غير متاحة لهذه المناسبة. ما زالت بياناتك هنا.", permissionOrDuplicateError: "تعذّر قبول هذا الرد. ربما استُخدم هذا الرقم من قبل أو لا تتوفر صلاحية الإرسال. ما زالت بياناتك هنا ولم يتغير أي رد سابق.", quotaError: "خدمة الردود مشغولة مؤقتًا. ما زالت بياناتك هنا؛ حاول لاحقًا.", networkError: "منع خلل في الاتصال حفظ ردك. ما زالت بياناتك هنا؛ تحقق من الاتصال وحاول مجددًا.", saveError: "تعذّر حفظ ردك. ما زالت بياناتك هنا؛ حاول مجددًا.",
     resultsError: "تم حفظ ردك، لكن تعذّر تحميل إجمالي التوقعات الآن.", boyBar: "توقعات ولد", girlBar: "توقعات بنت", madeWith: "صُنعت بعناية بواسطة", fallbackStatic: "تم تخطي الحركة الافتتاحية. دعوتك جاهزة.",
@@ -45,7 +45,7 @@ const copy = {
 const $ = (id) => document.getElementById(id);
 const elements = {
   app: $("genderRevealApp"), pageStatus: $("pageStatus"), cover: $("cover"), coverArtwork: $("coverArtwork"), coverMessage: $("coverMessage"), coverEventTitle: $("coverEventTitle"), open: $("openInvitation"),
-  openingStage: $("openingStage"), openingVideo: $("openingVideo"), openingPoster: $("openingPoster"), openingStatus: $("openingStatus"), skip: $("skipOpening"), invitation: $("invitationContent"),
+  openingStage: $("openingStage"), openingVideo: $("openingVideo"), openingPoster: $("openingPoster"), openingStatus: $("openingStatus"), retry: $("retryOpening"), skip: $("skipOpening"), invitation: $("invitationContent"),
   eventTitle: $("eventTitle"), eventDate: $("eventDate"), eventMessage: $("eventMessage"), closedNotice: $("closedNotice"), formSection: $("responseFormSection"), form: $("responseForm"), formStatus: $("formStatus"), submit: $("submitResponse"),
   country: $("countryCallingCode"), fullName: $("fullName"), phone: $("phone"), message: $("message"), thankYou: $("thankYou"), results: $("results"), resultsStatus: $("resultsStatus"),
   music: $("eventMusic"), musicControls: $("musicControls"), musicToggle: $("musicToggle"), musicStatus: $("musicStatus"),
@@ -170,7 +170,7 @@ function renderLanguage() {
   }
   $("boyBar")?.setAttribute("aria-label", strings.boyBar);
   $("girlBar")?.setAttribute("aria-label", strings.girlBar);
-  elements.musicToggle.setAttribute("aria-label", elements.music.muted ? strings.musicUnmute : strings.musicMute);
+  updateMusicButtonLabel();
   elements.app.setAttribute("aria-busy", String(!eventData));
 }
 
@@ -184,6 +184,18 @@ function setPageStatus(key = "", isError = false) {
 function setOpeningStatus(key) {
   openingMessageKey = key;
   elements.openingStatus.textContent = key ? copy[activeLanguage][key] : "";
+}
+
+function updateMusicButtonLabel() {
+  const playing = !elements.music.paused && !elements.music.ended;
+  elements.musicToggle.setAttribute("aria-label", copy[activeLanguage][playing ? "musicPause" : "musicPlay"]);
+  elements.musicToggle.setAttribute("aria-pressed", String(playing));
+  elements.musicToggle.dataset.state = playing ? "playing" : "paused";
+}
+
+function setMusicStatus(key) {
+  musicStatusKey = key;
+  elements.musicStatus.textContent = key ? copy[activeLanguage][key] : "";
 }
 
 function setFormStatus(key, isError = false) {
@@ -257,8 +269,10 @@ function shouldUseStaticOpening() {
 
 function startMusicFromGesture() {
   if (!musicUrl) return;
-  elements.music.src = musicUrl;
-  elements.music.load();
+  if (elements.music.src !== musicUrl) {
+    elements.music.src = musicUrl;
+    elements.music.load();
+  }
   elements.musicControls.hidden = false;
   elements.musicToggle.hidden = false;
   elements.music.muted = false;
@@ -266,18 +280,16 @@ function startMusicFromGesture() {
     const play = elements.music.play();
     if (play && typeof play.then === "function") {
       void play.then(() => {
-        elements.musicToggle.setAttribute("aria-pressed", "false");
-        elements.musicToggle.setAttribute("aria-label", copy[activeLanguage].musicMute);
-        musicStatusKey = "musicPlaying";
-        elements.musicStatus.textContent = copy[activeLanguage].musicPlaying;
+        updateMusicButtonLabel();
+        setMusicStatus("musicPlaying");
       }).catch(() => {
-        musicStatusKey = "musicBlocked";
-        elements.musicStatus.textContent = copy[activeLanguage].musicBlocked;
+        updateMusicButtonLabel();
+        setMusicStatus("musicBlocked");
       });
     }
   } catch {
-    musicStatusKey = "musicBlocked";
-    elements.musicStatus.textContent = copy[activeLanguage].musicBlocked;
+    updateMusicButtonLabel();
+    setMusicStatus("musicBlocked");
   }
 }
 
@@ -294,6 +306,7 @@ function finishOpening(why = "") {
   introSequence = null;
   elements.invitation.hidden = false;
   elements.invitation.inert = false;
+  elements.retry.hidden = true;
   if (why) elements.openingStage.classList.add("is-leaving");
   elements.openingStage.classList.add("is-leaving");
   elements.cover.classList.add("is-leaving");
@@ -323,61 +336,81 @@ function handleOpenInvitation() {
   }
   elements.openingStage.hidden = false;
   elements.openingVideo.poster = artworkUrl;
+  elements.openingVideo.defaultMuted = true;
+  elements.openingVideo.muted = true;
+  elements.openingVideo.playsInline = true;
+  elements.openingVideo.setAttribute("playsinline", "");
+  elements.openingVideo.setAttribute("webkit-playsinline", "");
   elements.openingVideo.src = openingUrl;
   elements.openingVideo.load();
+  elements.retry.hidden = true;
   introSequence = createIntroSequence({
     video: elements.openingVideo,
-    startupTimeout: 2400,
-    bufferTimeout: 1800,
+    startupTimeout: 12000,
+    bufferTimeout: 18000,
     onState(phase) {
-      if (["loading", "buffering"].includes(phase)) setOpeningStatus("videoLoading");
+      if (["loading", "buffering"].includes(phase)) {
+        elements.retry.hidden = true;
+        setOpeningStatus("videoLoading");
+      } else if (phase === "playing") {
+        pendingFallbackKey = "";
+        elements.retry.hidden = true;
+        setOpeningStatus("");
+      }
       else if (phase === "retry") {
         setOpeningStatus("videoSlow");
-      pendingFallbackKey = "videoSlow";
-      introSequence?.skip();
-      } else if (phase === "error" || phase === "blocked") {
-        setOpeningStatus("videoFailed");
-        pendingFallbackKey = "videoFailed";
-        introSequence?.skip();
+        pendingFallbackKey = "videoSlow";
+        elements.retry.hidden = false;
+      } else if (phase === "blocked" || phase === "error") {
+        const key = phase === "blocked" ? "videoBlocked" : "videoFailed";
+        setOpeningStatus(key);
+        pendingFallbackKey = "fallbackStatic";
+        elements.retry.hidden = false;
       }
     },
-    onFrame() { setOpeningStatus(""); },
-    onComplete() { finishOpening(pendingFallbackKey); },
+    onFrame() {
+      pendingFallbackKey = "";
+      elements.retry.hidden = true;
+      setOpeningStatus("");
+    },
+    onComplete(reason) { finishOpening(pendingFallbackKey || (reason === "skip" ? "fallbackStatic" : "")); },
   });
   introSequence.start();
+  playOpeningVideoFromGesture();
+}
+
+function playOpeningVideoFromGesture() {
   try {
     const playback = elements.openingVideo.play();
     if (playback && typeof playback.catch === "function") playback.catch(() => introSequence?.playbackRejected());
   } catch {
-    introSequence.playbackRejected();
+    introSequence?.playbackRejected();
   }
+}
+
+function retryOpeningFromGesture() {
+  if (openingFinished || !introSequence || !elements.openingStage.hidden) return;
+  if (!introSequence.retry()) return;
+  elements.openingVideo.defaultMuted = true;
+  elements.openingVideo.muted = true;
+  elements.openingVideo.playsInline = true;
+  elements.openingVideo.setAttribute("playsinline", "");
+  elements.openingVideo.setAttribute("webkit-playsinline", "");
+  try { elements.openingVideo.currentTime = 0; } catch { /* The browser may still be loading metadata. */ }
+  elements.retry.hidden = true;
+  setOpeningStatus("videoLoading");
+  playOpeningVideoFromGesture();
 }
 
 function toggleMusic() {
   if (!musicUrl) return;
-  if (elements.music.paused) {
-    elements.music.muted = false;
-    try {
-      void elements.music.play().then(() => {
-        elements.musicToggle.setAttribute("aria-pressed", "false");
-        musicStatusKey = "musicPlaying";
-        elements.musicStatus.textContent = copy[activeLanguage].musicPlaying;
-        renderLanguage();
-      }).catch(() => {
-        musicStatusKey = "musicBlocked";
-        elements.musicStatus.textContent = copy[activeLanguage].musicBlocked;
-      });
-    } catch {
-      musicStatusKey = "musicBlocked";
-      elements.musicStatus.textContent = copy[activeLanguage].musicBlocked;
-    }
+  if (!elements.music.paused && !elements.music.ended) {
+    elements.music.pause();
+    updateMusicButtonLabel();
+    setMusicStatus("");
     return;
   }
-  elements.music.muted = !elements.music.muted;
-  elements.musicToggle.setAttribute("aria-pressed", String(elements.music.muted));
-  elements.musicToggle.setAttribute("aria-label", copy[activeLanguage][elements.music.muted ? "musicUnmute" : "musicMute"]);
-  elements.musicStatus.textContent = elements.music.muted ? copy[activeLanguage].musicUnmute : copy[activeLanguage].musicPlaying;
-  musicStatusKey = elements.music.muted ? "musicUnmute" : "musicPlaying";
+  startMusicFromGesture();
 }
 
 function validateForm() {
@@ -495,8 +528,12 @@ elements.form.addEventListener("input", clearFieldError, { signal });
 elements.form.addEventListener("change", clearFieldError, { signal });
 elements.form.addEventListener("submit", handleSubmit, { signal });
 elements.open.addEventListener("click", handleOpenInvitation, { signal });
+elements.retry.addEventListener("click", retryOpeningFromGesture, { signal });
 elements.skip.addEventListener("click", () => introSequence?.skip(), { signal });
 elements.musicToggle.addEventListener("click", toggleMusic, { signal });
+elements.music.addEventListener("play", () => { updateMusicButtonLabel(); setMusicStatus("musicPlaying"); }, { signal });
+elements.music.addEventListener("pause", updateMusicButtonLabel, { signal });
+elements.music.addEventListener("error", () => { updateMusicButtonLabel(); setMusicStatus("musicUnavailable"); }, { signal });
 window.addEventListener("pagehide", cleanup, { once: true, signal });
 
 renderLanguage();

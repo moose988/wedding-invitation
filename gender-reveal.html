@@ -6,7 +6,7 @@
     <meta name="theme-color" content="#fbf5ed" />
     <meta name="referrer" content="no-referrer" />
     <title>Gender Reveal Party</title>
-    <link rel="stylesheet" href="./gender-reveal.css?v=part2-1" />
+    <link rel="stylesheet" href="./gender-reveal.css?v=mobile-playback-vinyl-1" />
   </head>
   <body class="gender-reveal-page">
     <div class="gr-app" id="genderRevealApp" aria-busy="true">
@@ -18,8 +18,13 @@
             <button type="button" data-language="ar" lang="ar" aria-pressed="false">عربي</button>
           </div>
           <div class="gr-music" id="musicControls" hidden>
-            <button class="gr-icon-button" type="button" id="musicToggle" aria-label="Mute music" aria-pressed="false" hidden>
-              <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 10v4h4l5 4V6l-5 4H4Z"/><path class="gr-music-wave" d="M16 9a4 4 0 0 1 0 6m2-9a7 7 0 0 1 0 12"/></svg>
+            <button class="gr-vinyl-toggle" type="button" id="musicToggle" aria-label="Play event music" aria-pressed="false" data-state="paused" hidden>
+              <img class="gr-vinyl-toggle__record" src="./invitations/wedding-designs/layla-zaid/assets/wedding-vinyl-record.webp" alt="" aria-hidden="true" draggable="false" />
+              <svg class="gr-vinyl-toggle__indicator" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+                <circle cx="12" cy="12" r="10" />
+                <path class="gr-vinyl-toggle__play-mark" d="M10 7.8a.8.8 0 0 1 1.22-.68l6.1 4.2a.82.82 0 0 1 0 1.36l-6.1 4.2A.8.8 0 0 1 10 16.2z" />
+                <path class="gr-vinyl-toggle__pause-mark" d="M8.1 7.5h2.7v9H8.1zm5.1 0h2.7v9h-2.7z" />
+              </svg>
             </button>
             <span class="gr-sr-only" id="musicStatus" role="status" aria-live="polite"></span>
           </div>
@@ -45,9 +50,10 @@
 
       <section class="gr-opening" id="openingStage" aria-label="Opening invitation" hidden>
         <img class="gr-opening__poster" id="openingPoster" alt="" />
-        <video id="openingVideo" playsinline webkit-playsinline muted controls preload="none" aria-label="Gender reveal invitation opening video"></video>
+        <video id="openingVideo" playsinline webkit-playsinline muted preload="none" disablepictureinpicture disableremoteplayback aria-label="Gender reveal invitation opening video"></video>
         <div class="gr-opening__tools">
           <p class="gr-opening__status" id="openingStatus" role="status" aria-live="polite"></p>
+          <button class="gr-button gr-button--light" id="retryOpening" type="button" hidden><span data-copy="retryOpening">Retry video</span><span aria-hidden="true">↻</span></button>
           <button class="gr-button gr-button--light" id="skipOpening" type="button"><span data-copy="skip">Skip</span><span aria-hidden="true">→</span></button>
         </div>
       </section>
@@ -137,6 +143,6 @@
 
       <audio id="eventMusic" preload="none" loop></audio>
     </div>
-    <script type="module" src="./gender-reveal.js?v=part2-1"></script>
+    <script type="module" src="./gender-reveal.js?v=mobile-playback-vinyl-1"></script>
   </body>
 </html>

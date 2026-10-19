@@ -32,7 +32,7 @@ test("invitation QR visibility defaults to enabled and is synchronized through e
   assert.match(rules, /hasOnly\(\["showInvitationQr", "updatedAt"\]\)/);
   assert.match(rules, /request\.resource\.data\.showInvitationQr is bool/);
   assert.match(rules, /request\.resource\.data\.updatedAt == request\.time/);
-  assert.match(rules, /\|\| isInvitationQrSettingsUpdate\(weddingId\)/);
+  assert.match(rules, /changed\.hasOnly\(\["showInvitationQr", "updatedAt"\]\)\s*&& isInvitationQrSettingsUpdate\(weddingId\)/);
 });
 
 test("seating is enabled for old events, persists per event, and gates seating UI across invitation designs", async () => {
@@ -70,7 +70,7 @@ test("seating is enabled for old events, persists per event, and gates seating U
   assert.match(rules, /function isInvitationSeatingSettingsUpdate\(weddingId\)/);
   assert.match(rules, /hasOnly\(\["seatingEnabled", "updatedAt"\]\)/);
   assert.match(rules, /request\.resource\.data\.seatingEnabled is bool/);
-  assert.match(rules, /\|\| isInvitationSeatingSettingsUpdate\(weddingId\)/);
+  assert.match(rules, /changed\.hasOnly\(\["seatingEnabled", "updatedAt"\]\)\s*&& isInvitationSeatingSettingsUpdate\(weddingId\)/);
   assert.match(weddings, /seatingEnabled:f\.seatingEnabled\.checked/);
   assert.match(weddings, /showInvitationQr:f\.showInvitationQr\.checked/);
   assert.match(weddings, /seatingEnabled:wedding\.seatingEnabled !== false/);

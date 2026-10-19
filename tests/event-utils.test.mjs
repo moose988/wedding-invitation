@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { EVENT_CATEGORIES, eventUsesGuestSides, getDefaultGuestSide, getEventCategory, getEventDisplayTitle, isCelebrationEvent, isWeddingEvent } from "../event-utils.js";
+import { EVENT_CATEGORIES, eventUsesGuestSides, getDefaultGuestSide, getEventCategory, getEventDisplayTitle, isCelebrationEvent, isGenderRevealEvent, isWeddingEvent } from "../event-utils.js";
 
 test("legacy event documents default to wedding behavior and derive a safe title", () => {
   assert.equal(getEventCategory({}), EVENT_CATEGORIES.WEDDING_ENGAGEMENT);
@@ -26,4 +26,14 @@ test("celebrations use their title and neutral guest grouping", () => {
 
 test("unknown category values safely retain legacy wedding behavior", () => {
   assert.equal(getEventCategory({ eventCategory: "other" }), EVENT_CATEGORIES.WEDDING_ENGAGEMENT);
+});
+
+test("gender reveal events use general attendees without changing legacy categories", () => {
+  const event = { eventCategory: "gender_reveal", eventTitle: "Gender Reveal Party" };
+  assert.equal(getEventCategory(event), EVENT_CATEGORIES.GENDER_REVEAL);
+  assert.equal(isGenderRevealEvent(event), true);
+  assert.equal(isWeddingEvent(event), false);
+  assert.equal(isCelebrationEvent(event), false);
+  assert.equal(eventUsesGuestSides(event), false);
+  assert.equal(getDefaultGuestSide(event), "general");
 });

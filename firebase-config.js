@@ -14,6 +14,7 @@ import {
   initializeAuth,
   onAuthStateChanged,
   signInWithEmailAndPassword,
+  signInAnonymously,
   signOut,
 } from "https://www.gstatic.com/firebasejs/12.19.0/firebase-auth.js";
 import {
@@ -122,6 +123,19 @@ export function initPublicFirebase() {
   });
 }
 
+// Shared gender-reveal submissions use an isolated anonymous Auth session so
+// the invitation page never mutates planner/dashboard authentication state.
+// This initializer is intentionally called only after the submit action.
+export function initGenderRevealSubmissionFirebase() {
+  return serviceCache.get("gender-reveal-submission", () => {
+    const { app, config } = getConfiguredApp("gender-reveal-submission");
+    const auth = initializeAuth(app, { persistence: inMemoryPersistence });
+    const db = getFirestore(app);
+    connectLocalServices(app, auth, db);
+    return { app, auth, db, config };
+  });
+}
+
 export async function createIsolatedCustomer(email, password) {
   const { app } = getConfiguredApp(`customer-onboarding-${crypto.randomUUID()}`);
   const auth = initializeAuth(app, { persistence: inMemoryPersistence });
@@ -151,6 +165,7 @@ export {
   serverTimestamp,
   setDoc,
   signInWithEmailAndPassword,
+  signInAnonymously,
   signOut,
   updateDoc,
   where,

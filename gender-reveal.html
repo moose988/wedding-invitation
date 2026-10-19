@@ -1,0 +1,55 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="referrer" content="no-referrer" />
+    <title>Gender Reveal Party</title>
+  </head>
+  <body>
+    <main>
+      <p id="pageStatus" role="status" data-en="Loading event…" data-ar="جارٍ تحميل المناسبة…">Loading event…</p>
+      <article id="eventPanel" hidden>
+        <h1 id="eventTitle"></h1>
+        <p id="eventDate"></p>
+        <p id="eventVenue" hidden><span id="eventVenueName"></span> <a id="eventMapLink" data-en="Open map" data-ar="افتح الخريطة" target="_blank" rel="noopener noreferrer" hidden>Open map</a></p>
+        <img id="eventArtwork" alt="" hidden />
+        <video id="eventOpeningVideo" controls playsinline hidden></video>
+        <audio id="eventMusic" controls hidden></audio>
+        <p id="eventMessage"></p>
+        <label>Language
+          <select id="eventLanguage"><option value="en">English</option><option value="ar">العربية</option></select>
+        </label>
+        <section id="responseFormSection" hidden>
+          <h2 data-en="RSVP and make your prediction" data-ar="أكد حضورك وتوقع جنس المولود">RSVP and make your prediction</h2>
+          <form id="responseForm">
+            <label><span data-en="Full name" data-ar="الاسم الكامل">Full name</span> <input name="fullName" maxlength="120" autocomplete="name" required /></label>
+            <label><span data-en="Country" data-ar="الدولة">Country</span>
+              <select name="countryCallingCode" id="countryCallingCode" required></select>
+            </label>
+            <label><span data-en="International phone number" data-ar="رقم الهاتف الدولي">International phone number</span> <input name="phone" type="tel" maxlength="32" autocomplete="tel" required /></label>
+            <fieldset><legend data-en="Will you attend?" data-ar="هل ستحضر؟">Will you attend?</legend>
+              <label><input type="radio" name="attendance" value="attending" required /> <span data-en="Attending" data-ar="سأحضر">Attending</span></label>
+              <label><input type="radio" name="attendance" value="not_attending" required /> <span data-en="Not attending" data-ar="لن أحضر">Not attending</span></label>
+            </fieldset>
+            <fieldset><legend data-en="Your prediction" data-ar="توقعك">Your prediction</legend>
+              <label><input type="radio" name="prediction" value="boy" required /> <span data-en="Boy" data-ar="ولد">Boy</span></label>
+              <label><input type="radio" name="prediction" value="girl" required /> <span data-en="Girl" data-ar="بنت">Girl</span></label>
+            </fieldset>
+            <label><span data-en="Message to the parents (optional)" data-ar="رسالة للوالدين (اختياري)">Message to the parents (optional)</span>
+              <textarea name="message" maxlength="1000" rows="4"></textarea>
+            </label>
+            <button type="submit" data-en="Submit response" data-ar="إرسال الرد">Submit response</button>
+            <p id="formStatus" role="status" aria-live="polite"></p>
+          </form>
+        </section>
+        <section id="results" aria-live="polite" hidden>
+          <h2 data-en="Predictions" data-ar="التوقعات">Predictions</h2>
+          <p><span data-en="Boy" data-ar="ولد">Boy</span>: <strong id="boyResult">0</strong> (<span id="boyPercent">0%</span>)</p>
+          <p><span data-en="Girl" data-ar="بنت">Girl</span>: <strong id="girlResult">0</strong> (<span id="girlPercent">0%</span>)</p>
+        </section>
+      </article>
+    </main>
+    <script type="module" src="./gender-reveal.js?v=gender-reveal-part1"></script>
+  </body>
+</html>

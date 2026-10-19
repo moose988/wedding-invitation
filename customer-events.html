@@ -71,6 +71,7 @@
             <div class="event-category-grid" role="radiogroup" aria-label="Event category">
               <label class="event-category-card"><input type="radio" name="eventCategory" value="wedding_engagement" required /><span><strong>Wedding / Engagement</strong><small>For weddings, engagements, and couple celebrations.</small></span></label>
               <label class="event-category-card"><input type="radio" name="eventCategory" value="celebration" required /><span><strong>Celebration</strong><small>For birthdays, graduations, anniversaries, and other occasions.</small></span></label>
+              <label class="event-category-card"><input type="radio" name="eventCategory" value="gender_reveal" required /><span><strong>Gender Reveal Party</strong><small>حفل الكشف عن جنس المولود · Shared invitation and RSVP.</small></span></label>
             </div>
             <button class="primary-button" id="continueEventButton" type="button" disabled>Continue</button>
           </section>
@@ -91,11 +92,12 @@
           <label class="event-identity wedding-identity">Bride name<input name="brideName" autocomplete="given-name" /></label><label class="event-identity wedding-identity">Groom name<input name="groomName" autocomplete="given-name" /></label>
           <label class="event-identity celebration-identity full">Event name<input name="eventTitle" placeholder="Ahmed’s Graduation" /></label>
           <label>Event date<input name="eventDate" type="date" required /></label><label>Event time<input name="eventTime" type="time" required /></label>
-          <label class="full">Venue<input name="venueEn" required /></label>
+          <label class="full event-venue-field">Venue<input name="venueEn" required /></label>
           <label>Location<input name="location" /></label><label>Maps URL<input name="mapsUrl" type="url" placeholder="https://…" /></label>
-          <label>WhatsApp country code<input name="whatsAppCountryCode" inputmode="numeric" placeholder="971" /></label><label>Invitation language<select name="invitationLanguage"><option value="en">English</option><option value="ar">Arabic</option><option value="both">English & Arabic</option></select></label>
+          <label class="sender-control">WhatsApp country code<input name="whatsAppCountryCode" inputmode="numeric" placeholder="971" /></label><label>Invitation language<select name="invitationLanguage"><option value="en">English</option><option value="ar">Arabic</option><option value="both">English & Arabic</option></select></label>
           <label>Status<select name="status"><option value="draft">Draft</option><option value="upcoming">Upcoming</option><option value="active">Active</option><option value="completed">Completed</option></select></label>
           <label class="full">Planner notes<textarea name="plannerNotes" rows="3"></textarea></label>
+          <label class="full gender-reveal-ar-title" hidden>Arabic event name<input name="eventTitleAr" maxlength="160" value="حفل الكشف عن جنس المولود" /></label>
           <p class="form-error full" id="formError" role="alert"></p>
           </div>
         </div>

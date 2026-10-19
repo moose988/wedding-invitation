@@ -23,7 +23,7 @@ test("side links route through email/password sign-in and membership decides acc
   assert.match(rules, /function seatingMemberMayEditSide\(weddingId, side\)/);
   assert.match(rules, /allowedSide == "all"/);
   assert.match(rules, /allowedSide in \["bride", "groom", "family"\]/);
-  assert.match(rules, /category == "celebration" \? side == "general" : side != "general"/);
+  assert.match(rules, /category in \["celebration", "gender_reveal"\] \? side == "general" : side != "general"/);
   assert.equal(buildAuthRouteUrl("./dashboard.html", { weddingId: "event-42", side: "bride" }),
     "./dashboard.html?wedding=event-42&side=bride");
   assert.equal(buildAuthRouteUrl("./dashboard-login.html", { weddingId: "event-42", side: "bride", workspace: "side" }),

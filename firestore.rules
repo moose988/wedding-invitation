@@ -117,7 +117,7 @@ service cloud.firestore {
 
     function validEventCategory(data) {
       return !data.keys().hasAny(["eventCategory"]) ||
-        data.eventCategory in ["wedding_engagement", "celebration"];
+        data.eventCategory in ["wedding_engagement", "celebration", "gender_reveal"];
     }
 
     function validGuestSide(weddingId, guest, unchangedSide) {
@@ -125,7 +125,7 @@ service cloud.firestore {
       let known = side in ["general", "bride", "Bride", "bride side", "Bride Side", "brides side", "groom", "Groom", "groom side", "Groom Side", "grooms side", "family", "Family", "family side", "Family Side"];
       let legacyBoth = side in ["both", "Both", "both sides", "Both Sides", "shared", "Shared"] && unchangedSide;
       let category = get(/databases/$(database)/documents/weddings/$(weddingId)).data.get("eventCategory", "wedding_engagement");
-      return (known || legacyBoth) && (category == "celebration"
+      return (known || legacyBoth) && (category in ["celebration", "gender_reveal"]
         ? (side == "general" || unchangedSide)
         : (side != "general" || unchangedSide));
     }
@@ -171,7 +171,7 @@ service cloud.firestore {
         && event.get("seatingEnabled", true) == true
         && !(sideOnly && allowedSide == "family")
         && (allowedSide == "all" || (allowedSide in ["bride", "groom", "family"] && side == allowedSide))
-        && (category == "celebration" ? side == "general" : side != "general");
+        && (category in ["celebration", "gender_reveal"] ? side == "general" : side != "general");
     }
 
     function canManageUsers(weddingId) {
@@ -236,10 +236,14 @@ service cloud.firestore {
       return isCustomer(weddingId) && canEditEventDetails(weddingId)
         && request.resource.data.diff(resource.data).affectedKeys().hasOnly([
           "eventTitle", "coupleName", "brideName", "groomName", "eventDateISO", "timeEn", "timeAr",
-          "venueEn", "location", "locationEn", "mapsUrl", "whatsAppCountryCode", "invitationLanguage", "updatedAt"
+          "venueEn", "location", "locationEn", "mapsUrl", "whatsAppCountryCode", "invitationLanguage",
+          "eventTitleAr", "genderRevealArtworkUrl", "genderRevealOpeningVideoUrl", "genderRevealMusicUrl",
+          "genderRevealMessageEn", "genderRevealMessageAr", "updatedAt"
         ])
-        && (resource.data.get("eventCategory", "wedding_engagement") != "celebration"
+        && (resource.data.get("eventCategory", "wedding_engagement") == "wedding_engagement"
           || !request.resource.data.diff(resource.data).affectedKeys().hasAny(["coupleName", "brideName", "groomName"]))
+        && (!request.resource.data.diff(resource.data).affectedKeys().hasAny(["eventTitleAr", "genderRevealArtworkUrl", "genderRevealOpeningVideoUrl", "genderRevealMusicUrl", "genderRevealMessageEn", "genderRevealMessageAr"])
+          || resource.data.get("eventCategory", "wedding_engagement") == "gender_reveal")
         && validEventDetails(request.resource.data) && request.resource.data.updatedAt == request.time
         && request.resource.data.get("whatsAppCountryCode", "971").matches("^[0-9]{1,4}$")
         && request.resource.data.get("invitationLanguage", "en") in ["en", "ar"];
@@ -256,6 +260,7 @@ service cloud.firestore {
       return isSignedIn()
         && !isCustomer(weddingId)
         && (request.auth.uid == resource.data.ownerUserId || canManageUsers(weddingId) || canEditEventDetails(weddingId))
+        && get(/databases/$(database)/documents/weddings/$(weddingId)).data.get("eventCategory", "wedding_engagement") != "gender_reveal"
         && request.resource.data.diff(resource.data).affectedKeys()
           .hasOnly(["showInvitationQr", "updatedAt"])
         && request.resource.data.showInvitationQr is bool
@@ -266,6 +271,7 @@ service cloud.firestore {
       return isSignedIn()
         && !isCustomer(weddingId)
         && (request.auth.uid == resource.data.ownerUserId || canManageUsers(weddingId) || canEditEventDetails(weddingId))
+        && get(/databases/$(database)/documents/weddings/$(weddingId)).data.get("eventCategory", "wedding_engagement") != "gender_reveal"
         && request.resource.data.diff(resource.data).affectedKeys()
           .hasOnly(["seatingEnabled", "updatedAt"])
         && request.resource.data.seatingEnabled is bool
@@ -275,13 +281,14 @@ service cloud.firestore {
     function validEventDetails(data) {
       let mapsUrl = data.get("mapsUrl", "");
       let venueMapEmbedUrl = data.get("venueMapEmbedUrl", "");
+      let category = data.get("eventCategory", "wedding_engagement");
       return data.eventTitle is string
         && data.eventTitle.size() > 0
         && data.eventTitle.size() <= 160
         && data.eventDateISO is string
         && data.eventDateISO.matches("^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}\\.\\d{3}Z$")
         && data.venueEn is string
-        && data.venueEn.size() > 0
+        && (category == "gender_reveal" || data.venueEn.size() > 0)
         && data.venueEn.size() <= 200
         && data.get("location", "") is string
         && data.get("locationEn", "") is string
@@ -293,8 +300,30 @@ service cloud.firestore {
         && venueMapEmbedUrl.size() <= 3000
         && (venueMapEmbedUrl == "" || venueMapEmbedUrl.matches("^https://www\\.google\\.com/maps/embed\\?pb=.+$"))
         && (!data.keys().hasAny(["schedule"]) || (data.schedule is list && data.schedule.size() <= 12))
-        && (!data.keys().hasAny(["eventCategory"]) || data.eventCategory in ["wedding_engagement", "celebration"])
+        && (!data.keys().hasAny(["eventCategory"]) || data.eventCategory in ["wedding_engagement", "celebration", "gender_reveal"])
+        && (category != "gender_reveal" || validGenderRevealEventDetails(data))
         && (!data.keys().hasAny(["status"]) || data.status in ["draft", "upcoming", "active", "completed", "archived"]);
+    }
+
+    function validGenderRevealEventDetails(data) {
+      let artwork = data.get("genderRevealArtworkUrl", "");
+      let openingVideo = data.get("genderRevealOpeningVideoUrl", "");
+      let music = data.get("genderRevealMusicUrl", "");
+      let messageEn = data.get("genderRevealMessageEn", "");
+      let messageAr = data.get("genderRevealMessageAr", "");
+      let titleAr = data.get("eventTitleAr", "");
+      return data.venueEn is string && data.venueEn.size() <= 200
+        && data.get("eventTimeZone", "") == "Asia/Dubai"
+        && data.get("guestGroupMode", "general") == "general"
+        && data.get("seatingEnabled", false) == false
+        && data.get("showInvitationQr", false) == false
+        && data.get("invitationLanguage", "en") in ["en", "ar"]
+        && titleAr is string && titleAr.size() <= 160
+        && artwork is string && artwork.size() <= 2048 && (artwork == "" || artwork.matches("^https://[^ ]+$"))
+        && openingVideo is string && openingVideo.size() <= 2048 && (openingVideo == "" || openingVideo.matches("^https://[^ ]+$"))
+        && music is string && music.size() <= 2048 && (music == "" || music.matches("^https://[^ ]+$"))
+        && messageEn is string && messageEn.size() <= 1000
+        && messageAr is string && messageAr.size() <= 1000;
     }
 
     function isOwnerEventDetailsUpdate(weddingId) {
@@ -304,9 +333,11 @@ service cloud.firestore {
         && request.resource.data.get("status", "") in ["draft", "upcoming", "active", "archived"];
       return !isCustomer(weddingId) && (isPlatformAdmin() || request.auth.uid == resource.data.ownerUserId || canEditEventDetails(weddingId))
         && changes.hasOnly([
-          "eventCategory", "eventTitle", "coupleName", "brideName", "groomName",
+          "eventCategory", "eventTitle", "eventTitleAr", "coupleName", "brideName", "groomName",
           "eventDateISO", "timeEn", "timeAr", "venueEn", "location", "locationEn",
-          "mapsUrl", "venueMapEmbedUrl", "schedule", "whatsAppCountryCode", "invitationLanguage", "plannerNotes", "status", "updatedAt"
+          "mapsUrl", "venueMapEmbedUrl", "schedule", "whatsAppCountryCode", "invitationLanguage", "plannerNotes", "status", "updatedAt",
+          "eventTimeZone", "guestGroupMode", "genderRevealArtworkUrl", "genderRevealOpeningVideoUrl", "genderRevealMusicUrl",
+          "genderRevealMessageEn", "genderRevealMessageAr", "seatingEnabled", "showInvitationQr"
         ])
         && (statusUnchanged || normalStatusChange)
         && validEventDetails(request.resource.data);
@@ -314,6 +345,143 @@ service cloud.firestore {
 
     function isFullDashboardAccount(weddingId) {
       return canViewDashboard(weddingId) && !isSeatingOnlyDashboardAccount(weddingId);
+    }
+
+    function isAnonymousFirebaseSession() {
+      return isSignedIn() && request.auth.token.get("firebase", {}).get("sign_in_provider", "") == "anonymous";
+    }
+
+    function genderRevealSubmissionAllowed(weddingId) {
+      return isAnonymousFirebaseSession() && isPublicWedding(weddingId)
+        && get(/databases/$(database)/documents/weddings/$(weddingId)).data.eventCategory == "gender_reveal";
+    }
+
+    function genderRevealResponsePath(weddingId, responseId) {
+      return /databases/$(database)/documents/weddings/$(weddingId)/genderRevealResponses/$(responseId);
+    }
+
+    function genderRevealPhoneKeyPath(weddingId, phoneE164) {
+      return /databases/$(database)/documents/weddings/$(weddingId)/genderRevealPhoneKeys/$(phoneE164);
+    }
+
+    function genderRevealStatePath(weddingId) {
+      return /databases/$(database)/documents/weddings/$(weddingId)/genderRevealState/summary;
+    }
+
+    function genderRevealAggregatePath(weddingId) {
+      return /databases/$(database)/documents/weddings/$(weddingId)/genderRevealResults/aggregate;
+    }
+
+    function validGenderRevealResponseId(responseId) {
+      return responseId.matches("^[A-Za-z0-9_-]{20,64}$");
+    }
+
+    function validGenderRevealPhone(phoneE164) {
+      return phoneE164 is string && phoneE164.matches("^\\+[1-9]\\d{7,14}$");
+    }
+
+    function validGenderRevealResponseData(data, phoneE164) {
+      return data.keys().hasOnly(["fullName", "phoneE164", "attendance", "prediction", "message", "createdAt"])
+        && data.fullName is string && data.fullName.size() > 0 && data.fullName.size() <= 120
+        && data.phoneE164 == phoneE164 && validGenderRevealPhone(data.phoneE164)
+        && data.attendance in ["attending", "not_attending"]
+        && data.prediction in ["boy", "girl"]
+        && data.message is string && data.message.size() <= 1000
+        && data.createdAt == request.time;
+    }
+
+    function validGenderRevealSubmissionBundle(weddingId, responseId, phoneE164) {
+      let responsePath = genderRevealResponsePath(weddingId, responseId);
+      let keyPath = genderRevealPhoneKeyPath(weddingId, phoneE164);
+      let response = getAfter(responsePath).data;
+      let key = getAfter(keyPath).data;
+      return genderRevealSubmissionAllowed(weddingId)
+        && validGenderRevealResponseId(responseId)
+        && validGenderRevealPhone(phoneE164)
+        && !exists(responsePath) && !exists(keyPath)
+        && existsAfter(responsePath) && existsAfter(keyPath)
+        && getAfter(genderRevealStatePath(weddingId)).data.lastResponseId == responseId
+        && validGenderRevealResponseData(response, phoneE164)
+        && key.keys().hasOnly(["createdAt"]) && key.createdAt == request.time;
+    }
+
+    function validGenderRevealStateData(data) {
+      return data.keys().hasOnly(["boyCount", "girlCount", "totalCount", "lastResponseId", "updatedAt"])
+        && data.boyCount is int && data.boyCount >= 0
+        && data.girlCount is int && data.girlCount >= 0
+        && data.totalCount is int && data.totalCount == data.boyCount + data.girlCount
+        && validGenderRevealResponseId(data.lastResponseId)
+        && data.updatedAt == request.time;
+    }
+
+    function validGenderRevealStateCreate(weddingId) {
+      let responseId = request.resource.data.get("lastResponseId", "");
+      let response = getAfter(genderRevealResponsePath(weddingId, responseId)).data;
+      return !exists(genderRevealStatePath(weddingId))
+        && !exists(genderRevealAggregatePath(weddingId))
+        && validGenderRevealStateData(request.resource.data)
+        && validGenderRevealSubmissionBundle(weddingId, responseId, response.phoneE164)
+        && request.resource.data.boyCount == (response.prediction == "boy" ? 1 : 0)
+        && request.resource.data.girlCount == (response.prediction == "girl" ? 1 : 0)
+        && request.resource.data.totalCount == 1;
+    }
+
+    function validGenderRevealStateUpdate(weddingId) {
+      let responseId = request.resource.data.get("lastResponseId", "");
+      let response = getAfter(genderRevealResponsePath(weddingId, responseId)).data;
+      let oldState = resource.data;
+      let aggregate = get(genderRevealAggregatePath(weddingId)).data;
+      return validGenderRevealSubmissionBundle(weddingId, responseId, response.phoneE164)
+        && validGenderRevealStateData(request.resource.data)
+        && request.resource.data.diff(oldState).affectedKeys().hasOnly(["boyCount", "girlCount", "totalCount", "lastResponseId", "updatedAt"])
+        && aggregate.boyCount == oldState.boyCount
+        && aggregate.girlCount == oldState.girlCount
+        && aggregate.totalCount == oldState.totalCount
+        && request.resource.data.boyCount == oldState.boyCount + (response.prediction == "boy" ? 1 : 0)
+        && request.resource.data.girlCount == oldState.girlCount + (response.prediction == "girl" ? 1 : 0)
+        && request.resource.data.totalCount == oldState.totalCount + 1;
+    }
+
+    function validGenderRevealAggregateData(data) {
+      return data.keys().hasOnly(["boyCount", "girlCount", "totalCount", "updatedAt"])
+        && data.boyCount is int && data.boyCount >= 0
+        && data.girlCount is int && data.girlCount >= 0
+        && data.totalCount is int && data.totalCount == data.boyCount + data.girlCount
+        && data.updatedAt == request.time;
+    }
+
+    function validGenderRevealAggregateCreate(weddingId) {
+      let state = getAfter(genderRevealStatePath(weddingId)).data;
+      let response = getAfter(genderRevealResponsePath(weddingId, state.lastResponseId)).data;
+      return genderRevealSubmissionAllowed(weddingId)
+        && !exists(genderRevealAggregatePath(weddingId))
+        && !exists(genderRevealStatePath(weddingId))
+        && validGenderRevealAggregateData(request.resource.data)
+        && validGenderRevealSubmissionBundle(weddingId, state.lastResponseId, response.phoneE164)
+        && state.boyCount == request.resource.data.boyCount
+        && state.girlCount == request.resource.data.girlCount
+        && state.totalCount == request.resource.data.totalCount
+        && state.totalCount == 1;
+    }
+
+    function validGenderRevealAggregateUpdate(weddingId) {
+      let statePath = genderRevealStatePath(weddingId);
+      let state = getAfter(statePath).data;
+      let oldState = get(statePath).data;
+      let response = getAfter(genderRevealResponsePath(weddingId, state.lastResponseId)).data;
+      return genderRevealSubmissionAllowed(weddingId)
+        && validGenderRevealAggregateData(request.resource.data)
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(["boyCount", "girlCount", "totalCount", "updatedAt"])
+        && resource.data.boyCount == oldState.boyCount
+        && resource.data.girlCount == oldState.girlCount
+        && resource.data.totalCount == oldState.totalCount
+        && validGenderRevealSubmissionBundle(weddingId, state.lastResponseId, response.phoneE164)
+        && state.boyCount == request.resource.data.boyCount
+        && state.girlCount == request.resource.data.girlCount
+        && state.totalCount == request.resource.data.totalCount
+        && state.boyCount == oldState.boyCount + (response.prediction == "boy" ? 1 : 0)
+        && state.girlCount == oldState.girlCount + (response.prediction == "girl" ? 1 : 0)
+        && state.totalCount == oldState.totalCount + 1;
     }
 
     function isOwnerLifecycleUpdate(weddingId) {
@@ -414,6 +582,7 @@ service cloud.firestore {
         && data.keys().hasAll(["eventId", "wedding", "guest", "rsvpStatus", "additionalGuests", "rsvpMessage", "expiresAt", "updatedAt"])
         && data.eventId == weddingId
         && data.wedding is map
+        && data.wedding.eventCategory in ["wedding_engagement", "celebration", "gender_reveal"]
         && data.wedding.keys().hasOnly([
           "eventTitle", "coupleName", "brideName", "groomName", "brideNameAr", "groomNameAr",
           "eventCategory", "eventDateISO", "rsvpDeadlineISO", "timeEn", "timeAr", "venueEn",
@@ -450,17 +619,21 @@ service cloud.firestore {
 
     function canonicalSharedEvent(weddingId, data) {
       let event = getAfter(/databases/$(database)/documents/weddings/$(weddingId)).data;
+      let genderReveal = event.get("eventCategory", "wedding_engagement") == "gender_reveal";
       let items = event.get("schedule", []);
       let hasSharedSchedule = data.keys().hasAny(["scheduleCount"]);
       let expected = {
           "eventTitle": event.get("eventTitle", ""),
-          "coupleName": event.get("coupleName", ""),
-          "brideName": event.get("brideName", ""),
-          "groomName": event.get("groomName", ""),
-          "brideNameAr": event.get("brideNameAr", ""),
-          "groomNameAr": event.get("groomNameAr", ""),
+          "eventTitleAr": event.get("eventTitleAr", ""),
+          "coupleName": genderReveal ? "" : event.get("coupleName", ""),
+          "brideName": genderReveal ? "" : event.get("brideName", ""),
+          "groomName": genderReveal ? "" : event.get("groomName", ""),
+          "brideNameAr": genderReveal ? "" : event.get("brideNameAr", ""),
+          "groomNameAr": genderReveal ? "" : event.get("groomNameAr", ""),
           "eventCategory": event.get("eventCategory", "wedding_engagement"),
+          "eventStatus": event.get("status", "draft"),
           "eventDateISO": event.get("eventDateISO", ""),
+          "eventTimeZone": event.get("eventTimeZone", ""),
           "rsvpDeadlineISO": event.get("rsvpDeadlineISO", ""),
           "timeEn": event.get("timeEn", ""),
           "timeAr": event.get("timeAr", ""),
@@ -473,6 +646,11 @@ service cloud.firestore {
           "subtitleAr": event.get("subtitleAr", ""),
           "invitationMessageEn": event.get("invitationMessageEn", ""),
           "invitationMessageAr": event.get("invitationMessageAr", ""),
+          "genderRevealArtworkUrl": event.get("genderRevealArtworkUrl", ""),
+          "genderRevealOpeningVideoUrl": event.get("genderRevealOpeningVideoUrl", ""),
+          "genderRevealMusicUrl": event.get("genderRevealMusicUrl", ""),
+          "genderRevealMessageEn": event.get("genderRevealMessageEn", ""),
+          "genderRevealMessageAr": event.get("genderRevealMessageAr", ""),
           "invitationLanguage": event.get("invitationLanguage", "en"),
           "showInvitationQr": event.get("showInvitationQr", true),
           "seatingEnabled": event.get("seatingEnabled", true),
@@ -500,19 +678,20 @@ service cloud.firestore {
       let guestId = getAfter(invitationTokenPath(weddingId, token)).data.guestId;
       let guest = getAfter(/databases/$(database)/documents/weddings/$(weddingId)/guests/$(guestId)).data;
       let event = getAfter(/databases/$(database)/documents/weddings/$(weddingId)).data;
+      let genderReveal = event.get("eventCategory", "wedding_engagement") == "gender_reveal";
       return !isCustomer(weddingId) || ((data.wedding == {
           "canonicalLayout": true, "tables": [], "hallObjects": [],
-          "eventTitle": event.get("eventTitle", ""), "coupleName": event.get("coupleName", ""),
-          "brideName": event.get("brideName", ""), "groomName": event.get("groomName", ""),
-          "brideNameAr": event.get("brideNameAr", ""), "groomNameAr": event.get("groomNameAr", ""),
+          "eventTitle": event.get("eventTitle", ""), "coupleName": genderReveal ? "" : event.get("coupleName", ""),
+          "brideName": genderReveal ? "" : event.get("brideName", ""), "groomName": genderReveal ? "" : event.get("groomName", ""),
+          "brideNameAr": genderReveal ? "" : event.get("brideNameAr", ""), "groomNameAr": genderReveal ? "" : event.get("groomNameAr", ""),
           "eventCategory": event.get("eventCategory", "wedding_engagement"), "eventDateISO": event.get("eventDateISO", ""),
           "rsvpDeadlineISO": event.get("rsvpDeadlineISO", ""), "timeEn": event.get("timeEn", ""), "timeAr": event.get("timeAr", ""),
           "venueEn": event.get("venueEn", ""), "location": event.get("location", ""), "locationEn": event.get("locationEn", ""),
           "mapsUrl": event.get("mapsUrl", ""), "venueMapEmbedUrl": event.get("venueMapEmbedUrl", ""),
           "subtitleEn": event.get("subtitleEn", ""), "subtitleAr": event.get("subtitleAr", ""),
           "invitationMessageEn": event.get("invitationMessageEn", ""), "invitationMessageAr": event.get("invitationMessageAr", ""),
-          "invitationLanguage": event.get("invitationLanguage", "en"), "showInvitationQr": event.get("showInvitationQr", true),
-          "seatingEnabled": event.get("seatingEnabled", true), "schedule": []
+          "invitationLanguage": event.get("invitationLanguage", "en"), "showInvitationQr": genderReveal ? false : event.get("showInvitationQr", true),
+          "seatingEnabled": genderReveal ? false : event.get("seatingEnabled", true), "schedule": []
         } || (exists(/databases/$(database)/documents/weddings/$(weddingId)/publicGuests/$(token))
           && data.wedding == resource.data.wedding))
         && canonicalPublicAssignments(data.guest.seatingAssignments, guest.get("seatingAssignments", []))
@@ -937,7 +1116,8 @@ service cloud.firestore {
 
       allow create: if isPlatformAdmin() &&
         request.auth.uid == request.resource.data.ownerUserId &&
-        request.resource.data.eventCategory in ["wedding_engagement", "celebration"];
+        request.resource.data.eventCategory in ["wedding_engagement", "celebration", "gender_reveal"] &&
+        (request.resource.data.eventCategory != "gender_reveal" || validEventDetails(request.resource.data));
 
       // Table positions are stored in their own table documents, but the
       // stage/entrance markers live on the wedding document. Let seating
@@ -1157,6 +1337,47 @@ service cloud.firestore {
         allow delete: if isEventDeletingOwner(weddingId);
       }
 
+      match /genderRevealResponses/{responseId} {
+        function canReadGenderRevealResponses() {
+          return isEventOwner(weddingId) || isFullDashboardAccount(weddingId);
+        }
+        allow get, list: if canReadGenderRevealResponses() || isEventDeletingOwner(weddingId);
+        allow create: if validGenderRevealSubmissionBundle(weddingId, responseId, request.resource.data.phoneE164)
+          && validGenderRevealResponseData(request.resource.data, request.resource.data.phoneE164);
+        allow update: if false;
+        allow delete: if isEventDeletingOwner(weddingId);
+      }
+
+      match /genderRevealPhoneKeys/{phoneE164} {
+        allow get: if false;
+        allow list: if isEventDeletingOwner(weddingId);
+        allow create: if validGenderRevealSubmissionBundle(weddingId,
+          getAfter(genderRevealStatePath(weddingId)).data.lastResponseId, phoneE164)
+          && request.resource.data.keys().hasOnly(["createdAt"])
+          && request.resource.data.createdAt == request.time
+          && getAfter(genderRevealResponsePath(weddingId,
+            getAfter(genderRevealStatePath(weddingId)).data.lastResponseId)).data.phoneE164 == phoneE164;
+        allow update: if false;
+        allow delete: if isEventDeletingOwner(weddingId);
+      }
+
+      match /genderRevealState/{docId} {
+        allow get: if false;
+        allow list: if isEventDeletingOwner(weddingId);
+        allow create: if docId == "summary" && validGenderRevealStateCreate(weddingId);
+        allow update: if docId == "summary" && validGenderRevealStateUpdate(weddingId);
+        allow delete: if isEventDeletingOwner(weddingId);
+      }
+
+      match /genderRevealResults/{docId} {
+        allow get: if docId == "aggregate" && isPublicWedding(weddingId)
+          && get(/databases/$(database)/documents/weddings/$(weddingId)).data.eventCategory == "gender_reveal";
+        allow list: if isEventDeletingOwner(weddingId);
+        allow create: if docId == "aggregate" && validGenderRevealAggregateCreate(weddingId);
+        allow update: if docId == "aggregate" && validGenderRevealAggregateUpdate(weddingId);
+        allow delete: if isEventDeletingOwner(weddingId);
+      }
+
       match /publicScene/{docId} {
         allow get: if docId == "state" && eventAvailable(weddingId);
         allow list: if false;
@@ -1293,7 +1514,7 @@ service cloud.firestore {
         allow create, update: if isEventOwner(weddingId)
           && request.resource.data.keys().hasOnly(["eventId", "eventCategory", "stats", "updatedAt"])
           && request.resource.data.eventId == weddingId
-          && request.resource.data.eventCategory in ["wedding_engagement", "celebration"]
+          && request.resource.data.eventCategory in ["wedding_engagement", "celebration", "gender_reveal"]
           && request.resource.data.stats is map
           && request.resource.data.updatedAt == request.time;
         allow delete: if isEventDeletingOwner(weddingId);
@@ -1307,7 +1528,8 @@ service cloud.firestore {
           && request.resource.data.eventId == weddingId
           && request.resource.data.eventTitle is string && request.resource.data.eventTitle.size() <= 160
           && request.resource.data.coupleName is string && request.resource.data.coupleName.size() <= 160
-          && request.resource.data.eventCategory in ["wedding_engagement", "celebration"]
+          && request.resource.data.eventCategory in ["wedding_engagement", "celebration", "gender_reveal"]
+          && (request.resource.data.eventCategory != "gender_reveal" || request.resource.data.coupleName == "")
           && request.resource.data.seatingEnabled is bool
           && request.resource.data.seatingSchemaVersion is int
           && request.resource.data.stats is map

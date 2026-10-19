@@ -67,7 +67,7 @@ test("dashboard token creation is transactional and offers explicit revoke/regen
   assert.doesNotMatch(dashboard, /The invitation link is still being prepared/);
   assert.match(dashboard, /menuItem\("Regenerate invitation link", "regenerate-guest-invite"/);
   assert.match(dashboard, /menuItem\("Revoke invitation link", "revoke-guest-invite"/);
-  assert.match(dashboard, /state\.permissions\?\.seatingOnly === true\) return;[\s\S]*?onSnapshot\(collection\(state\.services\.db, "weddings", expectedWeddingId, "invitationSecrets"\)/);
+  assert.match(dashboard, /state\.permissions\?\.seatingOnly === true \|\| isGenderRevealEvent\(state\.wedding\)\) return;[\s\S]*?onSnapshot\(collection\(state\.services\.db, "weddings", expectedWeddingId, "invitationSecrets"\)/);
   assert.match(rules, /function canManageInvitationForGuest\(weddingId, guestId\)[\s\S]*?seatingAccountMayReadGuest\(weddingId, get\(guestPath\)\.data\)/);
   assert.match(rules, /match \/invitationSecrets\/\{guestId\}[\s\S]*?allow get: if canManageInvitationForGuest\(weddingId, guestId\);\s*allow list: if canManageGuestRecords\(weddingId\)/);
 });

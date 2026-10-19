@@ -31,12 +31,13 @@ import { commitGuestEdit, guestFormPatch, saveFailureMessage } from "./guest-edi
 import { projectionEqual } from "./event-publishing.js?v=20261018-guest-invitation-regressions-2";
 import { mountCustomerAccess } from "./customer-access-ui.js";
 import { createShareUrl } from "./share-link.js";
-import { exportGuests } from "./export.js";
+import { exportGuests, exportGenderRevealResponses } from "./export.js";
 import { buildInvitationProjection, generateInvitationToken, isValidInvitationToken } from "./invitations/shared/invitation-token.js?v=20261018-guest-invitation-regressions-2";
 import { createInvitationTokenService } from "./invitations/shared/invitation-token-service.js?v=20261018-guest-invitation-regressions-2";
 import { projectSeatAssignments, migrateLegacySeating, seatAssignmentRef, seatedPersonRef, seatOccupancyRef } from "./seating-firestore.js";
 import { canViewDashboardPage, canViewSeatingAccountPage, resolveDashboardPage, resolveSeatingAccountPage } from "./dashboard-access.js";
-import { eventUsesGuestSides, getDefaultGuestSide, getEventDisplayTitle, isCelebrationEvent } from "./event-utils.js";
+import { eventUsesGuestSides, getDefaultGuestSide, getEventDisplayTitle, isCelebrationEvent, isGenderRevealEvent } from "./event-utils.js";
+import { eventDateTimeParts, localDateTimeToIso } from "./event-date-time.js";
 import { attemptEventSettingsSave, bindEventSettingsFieldTracking, bindEventSettingsSubmit, canEditEventSettings, commitEventSettingsBatch, eventSettingsFeedback, eventSettingsHaveChanges, isEventSettingsSaveDisabled, updateEventSettingsSaveControl } from "./event-settings-state.js";
 import { createSenderPayload, encodeSenderPayload } from "./sender-codec.js";
 import {
@@ -1712,7 +1713,7 @@ async function bootstrapDashboard() {
     nextUrl.searchParams.delete("view");
     window.history.replaceState(null, "", nextUrl);
   }
-  if (state.editorMode && isCelebrationEvent(state.wedding)) {
+  if (state.editorMode && !eventUsesGuestSides(state.wedding)) {
     redirectToLogin("access-denied");
     return;
   }
@@ -1752,7 +1753,7 @@ async function ensureSeatingSchema() {
 }
 
 async function normalizeGuestSidesInBackground() {
-  if (!isWeddingOwner() || state.mode !== "live") return;
+  if (!isWeddingOwner() || state.mode !== "live" || isGenderRevealEvent(state.wedding)) return;
   const generation = state.listenerGeneration;
   try {
     const guestsSnapshot = await getDocs(
@@ -1760,7 +1761,7 @@ async function normalizeGuestSidesInBackground() {
     );
     const legacyGuests = guestsSnapshot.docs.filter((guestDoc) => {
       const side = guestDoc.data().side;
-      const desiredSide = isCelebrationEvent(state.wedding)
+      const desiredSide = !eventUsesGuestSides(state.wedding)
         ? "general"
         : (normalizeGuestSide(side) === "general" ? "family" : normalizeGuestSide(side));
       return side !== desiredSide;
@@ -1769,7 +1770,7 @@ async function normalizeGuestSidesInBackground() {
       const batch = writeBatch(state.services.db);
       legacyGuests.slice(offset, offset + 400).forEach((guestDoc) => {
         batch.update(guestDoc.ref, {
-          side: isCelebrationEvent(state.wedding)
+          side: !eventUsesGuestSides(state.wedding)
             ? "general"
             : (normalizeGuestSide(guestDoc.data().side) === "general" ? "family" : normalizeGuestSide(guestDoc.data().side)),
           updatedAt: serverTimestamp(),
@@ -1861,7 +1862,7 @@ function startListeners() {
       refreshAssignmentCandidatesAfterSnapshot();
       // Cached guest rows can predate a visitor's latest RSVP. Wait for the
       // server-backed snapshot before any one-time mirror repair is allowed.
-      if (!snapshot.metadata.fromCache) void hydrateGuestInvitationTokens(state.guests, generation);
+      if (!snapshot.metadata.fromCache && !isGenderRevealEvent(state.wedding)) void hydrateGuestInvitationTokens(state.guests, generation);
         },
     (error) => handleSeatingListenerError(error),
   );
@@ -1945,7 +1946,7 @@ function clearInvitationTokenCache() {
 }
 
 async function hydrateGuestInvitationTokens(guests, generation) {
-  if (state.mode !== "live" || !state.services?.db || !can("canEditGuests") || !state.currentUser?.uid || state.permissions?.seatingOnly === true) return;
+  if (state.mode !== "live" || !state.services?.db || !can("canEditGuests") || !state.currentUser?.uid || state.permissions?.seatingOnly === true || isGenderRevealEvent(state.wedding)) return;
   const expectedUid = state.currentUser.uid, expectedWeddingId = state.weddingId;
   const scope = `${expectedUid}:${expectedWeddingId}:${generation}`;
   if (state.invitationTokenScope === scope && state.unsubInvitationSecrets) return;
@@ -1984,7 +1985,7 @@ function startWeddingListener() {
         return;
       }
       const nextWedding = { ...snapshot.data(), id: snapshot.id };
-      if (state.editorMode && isCelebrationEvent(nextWedding)) {
+      if (state.editorMode && !eventUsesGuestSides(nextWedding)) {
         redirectToLogin("access-denied");
         return;
       }
@@ -2123,7 +2124,7 @@ function buildPublicStatsPayload(guests = state.guests, tables = state.tables, w
       invitesSent: rows.filter((guest) => guest.inviteSentAt || guest.reminderSentAt).length,
     };
   };
-  if (isCelebrationEvent(wedding)) return { eventCategory: "celebration", all: makeStats(guests) };
+  if (isCelebrationEvent(wedding) || isGenderRevealEvent(wedding)) return { eventCategory: wedding.eventCategory, all: makeStats(guests) };
   return {
     eventCategory: "wedding_engagement",
     sides: Object.fromEntries(["groom", "bride", "family"].map((side) => [
@@ -2196,7 +2197,7 @@ async function syncPublicStats({ force = false } = {}) {
   state.projectionSyncError = persistence.publicationError?.message || "";
   if (state.projectionSyncError) return;
   const stats = buildPublicStatsPayload(state.guests, state.tables, state.wedding);
-  const summary = { eventId: state.weddingId, eventTitle: getEventDisplayTitle(state.wedding).slice(0, 160), coupleName: String(state.wedding.coupleName || "").slice(0, 160), eventCategory: state.wedding.eventCategory || "wedding_engagement", seatingEnabled: state.wedding.seatingEnabled !== false, seatingSchemaVersion: Number(state.wedding.seatingSchemaVersion || 2), stats };
+  const summary = { eventId: state.weddingId, eventTitle: getEventDisplayTitle(state.wedding).slice(0, 160), coupleName: isGenderRevealEvent(state.wedding) ? "" : String(state.wedding.coupleName || "").slice(0, 160), eventCategory: state.wedding.eventCategory || "wedding_engagement", seatingEnabled: state.wedding.seatingEnabled !== false, seatingSchemaVersion: Number(state.wedding.seatingSchemaVersion || 2), stats };
   const summaryRef = doc(state.services.db, "weddings", state.weddingId, "publicSummary", "summary");
   const statsRef = doc(state.services.db, "weddings", state.weddingId, "publicStats", "summary");
   const old = await Promise.all([getDoc(summaryRef), getDoc(statsRef)]);
@@ -2546,9 +2547,9 @@ async function refreshDashboardData() {
 
 function renderOverviewMoreActions() {
   const actions = [
-    can("canExport") ? overviewMenuButton("Export guest list", "export-all") : "",
+    can("canExport") && !isGenderRevealEvent(state.wedding) ? overviewMenuButton("Export guest list", "export-all") : "",
     canViewDashboardPage("share", state.permissions)
-      ? overviewMenuButton("Copy invitation link", "copy-invitation-base")
+      ? overviewMenuButton(isGenderRevealEvent(state.wedding) ? "Copy shared Gender Reveal link" : "Copy invitation link", isGenderRevealEvent(state.wedding) ? "copy-gender-reveal-link" : "copy-invitation-base")
       : "",
     canViewDashboardPage("checkin", state.permissions)
       ? overviewMenuButton("Open check-in", "open-checkin")
@@ -3335,6 +3336,10 @@ function renderCheckinPage() {
 }
 
 function renderSharePage() {
+  if (isGenderRevealEvent(state.wedding)) {
+    elements.pageContent.innerHTML = `<section class="share-page"><article class="share-card share-card--sender"><p class="da3wa-eyebrow">Shared invitation</p><h2>Gender Reveal Party</h2><p>Share one event link with everyone. Guests RSVP and predict on the invitation page; per-guest invitations, sender links, QR passes, and seating are not used for this event.</p><button class="da3wa-button da3wa-button--primary" type="button" data-action="copy-gender-reveal-link">Copy shared invitation link</button></article></section>`;
+    return;
+  }
   elements.pageContent.innerHTML = `
     <section class="share-page">
       ${renderSenderCard()}
@@ -3353,9 +3358,10 @@ function eventSettingsDateParts(value) {
 }
 
 function eventSettingsDraftFromWedding(wedding = state.wedding) {
-  const parts = eventSettingsDateParts(wedding?.eventDateISO);
+  const parts = eventDateTimeParts(wedding?.eventDateISO, wedding?.eventTimeZone || "");
   return {
     eventTitle: wedding?.eventTitle || getEventDisplayTitle(wedding),
+    eventTitleAr: wedding?.eventTitleAr || "",
     brideName: wedding?.brideName || "",
     groomName: wedding?.groomName || "",
     eventDate: parts.date,
@@ -3367,6 +3373,11 @@ function eventSettingsDraftFromWedding(wedding = state.wedding) {
     invitationLanguage: wedding?.invitationLanguage || "en",
     venueMapEmbedUrl: wedding?.venueMapEmbedUrl || "",
     schedule: JSON.stringify(Array.isArray(wedding?.schedule) ? wedding.schedule : [], null, 2),
+    genderRevealArtworkUrl: wedding?.genderRevealArtworkUrl || "",
+    genderRevealOpeningVideoUrl: wedding?.genderRevealOpeningVideoUrl || "",
+    genderRevealMusicUrl: wedding?.genderRevealMusicUrl || "",
+    genderRevealMessageEn: wedding?.genderRevealMessageEn || "",
+    genderRevealMessageAr: wedding?.genderRevealMessageAr || "",
   };
 }
 
@@ -3401,10 +3412,11 @@ function updateEventSettingsFormState() {
 
 function validateEventSettingsDraft(draft) {
   const errors = {};
-  if (!/^[0-9]{1,4}$/.test(draft.whatsAppCountryCode || "971")) errors.whatsAppCountryCode = "Enter a country calling code (1 to 4 digits).";
+  const genderReveal = isGenderRevealEvent(state.wedding);
+  if (!genderReveal && !/^[0-9]{1,4}$/.test(draft.whatsAppCountryCode || "971")) errors.whatsAppCountryCode = "Enter a country calling code (1 to 4 digits).";
   if (!["en", "ar"].includes(draft.invitationLanguage || "en")) errors.invitationLanguage = "Choose English or Arabic.";
   if (!String(draft.eventTitle || "").trim()) errors.eventTitle = "Enter an event name.";
-  if (!String(draft.venueEn || "").trim()) errors.venueEn = "Enter a venue name.";
+  if (!isGenderRevealEvent(state.wedding) && !String(draft.venueEn || "").trim()) errors.venueEn = "Enter a venue name.";
   const dateValue = String(draft.eventDate || "");
   const timeValue = String(draft.eventTime || "");
   const parsed = new Date(`${dateValue}T${timeValue}`);
@@ -3426,19 +3438,35 @@ function validateEventSettingsDraft(draft) {
       errors.mapsUrl = "Enter a valid HTTP or HTTPS maps link, or leave it blank.";
     }
   }
-  const venueMapEmbedUrl = String(draft.venueMapEmbedUrl || "").trim();
-  if (venueMapEmbedUrl) {
-    try {
-      const url = new URL(venueMapEmbedUrl);
-      if (url.protocol !== "https:" || url.hostname !== "www.google.com" ||
-          url.pathname !== "/maps/embed" || !url.searchParams.has("pb") || venueMapEmbedUrl.length > 3000) {
-        throw new Error("Unsupported Google Maps embed URL.");
+  if (!genderReveal) {
+    const venueMapEmbedUrl = String(draft.venueMapEmbedUrl || "").trim();
+    if (venueMapEmbedUrl) {
+      try {
+        const url = new URL(venueMapEmbedUrl);
+        if (url.protocol !== "https:" || url.hostname !== "www.google.com" ||
+            url.pathname !== "/maps/embed" || !url.searchParams.has("pb") || venueMapEmbedUrl.length > 3000) {
+          throw new Error("Unsupported Google Maps embed URL.");
+        }
+      } catch {
+        errors.venueMapEmbedUrl = "Paste only the https://www.google.com/maps/embed?... URL from src=, not the full <iframe> tag.";
       }
-    } catch {
-      errors.venueMapEmbedUrl = "Paste only the https://www.google.com/maps/embed?... URL from src=, not the full <iframe> tag.";
     }
   }
-  try {
+  if (genderReveal) {
+    for (const [name, label, maxLength] of [
+      ["eventTitleAr", "Arabic event name", 160], ["genderRevealArtworkUrl", "Artwork URL", 2048],
+      ["genderRevealOpeningVideoUrl", "Opening video URL", 2048], ["genderRevealMusicUrl", "Music URL", 2048],
+      ["genderRevealMessageEn", "English message", 1000], ["genderRevealMessageAr", "Arabic message", 1000],
+    ]) {
+      const value = String(draft[name] || "").trim();
+      if (value.length > maxLength) errors[name] = `${label} must be ${maxLength} characters or fewer.`;
+      if (name.endsWith("Url") && value) {
+        try { const url = new URL(value); if (url.protocol !== "https:" || !url.hostname) throw new Error("Invalid URL"); }
+        catch { errors[name] = `Enter a valid HTTPS ${label.toLowerCase()}, or leave it blank.`; }
+      }
+    }
+  }
+  if (!genderReveal) try {
     const scheduleText = String(draft.schedule || "[]").trim();
     if (/<iframe\b/i.test(scheduleText) || /google\.com\/maps\/embed/i.test(scheduleText)) {
       errors.schedule = "This is map embed code. Paste only the URL from its src=\"…\" into Google Maps embed URL above. Leave this schedule as [] if you do not need a schedule.";
@@ -3470,19 +3498,20 @@ async function saveEventSettings(event) {
     return;
   }
 
-  const localDateTime = new Date(`${draft.eventDate}T${draft.eventTime}`);
-  const eventDateISO = localDateTime.toISOString();
+  const timeZone = isGenderRevealEvent(state.wedding) ? "Asia/Dubai" : (state.wedding.eventTimeZone || "");
+  const eventDateISO = localDateTimeToIso(draft.eventDate, draft.eventTime, timeZone);
+  const localDateTime = new Date(eventDateISO);
   const coupleName = [draft.brideName, draft.groomName].map((value) => String(value || "").trim()).filter(Boolean).join(" & ");
   const data = {
     eventTitle: String(draft.eventTitle).trim(),
     eventDateISO,
-    timeEn: localDateTime.toLocaleTimeString("en", { hour: "numeric", minute: "2-digit" }),
-    timeAr: `الساعة ${localDateTime.toLocaleTimeString("ar", { hour: "numeric", minute: "2-digit" })}`,
+    timeEn: localDateTime.toLocaleTimeString("en", { hour: "numeric", minute: "2-digit", ...(timeZone ? { timeZone } : {}) }),
+    timeAr: `الساعة ${localDateTime.toLocaleTimeString("ar", { hour: "numeric", minute: "2-digit", ...(timeZone ? { timeZone } : {}) })}`,
     venueEn: String(draft.venueEn).trim(),
     location: String(draft.location || "").trim(),
     locationEn: String(draft.location || "").trim(),
     mapsUrl: String(draft.mapsUrl || "").trim(),
-    whatsAppCountryCode: String(draft.whatsAppCountryCode || "971").trim(),
+    whatsAppCountryCode: isGenderRevealEvent(state.wedding) ? "971" : String(draft.whatsAppCountryCode || "971").trim(),
     invitationLanguage: draft.invitationLanguage || "en",
     ...(isWeddingOwner() ? { venueMapEmbedUrl: String(draft.venueMapEmbedUrl || "").trim(), schedule: JSON.parse(String(draft.schedule || "[]")) } : {}),
     updatedAt: serverTimestamp(),
@@ -3491,6 +3520,20 @@ async function saveEventSettings(event) {
     data.brideName = String(draft.brideName || "").trim();
     data.groomName = String(draft.groomName || "").trim();
     data.coupleName = coupleName || data.eventTitle;
+  }
+  if (isGenderRevealEvent(state.wedding)) {
+    Object.assign(data, {
+      eventTitleAr: String(draft.eventTitleAr || "").trim(),
+      genderRevealArtworkUrl: String(draft.genderRevealArtworkUrl || "").trim(),
+      genderRevealOpeningVideoUrl: String(draft.genderRevealOpeningVideoUrl || "").trim(),
+      genderRevealMusicUrl: String(draft.genderRevealMusicUrl || "").trim(),
+      genderRevealMessageEn: String(draft.genderRevealMessageEn || "").trim(),
+      genderRevealMessageAr: String(draft.genderRevealMessageAr || "").trim(),
+      seatingEnabled: false,
+      showInvitationQr: false,
+      eventTimeZone: "Asia/Dubai",
+      guestGroupMode: "general",
+    });
   }
 
   state.savingEventSettings = true;
@@ -3683,9 +3726,10 @@ function renderEventSettingsPage() {
     return;
   }
   const wedding = state.wedding || {};
+  const genderReveal = isGenderRevealEvent(wedding);
   const hideOptionsAndLifecycle = state.permissions?.seatingOnly === true ||
     Array.isArray(state.permissions?.allowedViews);
-  const hideInvitationScheduleAndMapEmbed = hideOptionsAndLifecycle;
+  const hideInvitationScheduleAndMapEmbed = hideOptionsAndLifecycle || genderReveal;
   if (!state.eventSettingsDraft || !state.dirtyEventSettings) {
     state.eventSettingsDraft = eventSettingsDraftFromWedding(wedding);
     state.eventSettingsOriginal = { ...state.eventSettingsDraft };
@@ -3694,12 +3738,12 @@ function renderEventSettingsPage() {
   const errors = state.eventSettingsErrors || {};
   const canEditDetails = canEditEventDetails();
   const canChangeOptions = state.mode === "live" && canManageInvitationSettings();
-  const showQr = state.eventSettingWrites.showInvitationQr?.pending
+  const showQr = !genderReveal && (state.eventSettingWrites.showInvitationQr?.pending
     ? state.eventSettingWrites.showInvitationQr.desired
-    : wedding.showInvitationQr !== false;
-  const seatingEnabled = state.eventSettingWrites.seatingEnabled?.pending
+    : wedding.showInvitationQr !== false);
+  const seatingEnabled = !genderReveal && (state.eventSettingWrites.seatingEnabled?.pending
     ? state.eventSettingWrites.seatingEnabled.desired
-    : wedding.seatingEnabled !== false;
+    : wedding.seatingEnabled !== false);
   const isCompleted = wedding.status === "completed";
   const statusAction = isCompleted ? "reopen-event" : "complete-event";
   const statusLabel = isCompleted ? "Reopen event" : "Mark event as completed";
@@ -3731,11 +3775,12 @@ function renderEventSettingsPage() {
     const message = errors[name] || "";
     return `<label class="event-settings-field${full ? " is-full" : ""}"><span>${label}${required ? " <b aria-hidden=\"true\">*</b>" : ""}</span><input class="da3wa-input" name="${name}" type="${type}" value="${escapeAttribute(value)}" data-event-setting-field ${required ? "required" : ""} ${autocomplete ? `autocomplete="${autocomplete}"` : ""} ${canEditDetails ? "" : "disabled aria-disabled=\"true\""} ${message ? "aria-invalid=\"true\"" : ""} /><small class="event-setting-error" role="alert">${escapeHtml(message)}</small></label>`;
   };
+  const textareaField = (name, label) => `<label class="event-settings-field is-full"><span>${label}</span><textarea class="da3wa-input" name="${name}" rows="4" maxlength="1000" data-event-setting-field ${canEditDetails ? "" : "disabled aria-disabled=\"true\""}>${escapeHtml(draft[name] || "")}</textarea><small class="event-setting-error" role="alert">${escapeHtml(errors[name] || "")}</small></label>`;
 
   const previousCustomerPanel = document.getElementById("customerAccessPanel");
   elements.pageContent.innerHTML = `
     <section class="event-settings-page">
-      ${hideOptionsAndLifecycle ? "" : `
+      ${hideOptionsAndLifecycle || genderReveal ? "" : `
       <section class="event-settings-section share-card" aria-labelledby="eventOptionsTitle">
         <header class="event-settings-section__header"><div><h2 id="eventOptionsTitle">Invitation and seating options</h2></div></header>
         <label class="invitation-setting-toggle">
@@ -3755,15 +3800,16 @@ function renderEventSettingsPage() {
           <div><h2>Event details</h2></div>
         </header>
         <div class="event-settings-fields">
-          ${field("eventTitle", isCelebrationEvent(wedding) ? "Event name" : "Event title", "text", true, true)}
-          ${isCelebrationEvent(wedding) ? "" : `${field("brideName", "Bride name", "text", false, false, "given-name")}${field("groomName", "Groom name", "text", false, false, "given-name")}`}
+          ${field("eventTitle", eventUsesGuestSides(wedding) ? "Event title" : "Event name", "text", true, true)}
+          ${eventUsesGuestSides(wedding) ? `${field("brideName", "Bride name", "text", false, false, "given-name")}${field("groomName", "Groom name", "text", false, false, "given-name")}` : ""}
           ${field("eventDate", "Event date", "date", false, true)}
           ${field("eventTime", "Event time", "time", false, true)}
-          ${field("venueEn", "Venue name", "text", false, true)}
+          ${field("venueEn", genderReveal ? "Venue name (optional)" : "Venue name", "text", false, !genderReveal)}
           ${field("location", "Location / address", "text", false, false, "street-address")}
           ${field("mapsUrl", "Maps link", "url", true, false)}
-          ${field("whatsAppCountryCode", "Country calling code", "text", false, true)}
+          ${genderReveal ? "" : field("whatsAppCountryCode", "Country calling code", "text", false, true)}
           <label class="event-settings-field"><span>Invitation language</span><select class="da3wa-input" name="invitationLanguage" data-event-setting-field ${canEditDetails ? "" : "disabled"}><option value="en" ${draft.invitationLanguage === "en" ? "selected" : ""}>English</option><option value="ar" ${draft.invitationLanguage === "ar" ? "selected" : ""}>Arabic</option></select></label>
+          ${genderReveal ? `${field("eventTitleAr", "Arabic event name", "text", true)}${field("genderRevealArtworkUrl", "Artwork URL", "url", true)}${field("genderRevealOpeningVideoUrl", "Opening video URL", "url", true)}${field("genderRevealMusicUrl", "Music URL", "url", true)}${textareaField("genderRevealMessageEn", "English invitation wording")}${textareaField("genderRevealMessageAr", "Arabic invitation wording")}` : ""}
           ${hideInvitationScheduleAndMapEmbed ? "" : `${field("venueMapEmbedUrl", "Google Maps embed URL", "url", true, false)}
           <p class="event-settings-timezone">Paste only the URL inside the Google Maps iframe's src="…" attribute, not the full iframe code. It is saved for this event only.</p>
           <label class="event-settings-field is-full"><span>Invitation schedule (JSON, optional)</span><textarea class="da3wa-input" name="schedule" rows="8" data-event-setting-field ${canEditDetails ? "" : "disabled aria-disabled=\"true\""}>${escapeHtml(draft.schedule || "[]")}</textarea><small class="event-setting-error" role="alert">${escapeHtml(errors.schedule || "")}</small><small class="event-settings-timezone">Use up to 12 JSON items with time, timeAr, titleEn, titleAr, descriptionEn, and descriptionAr. Leave [] to hide the schedule. The map URL belongs in Google Maps embed URL above.</small></label>`}
@@ -3874,7 +3920,7 @@ function renderSenderCard() {
 }
 
 function renderExportsPage() {
-  const cards = [
+  const cards = isGenderRevealEvent(state.wedding) ? [] : [
     exportCard(
       "All guests",
       "Guest directory with contact, party size, invitation, RSVP, and attendance data.",
@@ -3906,6 +3952,15 @@ function renderExportsPage() {
       "third",
     ),
   ];
+
+  if (isGenderRevealEvent(state.wedding) && can("canExport") && state.mode === "live") {
+    cards.push(exportCard(
+      "Gender Reveal responses",
+      "Export full names, phone numbers, attendance, predictions, and messages for this assigned event.",
+      "export-gender-reveal",
+      "third",
+    ));
+  }
 
   elements.pageContent.innerHTML = `
     <section class="exports-page">
@@ -4744,6 +4799,7 @@ async function copyPreparedInvitationLink(url, successMessage = "Invitation link
 }
 
 async function ensureGuestInvitationToken(guestId) {
+  if (isGenderRevealEvent(state.wedding)) throw new Error("Gender Reveal events use one shared invitation link.");
   const guest = state.guests.find((item) => item.id === guestId);
   if (!guest) throw new Error("Invitation unavailable.");
   if (state.mode === "demo") {
@@ -5032,6 +5088,9 @@ async function handleAction(action, dataset, event = null) {
         ).toString(),
       );
       return;
+    case "copy-gender-reveal-link":
+      if (isGenderRevealEvent(state.wedding)) await copyText(new URL(`gender-reveal.html?wedding=${encodeURIComponent(state.weddingId)}`, window.location.href).toString());
+      return;
     case "copy-dashboard":
       await copyText(
         new URL(
@@ -5079,6 +5138,9 @@ async function handleAction(action, dataset, event = null) {
       return;
     case "export-tables":
       await handleExport("tables");
+      return;
+    case "export-gender-reveal":
+      await handleExportGenderRevealResponses();
       return;
     case "export-bride":
       await handleExport("bride");
@@ -8351,6 +8413,7 @@ async function syncTablesAndGuests() {
 }
 
 async function handleExport(type) {
+  if (isGenderRevealEvent(state.wedding)) return;
   if (!eventUsesGuestSides(state.wedding) && ["bride", "groom"].includes(type)) type = "all";
   const filtered = (() => {
     switch (type) {
@@ -8403,6 +8466,19 @@ async function handleExport(type) {
     { includeSeating: type === "tables", includeSide: eventUsesGuestSides(state.wedding) },
   );
   showToast(`Guest export completed as ${format.toUpperCase()}.`, "success");
+}
+
+async function handleExportGenderRevealResponses() {
+  if (!isGenderRevealEvent(state.wedding) || state.mode !== "live" || !can("canExport")) return;
+  try {
+    const snapshot = await getDocs(collection(state.services.db, "weddings", state.weddingId, "genderRevealResponses"));
+    const responses = snapshot.docs.map((row) => row.data());
+    const format = await exportGenderRevealResponses(responses, `gender-reveal-responses-${state.weddingId}`);
+    showToast(`Gender Reveal response export completed as ${format.toUpperCase()}.`, "success");
+  } catch (error) {
+    console.error("Gender Reveal responses could not be exported.", error?.code || "unavailable");
+    showToast("You could not read response submissions for this event.", "error");
+  }
 }
 
 function hydrateTables(tables, guests = state.guests) {

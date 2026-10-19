@@ -1,11 +1,12 @@
 export const EVENT_CATEGORIES = Object.freeze({
   WEDDING_ENGAGEMENT: "wedding_engagement",
   CELEBRATION: "celebration",
+  GENDER_REVEAL: "gender_reveal",
 });
 
 export function getEventCategory(event) {
-  return event?.eventCategory === EVENT_CATEGORIES.CELEBRATION
-    ? EVENT_CATEGORIES.CELEBRATION
+  return Object.values(EVENT_CATEGORIES).includes(event?.eventCategory)
+    ? event.eventCategory
     : EVENT_CATEGORIES.WEDDING_ENGAGEMENT;
 }
 
@@ -17,10 +18,14 @@ export function isCelebrationEvent(event) {
   return getEventCategory(event) === EVENT_CATEGORIES.CELEBRATION;
 }
 
+export function isGenderRevealEvent(event) {
+  return getEventCategory(event) === EVENT_CATEGORIES.GENDER_REVEAL;
+}
+
 export function getEventDisplayTitle(event) {
   const title = String(event?.eventTitle || "").trim();
   if (title) return title;
-  if (isCelebrationEvent(event)) return "Untitled event";
+  if (!isWeddingEvent(event)) return "Untitled event";
   const coupleName = String(event?.coupleName || "").trim();
   if (coupleName) return coupleName;
   const brideName = String(event?.brideName || "").trim();
@@ -30,7 +35,7 @@ export function getEventDisplayTitle(event) {
 }
 
 export function getDefaultGuestSide(event) {
-  return isCelebrationEvent(event) ? "general" : "bride";
+  return eventUsesGuestSides(event) ? "bride" : "general";
 }
 
 export function eventUsesGuestSides(event) {

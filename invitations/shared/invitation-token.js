@@ -39,7 +39,11 @@ function validColor(value) {
 }
 
 export function buildInvitationProjection(weddingId, wedding = {}, guest = {}, tables = [], { canonicalLayout = false } = {}) {
-  const sourceTables = wedding.seatingEnabled === false ? [] : (Array.isArray(tables) ? tables : []).slice(0, 200);
+  const genderReveal = wedding.eventCategory === "gender_reveal";
+  const eventCategory = ["wedding_engagement", "celebration", "gender_reveal"].includes(wedding.eventCategory)
+    ? wedding.eventCategory
+    : "wedding_engagement";
+  const sourceTables = genderReveal || wedding.seatingEnabled === false ? [] : (Array.isArray(tables) ? tables : []).slice(0, 200);
   const tableIds = new Map(sourceTables.map((table, index) => [String(table.id || ""), canonicalLayout ? String(table.id) : `t${index + 1}`]));
   const projectedTables = sourceTables.map((table, index) => {
     const chairs = Array.isArray(table.chairs) ? table.chairs.slice(0, 250).map((chair, chairIndex) => ({
@@ -84,12 +88,12 @@ export function buildInvitationProjection(weddingId, wedding = {}, guest = {}, t
     eventId: weddingId,
     wedding: {
       eventTitle: text(wedding.eventTitle, 160),
-      coupleName: text(wedding.coupleName, 160),
-      brideName: text(wedding.brideName, 160),
-      groomName: text(wedding.groomName, 160),
-      brideNameAr: text(wedding.brideNameAr, 160),
-      groomNameAr: text(wedding.groomNameAr, 160),
-      eventCategory: wedding.eventCategory === "celebration" ? "celebration" : "wedding_engagement",
+      coupleName: genderReveal ? "" : text(wedding.coupleName, 160),
+      brideName: genderReveal ? "" : text(wedding.brideName, 160),
+      groomName: genderReveal ? "" : text(wedding.groomName, 160),
+      brideNameAr: genderReveal ? "" : text(wedding.brideNameAr, 160),
+      groomNameAr: genderReveal ? "" : text(wedding.groomNameAr, 160),
+      eventCategory,
       eventDateISO: text(wedding.eventDateISO, 40),
       rsvpDeadlineISO: text(wedding.rsvpDeadlineISO, 40),
       timeEn: text(wedding.timeEn, 80),
@@ -104,8 +108,8 @@ export function buildInvitationProjection(weddingId, wedding = {}, guest = {}, t
       invitationMessageEn: text(wedding.invitationMessageEn, 2000),
       invitationMessageAr: text(wedding.invitationMessageAr, 2000),
       invitationLanguage: wedding.invitationLanguage === "ar" ? "ar" : "en",
-      showInvitationQr: wedding.showInvitationQr !== false,
-      seatingEnabled: wedding.seatingEnabled !== false,
+      showInvitationQr: !genderReveal && wedding.showInvitationQr !== false,
+      seatingEnabled: !genderReveal && wedding.seatingEnabled !== false,
       schedule: canonicalLayout ? [] : Array.isArray(wedding.schedule) ? wedding.schedule.slice(0, 12).map((item) => ({
         titleEn: text(item?.titleEn, 160), titleAr: text(item?.titleAr, 160),
         timeEn: text(item?.timeEn, 80), timeAr: text(item?.timeAr, 80),

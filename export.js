@@ -77,6 +77,31 @@ export async function exportGuests(rows, fileBaseName = "guest-list", options = 
   }
 }
 
+export async function exportGenderRevealResponses(rows, fileBaseName = "gender-reveal-responses") {
+  const normalisedRows = rows.map((row) => ({
+    "Full Name": row.fullName || "",
+    "International Phone": row.phoneE164 || "",
+    Attendance: row.attendance === "attending" ? "Attending" : row.attendance === "not_attending" ? "Not attending" : "",
+    Prediction: row.prediction === "boy" ? "Boy" : row.prediction === "girl" ? "Girl" : "",
+    "Message to Parents": row.message || "",
+    "Submitted At": row.createdAt?.toDate?.().toLocaleString?.() || "",
+  }));
+  try {
+    const XLSX = await loadSheetJs();
+    const workbook = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(workbook, XLSX.utils.json_to_sheet(normalisedRows), "Responses");
+    XLSX.writeFile(workbook, `${fileBaseName}.xlsx`);
+    return "xlsx";
+  } catch {
+    const header = Object.keys(normalisedRows[0] || {
+      "Full Name": "", "International Phone": "", Attendance: "", Prediction: "", "Message to Parents": "", "Submitted At": "",
+    });
+    const csv = [header.map(csvCell).join(","), ...normalisedRows.map((row) => header.map((column) => csvCell(row[column])).join(","))].join("\r\n");
+    downloadFile(`${fileBaseName}.csv`, "text/csv;charset=utf-8", csv);
+    return "csv";
+  }
+}
+
 function normaliseAdditionalGuests(value) {
   const numberValue = Number(value);
   return Number.isInteger(numberValue) && numberValue >= 0 ? numberValue : 0;

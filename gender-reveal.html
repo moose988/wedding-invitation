@@ -1,55 +1,142 @@
 <!doctype html>
-<html lang="en">
+<html lang="en" dir="ltr">
   <head>
     <meta charset="utf-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <meta name="theme-color" content="#fbf5ed" />
     <meta name="referrer" content="no-referrer" />
     <title>Gender Reveal Party</title>
+    <link rel="stylesheet" href="./gender-reveal.css?v=part2-1" />
   </head>
-  <body>
-    <main>
-      <p id="pageStatus" role="status" data-en="Loading event…" data-ar="جارٍ تحميل المناسبة…">Loading event…</p>
-      <article id="eventPanel" hidden>
-        <h1 id="eventTitle"></h1>
-        <p id="eventDate"></p>
-        <p id="eventVenue" hidden><span id="eventVenueName"></span> <a id="eventMapLink" data-en="Open map" data-ar="افتح الخريطة" target="_blank" rel="noopener noreferrer" hidden>Open map</a></p>
-        <img id="eventArtwork" alt="" hidden />
-        <video id="eventOpeningVideo" controls playsinline hidden></video>
-        <audio id="eventMusic" controls hidden></audio>
-        <p id="eventMessage"></p>
-        <label>Language
-          <select id="eventLanguage"><option value="en">English</option><option value="ar">العربية</option></select>
-        </label>
-        <section id="responseFormSection" hidden>
-          <h2 data-en="RSVP and make your prediction" data-ar="أكد حضورك وتوقع جنس المولود">RSVP and make your prediction</h2>
-          <form id="responseForm">
-            <label><span data-en="Full name" data-ar="الاسم الكامل">Full name</span> <input name="fullName" maxlength="120" autocomplete="name" required /></label>
-            <label><span data-en="Country" data-ar="الدولة">Country</span>
-              <select name="countryCallingCode" id="countryCallingCode" required></select>
+  <body class="gender-reveal-page">
+    <div class="gr-app" id="genderRevealApp" aria-busy="true">
+      <header class="gr-topbar">
+        <a class="gr-brand" href="./" aria-label="QD Systems home">QD <span>EVENTS</span></a>
+        <div class="gr-topbar__actions">
+          <div class="gr-language" role="group" aria-label="Invitation language">
+            <button type="button" data-language="en" aria-pressed="true">EN</button>
+            <button type="button" data-language="ar" lang="ar" aria-pressed="false">عربي</button>
+          </div>
+          <div class="gr-music" id="musicControls" hidden>
+            <button class="gr-icon-button" type="button" id="musicToggle" aria-label="Mute music" aria-pressed="false" hidden>
+              <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 10v4h4l5 4V6l-5 4H4Z"/><path class="gr-music-wave" d="M16 9a4 4 0 0 1 0 6m2-9a7 7 0 0 1 0 12"/></svg>
+            </button>
+            <span class="gr-sr-only" id="musicStatus" role="status" aria-live="polite"></span>
+          </div>
+        </div>
+      </header>
+
+      <section class="gr-cover" id="cover" aria-labelledby="coverQuestion">
+        <img class="gr-cover__art" id="coverArtwork" alt="" fetchpriority="high" decoding="async" />
+        <div class="gr-cover__veil" aria-hidden="true"></div>
+        <div class="gr-cover__content">
+          <p class="gr-eyebrow" data-copy="coverEyebrow">A little celebration is on the way</p>
+          <h1 id="coverQuestion" data-copy="coverQuestion">Boy or Girl?</h1>
+          <p class="gr-cover__message" id="coverMessage">A little surprise is on the way…</p>
+          <p class="gr-cover__event-title" id="coverEventTitle">Gender Reveal Party</p>
+          <button class="gr-button gr-button--primary" id="openInvitation" type="button" disabled>
+            <span data-copy="openInvitation">Open invitation</span><span class="gr-button__arrow" aria-hidden="true">↗</span>
+          </button>
+          <p class="gr-page-status" id="pageStatus" role="status" aria-live="polite" data-copy="loading">Loading invitation…</p>
+        </div>
+        <span class="gr-cover__sparkle gr-cover__sparkle--one" aria-hidden="true">✦</span>
+        <span class="gr-cover__sparkle gr-cover__sparkle--two" aria-hidden="true">✧</span>
+      </section>
+
+      <section class="gr-opening" id="openingStage" aria-label="Opening invitation" hidden>
+        <img class="gr-opening__poster" id="openingPoster" alt="" />
+        <video id="openingVideo" playsinline webkit-playsinline muted controls preload="none" aria-label="Gender reveal invitation opening video"></video>
+        <div class="gr-opening__tools">
+          <p class="gr-opening__status" id="openingStatus" role="status" aria-live="polite"></p>
+          <button class="gr-button gr-button--light" id="skipOpening" type="button"><span data-copy="skip">Skip</span><span aria-hidden="true">→</span></button>
+        </div>
+      </section>
+
+      <main class="gr-invitation" id="invitationContent" hidden inert>
+        <section class="gr-event-card" aria-labelledby="eventTitle">
+          <span class="gr-event-card__ornament" aria-hidden="true">✧</span>
+          <p class="gr-eyebrow" data-copy="youAreInvited">You are invited</p>
+          <h2 id="eventTitle"></h2>
+          <p class="gr-event-card__date" id="eventDate"></p>
+          <p class="gr-event-card__message" id="eventMessage"></p>
+          <p class="gr-closed-notice" id="closedNotice" role="status" hidden data-copy="closed">Responses are not open for this event.</p>
+          <p class="gr-media-notice" id="mediaNotice" role="status" hidden></p>
+        </section>
+
+        <section class="gr-form-card" id="responseFormSection" aria-labelledby="formTitle" hidden>
+          <div class="gr-section-heading">
+            <span class="gr-eyebrow" data-copy="kindlyReply">Kindly reply</span>
+            <h2 id="formTitle" data-copy="formTitle">Share your RSVP and prediction</h2>
+            <p data-copy="formIntro">We would love to hear from you.</p>
+          </div>
+          <form id="responseForm" novalidate>
+            <label class="gr-field" for="fullName">
+              <span data-copy="fullName">Full name</span>
+              <input id="fullName" name="fullName" type="text" maxlength="120" autocomplete="name" required aria-describedby="fullNameError" />
+              <small class="gr-field__error" id="fullNameError" role="alert"></small>
             </label>
-            <label><span data-en="International phone number" data-ar="رقم الهاتف الدولي">International phone number</span> <input name="phone" type="tel" maxlength="32" autocomplete="tel" required /></label>
-            <fieldset><legend data-en="Will you attend?" data-ar="هل ستحضر؟">Will you attend?</legend>
-              <label><input type="radio" name="attendance" value="attending" required /> <span data-en="Attending" data-ar="سأحضر">Attending</span></label>
-              <label><input type="radio" name="attendance" value="not_attending" required /> <span data-en="Not attending" data-ar="لن أحضر">Not attending</span></label>
+
+            <fieldset class="gr-fieldset">
+              <legend data-copy="phone">International phone number</legend>
+              <div class="gr-phone-row" dir="ltr">
+                <label class="gr-sr-only" for="countryCallingCode" data-copy="country">Country calling code</label>
+                <select id="countryCallingCode" name="countryCallingCode" autocomplete="tel-country-code" required aria-describedby="phoneError"></select>
+                <input id="phone" name="phone" type="tel" maxlength="32" autocomplete="tel-national" inputmode="tel" dir="ltr" placeholder="50 123 4567" required aria-describedby="phoneError" />
+              </div>
+              <small class="gr-field__error" id="phoneError" role="alert"></small>
             </fieldset>
-            <fieldset><legend data-en="Your prediction" data-ar="توقعك">Your prediction</legend>
-              <label><input type="radio" name="prediction" value="boy" required /> <span data-en="Boy" data-ar="ولد">Boy</span></label>
-              <label><input type="radio" name="prediction" value="girl" required /> <span data-en="Girl" data-ar="بنت">Girl</span></label>
+
+            <fieldset class="gr-fieldset">
+              <legend data-copy="attendance">Will you attend?</legend>
+              <div class="gr-choice-row">
+                <label class="gr-choice gr-choice--pink"><input type="radio" name="attendance" value="attending" required /><span data-copy="attending">Attending</span></label>
+                <label class="gr-choice gr-choice--blue"><input type="radio" name="attendance" value="not_attending" required /><span data-copy="notAttending">Not attending</span></label>
+              </div>
+              <small class="gr-field__error" id="attendanceError" role="alert"></small>
             </fieldset>
-            <label><span data-en="Message to the parents (optional)" data-ar="رسالة للوالدين (اختياري)">Message to the parents (optional)</span>
-              <textarea name="message" maxlength="1000" rows="4"></textarea>
+
+            <fieldset class="gr-fieldset">
+              <legend data-copy="prediction">What is your prediction?</legend>
+              <div class="gr-choice-row">
+                <label class="gr-choice gr-choice--blue"><input type="radio" name="prediction" value="boy" required /><span class="gr-choice__icon" aria-hidden="true">☁</span><span data-copy="boy">Boy</span></label>
+                <label class="gr-choice gr-choice--pink"><input type="radio" name="prediction" value="girl" required /><span class="gr-choice__icon" aria-hidden="true">♡</span><span data-copy="girl">Girl</span></label>
+              </div>
+              <small class="gr-field__error" id="predictionError" role="alert"></small>
+            </fieldset>
+
+            <label class="gr-field" for="message">
+              <span><span data-copy="message">Message to the parents</span> <em data-copy="optional">Optional</em></span>
+              <textarea id="message" name="message" maxlength="1000" rows="4" aria-describedby="messageHint"></textarea>
+              <small class="gr-field__hint" id="messageHint" data-copy="messageHint">Up to 1,000 characters.</small>
+              <small class="gr-field__error" id="messageError" role="alert"></small>
             </label>
-            <button type="submit" data-en="Submit response" data-ar="إرسال الرد">Submit response</button>
-            <p id="formStatus" role="status" aria-live="polite"></p>
+
+            <button class="gr-button gr-button--primary gr-submit" type="submit" id="submitResponse"><span data-copy="submit">Submit response</span></button>
+            <p class="gr-form-status" id="formStatus" role="status" aria-live="polite"></p>
           </form>
         </section>
-        <section id="results" aria-live="polite" hidden>
-          <h2 data-en="Predictions" data-ar="التوقعات">Predictions</h2>
-          <p><span data-en="Boy" data-ar="ولد">Boy</span>: <strong id="boyResult">0</strong> (<span id="boyPercent">0%</span>)</p>
-          <p><span data-en="Girl" data-ar="بنت">Girl</span>: <strong id="girlResult">0</strong> (<span id="girlPercent">0%</span>)</p>
+
+        <section class="gr-thanks-card" id="thankYou" aria-labelledby="thankYouTitle" hidden>
+          <div class="gr-thanks-card__icon" aria-hidden="true">♡</div>
+          <p class="gr-eyebrow" data-copy="saved">Response saved</p>
+          <h2 id="thankYouTitle" data-copy="thankYou">Thank you for sharing your prediction!</h2>
+          <p data-copy="thankYouBody">Your kind wishes mean so much.</p>
+          <section class="gr-results" id="results" aria-labelledby="resultsTitle" hidden>
+            <h3 id="resultsTitle" data-copy="resultsTitle">The predictions so far</h3>
+            <div class="gr-results__row gr-results__row--boy"><span><span data-copy="boy">Boy</span><strong id="boyResult">0</strong></span><span id="boyPercent">0%</span></div>
+            <div class="gr-results__bar" role="progressbar" id="boyBar" aria-label="Boy predictions" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0"><span id="boyFill"></span></div>
+            <div class="gr-results__row gr-results__row--girl"><span><span data-copy="girl">Girl</span><strong id="girlResult">0</strong></span><span id="girlPercent">0%</span></div>
+            <div class="gr-results__bar" role="progressbar" id="girlBar" aria-label="Girl predictions" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0"><span id="girlFill"></span></div>
+            <p class="gr-results__total" id="resultTotal"></p>
+          </section>
+          <p class="gr-results-status" id="resultsStatus" role="status" aria-live="polite" hidden></p>
         </section>
-      </article>
-    </main>
-    <script type="module" src="./gender-reveal.js?v=gender-reveal-part1"></script>
+
+        <footer class="gr-footer"><span data-copy="madeWith">Made with care by</span> <a href="https://qdsystems.ae" target="_blank" rel="noopener noreferrer">QD Systems</a></footer>
+      </main>
+
+      <audio id="eventMusic" preload="none" loop></audio>
+    </div>
+    <script type="module" src="./gender-reveal.js?v=part2-1"></script>
   </body>
 </html>

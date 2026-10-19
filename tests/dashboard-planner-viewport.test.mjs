@@ -123,7 +123,9 @@ test("desktop sidebar preference is separate from the accessible mobile drawer",
   assert.match(html, /id="sidebarCloseButton" aria-label="Close navigation"/);
   assert.match(dashboard, /dashboardSidebarStorageKey,[\s\S]*?state\.sidebarCollapsed \? "1" : "0"/);
   assert.match(dashboard, /event\.key === "Tab"[\s\S]*?state\.sidebarOpen[\s\S]*?focusable/);
-  assert.match(dashboard, /function closeMobileSidebar\(\)[\s\S]*?elements\.seatingMobileNavButton[\s\S]*?elements\.navToggleButton\)\?\.focus\(\)/);
+  const closeMobileSidebar = dashboard.match(/function closeMobileSidebar\(\)[\s\S]*?\n\}/)?.[0] || "";
+  assert.match(closeMobileSidebar, /state\.sidebarOpen = false;[\s\S]*?elements\.navToggleButton\?\.focus\(\)/);
+  assert.doesNotMatch(closeMobileSidebar, /seatingMobileNavButton/);
   assert.match(css, /\.da3wa-app\.is-sidebar-collapsed\s*\{\s*grid-template-columns: 76px minmax\(0, 1fr\)/);
   assert.match(css, /\.da3wa-app\.is-sidebar-collapsed > \.da3wa-sidebar\s*\{\s*display: grid/);
   assert.match(css, /\.da3wa-app\.is-sidebar-collapsed \.da3wa-nav-label,/);

@@ -109,6 +109,14 @@ export function createInvitationTokenService({ db, firestore, tokenFactory = gen
           throw new Error("Invitation unavailable.");
         }
         const projection = buildInvitationProjection(weddingId, wedding, sourceGuest, tables, { canonicalLayout: true });
+        const secretPatch = {};
+        const indexPatch = {};
+        if (!projectionEqual(secret.wedding, projection.wedding)) secretPatch.wedding = projection.wedding;
+        if (!projectionEqual(oldIndex.seatingAssignments, projection.guest.seatingAssignments)) {
+          indexPatch.seatingAssignments = projection.guest.seatingAssignments;
+        }
+        if (Object.keys(secretPatch).length) transaction.update(refs.secret, { ...secretPatch, updatedAt: firestore.serverTimestamp() });
+        if (Object.keys(indexPatch).length) transaction.update(oldRefs.index, { ...indexPatch, updatedAt: firestore.serverTimestamp() });
         if (!projectionEqual(oldPublic.wedding, projection.wedding) ||
             !projectionEqual(oldPublic.guest, projection.guest)) {
           transaction.update(oldRefs.public, {
@@ -152,11 +160,13 @@ export function createInvitationTokenService({ db, firestore, tokenFactory = gen
       transaction.set(refs.secret, {
         token: nextToken, status: "active", purpose: "guest-invitation", version,
         expiresAt: null, createdAt: secret.createdAt || firestore.serverTimestamp(),
-        updatedAt: firestore.serverTimestamp(), ...(requestId ? { lastIssueRequestId: requestId } : {}),
+        updatedAt: firestore.serverTimestamp(), wedding: projection.wedding,
+        ...(requestId ? { lastIssueRequestId: requestId } : {}),
       });
       transaction.set(nextRefs.index, {
         guestId, status: "active", purpose: "guest-invitation", version,
         expiresAt: null, createdAt: firestore.serverTimestamp(), updatedAt: firestore.serverTimestamp(),
+        seatingAssignments: projection.guest.seatingAssignments,
       });
       transaction.set(nextRefs.public, publicData);
       return nextToken;

@@ -78,6 +78,10 @@ test("Gender Reveal Spark rules enforce category creation, atomic RSVP uniquenes
       fullName: "Public bypass", phoneE164: "+971501234567", attendance: "attending", prediction: "boy", message: "", createdAt: serverTimestamp(),
     }));
     await assertFails(setDoc(doc(db, `weddings/${eventId}/genderRevealPhoneKeys/+971501234567`), { createdAt: serverTimestamp() }));
+    const publicDb = env.unauthenticatedContext().firestore();
+    const aggregatePath = `weddings/${eventId}/genderRevealResults/aggregate`;
+    const beforeFirstSubmission = await assertSucceeds(getDoc(doc(publicDb, aggregatePath)));
+    assert.equal(beforeFirstSubmission.exists(), false, "the public result path is readable, but is not created before the first valid response");
 
     const duplicateForm = {
       fullName: "Guest One", phone: "050 123 4567", countryCallingCode: "971",
@@ -88,6 +92,11 @@ test("Gender Reveal Spark rules enforce category creation, atomic RSVP uniquenes
     assert.equal(duplicateResults.filter((result) => result.status === "rejected").length, 1);
     const duplicateError = duplicateResults.find((result) => result.status === "rejected").reason;
     assert.equal(duplicateError.code, "permission-denied", "the private uniqueness key cannot be read to identify a duplicate");
+
+    const publicResultsBeforeNextSubmission = await assertSucceeds(getDoc(doc(publicDb, aggregatePath)));
+    assert.deepEqual(publicResultsBeforeNextSubmission.data(), {
+      boyCount: 1, girlCount: 0, totalCount: 1, updatedAt: publicResultsBeforeNextSubmission.data().updatedAt,
+    }, "existing aggregate results are publicly readable before a visitor submits");
 
     await submit({
       fullName: "Guest Two", phone: "202-555-0114", countryCallingCode: "1",
@@ -106,13 +115,12 @@ test("Gender Reveal Spark rules enforce category creation, atomic RSVP uniquenes
     await assertFails(setDoc(doc(db, `weddings/${eventId}/genderRevealState/summary`), {
       boyCount: 99, girlCount: 0, totalCount: 99, lastResponseId: "malicious-counter-write-1234", updatedAt: serverTimestamp(),
     }));
-    const publicDb = env.unauthenticatedContext().firestore();
     await assertFails(getDoc(doc(publicDb, `weddings/${eventId}/genderRevealResponses/${responseIds[0]}`)));
     await assertFails(getDocs(query(collection(publicDb, `weddings/${eventId}/genderRevealResponses`))));
     await assertFails(getDocs(query(collection(anonymousDb, `weddings/${eventId}/genderRevealResponses`))));
     await assertFails(getDoc(doc(anonymousDb, `weddings/${eventId}/genderRevealState/summary`)));
     await assertFails(getDocs(query(collection(anonymousDb, `weddings/${eventId}/genderRevealPhoneKeys`))));
-    await assertSucceeds(getDoc(aggregateRef));
+    await assertSucceeds(getDoc(doc(publicDb, aggregatePath)));
 
     const customerDb = env.authenticatedContext("event-customer").firestore();
     const customerRows = await assertSucceeds(getDocs(query(collection(customerDb, `weddings/${eventId}/genderRevealResponses`))));
@@ -120,6 +128,8 @@ test("Gender Reveal Spark rules enforce category creation, atomic RSVP uniquenes
     assert.equal(customerRows.docs.some((row) => row.data().phoneE164 === "+971501234567"), true);
     const eventRef = doc(customerDb, `weddings/${eventId}`);
     await assertSucceeds(updateDoc(eventRef, { genderRevealMessageAr: "رسالة تجريبية", updatedAt: serverTimestamp() }));
+    await assertSucceeds(updateDoc(eventRef, { genderRevealArtworkUrl: "/images/custom-cover.png", updatedAt: serverTimestamp() }));
+    await assertFails(updateDoc(eventRef, { genderRevealArtworkUrl: "/images/../private.png", updatedAt: serverTimestamp() }));
     await assertFails(updateDoc(eventRef, { seatingEnabled: true, updatedAt: serverTimestamp() }));
     await assertFails(getDoc(doc(anonymousDb, `weddings/${eventId}/genderRevealResponses/${customerRows.docs[0].id}`)));
     await assertFails(getDocs(query(collection(customerDb, `weddings/${otherEventId}/genderRevealResponses`))));

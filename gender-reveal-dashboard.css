@@ -1,0 +1,116 @@
+body.is-gender-reveal {
+  --grd-ink: #473f3c;
+  --grd-muted: #7d716a;
+  --grd-ivory: #fbf6ef;
+  --grd-card: #fffdfa;
+  --grd-pink: #d6909d;
+  --grd-blue: #83abc4;
+  --grd-line: #e9ddd5;
+}
+
+body.is-gender-reveal .dashboard-main,
+body.is-gender-reveal .dashboard-content,
+body.is-gender-reveal #pageContent { color: var(--grd-ink); }
+
+body.is-gender-reveal .gr-dashboard { display: grid; max-width: 1380px; gap: 19px; padding-bottom: 30px; }
+body.is-gender-reveal .gr-dashboard-hero { display: flex; align-items: end; justify-content: space-between; gap: 22px; padding: clamp(23px, 4vw, 39px); border: 1px solid #eadbd3; border-radius: 24px; background: radial-gradient(circle at 88% 0, rgba(200, 222, 233, .56), transparent 36%), radial-gradient(circle at 6% 100%, rgba(246, 218, 219, .58), transparent 37%), #fffaf4; box-shadow: 0 12px 32px rgba(103, 77, 62, .08); }
+body.is-gender-reveal .gr-dashboard-hero h2,
+body.is-gender-reveal .gr-dashboard-card h2,
+body.is-gender-reveal .gr-dashboard-card h3 { margin: 0; color: #514641; font-family: "Fraunces", Georgia, serif; font-weight: 600; }
+body.is-gender-reveal .gr-dashboard-hero h2 { font-size: clamp(1.65rem, 3vw, 2.45rem); }
+body.is-gender-reveal .gr-dashboard-hero p:not(.da3wa-eyebrow) { margin: 9px 0 0; color: var(--grd-muted); line-height: 1.6; }
+body.is-gender-reveal .gr-dashboard-actions { display: flex; flex-wrap: wrap; gap: 9px; }
+body.is-gender-reveal .gr-dashboard-actions .da3wa-button { white-space: nowrap; }
+body.is-gender-reveal .gr-stats-grid { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 12px; }
+body.is-gender-reveal .gr-stat { display: grid; min-height: 116px; align-content: space-between; gap: 12px; padding: 17px 18px; border: 1px solid var(--grd-line); border-radius: 18px; background: var(--grd-card); box-shadow: 0 6px 18px rgba(103, 77, 62, .045); }
+body.is-gender-reveal .gr-stat > span { color: #7e716a; font-size: .78rem; font-weight: 650; }
+body.is-gender-reveal .gr-stat strong { color: #504743; font-size: clamp(1.35rem, 2vw, 1.9rem); font-variant-numeric: tabular-nums; line-height: 1.05; }
+body.is-gender-reveal .gr-stat--attending { background: linear-gradient(145deg, #fffdfa, #fff0ee); }
+body.is-gender-reveal .gr-stat--declined { background: linear-gradient(145deg, #fffdfa, #eef5f8); }
+body.is-gender-reveal .gr-stat--boy { background: linear-gradient(145deg, #fffdfa, #eaf3f7); }
+body.is-gender-reveal .gr-stat--girl { background: linear-gradient(145deg, #fffdfa, #fbeded); }
+body.is-gender-reveal .gr-stat--boy strong { color: #5d8aa3; }
+body.is-gender-reveal .gr-stat--girl strong { color: #b87380; }
+body.is-gender-reveal .gr-dashboard-card { min-width: 0; padding: clamp(19px, 3vw, 28px); border: 1px solid var(--grd-line); border-radius: 21px; background: var(--grd-card); box-shadow: 0 9px 25px rgba(103, 77, 62, .055); }
+body.is-gender-reveal .gr-dashboard-card__heading { display: flex; align-items: center; justify-content: space-between; gap: 18px; }
+body.is-gender-reveal .gr-dashboard-card__heading h2 { font-size: 1.45rem; }
+body.is-gender-reveal .gr-dashboard-card__heading p:not(.da3wa-eyebrow) { margin: 7px 0 0; color: var(--grd-muted); font-size: .88rem; line-height: 1.5; }
+body.is-gender-reveal .gr-dashboard-card__heading > span { flex: none; color: #867970; font-size: .83rem; }
+body.is-gender-reveal .gr-prediction-summary { max-width: 770px; }
+body.is-gender-reveal .gr-prediction-summary h3 { font-size: 1.55rem; }
+body.is-gender-reveal .gr-prediction-summary__item { display: grid; gap: 9px; margin-top: 23px; }
+body.is-gender-reveal .gr-prediction-summary__item > div:first-child { display: flex; align-items: baseline; justify-content: space-between; gap: 14px; }
+body.is-gender-reveal .gr-prediction-summary__item strong { font-size: .94rem; }
+body.is-gender-reveal .gr-prediction-summary__item > div:first-child span { color: #776a63; font-size: .86rem; font-variant-numeric: tabular-nums; }
+body.is-gender-reveal .gr-prediction-summary__item--boy strong { color: #5d8aa3; }
+body.is-gender-reveal .gr-prediction-summary__item--girl strong { color: #b87380; }
+body.is-gender-reveal .gr-prediction-track { height: 12px; overflow: hidden; border-radius: 999px; background: #f0e8e2; }
+body.is-gender-reveal .gr-prediction-track span { display: block; height: 100%; border-radius: inherit; transition: width .35s ease; }
+body.is-gender-reveal .gr-prediction-summary__item--boy .gr-prediction-track span { background: linear-gradient(90deg, #bed9e5, #80b0c8); }
+body.is-gender-reveal .gr-prediction-summary__item--girl .gr-prediction-track span { background: linear-gradient(90deg, #f1c6cb, #d48c98); }
+body.is-gender-reveal .gr-dashboard-note { margin: 18px 0 0; color: #8b7e77; font-size: .79rem; }
+body.is-gender-reveal .gr-dashboard-error { max-width: 690px; }
+body.is-gender-reveal .gr-dashboard-error h2 { font-size: 1.55rem; }
+body.is-gender-reveal .gr-dashboard-error p:not(.da3wa-eyebrow) { margin: 9px 0 18px; color: #865d5b; }
+
+body.is-gender-reveal .gr-response-summary-strip { display: flex; flex-wrap: wrap; gap: 9px; }
+body.is-gender-reveal .gr-response-summary-strip > span { padding: 10px 13px; border: 1px solid #ebddd5; border-radius: 999px; background: #fffaf5; color: #74675f; font-size: .8rem; }
+body.is-gender-reveal .gr-response-summary-strip strong { color: #504743; font-variant-numeric: tabular-nums; }
+body.is-gender-reveal .gr-response-filters { display: grid; grid-template-columns: minmax(240px, 1.6fr) repeat(2, minmax(160px, .8fr)); gap: 11px; margin-top: 23px; }
+body.is-gender-reveal .gr-response-filters label { display: grid; gap: 7px; }
+body.is-gender-reveal .gr-response-filters label > span { color: #74675f; font-size: .77rem; font-weight: 650; }
+body.is-gender-reveal .gr-response-filters .da3wa-input { min-width: 0; min-height: 45px; border-color: #e3d7cf; border-radius: 12px; background-color: #fffdfa; }
+body.is-gender-reveal .gr-response-count { margin: 16px 0 10px; color: #877b74; font-size: .79rem; }
+body.is-gender-reveal .gr-response-table-wrap { max-width: 100%; overflow-x: auto; border: 1px solid #eee3dc; border-radius: 14px; }
+body.is-gender-reveal .gr-response-table { width: 100%; border-collapse: collapse; font-size: .83rem; }
+body.is-gender-reveal .gr-response-table th { padding: 12px 11px; background: #fbf5ef; color: #71645d; font-size: .74rem; font-weight: 700; text-align: start; white-space: nowrap; }
+body.is-gender-reveal .gr-response-table td { padding: 13px 11px; border-top: 1px solid #f0e7e1; color: #504743; vertical-align: top; }
+body.is-gender-reveal .gr-response-table td:first-child { min-width: 135px; font-weight: 650; }
+body.is-gender-reveal .gr-response-table td:nth-child(2) { min-width: 145px; white-space: nowrap; }
+body.is-gender-reveal .gr-response-table td:nth-child(3), body.is-gender-reveal .gr-response-table td:nth-child(4) { min-width: 115px; }
+body.is-gender-reveal .gr-response-table .gr-response-message { min-width: 190px; max-width: 330px; white-space: pre-wrap; overflow-wrap: anywhere; }
+body.is-gender-reveal .gr-response-table tbody tr:hover { background: #fffaf6; }
+body.is-gender-reveal .gr-response-pill, body.is-gender-reveal .gr-response-prediction { display: inline-flex; min-height: 26px; align-items: center; padding: 4px 9px; border-radius: 999px; font-size: .74rem; font-weight: 700; white-space: nowrap; }
+body.is-gender-reveal .gr-response-pill.is-attending { background: #fbebeb; color: #9b5f68; }
+body.is-gender-reveal .gr-response-pill.is-declining { background: #eaf3f7; color: #527b92; }
+body.is-gender-reveal .gr-response-prediction.is-boy { background: #e5f0f5; color: #4e7f99; }
+body.is-gender-reveal .gr-response-prediction.is-girl { background: #fae9eb; color: #a85f6e; }
+body.is-gender-reveal .gr-response-empty { display: grid; min-height: 175px; place-content: center; color: #80736c; text-align: center; }
+body.is-gender-reveal .gr-response-empty span { color: #bda78d; font-size: 1.65rem; }
+body.is-gender-reveal .gr-response-empty p { margin: 8px 0; }
+body.is-gender-reveal .gr-response-cards { display: none; }
+body.is-gender-reveal .gr-response-pagination { display: flex; align-items: center; justify-content: center; gap: 18px; padding-top: 18px; color: #776a63; font-size: .83rem; }
+body.is-gender-reveal .gr-response-pagination button { min-height: 38px; padding: 7px 13px; border: 1px solid #e4d7ce; border-radius: 10px; background: #fffaf6; color: #63554d; cursor: pointer; }
+body.is-gender-reveal .gr-response-pagination button:disabled { cursor: default; opacity: .45; }
+
+@media (max-width: 1080px) {
+  body.is-gender-reveal .gr-stats-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+}
+@media (max-width: 760px) {
+  body.is-gender-reveal .gr-dashboard-hero { align-items: start; flex-direction: column; }
+  body.is-gender-reveal .gr-dashboard-actions { width: 100%; }
+  body.is-gender-reveal .gr-dashboard-actions .da3wa-button { flex: 1; }
+  body.is-gender-reveal .gr-stats-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  body.is-gender-reveal .gr-stat { min-height: 99px; padding: 14px; }
+  body.is-gender-reveal .gr-response-filters { grid-template-columns: 1fr 1fr; }
+  body.is-gender-reveal .gr-response-filters label:first-child { grid-column: 1 / -1; }
+  body.is-gender-reveal .gr-response-table-wrap { display: none; }
+  body.is-gender-reveal .gr-response-cards { display: grid; gap: 10px; }
+  body.is-gender-reveal .gr-response-mobile-card { min-width: 0; padding: 15px; border: 1px solid #eee3dc; border-radius: 14px; background: #fffdfa; }
+  body.is-gender-reveal .gr-response-mobile-card__top { display: flex; flex-wrap: wrap; align-items: baseline; justify-content: space-between; gap: 6px 14px; }
+  body.is-gender-reveal .gr-response-mobile-card__top strong { color: #504743; overflow-wrap: anywhere; }
+  body.is-gender-reveal .gr-response-mobile-card__top bdi { color: #71645d; font-size: .81rem; }
+  body.is-gender-reveal .gr-response-mobile-card p { display: flex; flex-wrap: wrap; gap: 7px; margin: 11px 0; }
+  body.is-gender-reveal .gr-response-mobile-card__message { padding: 11px; border-radius: 11px; background: #fbf5ef; color: #635750; font-size: .86rem; line-height: 1.55; white-space: pre-wrap; overflow-wrap: anywhere; }
+  body.is-gender-reveal .gr-response-mobile-card small { display: block; margin-top: 10px; color: #877b74; }
+}
+@media (max-width: 430px) {
+  body.is-gender-reveal .gr-dashboard-hero, body.is-gender-reveal .gr-dashboard-card { padding: 18px 15px; }
+  body.is-gender-reveal .gr-dashboard-actions { flex-direction: column; }
+  body.is-gender-reveal .gr-dashboard-actions .da3wa-button { width: 100%; }
+  body.is-gender-reveal .gr-response-summary-strip { display: grid; grid-template-columns: 1fr 1fr; }
+  body.is-gender-reveal .gr-response-summary-strip > span { border-radius: 12px; }
+}
+@media (prefers-reduced-motion: reduce) {
+  body.is-gender-reveal .gr-prediction-track span { transition: none; }
+}

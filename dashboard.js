@@ -780,6 +780,11 @@ const state = {
   permissions: null,
   wedding: null,
   guests: [],
+  genderRevealResponses: [],
+  genderRevealResponsesLoading: true,
+  genderRevealResponsesError: "",
+  genderRevealResponseFilters: { search: "", attendance: "all", prediction: "all" },
+  genderRevealResponsePageIndex: 0,
   invitationTokenCache: new Map(),
   invitationTokenUnavailable: new Set(),
   invitationTokenScope: "",
@@ -858,6 +863,7 @@ const state = {
   eventStatusPending: false,
   eventLifecycleMessage: "",
   unsubGuests: null,
+  unsubGenderRevealResponses: null,
   unsubTables: null,
   unsubSeatAssignments: null,
   unsubSeatOccupancy: null,
@@ -965,9 +971,9 @@ async function init() {
     const previousUserId = state.currentUser?.uid || "";
     if (previousUserId && user?.uid !== previousUserId) {
       clearInvitationTokenCache();
-      state.unsubGuests?.(); state.unsubTables?.(); state.unsubSeatAssignments?.(); state.unsubSeatOccupancy?.(); state.unsubWedding?.();
+      state.unsubGuests?.(); state.unsubGenderRevealResponses?.(); state.unsubTables?.(); state.unsubSeatAssignments?.(); state.unsubSeatOccupancy?.(); state.unsubWedding?.();
       state.listenerGeneration += 1;
-      state.guests = []; state.tables = []; state.seatAssignments = []; state.seatOccupancy = []; state.seatAssignmentsReady = false; state.wedding = null; state.permissions = null;
+      state.guests = []; state.genderRevealResponses = []; state.tables = []; state.seatAssignments = []; state.seatOccupancy = []; state.seatAssignmentsReady = false; state.wedding = null; state.permissions = null;
       if (user) {
         window.location.replace("./all-events.html");
         return;
@@ -1330,7 +1336,29 @@ function handleDialogBackdropClick(event) {
   modal.close();
 }
 
+function refreshGenderRevealResponseFilters(control, preserveCaret) {
+  const caretStart = preserveCaret ? control.selectionStart : null;
+  const caretEnd = preserveCaret ? control.selectionEnd : null;
+  const scrollY = window.scrollY;
+  const selector = preserveCaret
+    ? "[data-gender-response-search]"
+    : `[data-gender-response-filter="${control.dataset.genderResponseFilter}"]`;
+  renderActiveView();
+  const nextControl = elements.pageContent.querySelector(selector);
+  nextControl?.focus({ preventScroll: true });
+  try { if (Number.isInteger(caretStart) && Number.isInteger(caretEnd)) nextControl?.setSelectionRange(caretStart, caretEnd); } catch {}
+  if (window.scrollY !== scrollY) window.scrollTo(window.scrollX, scrollY);
+}
+
 function handleDocumentInput(event) {
+  const genderResponseSearch = event.target.closest("[data-gender-response-search]");
+  if (genderResponseSearch && isGenderRevealEvent(state.wedding)) {
+    state.genderRevealResponseFilters.search = genderResponseSearch.value;
+    state.genderRevealResponsePageIndex = 0;
+    refreshGenderRevealResponseFilters(genderResponseSearch, true);
+    return;
+  }
+
   if (event.target === elements.guestForm?.fullName) {
     event.target.setCustomValidity(
       event.target.value.trim() ? "" : "Enter the guest's full name.",
@@ -1424,6 +1452,14 @@ function showDashboardBootstrapError(error) {
 }
 
 function handleDocumentChange(event) {
+  const genderResponseFilter = event.target.closest("[data-gender-response-filter]");
+  if (genderResponseFilter && isGenderRevealEvent(state.wedding)) {
+    state.genderRevealResponseFilters[genderResponseFilter.dataset.genderResponseFilter] = genderResponseFilter.value;
+    state.genderRevealResponsePageIndex = 0;
+    refreshGenderRevealResponseFilters(genderResponseFilter, false);
+    return;
+  }
+
   const eventSetting = event.target.closest(
     "[data-action='toggle-event-qr'], [data-action='toggle-event-seating']",
   );
@@ -1713,6 +1749,12 @@ async function bootstrapDashboard() {
     nextUrl.searchParams.delete("view");
     window.history.replaceState(null, "", nextUrl);
   }
+  if (isGenderRevealEvent(state.wedding) && state.activeView === "exports") {
+    state.activeView = "guests";
+    const nextUrl = new URL(window.location.href);
+    nextUrl.searchParams.set("view", "guests");
+    window.history.replaceState(null, "", nextUrl);
+  }
   if (state.editorMode && !eventUsesGuestSides(state.wedding)) {
     redirectToLogin("access-denied");
     return;
@@ -1728,7 +1770,7 @@ async function bootstrapDashboard() {
   renderAll();
   startWeddingListener();
   startListeners();
-  if (Number(state.wedding?.seatingSchemaVersion || 0) !== 2) showToast("This legacy seating plan needs an explicit owner repair before editing seats.", "info");
+  if (!isGenderRevealEvent(state.wedding) && state.wedding?.seatingEnabled !== false && Number(state.wedding?.seatingSchemaVersion || 0) !== 2) showToast("This legacy seating plan needs an explicit owner repair before editing seats.", "info");
   // A migration outage must not delay dashboard rendering or live data.
 
 }
@@ -1812,10 +1854,12 @@ function canViewEventSettings() {
 
 function startListeners() {
   state.unsubGuests?.();
+  state.unsubGenderRevealResponses?.();
   state.unsubTables?.();
   state.unsubSeatAssignments?.();
   state.unsubSeatOccupancy?.();
   state.unsubGuests = null;
+  state.unsubGenderRevealResponses = null;
   state.unsubTables = null;
   state.unsubSeatAssignments = null;
   state.unsubSeatOccupancy = null;
@@ -1823,6 +1867,50 @@ function startListeners() {
   state.seatAssignments = [];
   state.seatOccupancy = [];
   const generation = ++state.listenerGeneration;
+  if (isGenderRevealEvent(state.wedding)) {
+    state.guests = [];
+    state.tables = [];
+    state.seatAssignments = [];
+    state.seatOccupancy = [];
+    state.seatAssignmentsReady = true;
+    state.loadingGuests = false;
+    state.loadingTables = false;
+    state.genderRevealResponses = [];
+    state.genderRevealResponsesLoading = true;
+    state.genderRevealResponsesError = "";
+    renderAll();
+    if (state.permissions?.seatingOnly === true || !canViewDashboardPage("guests", state.permissions)) {
+      state.genderRevealResponsesLoading = false;
+      state.genderRevealResponsesError = "This account cannot view event responses.";
+      renderAll();
+      return;
+    }
+    state.unsubGenderRevealResponses = onSnapshot(
+      collection(state.services.db, "weddings", state.weddingId, "genderRevealResponses"),
+      (snapshot) => {
+        if (generation !== state.listenerGeneration) return;
+        state.genderRevealResponses = snapshot.docs.map((row) => ({ ...row.data(), id: row.id }))
+          .sort((left, right) => (right.createdAt?.toMillis?.() || 0) - (left.createdAt?.toMillis?.() || 0));
+        state.genderRevealResponsesLoading = false;
+        state.genderRevealResponsesError = "";
+        renderAll();
+      },
+      (error) => {
+        if (generation !== state.listenerGeneration) return;
+        state.genderRevealResponses = [];
+        state.genderRevealResponsesLoading = false;
+        state.genderRevealResponsesError = error?.code === "permission-denied"
+          ? "This account is not authorized to read these event responses."
+          : "Event responses could not be loaded. Check the connection and refresh this view.";
+        console.error("Gender Reveal responses could not be loaded.", error?.code || "unavailable");
+        renderAll();
+      },
+    );
+    return;
+  }
+  state.genderRevealResponses = [];
+  state.genderRevealResponsesLoading = false;
+  state.genderRevealResponsesError = "";
   state.loadingGuests = true;
   state.loadingTables = true;
   renderActiveView();
@@ -2027,6 +2115,7 @@ function disposeDashboardListeners() {
   state.unsubMembership?.();
   state.listenerGeneration += 1;
   state.unsubGuests?.();
+  state.unsubGenderRevealResponses?.();
   state.unsubTables?.();
   state.unsubSeatAssignments?.();
   state.unsubSeatOccupancy?.();
@@ -2034,6 +2123,7 @@ function disposeDashboardListeners() {
   state.unsubSeatingAccess?.();
   state.unsubAuth?.();
   state.unsubGuests = null;
+  state.unsubGenderRevealResponses = null;
   state.unsubTables = null;
   state.unsubSeatAssignments = null;
   state.unsubSeatOccupancy = null;
@@ -2241,12 +2331,18 @@ function renderAll() {
     if (select) select.disabled = !eventUsesGuestSides(state.wedding);
   });
   document.body.classList.toggle("is-celebration-event", isCelebrationEvent(state.wedding));
+  document.body.classList.toggle("is-gender-reveal", isGenderRevealEvent(state.wedding));
   renderChrome();
   renderActiveView();
 }
 
 function renderChrome() {
-  const meta = pageMeta[state.activeView];
+  const genderReveal = isGenderRevealEvent(state.wedding);
+  const meta = genderReveal && state.activeView === "guests"
+    ? { eyebrow: "Event responses", title: "Responses", description: "Private responses for this assigned event." }
+    : genderReveal && state.activeView === "overview"
+      ? { ...pageMeta.overview, description: "Manage RSVPs and predictions for this event." }
+      : pageMeta[state.activeView];
   const isSeatingView = state.activeView === "seating";
   const isOverviewView = state.activeView === "overview";
   const isSeatingEditorView = state.editorMode && state.activeView === "seating";
@@ -2300,6 +2396,13 @@ function renderChrome() {
       button.dataset.navView === state.activeView,
     );
     button.hidden = !canViewDashboardPage(button.dataset.navView, state.permissions);
+    if (genderReveal && button.dataset.navView === "exports") button.hidden = true;
+    if (button.dataset.navView === "guests") {
+      const label = genderReveal ? "Responses" : "Guests";
+      button.querySelector(".da3wa-nav-label")?.replaceChildren(label);
+      button.title = label;
+      button.setAttribute("aria-label", label);
+    }
     if (!button.hidden && !isAccountSeatingWorkspace) {
       if (button.dataset.navView === "seating") button.hidden = !isSeatingEnabled();
       if (button.dataset.navView === "checkin") {
@@ -2449,6 +2552,18 @@ async function refreshDashboardData() {
       return;
     }
 
+    if (isGenderRevealEvent(state.wedding)) {
+      const responseSnapshot = await getDocs(collection(state.services.db, "weddings", state.weddingId, "genderRevealResponses"));
+      if (responseSnapshot.metadata?.fromCache) throw new Error("The latest response data is not available from the server yet.");
+      state.genderRevealResponses = responseSnapshot.docs.map((row) => ({ ...row.data(), id: row.id }))
+        .sort((left, right) => (right.createdAt?.toMillis?.() || 0) - (left.createdAt?.toMillis?.() || 0));
+      state.genderRevealResponsesLoading = false;
+      state.genderRevealResponsesError = "";
+      renderAll();
+      showToast("Event responses refreshed.", "success");
+      return;
+    }
+
     const persistence = getDashboardPersistence();
     await persistence.flush();
     if (persistence.publicationError) throw persistence.publicationError;
@@ -2581,6 +2696,7 @@ function switchView(view) {
   }
   if (state.editorMode && !state.permissions?.seatingOnly && view !== "seating") return;
   if (view === "checkin" && !isInvitationQrEnabled()) return;
+  if (isGenderRevealEvent(state.wedding) && view === "exports") return;
   if (view === "seating" && !isSeatingEnabled()) {
     showToast("Seating is disabled for this event.", "info");
     return;
@@ -2637,6 +2753,10 @@ function renderActiveView() {
 }
 
 function renderOverviewPage() {
+  if (state.wedding?.eventCategory === "gender_reveal") {
+    renderGenderRevealOverviewPage();
+    return;
+  }
   if (state.loadingGuests || state.loadingTables) {
     elements.pageContent.innerHTML =
       '<div class="da3wa-skeleton" aria-hidden="true"></div>';
@@ -2732,7 +2852,118 @@ function renderOverviewPage() {
   `;
 }
 
+function genderRevealDashboardSummary(responses = state.genderRevealResponses) {
+  const total = responses.length;
+  const attending = responses.filter((response) => response.attendance === "attending").length;
+  const boy = responses.filter((response) => response.prediction === "boy").length;
+  const girl = responses.filter((response) => response.prediction === "girl").length;
+  return {
+    total, attending, notAttending: total - attending, boy, girl,
+    boyPercent: total ? Math.round((boy / total) * 100) : 0,
+    girlPercent: total ? Math.round((girl / total) * 100) : 0,
+  };
+}
+
+function renderGenderRevealOverviewPage() {
+  if (state.genderRevealResponsesLoading) {
+    elements.pageContent.innerHTML = '<section class="gr-dashboard"><div class="da3wa-skeleton" aria-hidden="true"></div></section>';
+    return;
+  }
+  if (state.genderRevealResponsesError) {
+    elements.pageContent.innerHTML = `<section class="gr-dashboard"><article class="gr-dashboard-card gr-dashboard-error"><p class="da3wa-eyebrow">Responses</p><h2>Responses are unavailable</h2><p>${escapeHtml(state.genderRevealResponsesError)}</p><button class="da3wa-button da3wa-button--secondary" type="button" data-action="refresh-dashboard">Refresh</button></article></section>`;
+    return;
+  }
+  const stats = genderRevealDashboardSummary();
+  const cards = [
+    ["Submitted responses", stats.total, "gr-stat--total"],
+    ["Attending", stats.attending, "gr-stat--attending"],
+    ["Not attending", stats.notAttending, "gr-stat--declined"],
+    ["Predicted boy", `${stats.boy} · ${stats.boyPercent}%`, "gr-stat--boy"],
+    ["Predicted girl", `${stats.girl} · ${stats.girlPercent}%`, "gr-stat--girl"],
+  ].map(([label, value, tone]) => `<article class="gr-stat ${tone}"><span>${label}</span><strong>${value}</strong></article>`).join("");
+  const invitationLink = new URL(`gender-reveal.html?wedding=${encodeURIComponent(state.weddingId)}`, window.location.href).toString();
+  elements.pageContent.innerHTML = `
+    <section class="gr-dashboard">
+      <header class="gr-dashboard-hero">
+        <div><p class="da3wa-eyebrow">Gender Reveal Party</p><h2>Event responses</h2><p>RSVPs and predictions from everyone invited to this event.</p></div>
+        <div class="gr-dashboard-actions"><button class="da3wa-button da3wa-button--secondary" type="button" data-action="copy-gender-reveal-link">Copy invitation link</button><button class="da3wa-button da3wa-button--primary" type="button" data-nav-view="guests">View responses</button></div>
+      </header>
+      <div class="gr-stats-grid" aria-label="Response summary">${cards}</div>
+      <article class="gr-dashboard-card gr-prediction-summary">
+        <div class="gr-dashboard-card__heading"><div><p class="da3wa-eyebrow">All submitted predictions</p><h3>Boy or girl?</h3></div><span>${stats.total} total</span></div>
+        <div class="gr-prediction-summary__item gr-prediction-summary__item--boy"><div><strong>Boy</strong><span>${stats.boy} · ${stats.boyPercent}%</span></div><div class="gr-prediction-track" role="progressbar" aria-label="Boy predictions" aria-valuemin="0" aria-valuemax="100" aria-valuenow="${stats.boyPercent}"><span style="width:${stats.boyPercent}%"></span></div></div>
+        <div class="gr-prediction-summary__item gr-prediction-summary__item--girl"><div><strong>Girl</strong><span>${stats.girl} · ${stats.girlPercent}%</span></div><div class="gr-prediction-track" role="progressbar" aria-label="Girl predictions" aria-valuemin="0" aria-valuemax="100" aria-valuenow="${stats.girlPercent}"><span style="width:${stats.girlPercent}%"></span></div></div>
+        <p class="gr-dashboard-note">Predictions include guests who cannot attend.</p>
+      </article>
+    </section>`;
+}
+
+function genderRevealSubmissionTime(value) {
+  const date = value?.toDate?.();
+  if (!date || Number.isNaN(date.getTime())) return "—";
+  return new Intl.DateTimeFormat("en-AE", { dateStyle: "medium", timeStyle: "short", timeZone: "Asia/Dubai" }).format(date);
+}
+
+function getFilteredGenderRevealResponses() {
+  const filters = state.genderRevealResponseFilters;
+  const search = filters.search.trim().toLocaleLowerCase();
+  return state.genderRevealResponses.filter((response) => {
+    if (filters.attendance !== "all" && response.attendance !== filters.attendance) return false;
+    if (filters.prediction !== "all" && response.prediction !== filters.prediction) return false;
+    if (!search) return true;
+    return [response.fullName, response.phoneE164, response.message].some((value) => String(value || "").toLocaleLowerCase().includes(search));
+  });
+}
+
+function renderGenderRevealResponsesPage() {
+  if (state.genderRevealResponsesLoading) {
+    elements.pageContent.innerHTML = '<section class="gr-dashboard"><div class="da3wa-skeleton" aria-hidden="true"></div></section>';
+    return;
+  }
+  if (state.genderRevealResponsesError) {
+    elements.pageContent.innerHTML = `<section class="gr-dashboard"><article class="gr-dashboard-card gr-dashboard-error"><h2>Responses are unavailable</h2><p>${escapeHtml(state.genderRevealResponsesError)}</p><button class="da3wa-button da3wa-button--secondary" type="button" data-action="refresh-dashboard">Refresh</button></article></section>`;
+    return;
+  }
+  const filtered = getFilteredGenderRevealResponses();
+  const pageSize = 12;
+  const pageCount = Math.max(1, Math.ceil(filtered.length / pageSize));
+  state.genderRevealResponsePageIndex = clamp(state.genderRevealResponsePageIndex, 0, pageCount - 1);
+  const start = state.genderRevealResponsePageIndex * pageSize;
+  const visible = filtered.slice(start, start + pageSize);
+  const stats = genderRevealDashboardSummary();
+  const formatValue = (value) => escapeHtml(value || "—");
+  const rows = visible.map((response) => `
+    <tr>
+      <td data-label="Name">${formatValue(response.fullName)}</td>
+      <td data-label="Phone"><bdi dir="ltr">${formatValue(response.phoneE164)}</bdi></td>
+      <td data-label="Attendance"><span class="gr-response-pill ${response.attendance === "attending" ? "is-attending" : "is-declining"}">${response.attendance === "attending" ? "Attending" : "Not attending"}</span></td>
+      <td data-label="Prediction"><span class="gr-response-prediction ${response.prediction === "boy" ? "is-boy" : "is-girl"}">${response.prediction === "boy" ? "Boy" : "Girl"}</span></td>
+      <td class="gr-response-message" data-label="Message">${formatValue(response.message || "—")}</td>
+      <td data-label="Submitted">${formatValue(genderRevealSubmissionTime(response.createdAt))}</td>
+    </tr>`).join("");
+  const exportDisabled = state.mode !== "live" || !can("canExport") || state.genderRevealResponses.length === 0;
+  elements.pageContent.innerHTML = `
+    <section class="gr-dashboard gr-responses-page">
+      <div class="gr-response-summary-strip"><span><strong>${stats.total}</strong> submitted</span><span><strong>${stats.attending}</strong> attending</span><span><strong>${stats.notAttending}</strong> not attending</span><span><strong>${stats.boy}</strong> boy predictions</span><span><strong>${stats.girl}</strong> girl predictions</span></div>
+      <article class="gr-dashboard-card gr-response-card">
+        <header class="gr-dashboard-card__heading"><div><p class="da3wa-eyebrow">Assigned event · private responses</p><h2>Guest responses</h2><p>Read-only submissions. Guests cannot edit a response after it is sent.</p></div><button class="da3wa-button da3wa-button--primary" type="button" data-action="export-gender-reveal" ${exportDisabled ? "disabled aria-disabled=\"true\"" : ""}>Export Excel</button></header>
+        <div class="gr-response-filters">
+          <label><span>Search responses</span><input class="da3wa-input" type="search" data-gender-response-search value="${escapeAttribute(state.genderRevealResponseFilters.search)}" placeholder="Name, phone or message" aria-label="Search response name, phone or message" /></label>
+          <label><span>Attendance</span><select class="da3wa-input" data-gender-response-filter="attendance"><option value="all" ${state.genderRevealResponseFilters.attendance === "all" ? "selected" : ""}>All responses</option><option value="attending" ${state.genderRevealResponseFilters.attendance === "attending" ? "selected" : ""}>Attending</option><option value="not_attending" ${state.genderRevealResponseFilters.attendance === "not_attending" ? "selected" : ""}>Not attending</option></select></label>
+          <label><span>Prediction</span><select class="da3wa-input" data-gender-response-filter="prediction"><option value="all" ${state.genderRevealResponseFilters.prediction === "all" ? "selected" : ""}>All predictions</option><option value="boy" ${state.genderRevealResponseFilters.prediction === "boy" ? "selected" : ""}>Boy</option><option value="girl" ${state.genderRevealResponseFilters.prediction === "girl" ? "selected" : ""}>Girl</option></select></label>
+        </div>
+        <p class="gr-response-count" role="status" aria-live="polite">Showing ${filtered.length ? start + 1 : 0}–${Math.min(start + pageSize, filtered.length)} of ${filtered.length} matching responses</p>
+        ${filtered.length ? `<div class="gr-response-table-wrap"><table class="gr-response-table"><thead><tr><th>Name</th><th>Phone</th><th>Attendance</th><th>Prediction</th><th>Message</th><th>Submitted (Dubai)</th></tr></thead><tbody>${rows}</tbody></table></div><div class="gr-response-cards">${visible.map((response) => `<article class="gr-response-mobile-card"><div class="gr-response-mobile-card__top"><strong>${formatValue(response.fullName)}</strong><bdi dir="ltr">${formatValue(response.phoneE164)}</bdi></div><p><span class="gr-response-pill ${response.attendance === "attending" ? "is-attending" : "is-declining"}">${response.attendance === "attending" ? "Attending" : "Not attending"}</span><span class="gr-response-prediction ${response.prediction === "boy" ? "is-boy" : "is-girl"}">${response.prediction === "boy" ? "Boy" : "Girl"}</span></p><div class="gr-response-mobile-card__message">${formatValue(response.message || "—")}</div><small>${formatValue(genderRevealSubmissionTime(response.createdAt))}</small></article>`).join("")}</div>` : `<div class="gr-response-empty"><span aria-hidden="true">☁</span><p>${state.genderRevealResponses.length ? "No responses match these filters." : "No responses have been submitted yet."}</p></div>`}
+        ${filtered.length > pageSize ? `<nav class="gr-response-pagination" aria-label="Response pages"><button type="button" data-action="gender-response-page" data-page="${state.genderRevealResponsePageIndex - 1}" ${state.genderRevealResponsePageIndex === 0 ? "disabled" : ""}>Previous</button><span>Page ${state.genderRevealResponsePageIndex + 1} of ${pageCount}</span><button type="button" data-action="gender-response-page" data-page="${state.genderRevealResponsePageIndex + 1}" ${state.genderRevealResponsePageIndex >= pageCount - 1 ? "disabled" : ""}>Next</button></nav>` : ""}
+      </article>
+    </section>`;
+}
+
 function renderGuestPage() {
+  if (isGenderRevealEvent(state.wedding)) {
+    renderGenderRevealResponsesPage();
+    return;
+  }
   if (state.loadingGuests) {
     elements.pageContent.innerHTML =
       '<section class="guest-page"><div class="da3wa-skeleton" aria-hidden="true"></div></section>';
@@ -3453,16 +3684,26 @@ function validateEventSettingsDraft(draft) {
     }
   }
   if (genderReveal) {
+    const isValidMediaPath = (value) => {
+      if (!value) return true;
+      if (value.startsWith("/")) {
+        return /^\/(images|videos|music)\/[A-Za-z0-9._/-]+$/.test(value) &&
+          !value.includes("..") && !value.includes("//") && !value.includes("\\") && !/[?#\s]/.test(value);
+      }
+      try {
+        const url = new URL(value);
+        return url.protocol === "https:" && !url.username && !url.password;
+      } catch { return false; }
+    };
     for (const [name, label, maxLength] of [
-      ["eventTitleAr", "Arabic event name", 160], ["genderRevealArtworkUrl", "Artwork URL", 2048],
-      ["genderRevealOpeningVideoUrl", "Opening video URL", 2048], ["genderRevealMusicUrl", "Music URL", 2048],
+      ["eventTitleAr", "Arabic event name", 160], ["genderRevealArtworkUrl", "Artwork path", 2048],
+      ["genderRevealOpeningVideoUrl", "Opening video path", 2048], ["genderRevealMusicUrl", "Music path", 2048],
       ["genderRevealMessageEn", "English message", 1000], ["genderRevealMessageAr", "Arabic message", 1000],
     ]) {
       const value = String(draft[name] || "").trim();
       if (value.length > maxLength) errors[name] = `${label} must be ${maxLength} characters or fewer.`;
-      if (name.endsWith("Url") && value) {
-        try { const url = new URL(value); if (url.protocol !== "https:" || !url.hostname) throw new Error("Invalid URL"); }
-        catch { errors[name] = `Enter a valid HTTPS ${label.toLowerCase()}, or leave it blank.`; }
+      if (name.endsWith("Url") && !isValidMediaPath(value)) {
+        errors[name] = `Use an HTTPS URL or a repository path under /images/, /videos/, or /music/.`;
       }
     }
   }
@@ -3809,7 +4050,7 @@ function renderEventSettingsPage() {
           ${field("mapsUrl", "Maps link", "url", true, false)}
           ${genderReveal ? "" : field("whatsAppCountryCode", "Country calling code", "text", false, true)}
           <label class="event-settings-field"><span>Invitation language</span><select class="da3wa-input" name="invitationLanguage" data-event-setting-field ${canEditDetails ? "" : "disabled"}><option value="en" ${draft.invitationLanguage === "en" ? "selected" : ""}>English</option><option value="ar" ${draft.invitationLanguage === "ar" ? "selected" : ""}>Arabic</option></select></label>
-          ${genderReveal ? `${field("eventTitleAr", "Arabic event name", "text", true)}${field("genderRevealArtworkUrl", "Artwork URL", "url", true)}${field("genderRevealOpeningVideoUrl", "Opening video URL", "url", true)}${field("genderRevealMusicUrl", "Music URL", "url", true)}${textareaField("genderRevealMessageEn", "English invitation wording")}${textareaField("genderRevealMessageAr", "Arabic invitation wording")}` : ""}
+          ${genderReveal ? `${field("eventTitleAr", "Arabic event name", "text", true)}${field("genderRevealArtworkUrl", "Cover artwork path", "text", true)}${field("genderRevealOpeningVideoUrl", "Opening video path (optional)", "text", true)}${field("genderRevealMusicUrl", "Music path", "text", true)}<p class="event-settings-timezone is-full">Use a repository path under /images/, /videos/, or /music/, or an HTTPS URL. Commit repository files with the site; there is no media upload here. The opening video is optional and falls back to the cover artwork.</p>${textareaField("genderRevealMessageEn", "English invitation wording")}${textareaField("genderRevealMessageAr", "Arabic invitation wording")}` : ""}
           ${hideInvitationScheduleAndMapEmbed ? "" : `${field("venueMapEmbedUrl", "Google Maps embed URL", "url", true, false)}
           <p class="event-settings-timezone">Paste only the URL inside the Google Maps iframe's src="…" attribute, not the full iframe code. It is saved for this event only.</p>
           <label class="event-settings-field is-full"><span>Invitation schedule (JSON, optional)</span><textarea class="da3wa-input" name="schedule" rows="8" data-event-setting-field ${canEditDetails ? "" : "disabled aria-disabled=\"true\""}>${escapeHtml(draft.schedule || "[]")}</textarea><small class="event-setting-error" role="alert">${escapeHtml(errors.schedule || "")}</small><small class="event-settings-timezone">Use up to 12 JSON items with time, timeAr, titleEn, titleAr, descriptionEn, and descriptionAr. Leave [] to hide the schedule. The map URL belongs in Google Maps embed URL above.</small></label>`}
@@ -4969,6 +5210,10 @@ async function handleAction(action, dataset, event = null) {
     case "overview-guests":
       state.guestPageIndex = 0;
       switchView("guests");
+      return;
+    case "gender-response-page":
+      state.genderRevealResponsePageIndex = Math.max(0, Number(dataset.page) || 0);
+      renderActiveView();
       return;
     case "overview-response-filter":
       state.guestFilters.rsvp = ["confirmed", "pending", "declined"].includes(dataset.rsvp) ? dataset.rsvp : "all";

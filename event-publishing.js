@@ -97,9 +97,13 @@ export function createEventPublisher({ api, db, weddingId, isCurrent = () => tru
         rsvpStatus: guest.rsvpStatus || "pending", additionalGuests: guest.additionalGuests || 0, rsvpMessage: guest.rsvpMessage || "", expiresAt: index.data().expiresAt ?? null };
       // Reading canonical RSVP and the capability in this transaction means a
       // concurrent RSVP/revocation causes an SDK retry, never an overwrite.
-      if (projectionEqual(old.data(), data)) return;
+      const assignmentsChanged = !projectionEqual(index.data().seatingAssignments, data.guest.seatingAssignments);
+      if (projectionEqual(old.data(), data) && !assignmentsChanged) return;
       current();
-      transaction.set(publicRef, { ...data, updatedAt: api.serverTimestamp() });
+      if (assignmentsChanged) transaction.update(ref("invitationTokens", secret.token), {
+        seatingAssignments: data.guest.seatingAssignments, updatedAt: api.serverTimestamp(),
+      });
+      if (!projectionEqual(old.data(), data)) transaction.set(publicRef, { ...data, updatedAt: api.serverTimestamp() });
     });
   }
 

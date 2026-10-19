@@ -179,8 +179,10 @@ service cloud.firestore {
     }
 
     function isEventDeletingOwner(weddingId) {
-      return isEventOwner(weddingId)
-        && get(/databases/$(database)/documents/weddings/$(weddingId)).data.get("deleting", false) == true;
+      let eventPath = /databases/$(database)/documents/weddings/$(weddingId);
+      return isSignedIn() && exists(eventPath)
+        && get(eventPath).data.get("deleting", false) == true
+        && (get(eventPath).data.get("ownerUserId", "") == request.auth.uid || isPlatformAdmin());
     }
 
     function validDashboardMembership(data, userId) {
@@ -319,11 +321,19 @@ service cloud.firestore {
         && data.get("showInvitationQr", false) == false
         && data.get("invitationLanguage", "en") in ["en", "ar"]
         && titleAr is string && titleAr.size() <= 160
-        && artwork is string && artwork.size() <= 2048 && (artwork == "" || artwork.matches("^https://[^ ]+$"))
-        && openingVideo is string && openingVideo.size() <= 2048 && (openingVideo == "" || openingVideo.matches("^https://[^ ]+$"))
-        && music is string && music.size() <= 2048 && (music == "" || music.matches("^https://[^ ]+$"))
+        && artwork is string && artwork.size() <= 2048 && validGenderRevealMediaUrl(artwork)
+        && openingVideo is string && openingVideo.size() <= 2048 && validGenderRevealMediaUrl(openingVideo)
+        && music is string && music.size() <= 2048 && validGenderRevealMediaUrl(music)
         && messageEn is string && messageEn.size() <= 1000
         && messageAr is string && messageAr.size() <= 1000;
+    }
+
+    function validGenderRevealMediaUrl(value) {
+      return value == ""
+        || value.matches("^https://[^ ]+$")
+        || (value.matches("^/(images|videos|music)/[A-Za-z0-9._/-]+$")
+          && !value.matches(".*\\.\\..*")
+          && !value.matches(".*//.*"));
     }
 
     function isOwnerEventDetailsUpdate(weddingId) {
@@ -539,12 +549,17 @@ service cloud.firestore {
     // for guests they are already allowed to access. Their access is always an
     // exact document operation; they cannot list the event's token directory.
     function canManageInvitationForGuest(weddingId, guestId) {
+      let eventPath = /databases/$(database)/documents/weddings/$(weddingId);
+      let memberPath = dashboardUserPath(weddingId);
       let guestPath = /databases/$(database)/documents/weddings/$(weddingId)/guests/$(guestId);
-      return canManageGuestRecords(weddingId) ||
-        (isDashboardMember(weddingId) &&
-          dashboardUser(weddingId).data.get("canEditGuests", false) == true &&
-          isSeatingOnlyDashboardAccount(weddingId) &&
-          exists(guestPath) && seatingAccountMayReadGuest(weddingId, get(guestPath).data));
+      return isSignedIn() && exists(eventPath)
+        && get(eventPath).data.get("deleting", false) != true
+        && ((exists(memberPath)
+          && get(memberPath).data.get("canEditGuests", false) == true
+          && (get(memberPath).data.get("seatingOnly", false) != true
+            || (isSeatingOnlyDashboardAccount(weddingId) && exists(guestPath)
+              && seatingAccountMayReadGuest(weddingId, get(guestPath).data))))
+          || isPlatformAdmin());
     }
 
     function canManageInvitationCandidate(weddingId) {
@@ -556,15 +571,15 @@ service cloud.firestore {
 
     function canReadInvitationTokenRecord(weddingId, token) {
       let path = invitationTokenPath(weddingId, token);
-      return canManageGuestRecords(weddingId) ||
-        (canCheckIn(weddingId) && isActiveInvitationToken(weddingId, token) && exists(path)
+      return canManageGuestRecords(weddingId) ? true :
+        (canCheckIn(weddingId) ? (isActiveInvitationToken(weddingId, token) && exists(path)
           && get(path).data.guestId is string
           && exists(checkinGuestPath(weddingId, get(path).data.guestId))
-          && checkInAccountMayAccessGuest(weddingId, get(checkinGuestPath(weddingId, get(path).data.guestId)).data)) ||
+          && checkInAccountMayAccessGuest(weddingId, get(checkinGuestPath(weddingId, get(path).data.guestId)).data)) :
         (validInvitationToken(token) &&
           ((!exists(path) && canManageInvitationCandidate(weddingId)) ||
             (exists(path) && get(path).data.guestId is string &&
-              canManageInvitationForGuest(weddingId, get(path).data.guestId))));
+              canManageInvitationForGuest(weddingId, get(path).data.guestId)))));
     }
 
     function isActiveInvitationToken(weddingId, token) {
@@ -622,6 +637,22 @@ service cloud.firestore {
       let genderReveal = event.get("eventCategory", "wedding_engagement") == "gender_reveal";
       let items = event.get("schedule", []);
       let hasSharedSchedule = data.keys().hasAny(["scheduleCount"]);
+      let scheduleMatches = hasSharedSchedule
+        ? (data.scheduleCount == items.size() && data.scheduleCount <= 12 && data.schedule == [])
+        : (data.schedule is list && data.schedule.size() == items.size() && items.size() <= 12
+          && (!exists(/databases/$(database)/documents/weddings/$(weddingId)/publicEvent/details) || !resource.data.keys().hasAny(["scheduleCount"]))
+          && validLegacyPublicScheduleAt(data.schedule, items, 0)
+          && validLegacyPublicScheduleAt(data.schedule, items, 1)
+          && validLegacyPublicScheduleAt(data.schedule, items, 2)
+          && validLegacyPublicScheduleAt(data.schedule, items, 3)
+          && validLegacyPublicScheduleAt(data.schedule, items, 4)
+          && validLegacyPublicScheduleAt(data.schedule, items, 5)
+          && validLegacyPublicScheduleAt(data.schedule, items, 6)
+          && validLegacyPublicScheduleAt(data.schedule, items, 7)
+          && validLegacyPublicScheduleAt(data.schedule, items, 8)
+          && validLegacyPublicScheduleAt(data.schedule, items, 9)
+          && validLegacyPublicScheduleAt(data.schedule, items, 10)
+          && validLegacyPublicScheduleAt(data.schedule, items, 11));
       let expected = {
           "eventTitle": event.get("eventTitle", ""),
           "eventTitleAr": event.get("eventTitleAr", ""),
@@ -656,56 +687,63 @@ service cloud.firestore {
           "seatingEnabled": event.get("seatingEnabled", true),
           "schedule": data.schedule, "updatedAt": request.time
         };
-      return data.diff(expected).affectedKeys().hasOnly(["scheduleCount"])
-        && ((hasSharedSchedule && data.scheduleCount == items.size() && data.scheduleCount <= 12 && data.schedule == [])
-          || (!hasSharedSchedule && data.schedule is list && data.schedule.size() == items.size() && items.size() <= 12
-            && (!exists(/databases/$(database)/documents/weddings/$(weddingId)/publicEvent/details) || !resource.data.keys().hasAny(["scheduleCount"]))
-            && validLegacyPublicScheduleAt(data.schedule, items, 0)
-            && validLegacyPublicScheduleAt(data.schedule, items, 1)
-            && validLegacyPublicScheduleAt(data.schedule, items, 2)
-            && validLegacyPublicScheduleAt(data.schedule, items, 3)
-            && validLegacyPublicScheduleAt(data.schedule, items, 4)
-            && validLegacyPublicScheduleAt(data.schedule, items, 5)
-            && validLegacyPublicScheduleAt(data.schedule, items, 6)
-            && validLegacyPublicScheduleAt(data.schedule, items, 7)
-            && validLegacyPublicScheduleAt(data.schedule, items, 8)
-            && validLegacyPublicScheduleAt(data.schedule, items, 9)
-            && validLegacyPublicScheduleAt(data.schedule, items, 10)
-            && validLegacyPublicScheduleAt(data.schedule, items, 11)));
+      return data.diff(expected).affectedKeys().hasOnly(["scheduleCount"]) && scheduleMatches;
+    }
+
+    function canonicalCustomerInvitationData(weddingId, token, data) {
+      let index = getAfter(invitationTokenPath(weddingId, token)).data;
+      let secret = getAfter(invitationSecretPath(weddingId, index.guestId)).data;
+      let guest = getAfter(/databases/$(database)/documents/weddings/$(weddingId)/guests/$(index.guestId)).data;
+      let publicPath = /databases/$(database)/documents/weddings/$(weddingId)/publicGuests/$(token);
+      return (data.wedding == secret.get("wedding", null)
+          || (exists(publicPath) && data.wedding == resource.data.wedding))
+        && data.guest.seatingAssignments == index.get("seatingAssignments", [])
+        && data.guest.fullName == guest.fullName
+        && data.guest.additionalGuestAllowance == invitationGuestAllowance(guest)
+        && data.guest.tableId == ""
+        && data.guest.tableName == guest.get("tableName", "")
+        && data.guest.seatNumber == guest.get("seatNumber", "")
+        && data.rsvpStatus == guest.get("rsvpStatus", "pending")
+        && data.additionalGuests == guest.get("additionalGuests", 0)
+        && data.rsvpMessage == guest.get("rsvpMessage", "");
+    }
+
+    function canonicalInvitationWedding(weddingId, projection) {
+      let event = getAfter(/databases/$(database)/documents/weddings/$(weddingId)).data;
+      let genderReveal = event.get("eventCategory", "wedding_engagement") == "gender_reveal";
+      return projection == {
+        "canonicalLayout": true, "tables": [], "hallObjects": [],
+        "eventTitle": event.get("eventTitle", ""), "coupleName": genderReveal ? "" : event.get("coupleName", ""),
+        "brideName": genderReveal ? "" : event.get("brideName", ""), "groomName": genderReveal ? "" : event.get("groomName", ""),
+        "brideNameAr": genderReveal ? "" : event.get("brideNameAr", ""), "groomNameAr": genderReveal ? "" : event.get("groomNameAr", ""),
+        "eventCategory": event.get("eventCategory", "wedding_engagement"), "eventDateISO": event.get("eventDateISO", ""),
+        "rsvpDeadlineISO": event.get("rsvpDeadlineISO", ""), "timeEn": event.get("timeEn", ""), "timeAr": event.get("timeAr", ""),
+        "venueEn": event.get("venueEn", ""), "location": event.get("location", ""), "locationEn": event.get("locationEn", ""),
+        "mapsUrl": event.get("mapsUrl", ""), "venueMapEmbedUrl": event.get("venueMapEmbedUrl", ""),
+        "subtitleEn": event.get("subtitleEn", ""), "subtitleAr": event.get("subtitleAr", ""),
+        "invitationMessageEn": event.get("invitationMessageEn", ""), "invitationMessageAr": event.get("invitationMessageAr", ""),
+        "invitationLanguage": event.get("invitationLanguage", "en"), "showInvitationQr": genderReveal ? false : event.get("showInvitationQr", true),
+        "seatingEnabled": genderReveal ? false : event.get("seatingEnabled", true), "schedule": []
+      };
+    }
+
+    function canonicalInvitationAssignments(weddingId, guestId, assignments) {
+      let guest = getAfter(/databases/$(database)/documents/weddings/$(weddingId)/guests/$(guestId)).data;
+      return assignments is list && canonicalPublicAssignments(assignments, guest.get("seatingAssignments", []));
     }
 
     function canonicalCustomerInvitation(weddingId, token, data) {
-      let guestId = getAfter(invitationTokenPath(weddingId, token)).data.guestId;
-      let guest = getAfter(/databases/$(database)/documents/weddings/$(weddingId)/guests/$(guestId)).data;
-      let event = getAfter(/databases/$(database)/documents/weddings/$(weddingId)).data;
-      let genderReveal = event.get("eventCategory", "wedding_engagement") == "gender_reveal";
-      return !isCustomer(weddingId) || ((data.wedding == {
-          "canonicalLayout": true, "tables": [], "hallObjects": [],
-          "eventTitle": event.get("eventTitle", ""), "coupleName": genderReveal ? "" : event.get("coupleName", ""),
-          "brideName": genderReveal ? "" : event.get("brideName", ""), "groomName": genderReveal ? "" : event.get("groomName", ""),
-          "brideNameAr": genderReveal ? "" : event.get("brideNameAr", ""), "groomNameAr": genderReveal ? "" : event.get("groomNameAr", ""),
-          "eventCategory": event.get("eventCategory", "wedding_engagement"), "eventDateISO": event.get("eventDateISO", ""),
-          "rsvpDeadlineISO": event.get("rsvpDeadlineISO", ""), "timeEn": event.get("timeEn", ""), "timeAr": event.get("timeAr", ""),
-          "venueEn": event.get("venueEn", ""), "location": event.get("location", ""), "locationEn": event.get("locationEn", ""),
-          "mapsUrl": event.get("mapsUrl", ""), "venueMapEmbedUrl": event.get("venueMapEmbedUrl", ""),
-          "subtitleEn": event.get("subtitleEn", ""), "subtitleAr": event.get("subtitleAr", ""),
-          "invitationMessageEn": event.get("invitationMessageEn", ""), "invitationMessageAr": event.get("invitationMessageAr", ""),
-          "invitationLanguage": event.get("invitationLanguage", "en"), "showInvitationQr": genderReveal ? false : event.get("showInvitationQr", true),
-          "seatingEnabled": genderReveal ? false : event.get("seatingEnabled", true), "schedule": []
-        } || (exists(/databases/$(database)/documents/weddings/$(weddingId)/publicGuests/$(token))
-          && data.wedding == resource.data.wedding))
-        && canonicalPublicAssignments(data.guest.seatingAssignments, guest.get("seatingAssignments", []))
-        && data.guest.tableName == guest.get("tableName", "") && data.guest.seatNumber == guest.get("seatNumber", "")
-        && data.rsvpStatus == guest.get("rsvpStatus", "pending")
-        && data.additionalGuests == guest.get("additionalGuests", 0) && data.rsvpMessage == guest.get("rsvpMessage", ""));
+      return !isCustomer(weddingId) || canonicalCustomerInvitationData(weddingId, token, data);
     }
 
     function canonicalPublicAssignmentAt(projected, canonical, index) {
-      return projected.size() <= index || projected[index].keys().hasOnly(["tableId", "tableName", "seatNumber", "personKey", "label"]);
+      return projected.size() <= index || (projected[index] is map && canonical[index] is map
+        && projected[index].keys().hasOnly(["tableId", "tableName", "seatNumber", "personKey", "label"]));
     }
 
     function canonicalPublicAssignments(projected, canonical) {
-      return projected == canonical && projected.size() <= 11
+      return projected is list && canonical is list
+        && projected.size() == canonical.size() && projected.size() <= 11 && projected == canonical
         && canonicalPublicAssignmentAt(projected, canonical, 0) && canonicalPublicAssignmentAt(projected, canonical, 1)
         && canonicalPublicAssignmentAt(projected, canonical, 2) && canonicalPublicAssignmentAt(projected, canonical, 3)
         && canonicalPublicAssignmentAt(projected, canonical, 4) && canonicalPublicAssignmentAt(projected, canonical, 5)
@@ -714,12 +752,26 @@ service cloud.firestore {
         && canonicalPublicAssignmentAt(projected, canonical, 10);
     }
 
+    function validCustomerInvitationEnvelope(data, weddingId) {
+      // Customer projection writes are compared to the canonical event and
+      // guest below. Keep the structural/privacy boundary here, and leave
+      // value validation to those exact comparisons to avoid duplicating the
+      // larger public projection validator three times in an atomic batch.
+      return data.keys().hasOnly(["eventId", "wedding", "guest", "rsvpStatus", "additionalGuests", "rsvpMessage", "expiresAt", "updatedAt"])
+        && data.keys().hasAll(["eventId", "wedding", "guest", "rsvpStatus", "additionalGuests", "rsvpMessage", "expiresAt", "updatedAt"])
+        && data.eventId == weddingId
+        && data.wedding is map
+        && data.guest is map
+        && data.guest.keys().hasOnly(["fullName", "additionalGuestAllowance", "seatingAssignments", "tableId", "tableName", "seatNumber"])
+        && data.guest.keys().hasAll(["fullName", "additionalGuestAllowance", "seatingAssignments", "tableId", "tableName", "seatNumber"]);
+    }
+
     function customerInvitationWrite(weddingId, token, data) {
       let index = getAfter(invitationTokenPath(weddingId, token)).data;
       let guest = getAfter(/databases/$(database)/documents/weddings/$(weddingId)/guests/$(index.guestId)).data;
       return eventAvailable(weddingId) && index.status == "active" && index.purpose == "guest-invitation"
         && data.expiresAt == index.expiresAt && validInvitationToken(token)
-        && validInvitationProjection(data, weddingId) && canonicalCustomerInvitation(weddingId, token, data)
+        && validCustomerInvitationEnvelope(data, weddingId) && canonicalCustomerInvitationData(weddingId, token, data)
         && data.guest.fullName == guest.fullName && data.guest.additionalGuestAllowance == invitationGuestAllowance(guest)
         && data.updatedAt == request.time;
     }
@@ -1444,9 +1496,8 @@ service cloud.firestore {
       match /invitationSecrets/{guestId} {
         allow get: if canManageInvitationForGuest(weddingId, guestId);
         allow list: if canManageGuestRecords(weddingId);
-        allow create, update: if invitationEventExists(weddingId)
-          && canManageInvitationForGuest(weddingId, guestId)
-          && request.resource.data.keys().hasOnly(["token", "status", "purpose", "version", "expiresAt", "createdAt", "updatedAt", "lastIssueRequestId"])
+        allow create, update: if canManageInvitationForGuest(weddingId, guestId)
+          && request.resource.data.keys().hasOnly(["token", "status", "purpose", "version", "expiresAt", "createdAt", "updatedAt", "lastIssueRequestId", "wedding"])
           && validInvitationToken(request.resource.data.token)
           && request.resource.data.status in ["active", "revoked"]
           && request.resource.data.purpose == "guest-invitation"
@@ -1454,7 +1505,11 @@ service cloud.firestore {
           && (request.resource.data.expiresAt == null || request.resource.data.expiresAt is timestamp)
           && request.resource.data.createdAt is timestamp
           && request.resource.data.updatedAt == request.time
-          && (!exists(invitationSecretPath(weddingId, guestId)) || request.resource.data.diff(resource.data).affectedKeys().hasOnly(["token", "status", "purpose", "version", "expiresAt", "updatedAt", "lastIssueRequestId"]))
+          && request.resource.data.wedding is map
+          && (request.resource.data.status == "revoked"
+            ? (exists(invitationSecretPath(weddingId, guestId)) && request.resource.data.wedding == resource.data.wedding)
+            : (isCustomer(weddingId) ? canonicalInvitationWedding(weddingId, request.resource.data.wedding) : true))
+          && (!exists(invitationSecretPath(weddingId, guestId)) || request.resource.data.diff(resource.data).affectedKeys().hasOnly(["token", "status", "purpose", "version", "expiresAt", "updatedAt", "lastIssueRequestId", "wedding"]))
           && request.resource.data.get("lastIssueRequestId", "") is string
           && request.resource.data.get("lastIssueRequestId", "").size() <= 100
           && exists(/databases/$(database)/documents/weddings/$(weddingId)/guests/$(guestId))
@@ -1475,10 +1530,9 @@ service cloud.firestore {
       match /invitationTokens/{token} {
         allow get: if canReadInvitationTokenRecord(weddingId, token);
         allow list: if canManageGuestRecords(weddingId);
-        allow create, update: if invitationEventExists(weddingId)
-          && canManageInvitationForGuest(weddingId, request.resource.data.guestId)
+        allow create, update: if canManageInvitationForGuest(weddingId, request.resource.data.guestId)
           && validInvitationToken(token)
-          && request.resource.data.keys().hasOnly(["guestId", "status", "purpose", "version", "expiresAt", "createdAt", "updatedAt"])
+          && request.resource.data.keys().hasOnly(["guestId", "status", "purpose", "version", "expiresAt", "createdAt", "updatedAt", "seatingAssignments"])
           && request.resource.data.guestId is string
           && request.resource.data.status in ["active", "revoked"]
           && request.resource.data.purpose == "guest-invitation"
@@ -1486,8 +1540,10 @@ service cloud.firestore {
           && (request.resource.data.expiresAt == null || request.resource.data.expiresAt is timestamp)
           && request.resource.data.createdAt is timestamp
           && request.resource.data.updatedAt == request.time
+          && request.resource.data.seatingAssignments is list
+          && canonicalInvitationAssignments(weddingId, request.resource.data.guestId, request.resource.data.seatingAssignments)
           && (!exists(invitationTokenPath(weddingId, token)) || (
-            request.resource.data.diff(resource.data).affectedKeys().hasOnly(["status", "version", "expiresAt", "updatedAt"])
+            request.resource.data.diff(resource.data).affectedKeys().hasOnly(["status", "version", "expiresAt", "updatedAt", "seatingAssignments"])
             && request.resource.data.guestId == resource.data.guestId
             && request.resource.data.purpose == resource.data.purpose
             && request.resource.data.createdAt == resource.data.createdAt
@@ -1605,8 +1661,9 @@ service cloud.firestore {
       match /publicGuests/{guestToken} {
         allow get: if isActiveInvitationToken(weddingId, guestToken) || canReadInvitationTokenRecord(weddingId, guestToken);
         allow list: if false;
-        allow create: if isCustomer(weddingId) ? customerInvitationWrite(weddingId, guestToken, request.resource.data) : invitationEventExists(weddingId)
-          && canManageInvitationForGuest(weddingId,
+        allow create: if isCustomer(weddingId)
+          ? customerInvitationWrite(weddingId, guestToken, request.resource.data)
+          : (canManageInvitationForGuest(weddingId,
             getAfter(invitationTokenPath(weddingId, guestToken)).data.guestId)
           && validInvitationToken(guestToken)
           && validInvitationProjection(request.resource.data, weddingId)
@@ -1616,10 +1673,11 @@ service cloud.firestore {
           && getAfter(invitationTokenPath(weddingId, guestToken)).data.expiresAt == request.resource.data.expiresAt
           && getAfter(/databases/$(database)/documents/weddings/$(weddingId)/guests/$(getAfter(invitationTokenPath(weddingId, guestToken)).data.guestId)).data.fullName == request.resource.data.guest.fullName
           && invitationGuestAllowance(getAfter(/databases/$(database)/documents/weddings/$(weddingId)/guests/$(getAfter(invitationTokenPath(weddingId, guestToken)).data.guestId)).data) == request.resource.data.guest.additionalGuestAllowance
-          && request.resource.data.updatedAt == request.time;
-        allow update: if isCustomer(weddingId) ? customerInvitationWrite(weddingId, guestToken, request.resource.data) : isPublicGuestRsvpUpdate(weddingId, guestToken)
-          || (invitationEventExists(weddingId)
-            && canManageInvitationForGuest(weddingId,
+          && request.resource.data.updatedAt == request.time);
+        allow update: if isCustomer(weddingId)
+          ? customerInvitationWrite(weddingId, guestToken, request.resource.data)
+          : (isPublicGuestRsvpUpdate(weddingId, guestToken)
+          || (canManageInvitationForGuest(weddingId,
             get(invitationTokenPath(weddingId, guestToken)).data.guestId)
             && validInvitationProjection(request.resource.data, weddingId)
             && canonicalCustomerInvitation(weddingId, guestToken, request.resource.data)
@@ -1629,7 +1687,7 @@ service cloud.firestore {
             && exists(/databases/$(database)/documents/weddings/$(weddingId)/guests/$(get(invitationTokenPath(weddingId, guestToken)).data.guestId))
             && getAfter(/databases/$(database)/documents/weddings/$(weddingId)/guests/$(get(invitationTokenPath(weddingId, guestToken)).data.guestId)).data.fullName == request.resource.data.guest.fullName
             && invitationGuestAllowance(getAfter(/databases/$(database)/documents/weddings/$(weddingId)/guests/$(get(invitationTokenPath(weddingId, guestToken)).data.guestId)).data) == request.resource.data.guest.additionalGuestAllowance
-            && request.resource.data.updatedAt == request.time);
+            && request.resource.data.updatedAt == request.time));
         allow delete: if invitationEventExists(weddingId)
           && canManageInvitationForGuest(weddingId,
             get(invitationTokenPath(weddingId, guestToken)).data.guestId)
@@ -1638,9 +1696,9 @@ service cloud.firestore {
       }
 
       // Client-driven deletion can resume after an interrupted batch. The
-      // deleting flag blocks all ordinary/public paths before this grant applies.
+      // deleting flag grants cleanup reads and deletes, never new writes.
       match /{document=**} {
-        allow read, write: if isEventDeletingOwner(weddingId);
+        allow read, delete: if isEventDeletingOwner(weddingId);
       }
     }
 

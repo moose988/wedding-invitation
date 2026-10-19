@@ -79,17 +79,22 @@ export async function exportGuests(rows, fileBaseName = "guest-list", options = 
 
 export async function exportGenderRevealResponses(rows, fileBaseName = "gender-reveal-responses") {
   const normalisedRows = rows.map((row) => ({
-    "Full Name": row.fullName || "",
-    "International Phone": row.phoneE164 || "",
-    Attendance: row.attendance === "attending" ? "Attending" : row.attendance === "not_attending" ? "Not attending" : "",
-    Prediction: row.prediction === "boy" ? "Boy" : row.prediction === "girl" ? "Girl" : "",
-    "Message to Parents": row.message || "",
-    "Submitted At": row.createdAt?.toDate?.().toLocaleString?.() || "",
+    "Full Name / الاسم الكامل": spreadsheetSafeText(row.fullName || ""),
+    "International Phone / رقم الهاتف": spreadsheetSafeText(row.phoneE164 || ""),
+    "Attendance / الحضور": row.attendance === "attending" ? "Attending / سأحضر" : row.attendance === "not_attending" ? "Not attending / لن أحضر" : "",
+    "Prediction / التوقع": row.prediction === "boy" ? "Boy / ولد" : row.prediction === "girl" ? "Girl / بنت" : "",
+    "Message to Parents / رسالة إلى الوالدين": spreadsheetSafeText(row.message || ""),
+    "Submitted At / وقت الإرسال": row.createdAt?.toDate?.()
+      ? new Intl.DateTimeFormat("en-AE", { dateStyle: "medium", timeStyle: "short", timeZone: "Asia/Dubai" }).format(row.createdAt.toDate())
+      : "",
   }));
   try {
     const XLSX = await loadSheetJs();
     const workbook = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(workbook, XLSX.utils.json_to_sheet(normalisedRows), "Responses");
+    const worksheet = XLSX.utils.json_to_sheet(normalisedRows);
+    worksheet["!cols"] = [{ wch: 26 }, { wch: 24 }, { wch: 23 }, { wch: 19 }, { wch: 44 }, { wch: 27 }];
+    worksheet["!rtl"] = true;
+    XLSX.utils.book_append_sheet(workbook, worksheet, "Responses الردود");
     XLSX.writeFile(workbook, `${fileBaseName}.xlsx`);
     return "xlsx";
   } catch {
@@ -100,6 +105,11 @@ export async function exportGenderRevealResponses(rows, fileBaseName = "gender-r
     downloadFile(`${fileBaseName}.csv`, "text/csv;charset=utf-8", csv);
     return "csv";
   }
+}
+
+export function spreadsheetSafeText(value) {
+  const text = String(value ?? "");
+  return /^[\s\uFEFF]*[=+\-@\t\r\n＝＋－＠]/u.test(text) ? `'${text}` : text;
 }
 
 function normaliseAdditionalGuests(value) {

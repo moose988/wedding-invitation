@@ -30,7 +30,9 @@ export function genderRevealResultSummary(aggregate = {}) {
 
 export function genderRevealSubmissionErrorKey(error) {
   if (error?.code === "failed-precondition") return "closedError";
-  if (error?.code === "permission-denied") return "permissionOrDuplicateError";
+  if (error?.code === "already-exists") return "duplicateError";
+  if (error?.code === "auth/network-request-failed") return "networkError";
+  if (error?.code === "permission-denied" || error?.code === "unauthenticated" || error?.code?.startsWith("auth/")) return "permissionError";
   if (error?.code === "resource-exhausted" || error?.code === "quota-exceeded") return "quotaError";
   if (error?.code === "unavailable" || error?.code === "network-request-failed" || error?.code === "deadline-exceeded" || error?.code === "cancelled" || globalThis.navigator?.onLine === false) return "networkError";
   return "saveError";

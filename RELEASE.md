@@ -22,6 +22,8 @@ npm run test:security
 
 1. Confirm the target project uses the Spark plan and Firestore is initialized. Do not initialize or deploy Firebase Hosting for production.
 2. Enable Email/Password under Authentication → Sign-in method.
+   Gender Reveal invitations also require Anonymous Authentication; their named
+   Auth instance must remain separate from planner/customer sessions.
 3. Confirm each existing authorized account has the correct UID-keyed event membership and permissions. The email address is not an authorization key.
 4. Review `firebase.json`'s Hosting site name and CLI project selection before deploying.
 
@@ -64,3 +66,37 @@ Stable browser-generated invitation tokens are retained and reprojected. A value
 - Confirm browser network activity for these routes has no `cloudfunctions.net` or Cloud Run requests.
 
 Record which smoke checks were completed. Emulator results do not prove the deployed Firebase Console configuration or production browser behavior.
+
+## Gender Reveal submissions
+
+Run `npm run test:gender-reveal` with the real Auth and Firestore emulators in
+addition to the existing unit and security suites. This covers first creation,
+independent sessions, duplicates, concurrent commits, transport fault recovery,
+private reads, incomplete bundles, and live authorized response listeners.
+
+For desktop and mobile Chrome invitation checks, install Playwright and
+its browsers, set disposable `GENDER_REVEAL_TEST_PASSWORD` and
+`GENDER_REVEAL_BROWSER_RUN_ID` values, then run:
+
+```powershell
+firebase emulators:exec --only auth,firestore --project demo-wedding-security "node scripts/check-gender-reveal-browser.mjs"
+```
+
+`GENDER_REVEAL_PLAYWRIGHT_MODULE` may point to an installed Playwright
+`index.mjs`. Set `GENDER_REVEAL_BROWSER_ENGINE=webkit` to run the optional
+WebKit mobile check. The script only seeds the loopback demo project. Mobile
+emulation uses Chrome as the dashboard observer because Windows WebKit stalls
+on the emulator dashboard transport; it is not a physical iPhone test.
+
+Deploy the matching Firestore rules before pushing the frontend to `main`.
+Verify the active ruleset and live asset hashes: a Vercel deployment does not
+update Firebase rules. Both the preceding session-key client and this client
+write the same four-document bundle, so the rules-first rollout is compatible.
+
+If an audited event has counters inconsistent with canonical saved responses,
+`scripts/repair-gender-reveal-totals.mjs --event=<event-id>` previews an IAM repair
+and writes a local backup. Add `--apply` only for an authorized repair. It uses a
+serializable transaction, preserves responses/event status and other fields,
+and makes no changes when the counters already match. Set `FIREBASE_CLI_LIB` to
+the installed Firebase CLI `lib` directory; never put IAM credentials in client
+code or evidence reports.

@@ -10,7 +10,7 @@ export function validateGenderRevealResponse(input) {
 }
 
 export function createGenderRevealSubmissionService({ api, db, weddingId, ensureAnonymousUser, createResponseId = makeResponseId }) {
-  if (!api?.doc || !api?.runTransaction || !api?.serverTimestamp || !db || !weddingId || typeof ensureAnonymousUser !== "function") {
+  if (!api?.doc || !api?.getDocFromServer || !api?.increment || !api?.runTransaction || !api?.serverTimestamp || !db || !weddingId || typeof ensureAnonymousUser !== "function") {
     throw new TypeError("Gender reveal submission service is not configured.");
   }
   const ref = (...segments) => api.doc(db, "weddings", weddingId, ...segments);
@@ -30,26 +30,42 @@ export function createGenderRevealSubmissionService({ api, db, weddingId, ensure
 
     try {
       await api.runTransaction(db, async (transaction) => {
-      const [event, aggregate] = await Promise.all([
-        transaction.get(eventRef), transaction.get(aggregateRef),
-      ]);
-      if (!event.exists() || event.data()?.eventCategory !== "gender_reveal" || event.data()?.eventStatus !== "active") {
-        throw Object.assign(new Error("Responses are not open for this event."), { code: "failed-precondition" });
-      }
-      const previous = aggregate.exists() ? aggregate.data() : { boyCount: 0, girlCount: 0, totalCount: 0 };
-      if (![previous.boyCount, previous.girlCount, previous.totalCount].every((value) => Number.isSafeInteger(value) && value >= 0) ||
-          previous.totalCount !== previous.boyCount + previous.girlCount) {
-        throw Object.assign(new Error("Event response totals need organizer attention."), { code: "failed-precondition" });
-      }
-      const boyCount = previous.boyCount + (response.prediction === "boy" ? 1 : 0);
-      const girlCount = previous.girlCount + (response.prediction === "girl" ? 1 : 0);
-      const totalCount = previous.totalCount + 1;
-      transaction.set(responseRef, { ...response, createdAt: api.serverTimestamp() });
-      transaction.set(keyRef, { responseId, createdAt: api.serverTimestamp() });
-      transaction.set(stateRef, { boyCount, girlCount, totalCount, lastResponseId: responseId, lastSessionId: sessionId, updatedAt: api.serverTimestamp() });
-      transaction.set(aggregateRef, { boyCount, girlCount, totalCount, updatedAt: api.serverTimestamp() });
+        const receipt = await transaction.get(keyRef);
+        if (receipt.exists()) {
+          throw Object.assign(new Error("This browser session has already submitted a response."), { code: "already-exists" });
+        }
+        const [event, aggregate] = await Promise.all([transaction.get(eventRef), transaction.get(aggregateRef)]);
+        if (!event.exists() || event.data()?.eventCategory !== "gender_reveal" || event.data()?.eventStatus !== "active") {
+          throw Object.assign(new Error("Responses are not open for this event."), { code: "failed-precondition" });
+        }
+        const previous = aggregate.exists() ? aggregate.data() : { boyCount: 0, girlCount: 0, totalCount: 0 };
+        if (![previous.boyCount, previous.girlCount, previous.totalCount].every((value) => Number.isSafeInteger(value) && value >= 0) ||
+            previous.totalCount !== previous.boyCount + previous.girlCount) {
+          throw Object.assign(new Error("Event response totals need organizer attention."), { code: "data-loss" });
+        }
+        // Transforms evaluate against the commit's current counters, so another
+        // session's commit cannot make a valid bundle fail rule evaluation before
+        // Firestore detects the transaction conflict and retries it.
+        const counts = {
+          boyCount: api.increment(response.prediction === "boy" ? 1 : 0),
+          girlCount: api.increment(response.prediction === "girl" ? 1 : 0),
+          totalCount: api.increment(1),
+        };
+        transaction.set(responseRef, { ...response, createdAt: api.serverTimestamp() });
+        transaction.set(keyRef, { responseId, createdAt: api.serverTimestamp() });
+        transaction.set(stateRef, { ...counts, lastResponseId: responseId, lastSessionId: sessionId, updatedAt: api.serverTimestamp() }, { merge: true });
+        transaction.set(aggregateRef, { ...counts, updatedAt: api.serverTimestamp() }, { merge: true });
       });
     } catch (error) {
+      if (error?.code === "already-exists") throw error;
+      // A commit acknowledgement can be lost after the server saves all four
+      // documents. Confirm this attempt through its server-only receipt before
+      // reporting failure; cached data must never turn a failed save into success.
+      const receipt = await api.getDocFromServer(keyRef).catch(() => null);
+      if (receipt?.exists()) {
+        if (receipt.data().responseId === responseId) return { ok: true };
+        throw Object.assign(new Error("This browser session has already submitted a response."), { code: "already-exists" });
+      }
       throw error;
     }
     return { ok: true };

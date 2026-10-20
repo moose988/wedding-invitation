@@ -3,7 +3,7 @@ import { readFile } from "node:fs/promises";
 import test from "node:test";
 import { initializeApp, deleteApp } from "firebase/app";
 import { connectAuthEmulator, initializeAuth, inMemoryPersistence, signInAnonymously, signOut } from "firebase/auth";
-import { collection, connectFirestoreEmulator, deleteDoc, doc, getDoc, getDocs, query, runTransaction, serverTimestamp, setDoc, updateDoc } from "firebase/firestore";
+import { collection, connectFirestoreEmulator, deleteDoc, doc, getDoc, getDocFromServer, getDocs, getFirestore, increment, onSnapshot, query, runTransaction, serverTimestamp, setDoc, updateDoc, writeBatch } from "firebase/firestore";
 import { assertFails, assertSucceeds, initializeTestEnvironment } from "@firebase/rules-unit-testing";
 import { publicEventData } from "../event-publishing.js";
 import { createGenderRevealSubmissionService } from "../gender-reveal-submission.js";
@@ -66,7 +66,7 @@ test("Gender Reveal Spark rules enforce category creation, atomic RSVP uniquenes
     let responseNumber = 0;
     let anonymousSignIn;
     const submit = createGenderRevealSubmissionService({
-      api: { doc, getDoc, runTransaction, serverTimestamp }, db, weddingId: eventId,
+      api: { doc, getDoc, getDocFromServer, increment, runTransaction, serverTimestamp }, db, weddingId: eventId,
       ensureAnonymousUser: async () => {
         if (auth.currentUser) return auth.currentUser.uid;
         anonymousSignIn ||= signInAnonymously(auth);
@@ -82,7 +82,7 @@ test("Gender Reveal Spark rules enforce category creation, atomic RSVP uniquenes
       const sessionDb = (await import("firebase/firestore")).getFirestore(sessionApp);
       connectFirestoreEmulator(sessionDb, "127.0.0.1", 8080);
       const sessionSubmit = createGenderRevealSubmissionService({
-        api: { doc, getDoc, runTransaction, serverTimestamp }, db: sessionDb, weddingId: eventId,
+        api: { doc, getDoc, getDocFromServer, increment, runTransaction, serverTimestamp }, db: sessionDb, weddingId: eventId,
         ensureAnonymousUser: async () => {
           if (!sessionAuth.currentUser) await signInAnonymously(sessionAuth);
           return sessionAuth.currentUser.uid;
@@ -116,7 +116,7 @@ test("Gender Reveal Spark rules enforce category creation, atomic RSVP uniquenes
     assert.equal(duplicateResults.filter((result) => result.status === "fulfilled").length, 1);
     assert.equal(duplicateResults.filter((result) => result.status === "rejected").length, 1);
     const duplicateError = duplicateResults.find((result) => result.status === "rejected").reason;
-    assert.equal(duplicateError.code, "permission-denied", "the private session key blocks repeat submissions without exposing prior data");
+    assert.equal(duplicateError.code, "already-exists", "only an authorized own-session receipt identifies a duplicate");
     const firstSessionId = auth.currentUser.uid;
 
     const publicResultsBeforeNextSubmission = await assertSucceeds(getDoc(doc(publicDb, aggregatePath)));
@@ -130,7 +130,7 @@ test("Gender Reveal Spark rules enforce category creation, atomic RSVP uniquenes
     secondDb = (await import("firebase/firestore")).getFirestore(secondApp);
     connectFirestoreEmulator(secondDb, "127.0.0.1", 8080);
     const submitFromSecondSession = createGenderRevealSubmissionService({
-      api: { doc, getDoc, runTransaction, serverTimestamp }, db: secondDb, weddingId: eventId,
+      api: { doc, getDoc, getDocFromServer, increment, runTransaction, serverTimestamp }, db: secondDb, weddingId: eventId,
       ensureAnonymousUser: async () => {
         if (!secondAuth.currentUser) await signInAnonymously(secondAuth);
         return secondAuth.currentUser.uid;
@@ -165,7 +165,9 @@ test("Gender Reveal Spark rules enforce category creation, atomic RSVP uniquenes
     await assertFails(getDocs(query(collection(anonymousDb, `weddings/${eventId}/genderRevealResponses`))));
     await assertFails(getDoc(doc(anonymousDb, `weddings/${eventId}/genderRevealState/summary`)));
     await assertFails(getDocs(query(collection(anonymousDb, `weddings/${eventId}/genderRevealPhoneKeys`))));
-    await assertFails(getDoc(doc(anonymousDb, `weddings/${eventId}/genderRevealSessionKeys/${firstSessionId}`)));
+    await assertSucceeds(getDoc(doc(anonymousDb, `weddings/${eventId}/genderRevealSessionKeys/${firstSessionId}`)));
+    await assertFails(getDoc(doc(secondDb, `weddings/${eventId}/genderRevealSessionKeys/${firstSessionId}`)));
+    await assertFails(getDoc(doc(publicDb, `weddings/${eventId}/genderRevealSessionKeys/${firstSessionId}`)));
     await assertFails(getDocs(query(collection(anonymousDb, `weddings/${eventId}/genderRevealSessionKeys`))));
     await assertSucceeds(getDoc(doc(publicDb, aggregatePath)));
 
@@ -202,6 +204,117 @@ test("Gender Reveal Spark rules enforce category creation, atomic RSVP uniquenes
       await signOut(session.auth).catch(() => {});
       await deleteApp(session.app).catch(() => {});
     }
+    await env.cleanup();
+  }
+});
+
+test("real Auth/Firestore transactions retain atomic totals across concurrency and network retries", {
+  skip: emulatorAvailable ? false : "Run with the demo-project Auth and Firestore emulators.",
+}, async () => {
+  const projectId = "demo-wedding-security";
+  const eventId = "gender-reveal-retry-fixture";
+  const env = await initializeTestEnvironment({ projectId, firestore: { rules: await readFile(new URL("../firestore.rules", import.meta.url), "utf8") } });
+  const apps = [];
+  const event = { ...genderRevealEmulatorFixture, ownerUserId: "retry-owner" };
+  const input = { fullName: "Synthetic retry guest", attendance: "attending", prediction: "boy", message: "" };
+  const customerDb = env.authenticatedContext("retry-customer").firestore();
+  const responses = collection(customerDb, "weddings", eventId, "genderRevealResponses");
+  let stop;
+  try {
+    await env.withSecurityRulesDisabled(async context => {
+      const db = context.firestore();
+      await setDoc(doc(db, "weddings", eventId), event);
+      await setDoc(doc(db, "weddings", eventId, "publicEvent", "details"), publicEventData(event));
+      await setDoc(doc(db, "weddings", eventId, "dashboardUsers", "retry-customer"), { role: "customer", canViewDashboard: true, seatingOnly: false });
+    });
+    const session = async (overrides = {}) => {
+      const app = initializeApp({ apiKey: "demo-key", projectId }, `retry-session-${crypto.randomUUID()}`);
+      apps.push(app);
+      const auth = initializeAuth(app, { persistence: inMemoryPersistence });
+      connectAuthEmulator(auth, "http://127.0.0.1:9099", { disableWarnings: true });
+      const db = getFirestore(app);
+      connectFirestoreEmulator(db, "127.0.0.1", 8080);
+      await signInAnonymously(auth);
+      const makeSubmit = () => createGenderRevealSubmissionService({
+        db, weddingId: eventId, ensureAnonymousUser: async () => { await auth.authStateReady(); return auth.currentUser.uid; },
+        api: { doc, getDocFromServer, increment, serverTimestamp, runTransaction, ...overrides },
+      });
+      return { auth, db, submit: makeSubmit(), makeSubmit };
+    };
+    let latestCount = -1;
+    let pending;
+    stop = onSnapshot(responses, snapshot => { latestCount = snapshot.size; pending?.(); }, error => { throw error; });
+    const waitForRows = count => new Promise((resolve, reject) => {
+      const timer = setTimeout(() => reject(new Error(`Dashboard listener expected ${count}, saw ${latestCount}`)), 10000);
+      pending = () => { if (latestCount === count) { clearTimeout(timer); pending = null; resolve(); } };
+      pending();
+    });
+    await waitForRows(0);
+    const first = await session();
+    // A full-looking bundle that omits the public aggregate must be denied.
+    const rawBundle = (target, response, counts, omitAggregate = false) => {
+      const responseId = `raw-response-${crypto.randomUUID()}`;
+      const batch = writeBatch(target.db);
+      const ref = (...parts) => doc(target.db, "weddings", eventId, ...parts);
+      batch.set(ref("genderRevealResponses", responseId), { ...response, createdAt: serverTimestamp() });
+      batch.set(ref("genderRevealSessionKeys", target.auth.currentUser.uid), { responseId, createdAt: serverTimestamp() });
+      batch.set(ref("genderRevealState", "summary"), { ...counts, lastResponseId: responseId, lastSessionId: target.auth.currentUser.uid, updatedAt: serverTimestamp() });
+      if (!omitAggregate) batch.set(ref("genderRevealResults", "aggregate"), { ...counts, updatedAt: serverTimestamp() });
+      return batch.commit();
+    };
+    await assertFails(rawBundle(first, input, { boyCount: 1, girlCount: 0, totalCount: 1 }, true));
+    await assertFails(rawBundle(first, { ...input, prediction: "invalid" }, { boyCount: 1, girlCount: 0, totalCount: 1 }));
+    await assertFails(rawBundle(first, { ...input, privateField: "forbidden" }, { boyCount: 1, girlCount: 0, totalCount: 1 }));
+    await first.submit(input);
+    console.info("Retry fixture: first response committed");
+    await waitForRows(1);
+    await assert.rejects(first.makeSubmit()(input), { code: "already-exists" }, "a recreated service using the restored identity cannot double count");
+
+    // Inject a transport failure before commit while retaining real Auth,
+    // Firestore reads, rule evaluation, receipts, and the subsequent retry.
+    let connectionAvailable = false;
+    const offline = await session({ runTransaction: (db, callback) => {
+      if (!connectionAvailable) return Promise.reject(Object.assign(new Error("Injected connection interruption"), { code: "unavailable" }));
+      return runTransaction(db, callback);
+    } });
+    await assert.rejects(offline.submit(input), { code: "unavailable" });
+    assert.equal((await getDocs(responses)).size, 1, "offline submission must not report a saved response");
+    connectionAvailable = true;
+    await offline.submit({ ...input, attendance: "not_attending", prediction: "girl", message: "Restored connection" });
+    console.info("Retry fixture: interrupted request retried");
+    await waitForRows(2);
+
+    let loseAcknowledgement = true;
+    const ambiguous = await session({ runTransaction: async (...args) => {
+      const result = await runTransaction(...args);
+      if (loseAcknowledgement) { loseAcknowledgement = false; throw Object.assign(new Error("Injected lost commit acknowledgement"), { code: "unavailable" }); }
+      return result;
+    } });
+    assert.deepEqual(await ambiguous.submit(input), { ok: true }, "a real server receipt confirms the committed attempt after a lost acknowledgement");
+    console.info("Retry fixture: lost acknowledgement confirmed");
+    await waitForRows(3);
+    await assert.rejects(ambiguous.submit(input), { code: "already-exists" });
+
+    const concurrent = await Promise.all(Array.from({ length: 4 }, () => session()));
+    await Promise.all(concurrent.map((client, i) => client.submit({ ...input, prediction: i % 2 ? "girl" : "boy", attendance: i % 2 ? "not_attending" : "attending" })));
+    console.info("Retry fixture: concurrent responses committed");
+    await waitForRows(7);
+    const rows = await getDocs(responses);
+    const totals = rows.docs.reduce((a, row) => { a[`${row.data().prediction}Count`]++; a.totalCount++; return a; }, { boyCount: 0, girlCount: 0, totalCount: 0 });
+    const aggregate = await getDoc(doc(first.db, "weddings", eventId, "genderRevealResults", "aggregate"));
+    assert.deepEqual(totals, { boyCount: 4, girlCount: 3, totalCount: 7 });
+    assert.deepEqual({ ...aggregate.data(), updatedAt: undefined }, { ...totals, updatedAt: undefined });
+    stop(); stop = null;
+    assert.equal((await getDocs(responses)).size, 7, "dashboard re-subscription/reload retains saved records");
+    const invalid = await session();
+    await assertFails(rawBundle(invalid, input, { boyCount: 5, girlCount: 3, totalCount: 8 }, true));
+    await assertFails(rawBundle(invalid, input, { boyCount: 100, girlCount: 3, totalCount: 103 }));
+    await env.withSecurityRulesDisabled(async context => updateDoc(doc(context.firestore(), "weddings", eventId), { status: "completed" }));
+    await assert.rejects(invalid.submit(input), { code: "permission-denied" });
+    assert.equal((await getDocs(responses)).size, 7);
+  } finally {
+    stop?.();
+    await Promise.all(apps.map(app => deleteApp(app)));
     await env.cleanup();
   }
 });

@@ -23,7 +23,9 @@ import {
   deleteDoc as rawDeleteDoc,
   doc,
   getDoc as rawGetDoc,
+  getDocFromServer,
   getDocs as rawGetDocs,
+  increment,
   limit,
   onSnapshot as rawOnSnapshot,
   orderBy,
@@ -135,7 +137,8 @@ export function initGenderRevealSubmissionFirebase() {
     const auth = initializeAuth(app, { persistence: browserSessionPersistence });
     const db = getFirestore(app);
     connectLocalServices(app, auth, db);
-    return { app, auth, db, config };
+    const persistenceReady = auth.authStateReady();
+    return { app, auth, db, config, persistenceReady };
   });
 }
 
@@ -158,7 +161,9 @@ export {
   deleteDoc,
   doc,
   getDoc,
+  getDocFromServer,
   getDocs,
+  increment,
   limit,
   onAuthStateChanged,
   onSnapshot,

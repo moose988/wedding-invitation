@@ -1,5 +1,5 @@
 import {
-  doc, getDoc, initGenderRevealSubmissionFirebase, initPublicFirebase, onSnapshot, runTransaction,
+  doc, getDoc, getDocFromServer, increment, initGenderRevealSubmissionFirebase, initPublicFirebase, onSnapshot, runTransaction,
   serverTimestamp, signInAnonymously,
 } from "./firebase-config.js";
 import { createGenderRevealSubmissionService } from "./gender-reveal-submission.js";
@@ -23,7 +23,7 @@ const copy = {
     skip: "Skip", retryOpening: "Retry video", videoLoading: "Opening your invitation…", videoSlow: "The video is taking longer to start. You can retry or skip.", videoFailed: "The video could not be played. You can retry or skip.", videoBlocked: "Your browser blocked video playback. Tap retry or skip.", reducedMotion: "Your invitation is ready.",
     musicPlay: "Play event music", musicPause: "Pause event music", musicBlocked: "Music could not start. Tap the record to try again.", musicPlaying: "Event music is playing.", musicUnavailable: "Event music is unavailable.",
     closed: "Responses are not open for this event.", validationSummary: "Please correct the highlighted fields.", nameRequired: "Enter your full name.", nameTooLong: "Your name must be 120 characters or fewer.", attendanceRequired: "Choose whether you will attend.", predictionRequired: "Choose boy or girl.", messageTooLong: "Your message must be 1,000 characters or fewer.",
-    closedError: "Responses are not open for this event. Your draft is still here.", permissionOrDuplicateError: "This browser session may already have submitted a response, or access was denied. Your form is still here; no existing response was changed.", quotaError: "The response service is temporarily at capacity. Your form is still here; please try again later.", networkError: "A network problem prevented saving. Your form is still here; check your connection and try again.", saveError: "We could not save your response. Your form is still here; please try again.",
+    closedError: "Responses are not open for this event. Your draft is still here.", permissionError: "Access was denied while saving your response. Your form is still here; please try again or contact the organizer.", duplicateError: "This browser session has already submitted a response. Your existing response has not been changed.", quotaError: "The response service is temporarily at capacity. Your form is still here; please try again later.", networkError: "A network problem prevented saving. Your form is still here; check your connection and try again.", saveError: "We could not save your response. Your form is still here; please try again.",
     resultsError: "Your response was saved, but the prediction totals could not be loaded right now.", boyBar: "Boy predictions", girlBar: "Girl predictions", madeWith: "Made with care by", fallbackStatic: "The opening animation was skipped. Your invitation is ready.",
   },
   ar: {
@@ -36,7 +36,7 @@ const copy = {
     skip: "تخطي", retryOpening: "إعادة تشغيل الفيديو", videoLoading: "جارٍ فتح الدعوة…", videoSlow: "استغرق تشغيل الفيديو وقتًا أطول. يمكنك إعادة المحاولة أو التخطي.", videoFailed: "تعذّر تشغيل الفيديو. يمكنك إعادة المحاولة أو التخطي.", videoBlocked: "منع المتصفح تشغيل الفيديو. اضغط لإعادة المحاولة أو التخطي.", reducedMotion: "دعوتك جاهزة.",
     musicPlay: "تشغيل موسيقى الحفل", musicPause: "إيقاف موسيقى الحفل مؤقتًا", musicBlocked: "تعذّر تشغيل الموسيقى. اضغط على الأسطوانة للمحاولة مجددًا.", musicPlaying: "موسيقى الحفل تعمل.", musicUnavailable: "موسيقى الحفل غير متاحة.",
     closed: "الردود غير متاحة لهذه المناسبة.", validationSummary: "يرجى تصحيح الحقول المحددة.", nameRequired: "أدخل اسمك الكامل.", nameTooLong: "يجب ألا يتجاوز الاسم ١٢٠ حرفًا.", attendanceRequired: "اختر ما إذا كنت ستحضر.", predictionRequired: "اختر ولد أو بنت.", messageTooLong: "يجب ألا تتجاوز الرسالة ١٬٠٠٠ حرف.",
-    closedError: "الردود غير متاحة لهذه المناسبة. ما زالت بياناتك هنا.", permissionOrDuplicateError: "ربما أرسل هذا المتصفح ردًا من قبل أو لا تتوفر صلاحية الإرسال. ما زالت بياناتك هنا ولم يتغير أي رد سابق.", quotaError: "خدمة الردود مشغولة مؤقتًا. ما زالت بياناتك هنا؛ حاول لاحقًا.", networkError: "منع خلل في الاتصال حفظ ردك. ما زالت بياناتك هنا؛ تحقق من الاتصال وحاول مجددًا.", saveError: "تعذّر حفظ ردك. ما زالت بياناتك هنا؛ حاول مجددًا.",
+    closedError: "الردود غير متاحة لهذه المناسبة. ما زالت بياناتك هنا.", permissionError: "لا تتوفر صلاحية حفظ الرد. ما زالت بياناتك هنا؛ حاول مجددًا أو تواصل مع المنظم.", duplicateError: "أرسلت جلسة المتصفح هذه ردًا من قبل. لم يتغير ردك السابق.", quotaError: "خدمة الردود مشغولة مؤقتًا. ما زالت بياناتك هنا؛ حاول لاحقًا.", networkError: "منع خلل في الاتصال حفظ ردك. ما زالت بياناتك هنا؛ تحقق من الاتصال وحاول مجددًا.", saveError: "تعذّر حفظ ردك. ما زالت بياناتك هنا؛ حاول مجددًا.",
     resultsError: "تم حفظ ردك، لكن تعذّر تحميل إجمالي التوقعات الآن.", boyBar: "توقعات ولد", girlBar: "توقعات بنت", madeWith: "صُنعت بعناية بواسطة", fallbackStatic: "تم تخطي الحركة الافتتاحية. دعوتك جاهزة.",
   },
 };
@@ -434,10 +434,11 @@ async function getSubmissionService() {
   if (submissionService) return submissionService;
   const firebase = initGenderRevealSubmissionFirebase();
   submissionService = createGenderRevealSubmissionService({
-    api: { doc, runTransaction, serverTimestamp },
+    api: { doc, getDocFromServer, increment, runTransaction, serverTimestamp },
     db: firebase.db,
     weddingId,
     ensureAnonymousUser: async () => {
+      await firebase.persistenceReady;
       if (!firebase.auth.currentUser) await signInAnonymously(firebase.auth);
       return firebase.auth.currentUser?.uid || "";
     },

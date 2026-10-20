@@ -5,7 +5,7 @@ import {
   signInWithEmailAndPassword, signOut,
 } from "firebase/auth";
 import {
-  collection, connectFirestoreEmulator, doc, getDoc, getDocs, getFirestore,
+  collection, connectFirestoreEmulator, doc, getDoc, getDocFromServer, getDocs, getFirestore, increment,
   query, runTransaction, serverTimestamp,
 } from "firebase/firestore";
 import { createGenderRevealSubmissionService } from "../gender-reveal-submission.js";
@@ -47,7 +47,7 @@ try {
     assert.equal(sessionIds.has(sessionId), false, "each synthetic browser session must have a distinct anonymous user");
     sessionIds.add(sessionId);
     const submit = createGenderRevealSubmissionService({
-      api: { doc, runTransaction, serverTimestamp },
+      api: { doc, getDocFromServer, increment, runTransaction, serverTimestamp },
       db,
       weddingId: eventId,
       ensureAnonymousUser: async () => auth.currentUser?.uid || "",

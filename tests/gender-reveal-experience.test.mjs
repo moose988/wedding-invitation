@@ -39,9 +39,12 @@ test("local validation permits a prediction and message from a non-attendee with
   });
 });
 
-test("submission errors retain distinct network, permission/duplicate, quota, and closed states", () => {
+test("submission errors distinguish authorized duplicates from permission failures", () => {
   assert.equal(genderRevealSubmissionErrorKey({ code: "unavailable" }), "networkError");
-  assert.equal(genderRevealSubmissionErrorKey({ code: "permission-denied" }), "permissionOrDuplicateError");
+  assert.equal(genderRevealSubmissionErrorKey({ code: "permission-denied" }), "permissionError");
+  assert.equal(genderRevealSubmissionErrorKey({ code: "already-exists" }), "duplicateError");
+  assert.equal(genderRevealSubmissionErrorKey({ code: "auth/network-request-failed" }), "networkError");
+  assert.equal(genderRevealSubmissionErrorKey({ code: "data-loss" }), "saveError");
   assert.equal(genderRevealSubmissionErrorKey({ code: "resource-exhausted" }), "quotaError");
   assert.equal(genderRevealSubmissionErrorKey({ code: "failed-precondition" }), "closedError");
 });
@@ -99,7 +102,7 @@ test("public invitation defers video and audio sources until the open gesture", 
   assert.doesNotMatch(script, /adjustMusicPosition|musicPositionFrame|toggleMusicMuted|addEventListener\("scroll"/);
   assert.doesNotMatch(html, /id="musicMute"|gr-mute-toggle/);
   assert.match(invitationCss, /\.gr-button--open[\s\S]*?backdrop-filter: blur/);
-  assert.match(invitationCss, /\.gr-invitation[\s\S]*?gender-reveal-details-bg\.webp/);
+  assert.match(invitationCss, /\.gr-details-background[\s\S]*?gender-reveal-details-bg\.webp/);
   assert.match(invitationCss, /\.gr-decoration[\s\S]*?pointer-events: none/);
   assert.match(invitationCss, /html \{ min-width: 0;/);
   assert.match(script, /document\.body\.classList\.add\("gr-opening-active"\)/);
@@ -110,7 +113,7 @@ test("public invitation defers video and audio sources until the open gesture", 
   assert.match(firebaseConfig, /initGenderRevealSubmissionFirebase[\s\S]*?persistence: browserSessionPersistence/);
   assert.match(submissionService, /genderRevealSessionKeys/);
   assert.doesNotMatch(submissionService, /phoneE164|normalizeInternationalPhone/);
-  assert.match(html, /gender-reveal-teddy\.png[\s\S]*?alt=""/);
+  assert.match(html, /gender-reveal-teddy-floating\.png[\s\S]*?alt=""/);
   assert.match(html, /gender-reveal-toys\.png[\s\S]*?alt=""/);
 });
 
@@ -123,7 +126,7 @@ test("dashboard styling is gender-scoped and presents assigned event responses r
   assert.match(dashboard, /function renderGenderRevealResponsesPage/);
   assert.match(dashboard, /data-gender-response-search/);
   assert.match(dashboard, /data-gender-response-filter/);
-  assert.match(css, /@media \(max-width: 760px\)[\s\S]*?\.gr-stat--boy \{ order: 3; \}[\s\S]*?\.gr-stat--girl \{ order: 4; \}/);
+  assert.match(css, /@media \(max-width: 760px\)[\s\S]*?\.gr-stat--boy \{ order: 4; \}[\s\S]*?\.gr-stat--girl \{ order: 5; \}/);
   assert.match(dashboard, /Export Excel/);
   assert.match(dashboard, /phoneE164/);
   assert.match(dashboard, /function renderGenderRevealOverviewPage/);

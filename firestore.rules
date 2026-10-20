@@ -404,14 +404,17 @@ service cloud.firestore {
       let keyPath = genderRevealSessionKeyPath(weddingId, sessionId);
       let response = getAfter(responsePath).data;
       let key = getAfter(keyPath).data;
+      let state = getAfter(genderRevealStatePath(weddingId)).data;
+      let aggregate = getAfter(genderRevealAggregatePath(weddingId)).data;
       return genderRevealSubmissionAllowed(weddingId)
         && validGenderRevealResponseId(responseId)
         && validGenderRevealSessionId(sessionId)
         && sessionId == request.auth.uid
         && !exists(responsePath) && !exists(keyPath)
         && existsAfter(responsePath) && existsAfter(keyPath)
-        && getAfter(genderRevealStatePath(weddingId)).data.lastResponseId == responseId
-        && getAfter(genderRevealStatePath(weddingId)).data.lastSessionId == sessionId
+        && state.lastResponseId == responseId && state.lastSessionId == sessionId
+        && aggregate.boyCount == state.boyCount && aggregate.girlCount == state.girlCount
+        && aggregate.totalCount == state.totalCount && aggregate.updatedAt == request.time
         && validGenderRevealResponseData(response)
         && key.keys().hasOnly(["responseId", "createdAt"])
         && key.responseId == responseId && key.createdAt == request.time;
@@ -1445,7 +1448,9 @@ service cloud.firestore {
       }
 
       match /genderRevealSessionKeys/{sessionId} {
-        allow get: if false;
+        // Only this anonymous identity may check its own commit receipt. No
+        // response data, other sessions, or collection queries are exposed.
+        allow get: if isAnonymousFirebaseSession() && sessionId == request.auth.uid;
         allow list: if isEventDeletingOwner(weddingId);
         allow create: if sessionId == request.auth.uid
           && validGenderRevealSubmissionBundle(weddingId,

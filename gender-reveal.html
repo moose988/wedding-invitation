@@ -6,7 +6,7 @@
     <meta name="theme-color" content="#fbf5ed" />
     <meta name="referrer" content="no-referrer" />
     <title>Gender Reveal Party</title>
-    <link rel="stylesheet" href="./gender-reveal.css?v=gender-reveal-refine-20261020-4" />
+    <link rel="stylesheet" href="./gender-reveal.css?v=gender-reveal-details-bg-20261020-13" />
   </head>
   <body class="gender-reveal-page">
     <div class="gr-app" id="genderRevealApp" aria-busy="true">
@@ -59,6 +59,7 @@
         </div>
       </section>
 
+      <div class="gr-details-background" id="detailsBackground" aria-hidden="true" hidden></div>
       <main class="gr-invitation" id="invitationContent" hidden inert>
         <div class="gr-invitation__content">
         <section class="gr-event-card" aria-labelledby="eventTitle">
@@ -80,11 +81,9 @@
           </div>
           <div class="gr-teddy-balloon gr-teddy-balloon--pink">
             <img src="./images/gender-reveal-balloon-pink.png" alt="" loading="lazy" decoding="async" />
-            <svg viewBox="0 0 100 100" aria-hidden="true" focusable="false"><path d="M 36 19 C 24 31, 14 41, 22 48 C 28 54, 39 58, 46 59" /></svg>
           </div>
           <div class="gr-teddy-balloon gr-teddy-balloon--blue">
             <img src="./images/gender-reveal-balloon-blue.png" alt="" loading="lazy" decoding="async" />
-            <svg viewBox="0 0 100 100" aria-hidden="true" focusable="false"><path d="M 79 19 C 85 38, 69 51, 54 59" /></svg>
           </div>
           <img class="gr-decoration gr-decoration--teddy" src="./images/gender-reveal-teddy-floating.png" width="900" height="1200" alt="" loading="lazy" decoding="async" />
         </div>
@@ -148,8 +147,10 @@
           <p class="gr-results-status" id="resultsStatus" role="status" aria-live="polite" hidden></p>
         </section>
 
-        <img class="gr-decoration gr-decoration--toys" src="./images/gender-reveal-toys.png" width="1200" height="800" alt="" aria-hidden="true" loading="lazy" decoding="async" />
-        <footer class="gr-footer"><span data-copy="madeWith">Made with care by</span> <a href="https://qdsystems.ae" target="_blank" rel="noopener noreferrer">QD Systems</a></footer>
+        <div class="gr-ending">
+          <img class="gr-decoration gr-decoration--toys" src="./images/gender-reveal-toys.png" width="1200" height="800" alt="" aria-hidden="true" loading="lazy" decoding="async" />
+          <footer class="gr-footer"><span data-copy="madeWith">Made with care by</span> <a href="https://qdsystems.ae" target="_blank" rel="noopener noreferrer">QD Systems</a></footer>
+        </div>
         </div>
       </main>
 

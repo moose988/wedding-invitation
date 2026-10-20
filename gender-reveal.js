@@ -44,7 +44,7 @@ const copy = {
 const $ = (id) => document.getElementById(id);
 const elements = {
   app: $("genderRevealApp"), pageStatus: $("pageStatus"), cover: $("cover"), coverArtwork: $("coverArtwork"), coverMessage: $("coverMessage"), coverEventTitle: $("coverEventTitle"), open: $("openInvitation"),
-  openingStage: $("openingStage"), openingVideo: $("openingVideo"), openingPoster: $("openingPoster"), openingStatus: $("openingStatus"), retry: $("retryOpening"), skip: $("skipOpening"), invitation: $("invitationContent"),
+  openingStage: $("openingStage"), openingVideo: $("openingVideo"), openingPoster: $("openingPoster"), openingStatus: $("openingStatus"), retry: $("retryOpening"), skip: $("skipOpening"), invitation: $("invitationContent"), detailsBackground: $("detailsBackground"),
   eventTitle: $("eventTitle"), eventDate: $("eventDate"), eventMessage: $("eventMessage"), closedNotice: $("closedNotice"), formSection: $("responseFormSection"), form: $("responseForm"), formStatus: $("formStatus"), submit: $("submitResponse"),
   fullName: $("fullName"), message: $("message"), thankYou: $("thankYou"), results: $("results"), resultsStatus: $("resultsStatus"),
   music: $("eventMusic"), musicControls: $("musicControls"), musicToggle: $("musicToggle"), musicStatus: $("musicStatus"),
@@ -301,6 +301,7 @@ function finishOpening(why = "") {
   openingFinished = true;
   introSequence?.dispose();
   introSequence = null;
+  elements.detailsBackground.hidden = false;
   elements.invitation.hidden = false;
   elements.invitation.inert = false;
   elements.retry.hidden = true;
@@ -312,7 +313,10 @@ function finishOpening(why = "") {
     $("mediaNotice").hidden = false;
     $("mediaNotice").textContent = copy[activeLanguage][why] || "";
   }
-  requestAnimationFrame(() => elements.invitation.classList.add("is-visible"));
+  requestAnimationFrame(() => {
+    elements.detailsBackground.classList.add("is-visible");
+    elements.invitation.classList.add("is-visible");
+  });
   const delay = window.matchMedia?.("(prefers-reduced-motion: reduce)").matches ? 0 : 520;
   window.clearTimeout(revealTimer);
   revealTimer = window.setTimeout(() => {

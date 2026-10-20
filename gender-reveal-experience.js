@@ -36,17 +36,12 @@ export function genderRevealSubmissionErrorKey(error) {
   return "saveError";
 }
 
-export function genderRevealLocalValidation(values, normalizePhone) {
+export function genderRevealLocalValidation(values) {
   const errors = {};
   const fullName = typeof values.fullName === "string" ? values.fullName.trim() : "";
   const message = values.message === undefined ? "" : values.message;
   if (!fullName) errors.fullName = "nameRequired";
   else if (fullName.length > 120) errors.fullName = "nameTooLong";
-  try {
-    normalizePhone(values.phone, values.countryCallingCode);
-  } catch {
-    errors.phone = "phoneInvalid";
-  }
   if (!["attending", "not_attending"].includes(values.attendance)) errors.attendance = "attendanceRequired";
   if (!["boy", "girl"].includes(values.prediction)) errors.prediction = "predictionRequired";
   if (typeof message !== "string" || message.length > 1000) errors.message = "messageTooLong";

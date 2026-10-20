@@ -129,7 +129,10 @@ export function initPublicFirebase() {
 export function initGenderRevealSubmissionFirebase() {
   return serviceCache.get("gender-reveal-submission", () => {
     const { app, config } = getConfiguredApp("gender-reveal-submission");
-    const auth = initializeAuth(app, { persistence: inMemoryPersistence });
+    // Keep the anonymous identity in this tab's session storage so a reload
+    // cannot create another response for the same browser session. Other tabs
+    // retain independent session identities.
+    const auth = initializeAuth(app, { persistence: browserSessionPersistence });
     const db = getFirestore(app);
     connectLocalServices(app, auth, db);
     return { app, auth, db, config };

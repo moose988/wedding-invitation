@@ -7,14 +7,16 @@ import { genderRevealEmulatorFixture } from "./gender-reveal-event.mjs";
 
 const projectId = process.env.GCLOUD_PROJECT || "";
 const password = process.env.GENDER_REVEAL_TEST_PASSWORD || "";
+const runId = process.env.GENDER_REVEAL_BROWSER_RUN_ID || "manual";
 if (projectId !== "demo-wedding-security" || process.env.FIRESTORE_EMULATOR_HOST !== "127.0.0.1:8080" || process.env.FIREBASE_AUTH_EMULATOR_HOST !== "127.0.0.1:9099") {
   throw new Error("Refusing to seed. Start Auth and Firestore on 127.0.0.1 and set GCLOUD_PROJECT=demo-wedding-security.");
 }
 if (password.length < 8) throw new Error("Set a disposable GENDER_REVEAL_TEST_PASSWORD for the Auth emulator accounts.");
+if (!/^[a-z0-9-]{1,40}$/.test(runId)) throw new Error("Use a lowercase alphanumeric GENDER_REVEAL_BROWSER_RUN_ID.");
 
 const authEndpoint = "http://127.0.0.1:9099/identitytoolkit.googleapis.com/v1/accounts";
 async function ensureEmulatorUser(label) {
-  const email = `gr-${label}@example.test`;
+  const email = `gr-${label}-${runId}@example.test`;
   const body = JSON.stringify({ email, password, returnSecureToken: true });
   const request = (method) => fetch(`${authEndpoint}:${method}?key=demo-key`, {
     method: "POST", headers: { "Content-Type": "application/json" }, body,
@@ -31,8 +33,8 @@ const [admin, customerA, customerA2, customerB] = await Promise.all([
 const rules = await readFile(new URL("../../firestore.rules", import.meta.url), "utf8");
 const env = await initializeTestEnvironment({ projectId, firestore: { rules } });
 const timestamp = new Date();
-const eventAId = "gr-browser-event-a";
-const eventBId = "gr-browser-event-b";
+const eventAId = `gr-browser-event-${runId}`;
+const eventBId = `gr-browser-other-${runId}`;
 const eventA = {
   ...genderRevealEmulatorFixture,
   ownerUserId: admin.uid,
@@ -67,6 +69,16 @@ const eventB = {
 try {
   await env.withSecurityRulesDisabled(async (context) => {
     const db = context.firestore();
+    // Reset only this named synthetic event so repeated browser runs have a
+    // deterministic empty response set. This script refuses non-demo projects.
+    if (!eventAId.startsWith("gr-browser-event-")) throw new Error("Refusing to reset a non-synthetic event.");
+    for (const collectionName of [
+      "genderRevealResponses", "genderRevealPhoneKeys", "genderRevealSessionKeys",
+      "genderRevealState", "genderRevealResults",
+    ]) {
+      const rows = await firestore.getDocs(firestore.collection(db, `weddings/${eventAId}/${collectionName}`));
+      for (const row of rows.docs) await firestore.deleteDoc(row.ref);
+    }
     await firestore.setDoc(firestore.doc(db, `platformAdmins/${admin.uid}`), { enabled: true });
     for (const [eventId, event, customers] of [
       [eventAId, eventA, [customerA, customerA2]],

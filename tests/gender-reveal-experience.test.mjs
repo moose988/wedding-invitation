@@ -5,7 +5,6 @@ import {
   genderRevealLocalValidation, genderRevealResultSummary, genderRevealSubmissionErrorKey,
   safeGenderRevealMediaUrl,
 } from "../gender-reveal-experience.js";
-import { normalizeInternationalPhone } from "../gender-reveal-phone.js";
 import { spreadsheetSafeText } from "../export.js";
 
 test("repository media paths stay within the site's media directories", () => {
@@ -29,15 +28,14 @@ test("public prediction summary handles zero safely and totals only enum counts"
   });
 });
 
-test("local validation permits a prediction and message from a non-attendee", () => {
+test("local validation permits a prediction and message from a non-attendee without collecting a phone number", () => {
   assert.deepEqual(genderRevealLocalValidation({
-    fullName: "Guest", phone: "050 123 4567", countryCallingCode: "971",
-    attendance: "not_attending", prediction: "boy", message: "All the best!",
-  }, normalizeInternationalPhone), {});
+    fullName: "Guest", attendance: "not_attending", prediction: "boy", message: "All the best!",
+  }), {});
   assert.deepEqual(genderRevealLocalValidation({
-    fullName: "", phone: "bad", countryCallingCode: "971", attendance: "maybe", prediction: "unknown", message: "x".repeat(1001),
-  }, normalizeInternationalPhone), {
-    fullName: "nameRequired", phone: "phoneInvalid", attendance: "attendanceRequired", prediction: "predictionRequired", message: "messageTooLong",
+    fullName: "", attendance: "maybe", prediction: "unknown", message: "x".repeat(1001),
+  }), {
+    fullName: "nameRequired", attendance: "attendanceRequired", prediction: "predictionRequired", message: "messageTooLong",
   });
 });
 
@@ -55,11 +53,12 @@ test("Excel cell values retain Arabic and neutralize formula-leading guest conte
 });
 
 test("public invitation defers video and audio sources until the open gesture", async () => {
-  const [html, script, phoneSource, invitationCss] = await Promise.all([
+  const [html, script, invitationCss, firebaseConfig, submissionService] = await Promise.all([
     readFile(new URL("../gender-reveal.html", import.meta.url), "utf8"),
     readFile(new URL("../gender-reveal.js", import.meta.url), "utf8"),
-    readFile(new URL("../gender-reveal-phone.js", import.meta.url), "utf8"),
     readFile(new URL("../gender-reveal.css", import.meta.url), "utf8"),
+    readFile(new URL("../firebase-config.js", import.meta.url), "utf8"),
+    readFile(new URL("../gender-reveal-submission.js", import.meta.url), "utf8"),
   ]);
   assert.match(html, /Boy or Girl\?/);
   assert.match(html, /Open invitation/);
@@ -106,10 +105,11 @@ test("public invitation defers video and audio sources until the open gesture", 
   assert.match(script, /document\.body\.classList\.add\("gr-opening-active"\)/);
   assert.match(script, /document\.body\.classList\.remove\("gr-opening-active"\)/);
   assert.match(script, /function retryOpeningFromGesture\(\)[\s\S]*?elements\.openingStage\.hidden\) return/);
-  assert.match(script, /option\.value = region/);
-  assert.match(script, /option\.dataset\.callingCode = callingCode/);
-  assert.match(script, /elements\.country\.selectedOptions\[0\].*dataset\.callingCode/);
-  assert.match(phoneSource, /\["US", "United States", "1"\]/);
+  assert.doesNotMatch(html, /id="(?:phone|countryCallingCode)"|data-copy="phone"/);
+  assert.doesNotMatch(script, /normalizeInternationalPhone|countryCallingCode|phoneInvalid/);
+  assert.match(firebaseConfig, /initGenderRevealSubmissionFirebase[\s\S]*?persistence: browserSessionPersistence/);
+  assert.match(submissionService, /genderRevealSessionKeys/);
+  assert.doesNotMatch(submissionService, /phoneE164|normalizeInternationalPhone/);
   assert.match(html, /gender-reveal-teddy\.png[\s\S]*?alt=""/);
   assert.match(html, /gender-reveal-toys\.png[\s\S]*?alt=""/);
 });

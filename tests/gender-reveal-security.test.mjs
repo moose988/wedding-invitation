@@ -21,8 +21,12 @@ test("Gender Reveal Spark rules enforce category creation, atomic RSVP uniquenes
   const otherEventId = "gender-reveal-other";
   const event = { ...genderRevealEmulatorFixture, ownerUserId: "event-owner", createdAt: new Date(), updatedAt: new Date() };
   let app;
+  let secondApp;
   let auth;
+  let secondAuth;
   let db;
+  let secondDb;
+  const additionalSessions = [];
   try {
     await env.clearFirestore();
     await env.withSecurityRulesDisabled(async (context) => {
@@ -64,18 +68,39 @@ test("Gender Reveal Spark rules enforce category creation, atomic RSVP uniquenes
     const submit = createGenderRevealSubmissionService({
       api: { doc, getDoc, runTransaction, serverTimestamp }, db, weddingId: eventId,
       ensureAnonymousUser: async () => {
-        if (auth.currentUser) return;
+        if (auth.currentUser) return auth.currentUser.uid;
         anonymousSignIn ||= signInAnonymously(auth);
         await anonymousSignIn;
+        return auth.currentUser.uid;
       },
       createResponseId: () => { responseNumber += 1; const id = `gender-response-${String(responseNumber).padStart(20, "0")}`; responseIds.push(id); return id; },
     });
+    const createAdditionalSession = async () => {
+      const sessionApp = initializeApp({ apiKey: "demo-key", authDomain: "localhost", projectId }, `gender-reveal-extra-session-${Date.now()}-${additionalSessions.length}`);
+      const sessionAuth = initializeAuth(sessionApp, { persistence: inMemoryPersistence });
+      connectAuthEmulator(sessionAuth, "http://127.0.0.1:9099", { disableWarnings: true });
+      const sessionDb = (await import("firebase/firestore")).getFirestore(sessionApp);
+      connectFirestoreEmulator(sessionDb, "127.0.0.1", 8080);
+      const sessionSubmit = createGenderRevealSubmissionService({
+        api: { doc, getDoc, runTransaction, serverTimestamp }, db: sessionDb, weddingId: eventId,
+        ensureAnonymousUser: async () => {
+          if (!sessionAuth.currentUser) await signInAnonymously(sessionAuth);
+          return sessionAuth.currentUser.uid;
+        },
+        createResponseId: () => { responseNumber += 1; const id = `gender-response-${String(responseNumber).padStart(20, "0")}`; responseIds.push(id); return id; },
+      });
+      additionalSessions.push({ app: sessionApp, auth: sessionAuth });
+      return { auth: sessionAuth, submit: sessionSubmit };
+    };
 
-    await assert.rejects(submit({ fullName: "Test", phone: "0501234567", countryCallingCode: "971", attendance: "maybe", prediction: "boy" }), /attend/);
-    await assert.rejects(submit({ fullName: "T".repeat(121), phone: "0501234567", countryCallingCode: "971", attendance: "attending", prediction: "boy" }), /120 characters/);
+    await assert.rejects(submit({ fullName: "Test", attendance: "maybe", prediction: "boy" }), /attend/);
+    await assert.rejects(submit({ fullName: "T".repeat(121), attendance: "attending", prediction: "boy" }), /120 characters/);
     assert.equal(auth.currentUser, null, "invalid data must not initialize anonymous auth or write");
     await assertFails(setDoc(doc(db, `weddings/${eventId}/genderRevealResponses/direct-write-attempt-0001`), {
-      fullName: "Public bypass", phoneE164: "+971501234567", attendance: "attending", prediction: "boy", message: "", createdAt: serverTimestamp(),
+      fullName: "Public bypass", attendance: "attending", prediction: "boy", message: "", createdAt: serverTimestamp(),
+    }));
+    await assertFails(setDoc(doc(db, `weddings/${eventId}/genderRevealResponses/direct-write-phone-attempt-0001`), {
+      fullName: "Phone field bypass", phoneE164: "+971501234567", attendance: "attending", prediction: "boy", message: "", createdAt: serverTimestamp(),
     }));
     await assertFails(setDoc(doc(db, `weddings/${eventId}/genderRevealPhoneKeys/+971501234567`), { createdAt: serverTimestamp() }));
     const publicDb = env.unauthenticatedContext().firestore();
@@ -84,28 +109,48 @@ test("Gender Reveal Spark rules enforce category creation, atomic RSVP uniquenes
     assert.equal(beforeFirstSubmission.exists(), false, "the public result path is readable, but is not created before the first valid response");
 
     const duplicateForm = {
-      fullName: "Guest One", phone: "050 123 4567", countryCallingCode: "971",
+      fullName: "Guest One",
       attendance: "attending", prediction: "boy", message: "Hello parents",
     };
-    const duplicateResults = await Promise.allSettled([submit(duplicateForm), submit({ ...duplicateForm, phone: "+971 50 123 4567" })]);
+    const duplicateResults = await Promise.allSettled([submit(duplicateForm), submit({ ...duplicateForm, message: "Second attempt" })]);
     assert.equal(duplicateResults.filter((result) => result.status === "fulfilled").length, 1);
     assert.equal(duplicateResults.filter((result) => result.status === "rejected").length, 1);
     const duplicateError = duplicateResults.find((result) => result.status === "rejected").reason;
-    assert.equal(duplicateError.code, "permission-denied", "the private uniqueness key cannot be read to identify a duplicate");
+    assert.equal(duplicateError.code, "permission-denied", "the private session key blocks repeat submissions without exposing prior data");
+    const firstSessionId = auth.currentUser.uid;
 
     const publicResultsBeforeNextSubmission = await assertSucceeds(getDoc(doc(publicDb, aggregatePath)));
     assert.deepEqual(publicResultsBeforeNextSubmission.data(), {
       boyCount: 1, girlCount: 0, totalCount: 1, updatedAt: publicResultsBeforeNextSubmission.data().updatedAt,
     }, "existing aggregate results are publicly readable before a visitor submits");
 
-    await submit({
-      fullName: "Guest Two", phone: "202-555-0114", countryCallingCode: "1",
-      attendance: "not_attending", prediction: "girl", message: "Congratulations",
+    secondApp = initializeApp({ apiKey: "demo-key", authDomain: "localhost", projectId }, `gender-reveal-second-session-${Date.now()}`);
+    secondAuth = initializeAuth(secondApp, { persistence: inMemoryPersistence });
+    connectAuthEmulator(secondAuth, "http://127.0.0.1:9099", { disableWarnings: true });
+    secondDb = (await import("firebase/firestore")).getFirestore(secondApp);
+    connectFirestoreEmulator(secondDb, "127.0.0.1", 8080);
+    const submitFromSecondSession = createGenderRevealSubmissionService({
+      api: { doc, getDoc, runTransaction, serverTimestamp }, db: secondDb, weddingId: eventId,
+      ensureAnonymousUser: async () => {
+        if (!secondAuth.currentUser) await signInAnonymously(secondAuth);
+        return secondAuth.currentUser.uid;
+      },
+      createResponseId: () => { responseNumber += 1; const id = `gender-response-${String(responseNumber).padStart(20, "0")}`; responseIds.push(id); return id; },
     });
+    await submitFromSecondSession({
+      fullName: "ضيف ثانٍ", attendance: "not_attending", prediction: "girl", message: "مبروك للعائلة",
+    });
+    assert.notEqual(secondAuth.currentUser.uid, firstSessionId, "separate anonymous sessions have different identities");
+    const thirdSession = await createAdditionalSession();
+    const fourthSession = await createAdditionalSession();
+    const fifthSession = await createAdditionalSession();
+    await thirdSession.submit({ fullName: "Guest Three", attendance: "attending", prediction: "girl", message: "" });
+    await fourthSession.submit({ fullName: "سارة", attendance: "attending", prediction: "boy", message: "نتمنى لكم الفرح" });
+    await fifthSession.submit({ fullName: "فاطمة", attendance: "not_attending", prediction: "girl", message: "ألف مبروك" });
     const aggregateRef = doc(db, `weddings/${eventId}/genderRevealResults/aggregate`);
     const aggregateSnapshot = await getDoc(aggregateRef);
     assert.deepEqual(aggregateSnapshot.data(), {
-      boyCount: 1, girlCount: 1, totalCount: 2, updatedAt: aggregateSnapshot.data().updatedAt,
+      boyCount: 2, girlCount: 3, totalCount: 5, updatedAt: aggregateSnapshot.data().updatedAt,
     });
     assert.equal(aggregateSnapshot.data().updatedAt?.toDate instanceof Function, true);
     assert.deepEqual(Object.keys(aggregateSnapshot.data()).sort(), ["boyCount", "girlCount", "totalCount", "updatedAt"].sort());
@@ -120,12 +165,21 @@ test("Gender Reveal Spark rules enforce category creation, atomic RSVP uniquenes
     await assertFails(getDocs(query(collection(anonymousDb, `weddings/${eventId}/genderRevealResponses`))));
     await assertFails(getDoc(doc(anonymousDb, `weddings/${eventId}/genderRevealState/summary`)));
     await assertFails(getDocs(query(collection(anonymousDb, `weddings/${eventId}/genderRevealPhoneKeys`))));
+    await assertFails(getDoc(doc(anonymousDb, `weddings/${eventId}/genderRevealSessionKeys/${firstSessionId}`)));
+    await assertFails(getDocs(query(collection(anonymousDb, `weddings/${eventId}/genderRevealSessionKeys`))));
     await assertSucceeds(getDoc(doc(publicDb, aggregatePath)));
 
     const customerDb = env.authenticatedContext("event-customer").firestore();
     const customerRows = await assertSucceeds(getDocs(query(collection(customerDb, `weddings/${eventId}/genderRevealResponses`))));
-    assert.equal(customerRows.size, 2);
-    assert.equal(customerRows.docs.some((row) => row.data().phoneE164 === "+971501234567"), true);
+    assert.equal(customerRows.size, 5);
+    assert.equal(customerRows.docs.every((row) => !Object.hasOwn(row.data(), "phoneE164")), true);
+    assert.deepEqual(customerRows.docs.reduce((totals, row) => {
+      const response = row.data();
+      totals[response.attendance] += 1;
+      totals[response.prediction] += 1;
+      return totals;
+    }, { attending: 0, not_attending: 0, boy: 0, girl: 0 }), { attending: 3, not_attending: 2, boy: 2, girl: 3 });
+    assert.deepEqual(customerRows.docs.map((row) => row.data().fullName).sort(), ["Guest One", "Guest Three", "ضيف ثانٍ", "سارة", "فاطمة"].sort());
     const eventRef = doc(customerDb, `weddings/${eventId}`);
     await assertSucceeds(updateDoc(eventRef, { genderRevealMessageAr: "رسالة تجريبية", updatedAt: serverTimestamp() }));
     await assertSucceeds(updateDoc(eventRef, { genderRevealArtworkUrl: "/images/custom-cover.png", updatedAt: serverTimestamp() }));
@@ -137,12 +191,17 @@ test("Gender Reveal Spark rules enforce category creation, atomic RSVP uniquenes
     await assertFails(updateDoc(responseRef, { message: "Changed" }));
     await assertFails(deleteDoc(responseRef));
 
-    const submittedPhoneKey = doc(anonymousDb, `weddings/${eventId}/genderRevealPhoneKeys/+971501234567`);
-    await assertFails(getDoc(submittedPhoneKey));
+    await assertFails(getDoc(doc(anonymousDb, `weddings/${eventId}/genderRevealPhoneKeys/+971501234567`)));
     await assertFails(getDoc(doc(publicDb, `weddings/${eventId}/genderRevealPhoneKeys/+971501234567`)));
   } finally {
     if (auth) await signOut(auth).catch(() => {});
+    if (secondAuth) await signOut(secondAuth).catch(() => {});
     if (app) await deleteApp(app).catch(() => {});
+    if (secondApp) await deleteApp(secondApp).catch(() => {});
+    for (const session of additionalSessions) {
+      await signOut(session.auth).catch(() => {});
+      await deleteApp(session.app).catch(() => {});
+    }
     await env.cleanup();
   }
 });

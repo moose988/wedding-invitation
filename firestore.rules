@@ -370,8 +370,8 @@ service cloud.firestore {
       return /databases/$(database)/documents/weddings/$(weddingId)/genderRevealResponses/$(responseId);
     }
 
-    function genderRevealPhoneKeyPath(weddingId, phoneE164) {
-      return /databases/$(database)/documents/weddings/$(weddingId)/genderRevealPhoneKeys/$(phoneE164);
+    function genderRevealSessionKeyPath(weddingId, sessionId) {
+      return /databases/$(database)/documents/weddings/$(weddingId)/genderRevealSessionKeys/$(sessionId);
     }
 
     function genderRevealStatePath(weddingId) {
@@ -386,51 +386,55 @@ service cloud.firestore {
       return responseId.matches("^[A-Za-z0-9_-]{20,64}$");
     }
 
-    function validGenderRevealPhone(phoneE164) {
-      return phoneE164 is string && phoneE164.matches("^\\+[1-9]\\d{7,14}$");
+    function validGenderRevealSessionId(sessionId) {
+      return sessionId is string && sessionId.matches("^[A-Za-z0-9_-]{20,128}$");
     }
 
-    function validGenderRevealResponseData(data, phoneE164) {
-      return data.keys().hasOnly(["fullName", "phoneE164", "attendance", "prediction", "message", "createdAt"])
+    function validGenderRevealResponseData(data) {
+      return data.keys().hasOnly(["fullName", "attendance", "prediction", "message", "createdAt"])
         && data.fullName is string && data.fullName.size() > 0 && data.fullName.size() <= 120
-        && data.phoneE164 == phoneE164 && validGenderRevealPhone(data.phoneE164)
         && data.attendance in ["attending", "not_attending"]
         && data.prediction in ["boy", "girl"]
         && data.message is string && data.message.size() <= 1000
         && data.createdAt == request.time;
     }
 
-    function validGenderRevealSubmissionBundle(weddingId, responseId, phoneE164) {
+    function validGenderRevealSubmissionBundle(weddingId, responseId, sessionId) {
       let responsePath = genderRevealResponsePath(weddingId, responseId);
-      let keyPath = genderRevealPhoneKeyPath(weddingId, phoneE164);
+      let keyPath = genderRevealSessionKeyPath(weddingId, sessionId);
       let response = getAfter(responsePath).data;
       let key = getAfter(keyPath).data;
       return genderRevealSubmissionAllowed(weddingId)
         && validGenderRevealResponseId(responseId)
-        && validGenderRevealPhone(phoneE164)
+        && validGenderRevealSessionId(sessionId)
+        && sessionId == request.auth.uid
         && !exists(responsePath) && !exists(keyPath)
         && existsAfter(responsePath) && existsAfter(keyPath)
         && getAfter(genderRevealStatePath(weddingId)).data.lastResponseId == responseId
-        && validGenderRevealResponseData(response, phoneE164)
-        && key.keys().hasOnly(["createdAt"]) && key.createdAt == request.time;
+        && getAfter(genderRevealStatePath(weddingId)).data.lastSessionId == sessionId
+        && validGenderRevealResponseData(response)
+        && key.keys().hasOnly(["responseId", "createdAt"])
+        && key.responseId == responseId && key.createdAt == request.time;
     }
 
     function validGenderRevealStateData(data) {
-      return data.keys().hasOnly(["boyCount", "girlCount", "totalCount", "lastResponseId", "updatedAt"])
+      return data.keys().hasOnly(["boyCount", "girlCount", "totalCount", "lastResponseId", "lastSessionId", "updatedAt"])
         && data.boyCount is int && data.boyCount >= 0
         && data.girlCount is int && data.girlCount >= 0
         && data.totalCount is int && data.totalCount == data.boyCount + data.girlCount
         && validGenderRevealResponseId(data.lastResponseId)
+        && validGenderRevealSessionId(data.lastSessionId)
         && data.updatedAt == request.time;
     }
 
     function validGenderRevealStateCreate(weddingId) {
       let responseId = request.resource.data.get("lastResponseId", "");
+      let sessionId = request.resource.data.get("lastSessionId", "");
       let response = getAfter(genderRevealResponsePath(weddingId, responseId)).data;
       return !exists(genderRevealStatePath(weddingId))
         && !exists(genderRevealAggregatePath(weddingId))
         && validGenderRevealStateData(request.resource.data)
-        && validGenderRevealSubmissionBundle(weddingId, responseId, response.phoneE164)
+        && validGenderRevealSubmissionBundle(weddingId, responseId, sessionId)
         && request.resource.data.boyCount == (response.prediction == "boy" ? 1 : 0)
         && request.resource.data.girlCount == (response.prediction == "girl" ? 1 : 0)
         && request.resource.data.totalCount == 1;
@@ -438,12 +442,13 @@ service cloud.firestore {
 
     function validGenderRevealStateUpdate(weddingId) {
       let responseId = request.resource.data.get("lastResponseId", "");
+      let sessionId = request.resource.data.get("lastSessionId", "");
       let response = getAfter(genderRevealResponsePath(weddingId, responseId)).data;
       let oldState = resource.data;
       let aggregate = get(genderRevealAggregatePath(weddingId)).data;
-      return validGenderRevealSubmissionBundle(weddingId, responseId, response.phoneE164)
+      return validGenderRevealSubmissionBundle(weddingId, responseId, sessionId)
         && validGenderRevealStateData(request.resource.data)
-        && request.resource.data.diff(oldState).affectedKeys().hasOnly(["boyCount", "girlCount", "totalCount", "lastResponseId", "updatedAt"])
+        && request.resource.data.diff(oldState).affectedKeys().hasOnly(["boyCount", "girlCount", "totalCount", "lastResponseId", "lastSessionId", "updatedAt"])
         && aggregate.boyCount == oldState.boyCount
         && aggregate.girlCount == oldState.girlCount
         && aggregate.totalCount == oldState.totalCount
@@ -467,7 +472,7 @@ service cloud.firestore {
         && !exists(genderRevealAggregatePath(weddingId))
         && !exists(genderRevealStatePath(weddingId))
         && validGenderRevealAggregateData(request.resource.data)
-        && validGenderRevealSubmissionBundle(weddingId, state.lastResponseId, response.phoneE164)
+        && validGenderRevealSubmissionBundle(weddingId, state.lastResponseId, state.lastSessionId)
         && state.boyCount == request.resource.data.boyCount
         && state.girlCount == request.resource.data.girlCount
         && state.totalCount == request.resource.data.totalCount
@@ -485,7 +490,7 @@ service cloud.firestore {
         && resource.data.boyCount == oldState.boyCount
         && resource.data.girlCount == oldState.girlCount
         && resource.data.totalCount == oldState.totalCount
-        && validGenderRevealSubmissionBundle(weddingId, state.lastResponseId, response.phoneE164)
+        && validGenderRevealSubmissionBundle(weddingId, state.lastResponseId, state.lastSessionId)
         && state.boyCount == request.resource.data.boyCount
         && state.girlCount == request.resource.data.girlCount
         && state.totalCount == request.resource.data.totalCount
@@ -1433,21 +1438,23 @@ service cloud.firestore {
           return isEventOwner(weddingId) || isFullDashboardAccount(weddingId);
         }
         allow get, list: if canReadGenderRevealResponses() || isEventDeletingOwner(weddingId);
-        allow create: if validGenderRevealSubmissionBundle(weddingId, responseId, request.resource.data.phoneE164)
-          && validGenderRevealResponseData(request.resource.data, request.resource.data.phoneE164);
+        allow create: if validGenderRevealSubmissionBundle(weddingId, responseId, request.auth.uid)
+          && validGenderRevealResponseData(request.resource.data);
         allow update: if false;
         allow delete: if isEventDeletingOwner(weddingId);
       }
 
-      match /genderRevealPhoneKeys/{phoneE164} {
+      match /genderRevealSessionKeys/{sessionId} {
         allow get: if false;
         allow list: if isEventDeletingOwner(weddingId);
-        allow create: if validGenderRevealSubmissionBundle(weddingId,
-          getAfter(genderRevealStatePath(weddingId)).data.lastResponseId, phoneE164)
-          && request.resource.data.keys().hasOnly(["createdAt"])
+        allow create: if sessionId == request.auth.uid
+          && validGenderRevealSubmissionBundle(weddingId,
+          getAfter(genderRevealStatePath(weddingId)).data.lastResponseId, sessionId)
+          && request.resource.data.keys().hasOnly(["responseId", "createdAt"])
+          && request.resource.data.responseId == getAfter(genderRevealStatePath(weddingId)).data.lastResponseId
           && request.resource.data.createdAt == request.time
-          && getAfter(genderRevealResponsePath(weddingId,
-            getAfter(genderRevealStatePath(weddingId)).data.lastResponseId)).data.phoneE164 == phoneE164;
+          && validGenderRevealResponseData(getAfter(genderRevealResponsePath(weddingId,
+            getAfter(genderRevealStatePath(weddingId)).data.lastResponseId)).data);
         allow update: if false;
         allow delete: if isEventDeletingOwner(weddingId);
       }

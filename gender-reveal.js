@@ -3,7 +3,6 @@ import {
   serverTimestamp, signInAnonymously,
 } from "./firebase-config.js";
 import { createGenderRevealSubmissionService } from "./gender-reveal-submission.js";
-import { GENDER_REVEAL_COUNTRIES, normalizeInternationalPhone } from "./gender-reveal-phone.js";
 import { createIntroSequence } from "./intro-sequence.js";
 import {
   genderRevealLocalValidation, genderRevealResultSummary, genderRevealSubmissionErrorKey,
@@ -17,27 +16,27 @@ const copy = {
   en: {
     language: "Invitation language", loading: "Loading invitation…", loadError: "This invitation could not be loaded. Check the link or try again.",
     coverEyebrow: "A little celebration is on the way", coverQuestion: "Boy or Girl?", defaultMessage: "A little surprise is on the way…", openInvitation: "Open invitation",
-    youAreInvited: "You are invited", kindlyReply: "Kindly reply", formTitle: "Share your RSVP and prediction", formIntro: "We would love to hear from you.",
-    fullName: "Full name", phone: "International phone number", country: "Country calling code", attendance: "Will you attend?", attending: "Attending", notAttending: "Not attending",
+    youAreInvited: "You are invited", kindlyReply: "Kindly reply", formTitle: "Share your RSVP and prediction", formIntro: "One response per browser session, please.",
+    fullName: "Full name", attendance: "Will you attend?", attending: "Attending", notAttending: "Not attending",
     prediction: "What is your prediction?", boy: "Boy", girl: "Girl", message: "Message to the parents", optional: "Optional", messageHint: "Up to 1,000 characters.", submit: "Submit response", saving: "Saving your response…",
     saved: "Response saved", thankYou: "Thank you for sharing your prediction!", thankYouBody: "Your kind wishes mean so much.", resultsTitle: "The predictions so far", totalPredictions: (total) => `${total} ${total === 1 ? "prediction" : "predictions"}`,
     skip: "Skip", retryOpening: "Retry video", videoLoading: "Opening your invitation…", videoSlow: "The video is taking longer to start. You can retry or skip.", videoFailed: "The video could not be played. You can retry or skip.", videoBlocked: "Your browser blocked video playback. Tap retry or skip.", reducedMotion: "Your invitation is ready.",
     musicPlay: "Play event music", musicPause: "Pause event music", musicBlocked: "Music could not start. Tap the record to try again.", musicPlaying: "Event music is playing.", musicUnavailable: "Event music is unavailable.",
-    closed: "Responses are not open for this event.", validationSummary: "Please correct the highlighted fields.", nameRequired: "Enter your full name.", nameTooLong: "Your name must be 120 characters or fewer.", phoneInvalid: "Enter a valid international phone number.", attendanceRequired: "Choose whether you will attend.", predictionRequired: "Choose boy or girl.", messageTooLong: "Your message must be 1,000 characters or fewer.",
-    closedError: "Responses are not open for this event. Your draft is still here.", permissionOrDuplicateError: "We could not accept this response. This number may have been used already, or access was denied. Your form is still here; no existing response was changed.", quotaError: "The response service is temporarily at capacity. Your form is still here; please try again later.", networkError: "A network problem prevented saving. Your form is still here; check your connection and try again.", saveError: "We could not save your response. Your form is still here; please try again.",
+    closed: "Responses are not open for this event.", validationSummary: "Please correct the highlighted fields.", nameRequired: "Enter your full name.", nameTooLong: "Your name must be 120 characters or fewer.", attendanceRequired: "Choose whether you will attend.", predictionRequired: "Choose boy or girl.", messageTooLong: "Your message must be 1,000 characters or fewer.",
+    closedError: "Responses are not open for this event. Your draft is still here.", permissionOrDuplicateError: "This browser session may already have submitted a response, or access was denied. Your form is still here; no existing response was changed.", quotaError: "The response service is temporarily at capacity. Your form is still here; please try again later.", networkError: "A network problem prevented saving. Your form is still here; check your connection and try again.", saveError: "We could not save your response. Your form is still here; please try again.",
     resultsError: "Your response was saved, but the prediction totals could not be loaded right now.", boyBar: "Boy predictions", girlBar: "Girl predictions", madeWith: "Made with care by", fallbackStatic: "The opening animation was skipped. Your invitation is ready.",
   },
   ar: {
     language: "لغة الدعوة", loading: "جارٍ تحميل الدعوة…", loadError: "تعذّر تحميل هذه الدعوة. تحقق من الرابط أو حاول مرة أخرى.",
     coverEyebrow: "احتفال صغير يقترب", coverQuestion: "ولد أم بنت؟", defaultMessage: "مفاجأة جميلة بانتظارنا…", openInvitation: "افتح الدعوة",
-    youAreInvited: "أنتم مدعوون", kindlyReply: "يرجى الرد", formTitle: "شاركنا ردك وتوقعك", formIntro: "يسعدنا أن نسمع منك.",
-    fullName: "الاسم الكامل", phone: "رقم الهاتف الدولي", country: "رمز الاتصال الدولي", attendance: "هل ستحضر؟", attending: "سأحضر", notAttending: "لن أحضر",
+    youAreInvited: "أنتم مدعوون", kindlyReply: "يرجى الرد", formTitle: "شاركنا ردك وتوقعك", formIntro: "يرجى إرسال رد واحد فقط من كل جلسة متصفح.",
+    fullName: "الاسم الكامل", attendance: "هل ستحضر؟", attending: "سأحضر", notAttending: "لن أحضر",
     prediction: "ما توقعك؟", boy: "ولد", girl: "بنت", message: "رسالة إلى الوالدين", optional: "اختياري", messageHint: "حتى ١٬٠٠٠ حرف.", submit: "إرسال الرد", saving: "جارٍ حفظ ردك…",
     saved: "تم حفظ الرد", thankYou: "شكرًا لمشاركتنا توقعك!", thankYouBody: "تمنياتك الجميلة تعني لنا الكثير.", resultsTitle: "التوقعات حتى الآن", totalPredictions: (total) => `${new Intl.NumberFormat("ar").format(total)} ${total === 1 ? "توقع" : "توقعات"}`,
     skip: "تخطي", retryOpening: "إعادة تشغيل الفيديو", videoLoading: "جارٍ فتح الدعوة…", videoSlow: "استغرق تشغيل الفيديو وقتًا أطول. يمكنك إعادة المحاولة أو التخطي.", videoFailed: "تعذّر تشغيل الفيديو. يمكنك إعادة المحاولة أو التخطي.", videoBlocked: "منع المتصفح تشغيل الفيديو. اضغط لإعادة المحاولة أو التخطي.", reducedMotion: "دعوتك جاهزة.",
     musicPlay: "تشغيل موسيقى الحفل", musicPause: "إيقاف موسيقى الحفل مؤقتًا", musicBlocked: "تعذّر تشغيل الموسيقى. اضغط على الأسطوانة للمحاولة مجددًا.", musicPlaying: "موسيقى الحفل تعمل.", musicUnavailable: "موسيقى الحفل غير متاحة.",
-    closed: "الردود غير متاحة لهذه المناسبة.", validationSummary: "يرجى تصحيح الحقول المحددة.", nameRequired: "أدخل اسمك الكامل.", nameTooLong: "يجب ألا يتجاوز الاسم ١٢٠ حرفًا.", phoneInvalid: "أدخل رقم هاتف دوليًا صحيحًا.", attendanceRequired: "اختر ما إذا كنت ستحضر.", predictionRequired: "اختر ولد أو بنت.", messageTooLong: "يجب ألا تتجاوز الرسالة ١٬٠٠٠ حرف.",
-    closedError: "الردود غير متاحة لهذه المناسبة. ما زالت بياناتك هنا.", permissionOrDuplicateError: "تعذّر قبول هذا الرد. ربما استُخدم هذا الرقم من قبل أو لا تتوفر صلاحية الإرسال. ما زالت بياناتك هنا ولم يتغير أي رد سابق.", quotaError: "خدمة الردود مشغولة مؤقتًا. ما زالت بياناتك هنا؛ حاول لاحقًا.", networkError: "منع خلل في الاتصال حفظ ردك. ما زالت بياناتك هنا؛ تحقق من الاتصال وحاول مجددًا.", saveError: "تعذّر حفظ ردك. ما زالت بياناتك هنا؛ حاول مجددًا.",
+    closed: "الردود غير متاحة لهذه المناسبة.", validationSummary: "يرجى تصحيح الحقول المحددة.", nameRequired: "أدخل اسمك الكامل.", nameTooLong: "يجب ألا يتجاوز الاسم ١٢٠ حرفًا.", attendanceRequired: "اختر ما إذا كنت ستحضر.", predictionRequired: "اختر ولد أو بنت.", messageTooLong: "يجب ألا تتجاوز الرسالة ١٬٠٠٠ حرف.",
+    closedError: "الردود غير متاحة لهذه المناسبة. ما زالت بياناتك هنا.", permissionOrDuplicateError: "ربما أرسل هذا المتصفح ردًا من قبل أو لا تتوفر صلاحية الإرسال. ما زالت بياناتك هنا ولم يتغير أي رد سابق.", quotaError: "خدمة الردود مشغولة مؤقتًا. ما زالت بياناتك هنا؛ حاول لاحقًا.", networkError: "منع خلل في الاتصال حفظ ردك. ما زالت بياناتك هنا؛ تحقق من الاتصال وحاول مجددًا.", saveError: "تعذّر حفظ ردك. ما زالت بياناتك هنا؛ حاول مجددًا.",
     resultsError: "تم حفظ ردك، لكن تعذّر تحميل إجمالي التوقعات الآن.", boyBar: "توقعات ولد", girlBar: "توقعات بنت", madeWith: "صُنعت بعناية بواسطة", fallbackStatic: "تم تخطي الحركة الافتتاحية. دعوتك جاهزة.",
   },
 };
@@ -47,7 +46,7 @@ const elements = {
   app: $("genderRevealApp"), pageStatus: $("pageStatus"), cover: $("cover"), coverArtwork: $("coverArtwork"), coverMessage: $("coverMessage"), coverEventTitle: $("coverEventTitle"), open: $("openInvitation"),
   openingStage: $("openingStage"), openingVideo: $("openingVideo"), openingPoster: $("openingPoster"), openingStatus: $("openingStatus"), retry: $("retryOpening"), skip: $("skipOpening"), invitation: $("invitationContent"),
   eventTitle: $("eventTitle"), eventDate: $("eventDate"), eventMessage: $("eventMessage"), closedNotice: $("closedNotice"), formSection: $("responseFormSection"), form: $("responseForm"), formStatus: $("formStatus"), submit: $("submitResponse"),
-  country: $("countryCallingCode"), fullName: $("fullName"), phone: $("phone"), message: $("message"), thankYou: $("thankYou"), results: $("results"), resultsStatus: $("resultsStatus"),
+  fullName: $("fullName"), message: $("message"), thankYou: $("thankYou"), results: $("results"), resultsStatus: $("resultsStatus"),
   music: $("eventMusic"), musicControls: $("musicControls"), musicToggle: $("musicToggle"), musicStatus: $("musicStatus"),
 };
 const eventErrorMessage = "This invitation could not be loaded. Check the link or try again.";
@@ -85,6 +84,26 @@ function saveLanguage(language) {
   catch { /* Session storage can be disabled; language still works in memory. */ }
 }
 
+function setupTeddyMotion() {
+  const scene = document.querySelector(".gr-teddy-scene");
+  if (!scene) return;
+  const reducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)");
+  let visible = false;
+  const updateMotion = () => scene.classList.toggle("is-animating", visible && !reducedMotion.matches);
+  if ("IntersectionObserver" in window) {
+    const observer = new IntersectionObserver(([entry]) => {
+      visible = entry.isIntersecting;
+      updateMotion();
+    }, { threshold: 0.01 });
+    observer.observe(scene);
+    window.addEventListener("pagehide", () => observer.disconnect(), { once: true, signal });
+  } else {
+    visible = true;
+    updateMotion();
+  }
+  if (typeof reducedMotion.addEventListener === "function") reducedMotion.addEventListener("change", updateMotion, { signal });
+}
+
 function localizedEventTitle() {
   return activeLanguage === "ar"
     ? (eventData?.eventTitleAr || "حفل الكشف عن جنس المولود")
@@ -110,24 +129,6 @@ function localizedDate(event) {
   }
 }
 
-function localizeCountries() {
-  const selectedRegion = elements.country.value || "AE";
-  let displayNames;
-  try { displayNames = new Intl.DisplayNames([activeLanguage === "ar" ? "ar" : "en"], { type: "region" }); }
-  catch { displayNames = null; }
-  const fragment = document.createDocumentFragment();
-  for (const [region, englishName, callingCode] of GENDER_REVEAL_COUNTRIES) {
-    const option = document.createElement("option");
-    const countryName = activeLanguage === "ar" ? (displayNames?.of(region) || englishName) : englishName;
-    option.value = region;
-    option.textContent = `${countryName} (+${callingCode})`;
-    option.dataset.callingCode = callingCode;
-    option.selected = region === selectedRegion;
-    fragment.append(option);
-  }
-  elements.country.replaceChildren(fragment);
-}
-
 function renderLanguage() {
   const strings = copy[activeLanguage];
   const arabic = activeLanguage === "ar";
@@ -151,7 +152,6 @@ function renderLanguage() {
     elements.eventMessage.textContent = localizedEventMessage();
     if (eventData.eventStatus !== "active") elements.closedNotice.textContent = strings.closed;
   }
-  localizeCountries();
   for (const [fieldName, errorKey] of Object.entries(fieldErrorKeys)) {
     if (errorKey) $(`${fieldName}Error`).textContent = strings[errorKey] || "";
   }
@@ -414,10 +414,8 @@ function toggleMusic() {
 
 function validateForm() {
   const values = Object.fromEntries(new FormData(elements.form).entries());
-  values.countryRegion = values.countryCallingCode;
-  values.countryCallingCode = elements.country.selectedOptions[0]?.dataset.callingCode || "";
-  const errors = genderRevealLocalValidation(values, normalizeInternationalPhone);
-  for (const key of ["fullName", "phone", "attendance", "prediction", "message"]) setFieldError(key, errors[key] || "");
+  const errors = genderRevealLocalValidation(values);
+  for (const key of ["fullName", "attendance", "prediction", "message"]) setFieldError(key, errors[key] || "");
   if (Object.keys(errors).length) {
     setFormStatus("validationSummary", true);
     const first = Object.keys(errors)[0];
@@ -437,6 +435,7 @@ async function getSubmissionService() {
     weddingId,
     ensureAnonymousUser: async () => {
       if (!firebase.auth.currentUser) await signInAnonymously(firebase.auth);
+      return firebase.auth.currentUser?.uid || "";
     },
   });
   return submissionService;
@@ -500,7 +499,7 @@ async function handleSubmit(event) {
 
 function clearFieldError(event) {
   const name = event.target?.name;
-  if (["fullName", "phone", "attendance", "prediction", "message"].includes(name)) setFieldError(name, "");
+  if (["fullName", "attendance", "prediction", "message"].includes(name)) setFieldError(name, "");
   if (formStatusKey) setFormStatus("");
 }
 
@@ -525,7 +524,7 @@ document.querySelectorAll("[data-language]").forEach((button) => button.addEvent
   saveLanguage(activeLanguage);
   renderLanguage();
 }, { signal }));
-elements.country.addEventListener("change", () => { elements.country.dataset.touched = "true"; }, { signal });
+setupTeddyMotion();
 elements.form.addEventListener("input", clearFieldError, { signal });
 elements.form.addEventListener("change", clearFieldError, { signal });
 elements.form.addEventListener("submit", handleSubmit, { signal });

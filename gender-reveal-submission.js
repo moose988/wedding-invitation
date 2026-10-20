@@ -1,15 +1,12 @@
-import { normalizeInternationalPhone } from "./gender-reveal-phone.js";
-
 export function validateGenderRevealResponse(input) {
   if (!input || typeof input !== "object" || Array.isArray(input)) throw new TypeError("Enter your response.");
   const fullName = typeof input.fullName === "string" ? input.fullName.trim() : "";
   if (!fullName || fullName.length > 120) throw new TypeError("Full name must be between 1 and 120 characters.");
-  const phoneE164 = normalizeInternationalPhone(input.phone, input.countryCallingCode);
   if (!new Set(["attending", "not_attending"]).has(input.attendance)) throw new TypeError("Choose whether you will attend.");
   if (!new Set(["boy", "girl"]).has(input.prediction)) throw new TypeError("Choose boy or girl.");
   const message = input.message === undefined || input.message === null ? "" : input.message;
   if (typeof message !== "string" || message.length > 1000) throw new TypeError("Message must be 1,000 characters or fewer.");
-  return { fullName, phoneE164, attendance: input.attendance, prediction: input.prediction, message: message.trim() };
+  return { fullName, attendance: input.attendance, prediction: input.prediction, message: message.trim() };
 }
 
 export function createGenderRevealSubmissionService({ api, db, weddingId, ensureAnonymousUser, createResponseId = makeResponseId }) {
@@ -19,12 +16,15 @@ export function createGenderRevealSubmissionService({ api, db, weddingId, ensure
   const ref = (...segments) => api.doc(db, "weddings", weddingId, ...segments);
   return async function submit(input) {
     const response = validateGenderRevealResponse(input);
-    await ensureAnonymousUser();
+    const sessionId = await ensureAnonymousUser();
+    if (typeof sessionId !== "string" || !/^[A-Za-z0-9_-]{20,128}$/.test(sessionId)) {
+      throw new TypeError("Could not identify this anonymous browser session.");
+    }
     const responseId = createResponseId();
     if (!/^[A-Za-z0-9_-]{20,64}$/.test(responseId)) throw new TypeError("Could not create a secure response identifier.");
     const eventRef = ref("publicEvent", "details");
     const responseRef = ref("genderRevealResponses", responseId);
-    const keyRef = ref("genderRevealPhoneKeys", response.phoneE164);
+    const keyRef = ref("genderRevealSessionKeys", sessionId);
     const stateRef = ref("genderRevealState", "summary");
     const aggregateRef = ref("genderRevealResults", "aggregate");
 
@@ -45,8 +45,8 @@ export function createGenderRevealSubmissionService({ api, db, weddingId, ensure
       const girlCount = previous.girlCount + (response.prediction === "girl" ? 1 : 0);
       const totalCount = previous.totalCount + 1;
       transaction.set(responseRef, { ...response, createdAt: api.serverTimestamp() });
-      transaction.set(keyRef, { createdAt: api.serverTimestamp() });
-      transaction.set(stateRef, { boyCount, girlCount, totalCount, lastResponseId: responseId, updatedAt: api.serverTimestamp() });
+      transaction.set(keyRef, { responseId, createdAt: api.serverTimestamp() });
+      transaction.set(stateRef, { boyCount, girlCount, totalCount, lastResponseId: responseId, lastSessionId: sessionId, updatedAt: api.serverTimestamp() });
       transaction.set(aggregateRef, { boyCount, girlCount, totalCount, updatedAt: api.serverTimestamp() });
       });
     } catch (error) {

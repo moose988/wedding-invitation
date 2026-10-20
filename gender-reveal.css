@@ -77,11 +77,42 @@ button { color: inherit; }
 .gr-button--light { min-width: 108px; min-height: 48px; border: 1px solid rgba(104, 81, 66, .22); background: rgba(255, 253, 249, .92); color: #594a42; box-shadow: 0 6px 20px rgba(62, 48, 39, .13); }
 body.gr-opening-active { overflow: hidden; overscroll-behavior: none; }
 
-.gr-invitation { position: relative; width: min(100% - 28px, 900px); margin: 0 auto; padding: clamp(64px, 9vw, 105px) 0 calc(118px + env(safe-area-inset-bottom)); background: linear-gradient(rgba(251, 245, 237, .35), rgba(251, 245, 237, .35)), url("./images/gender-reveal-details-bg.webp") center top / cover no-repeat; opacity: 0; transform: translateY(14px); transition: opacity .52s ease, transform .52s ease; }
+.gr-invitation { position: relative; isolation: isolate; width: 100%; margin: 0; overflow: clip; background: var(--gr-ivory); opacity: 0; transform: translateY(14px); transition: opacity .52s ease, transform .52s ease; }
+.gr-invitation::before, .gr-invitation::after { position: absolute; z-index: -1; inset: 0; content: ""; pointer-events: none; }
+.gr-invitation::before { background: url("./images/gender-reveal-details-bg.webp") top center / 100% auto no-repeat; }
+.gr-invitation::after { background: linear-gradient(to bottom, transparent 0, rgba(251, 245, 237, .12) calc(100vw * .8), var(--gr-ivory) calc(100vw * 1.5)); }
+.gr-invitation__content { position: relative; z-index: 1; width: min(100% - 28px, 900px); margin: 0 auto; padding: clamp(64px, 9vw, 105px) 0 calc(118px + env(safe-area-inset-bottom)); }
 .gr-invitation.is-visible { opacity: 1; transform: translateY(0); }
 .gr-event-card, .gr-form-card, .gr-thanks-card { position: relative; margin: 0 auto 24px; padding: clamp(26px, 5vw, 52px); border: 1px solid rgba(206, 183, 163, .52); border-radius: 28px; background: rgba(255, 253, 249, .94); box-shadow: var(--gr-shadow); }
 .gr-decoration { display: block; height: auto; margin: 12px auto 20px; object-fit: contain; pointer-events: none; user-select: none; }
-.gr-decoration--teddy { width: min(178px, 42vw); }
+.gr-teddy-scene { position: relative; isolation: isolate; width: min(200px, 52vw); aspect-ratio: 3 / 4; margin: 12px auto 20px; pointer-events: none; }
+.gr-teddy-clouds { position: absolute; z-index: 0; inset: 0; overflow: hidden; }
+.gr-teddy-cloud { position: absolute; display: block; width: 46px; height: 15px; border-radius: 999px; background: linear-gradient(180deg, rgba(255, 255, 255, .82), rgba(238, 246, 250, .46)); box-shadow: 0 3px 10px rgba(126, 157, 174, .08), inset 0 1px 2px rgba(255, 255, 255, .72); opacity: 0; }
+.gr-teddy-cloud::before, .gr-teddy-cloud::after { position: absolute; bottom: 3px; border-radius: 50%; background: inherit; content: ""; }
+.gr-teddy-cloud::before { left: 8px; width: 19px; height: 19px; }
+.gr-teddy-cloud::after { right: 8px; width: 15px; height: 15px; }
+.gr-teddy-cloud--one { top: 4%; left: 6%; animation: gr-cloud-down 17s linear infinite; }
+.gr-teddy-cloud--two { top: 19%; right: 2%; width: 35px; transform: scale(.78); animation: gr-cloud-down 21s -8s linear infinite; }
+.gr-teddy-cloud--three { top: 31%; left: -8%; width: 40px; transform: scale(.68); animation: gr-cloud-down 14s -5s linear infinite; }
+.gr-teddy-cloud--four { top: 12%; right: -9%; width: 48px; transform: scale(.58); animation: gr-cloud-down 24s -13s linear infinite; }
+.gr-teddy-balloon { position: absolute; z-index: 2; inset: 0; transform-origin: 52% 59%; }
+.gr-teddy-balloon svg, .gr-teddy-balloon img { position: absolute; inset: 0; width: 100%; height: 100%; }
+.gr-teddy-balloon svg { z-index: 1; overflow: visible; }
+.gr-teddy-balloon path { fill: none; stroke-linecap: round; stroke-width: .65; }
+.gr-teddy-balloon--pink path { stroke: #c98793; }
+.gr-teddy-balloon--blue path { stroke: #7ea5bb; }
+.gr-teddy-balloon img { object-fit: contain; clip-path: inset(0 0 66% 0); transform-origin: 44% 31%; }
+.gr-teddy-balloon--pink img { transform: translate(-8%, -12%) scale(.58); }
+.gr-teddy-balloon--blue img { transform-origin: 70% 31%; transform: translate(8%, -12%) scale(.58); }
+.gr-decoration--teddy { position: absolute; z-index: 3; inset: 0; width: 100%; height: 100%; margin: 0; }
+.gr-teddy-scene.is-animating .gr-decoration--teddy { animation: gr-teddy-float 6.8s ease-in-out infinite; }
+.gr-teddy-scene.is-animating .gr-teddy-balloon--pink { animation: gr-balloon-sway 10.4s ease-in-out -1.6s infinite; }
+.gr-teddy-scene.is-animating .gr-teddy-balloon--blue { animation: gr-balloon-sway 11.7s ease-in-out -4.1s infinite reverse; }
+.gr-teddy-scene.is-animating .gr-teddy-cloud { animation-play-state: running; }
+@keyframes gr-teddy-float { 0%, 100% { transform: translate3d(0, 0, 0); } 50% { transform: translate3d(0, -5px, 0); } }
+@keyframes gr-balloon-sway { 0%, 100% { transform: rotate(-1.1deg); } 50% { transform: rotate(1.1deg); } }
+@keyframes gr-cloud-down { 0% { opacity: 0; transform: translate3d(0, -28px, 0); } 14% { opacity: .32; } 84% { opacity: .24; } 100% { opacity: 0; transform: translate3d(0, 190px, 0); } }
+.gr-teddy-scene .gr-teddy-cloud { animation-play-state: paused; }
 .gr-decoration--toys { width: min(242px, 58vw); margin-top: 6px; margin-bottom: 8px; }
 .gr-event-card { max-width: 760px; overflow: hidden; text-align: center; }
 .gr-event-card::before, .gr-event-card::after { position: absolute; width: 180px; height: 180px; border-radius: 50%; background: radial-gradient(circle, rgba(229, 184, 186, .22), transparent 72%); content: ""; pointer-events: none; }
@@ -164,7 +195,15 @@ body.gr-opening-active { overflow: hidden; overscroll-behavior: none; }
   .gr-cover__content { width: calc(100% - 30px); margin-top: max(138px, 18svh); margin-bottom: 280px; padding: 25px 18px 27px; border-radius: 23px; }
   .gr-cover__sparkle--one { left: 7%; }
   .gr-cover__sparkle--two { right: 7%; }
-  .gr-invitation { width: calc(100% - 22px); padding-top: 67px; }
+  .gr-invitation__content { width: calc(100% - 24px); padding-top: 67px; }
+  .gr-teddy-scene { width: min(190px, 56vw); }
+  .gr-teddy-balloon--pink img { transform: translate(-9%, -13%) scale(.53); }
+  .gr-teddy-balloon--blue img { transform: translate(9%, -13%) scale(.53); }
+  .gr-teddy-balloon { transform-origin: 52% 59%; }
+  .gr-teddy-scene.is-animating .gr-teddy-balloon--pink { animation-name: gr-balloon-sway-mobile; }
+  .gr-teddy-scene.is-animating .gr-teddy-balloon--blue { animation-name: gr-balloon-sway-mobile; }
+  .gr-teddy-scene.is-animating .gr-teddy-balloon--pink { animation-duration: 12.4s; }
+  .gr-teddy-scene.is-animating .gr-teddy-balloon--blue { animation-duration: 13.7s; }
   .gr-event-card, .gr-form-card, .gr-thanks-card { margin-bottom: 16px; padding: 25px 19px; border-radius: 22px; }
   #responseForm { gap: 19px; }
   .gr-phone-row { grid-template-columns: minmax(0, 132px) minmax(0, 1fr); gap: 7px; }
@@ -173,7 +212,11 @@ body.gr-opening-active { overflow: hidden; overscroll-behavior: none; }
   .gr-results { padding: 20px 16px; }
 }
 
+@keyframes gr-balloon-sway-mobile { 0%, 100% { transform: rotate(-.55deg); } 50% { transform: rotate(.55deg); } }
+
 @media (max-width: 360px) {
+  .gr-invitation__content { width: calc(100% - 20px); }
+  .gr-teddy-scene { width: min(184px, 58vw); }
   .gr-brand { font-size: .76rem; }
   .gr-language button { min-width: 37px; }
   .gr-phone-row { grid-template-columns: minmax(0, 112px) minmax(0, 1fr); gap: 6px; }
@@ -188,4 +231,5 @@ body.gr-opening-active { overflow: hidden; overscroll-behavior: none; }
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { scroll-behavior: auto !important; animation-duration: .01ms !important; animation-iteration-count: 1 !important; transition-duration: .01ms !important; }
   .gr-vinyl-toggle[data-state="playing"] .gr-vinyl-toggle__record { animation: none; }
+  .gr-teddy-scene .gr-teddy-balloon, .gr-teddy-scene .gr-decoration--teddy, .gr-teddy-scene .gr-teddy-cloud { animation: none !important; transform: none !important; }
 }

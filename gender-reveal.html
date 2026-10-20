@@ -6,12 +6,12 @@
     <meta name="theme-color" content="#fbf5ed" />
     <meta name="referrer" content="no-referrer" />
     <title>Gender Reveal Party</title>
-    <link rel="stylesheet" href="./gender-reveal.css?v=invitation-refine-10" />
+    <link rel="stylesheet" href="./gender-reveal.css?v=gender-reveal-refine-20261020-4" />
   </head>
   <body class="gender-reveal-page">
     <div class="gr-app" id="genderRevealApp" aria-busy="true">
       <header class="gr-topbar">
-        <a class="gr-brand" href="./" aria-label="QD Systems home">QD <span>EVENTS</span></a>
+        <a class="gr-brand" href="./" aria-label="QDevents home">QDevents</a>
         <div class="gr-topbar__actions">
           <div class="gr-language" role="group" aria-label="Invitation language">
             <button type="button" data-language="en" aria-pressed="true">EN</button>
@@ -60,6 +60,7 @@
       </section>
 
       <main class="gr-invitation" id="invitationContent" hidden inert>
+        <div class="gr-invitation__content">
         <section class="gr-event-card" aria-labelledby="eventTitle">
           <span class="gr-event-card__ornament" aria-hidden="true">✧</span>
           <p class="gr-eyebrow" data-copy="youAreInvited">You are invited</p>
@@ -70,7 +71,23 @@
           <p class="gr-media-notice" id="mediaNotice" role="status" hidden></p>
         </section>
 
-        <img class="gr-decoration gr-decoration--teddy" src="./images/gender-reveal-teddy.png" width="900" height="1080" alt="" aria-hidden="true" loading="lazy" decoding="async" />
+        <div class="gr-teddy-scene" aria-hidden="true">
+          <div class="gr-teddy-clouds">
+            <span class="gr-teddy-cloud gr-teddy-cloud--one"></span>
+            <span class="gr-teddy-cloud gr-teddy-cloud--two"></span>
+            <span class="gr-teddy-cloud gr-teddy-cloud--three"></span>
+            <span class="gr-teddy-cloud gr-teddy-cloud--four"></span>
+          </div>
+          <div class="gr-teddy-balloon gr-teddy-balloon--pink">
+            <img src="./images/gender-reveal-balloon-pink.png" alt="" loading="lazy" decoding="async" />
+            <svg viewBox="0 0 100 100" aria-hidden="true" focusable="false"><path d="M 36 19 C 24 31, 14 41, 22 48 C 28 54, 39 58, 46 59" /></svg>
+          </div>
+          <div class="gr-teddy-balloon gr-teddy-balloon--blue">
+            <img src="./images/gender-reveal-balloon-blue.png" alt="" loading="lazy" decoding="async" />
+            <svg viewBox="0 0 100 100" aria-hidden="true" focusable="false"><path d="M 79 19 C 85 38, 69 51, 54 59" /></svg>
+          </div>
+          <img class="gr-decoration gr-decoration--teddy" src="./images/gender-reveal-teddy-floating.png" width="900" height="1200" alt="" loading="lazy" decoding="async" />
+        </div>
 
         <section class="gr-form-card" id="responseFormSection" aria-labelledby="formTitle" hidden>
           <div class="gr-section-heading">
@@ -84,16 +101,6 @@
               <input id="fullName" name="fullName" type="text" maxlength="120" autocomplete="name" required aria-describedby="fullNameError" />
               <small class="gr-field__error" id="fullNameError" role="alert"></small>
             </label>
-
-            <fieldset class="gr-fieldset">
-              <legend data-copy="phone">International phone number</legend>
-              <div class="gr-phone-row" dir="ltr">
-                <label class="gr-sr-only" for="countryCallingCode" data-copy="country">Country calling code</label>
-                <select id="countryCallingCode" name="countryCallingCode" autocomplete="tel-country-code" required aria-describedby="phoneError"></select>
-                <input id="phone" name="phone" type="tel" maxlength="32" autocomplete="tel-national" inputmode="tel" dir="ltr" placeholder="50 123 4567" required aria-describedby="phoneError" />
-              </div>
-              <small class="gr-field__error" id="phoneError" role="alert"></small>
-            </fieldset>
 
             <fieldset class="gr-fieldset">
               <legend data-copy="attendance">Will you attend?</legend>
@@ -143,10 +150,11 @@
 
         <img class="gr-decoration gr-decoration--toys" src="./images/gender-reveal-toys.png" width="1200" height="800" alt="" aria-hidden="true" loading="lazy" decoding="async" />
         <footer class="gr-footer"><span data-copy="madeWith">Made with care by</span> <a href="https://qdsystems.ae" target="_blank" rel="noopener noreferrer">QD Systems</a></footer>
+        </div>
       </main>
 
       <audio id="eventMusic" preload="none" loop></audio>
     </div>
-    <script type="module" src="./gender-reveal.js?v=release-20261020-1"></script>
+    <script type="module" src="./gender-reveal.js?v=gender-reveal-motion-20261020-1"></script>
   </body>
 </html>

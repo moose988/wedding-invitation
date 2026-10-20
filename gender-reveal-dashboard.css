@@ -93,9 +93,9 @@ body.is-gender-reveal .gr-response-pagination button:disabled { cursor: default;
   body.is-gender-reveal .gr-stats-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   body.is-gender-reveal .gr-stat--total { order: 1; }
   body.is-gender-reveal .gr-stat--attending { order: 2; }
-  body.is-gender-reveal .gr-stat--boy { order: 3; }
-  body.is-gender-reveal .gr-stat--girl { order: 4; }
-  body.is-gender-reveal .gr-stat--declined { order: 5; }
+  body.is-gender-reveal .gr-stat--declined { order: 3; }
+  body.is-gender-reveal .gr-stat--boy { order: 4; }
+  body.is-gender-reveal .gr-stat--girl { order: 5; }
   body.is-gender-reveal .gr-stat { min-height: 99px; padding: 14px; }
   body.is-gender-reveal .gr-response-filters { grid-template-columns: 1fr 1fr; }
   body.is-gender-reveal .gr-response-filters label:first-child { grid-column: 1 / -1; }

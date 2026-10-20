@@ -4,7 +4,6 @@ import { eventDateTimeParts, localDateTimeToIso } from "../event-date-time.js";
 import { EVENT_CATEGORIES, eventUsesGuestSides, getDefaultGuestSide, getEventCategory, getEventDisplayTitle, isGenderRevealEvent } from "../event-utils.js";
 import { publicEventData } from "../event-publishing.js";
 import { buildInvitationProjection } from "../invitations/shared/invitation-token.js";
-import { GENDER_REVEAL_COUNTRIES, normalizeInternationalPhone } from "../gender-reveal-phone.js";
 import { validateGenderRevealResponse } from "../gender-reveal-submission.js";
 import { genderRevealEmulatorFixture } from "./fixtures/gender-reveal-event.mjs";
 
@@ -20,28 +19,18 @@ test("Gender Reveal category uses general attendees and preserves legacy categor
   assert.equal(getDefaultGuestSide({}), "bride");
 });
 
-test("phone formats normalize to one E.164 key and invalid lengths are rejected", () => {
-  assert.equal(normalizeInternationalPhone("050 123 4567", "971"), "+971501234567");
-  assert.equal(normalizeInternationalPhone("+971 (50) 123-4567", "1"), "+971501234567");
-  assert.equal(normalizeInternationalPhone("00971 50 123 4567", "44"), "+971501234567");
-  assert.equal(normalizeInternationalPhone("(212) 555-0100", "1"), "+12125550100");
-  assert.throws(() => normalizeInternationalPhone("12", "971"), /8 to 15/);
-  assert.throws(() => normalizeInternationalPhone("+012345678", "971"), /8 to 15/);
-  assert.ok(GENDER_REVEAL_COUNTRIES.some(([region, , code]) => region === "AE" && code === "971"));
-});
-
 test("shared response validates types, lengths, attendance and prediction while allowing a declined attendee to predict", () => {
   assert.deepEqual(validateGenderRevealResponse({
-    fullName: "  Example Guest ", phone: "050 123 4567", countryCallingCode: "971",
-    attendance: "not_attending", prediction: "girl", message: "Congratulations!",
+    fullName: "  Example Guest ", attendance: "not_attending", prediction: "girl", message: "Congratulations!",
   }), {
-    fullName: "Example Guest", phoneE164: "+971501234567", attendance: "not_attending",
+    fullName: "Example Guest", attendance: "not_attending",
     prediction: "girl", message: "Congratulations!",
   });
-  assert.throws(() => validateGenderRevealResponse({ fullName: " ", phone: "0501234567", countryCallingCode: "971", attendance: "attending", prediction: "boy" }), /Full name/);
-  assert.throws(() => validateGenderRevealResponse({ fullName: "A", phone: "0501234567", countryCallingCode: "971", attendance: "maybe", prediction: "boy" }), /attend/);
-  assert.throws(() => validateGenderRevealResponse({ fullName: "A", phone: "0501234567", countryCallingCode: "971", attendance: "attending", prediction: "unknown" }), /boy or girl/);
-  assert.throws(() => validateGenderRevealResponse({ fullName: "A", phone: "0501234567", countryCallingCode: "971", attendance: "attending", prediction: "boy", message: "x".repeat(1001) }), /1,000/);
+  assert.throws(() => validateGenderRevealResponse({ fullName: " ", attendance: "attending", prediction: "boy" }), /Full name/);
+  assert.throws(() => validateGenderRevealResponse({ fullName: "A", attendance: "maybe", prediction: "boy" }), /attend/);
+  assert.throws(() => validateGenderRevealResponse({ fullName: "A", attendance: "attending", prediction: "unknown" }), /boy or girl/);
+  assert.throws(() => validateGenderRevealResponse({ fullName: "A", attendance: "attending", prediction: "boy", message: "x".repeat(1001) }), /1,000/);
+  assert.equal(Object.hasOwn(validateGenderRevealResponse({ fullName: "A", attendance: "attending", prediction: "boy" }), "phoneE164"), false);
 });
 
 test("fixture date is stored as Dubai local time without a UTC date shift", () => {

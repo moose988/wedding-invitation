@@ -4,7 +4,7 @@ export function photoBucketReturn(raw, base) {
   try {
     if (!raw || raw.length > 300) return '';
     const url = new URL(raw, base);
-    if (url.origin !== new URL(base).origin || !url.pathname.endsWith('/photo-bucket-manage.html')) return '';
+    if (url.origin !== new URL(base).origin || !/\/photo-bucket-manage(\.html)?$/.test(url.pathname)) return '';
     const id = url.searchParams.get('bucket');
     return /^[a-zA-Z0-9_-]{1,80}$/.test(id || '') ? `./photo-bucket-manage.html?bucket=${encodeURIComponent(id)}` : '';
   } catch { return ''; }

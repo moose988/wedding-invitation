@@ -1,0 +1,8 @@
+{
+  "redirects": [
+    { "source": "/photo-bucket-manage.html", "destination": "/photo-bucket-manage", "permanent": false }
+  ],
+  "rewrites": [
+    { "source": "/photo-bucket-manage", "destination": "/photo-bucket-manage.html" }
+  ]
+}

@@ -55,7 +55,7 @@ async function boot() {
     }
     else {
       owner ? renderOwner() : renderGuest(); bindCommon();
-      if (owner) { bindOwner(); await renderShare(); }
+      if (owner) { bindOwner(); await renderShare(); setInterval(autoRefresh, 5000); }
       else { bindGuest(); queue = uploadQueue({ adapter, bucketId: bucket.id, changed: onJobChange, transport: defaultTransport() }); await loadQueue(); await queue.start(); }
       await refreshGallery();
     }
@@ -79,14 +79,24 @@ function renderOwner() {
   <aside><section class="pb-panel pb-sharing" aria-labelledby="shareHeading"><h2 id="shareHeading">Invite their perspective</h2><div id="qrSlot" class="pb-qr-slot" role="status">Preparing QR code…</div><button type="button" id="copyLink">Copy guest link</button><a id="guestLink" class="pb-button" target="_blank" rel="noopener">Open guest page</a><button type="button" id="downloadQr">Download QR image</button><a class="pb-button" href="./photo-bucket-poster.html?bucket=${encodeURIComponent(bucket.id)}">Preview & print A5 card</a></section>
   <details class="pb-panel pb-owner-details"><summary>Edit details</summary><form id="detailsForm"><label>Event title<input name="name" required maxlength="100" value="${h(bucket.name)}"></label><label>Date<input name="date" type="date" required value="${h(bucket.date)}"></label><label>Place<input name="location" required maxlength="160" value="${h(bucket.location)}"></label><button type="submit" class="pb-primary">Save</button></form></details></aside></div>${dialogs()}`;
 }
-async function refreshGallery() {
+let gallerySignature = '';
+// quiet = background refresh: no redraw when nothing changed, and no error banner if the network blips.
+// Host page only: pick up new guest uploads every 5 seconds while the tab is visible and nothing is open.
+function autoRefresh() {
+  if (disposed || document.visibilityState !== 'visible' || document.querySelector('dialog[open]')) return;
+  void refreshGallery(true);
+}
+async function refreshGallery(quiet = false) {
   if (disposed) return;
   if (refreshing) { pendingRefresh = true; return; } refreshing = true;
   try {
-    photos = (await adapter.photos(bucket.id)).sort((a,b) => b.createdAt - a.createdAt);
+    const next = (await adapter.photos(bucket.id)).sort((a,b) => b.createdAt - a.createdAt);
     if (disposed) return;
+    const signature = next.map(p => `${p.id}:${p.revision}`).join('|');
+    if (quiet && signature === gallerySignature) return;
+    photos = next; gallerySignature = signature;
     drawGallery();
-  } catch (error) { $('#galleryState').hidden = false; $('#galleryState').textContent = friendlyError(error); }
+  } catch (error) { if (!quiet) { $('#galleryState').hidden = false; $('#galleryState').textContent = friendlyError(error); } }
   finally { refreshing = false; if (pendingRefresh) { pendingRefresh = false; void refreshGallery(); } }
 }
 function visiblePhotos() { return filter ? photos.filter(p => p.contributorId === filter) : photos; }

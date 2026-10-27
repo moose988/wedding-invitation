@@ -15,7 +15,7 @@
     <link rel="preload" as="image" href="./invitations/wedding-designs/layla-zaid/assets/layla-zaid-sculpted-floral-cover.webp?v=20261026-cover-2" fetchpriority="low" />
     <link rel="preload" as="image" href="./invitations/wedding-designs/layla-zaid/assets/layla-zaid-bridal-ribbon-rings-background.webp" fetchpriority="low" />
     <link rel="stylesheet" href="./invitations/wedding-designs/layla-zaid/styles.css?v=20261027-layla-opening-fullscreen-1" />
-    <link rel="stylesheet" href="./invitations/wedding-designs/layla-zaid/visual-polish.css?v=20261027-envelope-fit-1" />
+    <link rel="stylesheet" href="./invitations/wedding-designs/layla-zaid/visual-polish.css?v=20261028-intro-handoff-speed-1" />
   </head>
   <body class="layla-zaid-invitation">
     <div class="layla-details-backdrop" aria-hidden="true"><img src="./invitations/wedding-designs/layla-zaid/assets/layla-zaid-bridal-ribbon-rings-background.webp" alt="" /></div>
@@ -39,7 +39,7 @@
         </button>
         <p class="envelope-intro__caption" data-layla-text="introCaption">A love story awaits — tap to open</p>
         <video class="envelope-intro__video" id="openingVideo" playsinline webkit-playsinline muted preload="none" poster="./invitations/wedding-designs/layla-zaid/assets/Ivory Wedding Envelope with LZ Seal.png" aria-label="The wedding invitation envelope opening">
-          <source src="./invitations/wedding-designs/layla-zaid/assets/enevlope%20opening.mp4?v=restored-20261027" type="video/mp4" />
+          <source src="./invitations/wedding-designs/layla-zaid/assets/enevlope%20opening.mp4?v=20261028-fullscreen-4-5s" type="video/mp4" />
         </video>
       </div>
       <p class="envelope-intro__status" id="introStatus" role="status" aria-live="polite" hidden></p>
@@ -85,13 +85,15 @@
       <section class="section reveal" id="detailsSection">
         <div class="section-frame venue-section">
           <div class="section-heading section-heading--center"><p class="section-kicker" data-layla-text="detailsLabel">When & where</p><h2 data-layla-text="detailsHeading">A place to gather</h2></div>
-          <div class="venue-illustration-wrap" aria-hidden="true"><img class="venue-illustration" src="./invitations/wedding-designs/layla-zaid/assets/Watercolor Ivory Courtyard Wedding Venue.png" alt="" loading="lazy" /></div>
-          <div class="detail-switcher" id="detailsGrid"></div>
-          <div class="venue-actions" id="venueActions">
-            <a class="luxury-button luxury-button--primary" id="openMapsLink" target="_blank" rel="noopener noreferrer" hidden><span data-layla-text="openInMaps">Open in Maps</span></a>
-            <button class="luxury-button luxury-button--secondary" type="button" data-calendar-download><span data-layla-text="calendar">Add to Calendar</span></button>
+          <div class="details-content-container">
+            <div class="venue-illustration-wrap" aria-hidden="true"><img class="venue-illustration" src="./invitations/wedding-designs/layla-zaid/assets/Watercolor Ivory Courtyard Wedding Venue.png" alt="" loading="lazy" /></div>
+            <div class="detail-switcher" id="detailsGrid"></div>
+            <div class="venue-actions" id="venueActions">
+              <a class="luxury-button luxury-button--primary" id="openMapsLink" target="_blank" rel="noopener noreferrer" hidden><span data-layla-text="openInMaps">Open in Maps</span></a>
+              <button class="luxury-button luxury-button--secondary" type="button" data-calendar-download><span data-layla-text="calendar">Add to Calendar</span></button>
+            </div>
+            <div id="venueMapPreviewMount"></div>
           </div>
-          <div id="venueMapPreviewMount"></div>
         </div>
       </section>
 
@@ -99,6 +101,7 @@
         <div class="section-frame">
           <div class="section-heading section-heading--center"><p class="section-kicker" data-layla-text="scheduleLabel">The Wedding Evening</p><h2 data-layla-text="scheduleHeading">A celebration of love</h2></div>
           <ol class="schedule-timeline" id="scheduleMount"></ol>
+          <div class="schedule-actions" id="scheduleActions"></div>
         </div>
       </section>
 
@@ -130,6 +133,6 @@
     </main>
     <nav class="sticky-actions" id="stickyActions" aria-label="Quick event actions" hidden></nav>
     <div class="toast-rail" id="toastRail" aria-live="polite" aria-atomic="true"></div>
-        <script type="module" src="./script.js?v=20261027-layla-visual-audit-1"></script>
+        <script type="module" src="./script.js?v=20261028-details-scroll-divider-1"></script>
   </body>
 </html>

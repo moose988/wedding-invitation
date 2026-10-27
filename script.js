@@ -908,6 +908,9 @@ function renderSchedule() {
     const iconClass = isLayla ? ` schedule-item--${iconType}` : "";
     return `<li class="schedule-item${arabic ? " schedule-item--arabic" : ""}${iconClass}" style="--item-index:${index}" ${arabic ? 'lang="ar" dir="rtl"' : ""}><time class="schedule-item__time" dir="auto"${timeLang}><bdi dir="auto">${escapeHtml(time)}</bdi></time>${eventIcon}<div class="schedule-item__copy"><h3${titleLang}>${escapeHtml(title)}</h3>${description ? `<p${descriptionLang}>${escapeHtml(description)}</p>` : ""}</div></li>`;
   }).join("");
+  const calendarAction = document.querySelector("[data-calendar-download]");
+  const calendarTarget = document.getElementById(items.length ? "scheduleActions" : "venueActions");
+  if (calendarAction && calendarTarget) calendarTarget.append(calendarAction);
   if (isLayla && items.length) updateLaylaScheduleConnector(mount);
 }
 
@@ -995,6 +998,7 @@ function renderLocationMap() {
       ${mapActionMarkup}
     </div>
   `;
+  if (isLaylaInvitation() && mapsLink && directions) mount.querySelector(".venue-map-card")?.append(mapsLink);
 
   const preview = mount.querySelector("[data-map-preview]");
   const retryButton = preview?.querySelector("[data-load-map-preview]");
@@ -1983,7 +1987,10 @@ function bindBaseEvents() {
     }
 
     if (event.target.closest("[data-scroll-details]")) {
-      document.getElementById("detailsSection")?.scrollIntoView({ behavior: "smooth", block: "start" });
+      const detailsTarget = isLaylaInvitation()
+        ? document.querySelector("#countdownSection .section-frame")
+        : document.getElementById("detailsSection");
+      detailsTarget?.scrollIntoView({ behavior: "smooth", block: "start" });
     }
 
     const rsvpTrigger = event.target.closest("[data-scroll-rsvp]");

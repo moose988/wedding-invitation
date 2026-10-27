@@ -1,5 +1,6 @@
 /* Final review layer. Loaded only by this invitation; no shared theme overrides. */
 body.layla-zaid-invitation {
+  --layla-venue-action-max: 320px;
   --layla-ink: #51473d;
   --layla-green: #424c3f;
   --layla-muted: #716151;
@@ -15,6 +16,9 @@ body.layla-zaid-invitation {
 body.layla-zaid-invitation .site-content { padding-bottom: max(100px, calc(env(safe-area-inset-bottom) + 80px)); }
 body.layla-zaid-invitation .site-content :is(.section, button, a, textarea, [tabindex]) {
   scroll-margin-block: calc(var(--layla-notice-height, 0px) + 72px) 90px;
+}
+body.layla-zaid-invitation #countdownSection > .section-frame {
+  scroll-margin-block-start: calc(var(--layla-notice-height, 0px) + 20px);
 }
 body.layla-zaid-invitation .section-heading h2 {
   color: var(--layla-ink);
@@ -119,7 +123,22 @@ body.layla-zaid-invitation .music-toggle { left: auto; right: max(18px, calc(env
 body.layla-zaid-invitation .rsvp-confirmation-mark { color: var(--layla-green); background: #eee6d4; }
 body.layla-zaid-invitation .sample-preview-banner { top: calc(var(--layla-notice-height, 0px) + max(12px, env(safe-area-inset-top))); inset-inline-start: 12px; transform: none; max-width: calc(100vw - 130px); white-space: normal; }
 body.layla-zaid-invitation .toast-rail { top: auto; bottom: max(86px, calc(env(safe-area-inset-bottom) + 76px)); pointer-events: none; }
-body.layla-zaid-invitation .qd-footer { color: var(--layla-muted); font-size: .8125rem; line-height: 1.5; letter-spacing: 0; }
+body.layla-zaid-invitation .qd-footer {
+  position: fixed;
+  z-index: 20;
+  left: 50%;
+  right: auto;
+  bottom: max(18px, calc(env(safe-area-inset-bottom) + 12px));
+  max-width: calc(100vw - 120px);
+  transform: translateX(-50%);
+  margin: 0;
+  padding: 0;
+  color: var(--layla-muted);
+  font-size: .8125rem;
+  line-height: 1.5;
+  letter-spacing: 0;
+  text-align: center;
+}
 body.layla-zaid-invitation.layla-arabic :is(.section-kicker, .detail-card__title, .countdown-card__label, .luxury-button, .detail-tab) { font-family: "Amiri", serif; letter-spacing: 0; text-transform: none; }
 body.layla-zaid-invitation.layla-arabic :is(.layla-party-chair__name, .layla-party-chair__assignment, .rsvp-form, .rsvp-summary, .hero-event-line) { font-family: "Amiri", serif; line-height: 1.8; }
 body.layla-zaid-invitation.layla-arabic #rsvpSection .rsvp-answer span { font-family: "Amiri", serif; font-size: 1rem; line-height: 1.8; letter-spacing: 0; }
@@ -127,8 +146,27 @@ body.layla-zaid-invitation.layla-arabic .schedule-item__time { font-size: .875re
 body.layla-zaid-invitation.layla-arabic .schedule-item--arabic :is(h3, p)[lang="ar"] { line-height: 1.8; }
 
 /* Keep the complete envelope artwork in view as Safari's browser chrome moves. */
-body.layla-zaid-invitation .envelope-intro__poster,
-body.layla-zaid-invitation .envelope-intro__video { object-fit: contain; }
+body.layla-zaid-invitation .envelope-intro { transition: opacity .18s ease, visibility .18s ease; }
+body.layla-zaid-invitation .envelope-intro__poster { object-fit: contain; }
+body.layla-zaid-invitation .envelope-intro__video { object-fit: cover; }
+body.layla-zaid-invitation .envelope-intro__status:not([hidden]) {
+  position: absolute;
+  inset-inline-start: 0;
+  inset-block-end: 0;
+  display: block;
+  width: 1px;
+  height: 1px;
+  max-width: none;
+  margin: -1px;
+  padding: 0;
+  overflow: hidden;
+  border: 0;
+  clip: rect(0, 0, 0, 0);
+  clip-path: inset(50%);
+  white-space: nowrap;
+  transform: none;
+}
+body.layla-zaid-invitation .envelope-intro__status::before { content: none; }
 @media (max-width: 600px) {
   body.layla-zaid-invitation .envelope-intro {
     inset: 0;
@@ -145,6 +183,58 @@ body.layla-zaid-invitation .envelope-intro__video { object-fit: contain; }
     aspect-ratio: auto;
     background: #f5efe4 url("./assets/Ivory Wedding Envelope with LZ Seal.png") center / cover no-repeat;
   }
+}
+
+/* Compact the invitation's content blocks while preserving the original artwork and tap sizes. */
+body.layla-zaid-invitation .site-content > .section:not(#heroSection) { padding-block: clamp(20px, 4vw, 44px); }
+body.layla-zaid-invitation.invitation-open .site-content .section-frame { padding: clamp(20px, 4vw, 40px); }
+body.layla-zaid-invitation .site-content .section-heading { margin-bottom: 20px; }
+body.layla-zaid-invitation .site-content .section-heading h2 { font-size: clamp(1.65rem, 4.7vw, 1.9rem); }
+body.layla-zaid-invitation .site-content .section-kicker { margin-bottom: 10px; }
+body.layla-zaid-invitation #detailsSection .details-content-container {
+  width: min(92%, 626px);
+  max-width: 100%;
+  min-width: 0;
+  margin-inline: auto;
+  box-sizing: border-box;
+}
+body.layla-zaid-invitation #detailsSection .details-content-container > :is(.venue-illustration-wrap, #detailsGrid, #venueActions, #venueMapPreviewMount) { min-width: 0; box-sizing: border-box; }
+body.layla-zaid-invitation #detailsSection .venue-illustration-wrap { width: 100%; max-width: none; margin: 0 auto 16px; }
+body.layla-zaid-invitation #detailsSection .venue-illustration { display: block; width: 100%; max-width: 100%; max-height: 272px; margin-inline: auto; object-fit: contain; }
+body.layla-zaid-invitation #detailsSection #detailsGrid { display: block; width: 100%; max-width: none; min-width: 0; margin-inline: auto; overflow: visible; box-sizing: border-box; }
+body.layla-zaid-invitation .detail-tabs { gap: 4px; margin-bottom: 10px; padding: 4px; }
+body.layla-zaid-invitation #detailsSection .detail-tabs { width: 100%; min-width: 0; box-sizing: border-box; }
+body.layla-zaid-invitation .detail-tab { min-width: 0; min-height: 44px; padding-block: 7px; box-sizing: border-box; }
+body.layla-zaid-invitation.invitation-open #detailsSection .detail-card { width: 100%; max-width: none; min-width: 0; min-height: 0; padding: 16px clamp(14px, 3vw, 24px); box-sizing: border-box; }
+body.layla-zaid-invitation.invitation-open .site-content .detail-card__icon { flex-basis: 40px; margin-bottom: 9px; }
+body.layla-zaid-invitation .detail-card__title { margin-bottom: 7px; }
+body.layla-zaid-invitation .venue-actions { gap: 8px; margin-block: 18px; }
+body.layla-zaid-invitation .venue-actions:empty { display: none; }
+body.layla-zaid-invitation .venue-actions:has(> [data-calendar-download]) { grid-template-columns: minmax(0, 1fr); max-width: 320px; }
+body.layla-zaid-invitation .schedule-actions { display: flex; justify-content: center; margin: 16px auto 0; }
+body.layla-zaid-invitation .schedule-actions > .luxury-button { width: min(100%, var(--layla-venue-action-max)); }
+body.layla-zaid-invitation #detailsSection #venueMapPreviewMount,
+body.layla-zaid-invitation #detailsSection .venue-map-card { width: 100%; max-width: none; min-width: 0; box-sizing: border-box; }
+body.layla-zaid-invitation #detailsSection .venue-map-card { margin: 20px auto 0; padding: 0; }
+body.layla-zaid-invitation .venue-map-card__venue { margin-bottom: 10px; }
+body.layla-zaid-invitation .venue-map-card #openMapsLink { display: flex; width: min(100%, var(--layla-venue-action-max)); margin: 12px auto 0; }
+body.layla-zaid-invitation #detailsSection .venue-map-frame { width: 100%; max-width: 100%; min-width: 0; padding: 0; box-sizing: border-box; }
+body.layla-zaid-invitation #detailsSection .venue-map-preview { width: 100%; max-width: 100%; min-width: 0; height: clamp(162px, 25vw, 196px); box-sizing: border-box; }
+body.layla-zaid-invitation #detailsSection .venue-map-preview iframe { display: block; width: 100%; max-width: 100%; min-width: 0; box-sizing: border-box; }
+body.layla-zaid-invitation .venue-map-preview--pending { min-height: 162px; padding: 15px; }
+body.layla-zaid-invitation .schedule-item { min-height: 48px; gap: 8px; padding-block: 11px; }
+body.layla-zaid-invitation #rsvpSection .rsvp-card { padding-block: clamp(20px, 3.2vw, 34px); }
+body.layla-zaid-invitation #rsvpSection .section-heading { margin-block-end: 15px; }
+body.layla-zaid-invitation #rsvpSection .rsvp-answer { min-height: 48px; padding-block: 8px; }
+body.layla-zaid-invitation #rsvpSection .rsvp-choice { gap: 8px; }
+body.layla-zaid-invitation #rsvpSection .rsvp-form__message { margin-block: 12px 8px; }
+body.layla-zaid-invitation #rsvpSection .rsvp-form__message textarea { min-height: 96px; }
+body.layla-zaid-invitation.invitation-open #rsvpSection .rsvp-summary { padding: 16px; }
+body.layla-zaid-invitation.invitation-open #seatingSection .seating-content-outline { padding: clamp(8px, 1.5vw, 14px); }
+@media (max-width: 600px) {
+  body.layla-zaid-invitation { --layla-venue-action-max: min(240px, calc(100vw - 140px)); }
+  body.layla-zaid-invitation .site-content > .section:not(#heroSection) { padding-block: 13px; }
+  body.layla-zaid-invitation .detail-tabs { gap: 3px; }
 }
 @media (max-width: 359px) {
   body.layla-zaid-invitation .venue-actions { grid-template-columns: minmax(0, 1fr); }

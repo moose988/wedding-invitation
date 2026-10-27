@@ -2,6 +2,10 @@
 import { details, validId } from './links.js';
 import { LIMITS, validateFile } from './limits.js';
 let opening;
+// Safari can refuse to store files in IndexedDB (private browsing, iCloud photos, low storage).
+// Sources it refuses live here for this page session, so the upload can still proceed.
+const memorySources = new Map();
+const storageRefusal = error => ['DataCloneError', 'UnknownError', 'InvalidStateError', 'AbortError'].includes(error?.name) || /blob|file|object store|clone/i.test(error?.message || '');
 const stores = ['buckets', 'photos', 'images', 'jobs', 'sources'];
 function database() {
   if (!globalThis.indexedDB) throw new Error('This browser does not support saving photos. Try an up-to-date browser.');
@@ -88,17 +92,29 @@ export function guestAdapter(contributorId) {
     image: (bucketId, photoId) => transaction(['photos', 'images'], 'readonly', async s => { mine(await req(s.photos.get(photoId)), validId(bucketId)); return (await req(s.images.get(photoId))).blob; }),
     async enqueue(bucketId, file, name = '') {
       validateFile(file); validId(bucketId);
-      return transaction(['buckets', 'jobs', 'sources'], 'readwrite', async s => {
+      // Copy the picked file into memory first: a stale picker handle can fail when stored later.
+      let copy;
+      try { copy = new Blob([await file.arrayBuffer()], { type: file.type }); }
+      catch { throw new Error('This photo could not be read. Wait for it to finish downloading on your phone, then choose it again.'); }
+      const create = keepSource => transaction(['buckets', 'jobs', 'sources'], 'readwrite', async s => {
         writable(await req(s.buckets.get(bucketId)));
         const queued = await req(s.jobs.getAll());
         if (queued.reduce((sum, j) => sum + j.size, 0) + file.size > LIMITS.queuedBytes) throw new Error('The local queue is full. Finish or remove pending photos, then try again.');
         const job = { id: id(), bucketId, contributorId, name: String(name).trim().slice(0, 60), size: file.size, filename: file.name, createdAt: Date.now(), attempts: 0, state: 'queued', error: '' };
-        s.jobs.add(job); s.sources.add({ id: job.id, blob: file }); return job;
+        s.jobs.add(job);
+        if (keepSource) s.sources.add({ id: job.id, blob: copy }); else memorySources.set(job.id, copy);
+        return job;
       });
+      try { return await create(true); }
+      catch (error) { if (!storageRefusal(error)) throw error; return create(false); }
     },
     jobs: bucketId => transaction(['jobs'], 'readonly', async s => (await req(s.jobs.index('bucketId').getAll(validId(bucketId)))).filter(j => j.contributorId === contributorId)),
-    jobFile: (bucketId, jobId) => transaction(['jobs', 'sources'], 'readonly', async s => { mine(await req(s.jobs.get(jobId)), validId(bucketId)); return (await req(s.sources.get(jobId))).blob; }),
-    updateJob: (bucketId, jobId, changes) => transaction(['jobs'], 'readwrite', async s => { const job = mine(await req(s.jobs.get(jobId)), validId(bucketId)); for (const key of ['state', 'attempts', 'error', 'thumbnail']) if (key in changes) job[key] = changes[key]; s.jobs.put(job); return job; }),
+    jobFile: (bucketId, jobId) => transaction(['jobs', 'sources'], 'readonly', async s => { mine(await req(s.jobs.get(jobId)), validId(bucketId)); const source = memorySources.get(jobId) || (await req(s.sources.get(jobId)))?.blob; if (!source) throw new Error('This photo is no longer on this device. Please choose it again.'); return source; }),
+    async updateJob(bucketId, jobId, changes) {
+      const apply = keys => transaction(['jobs'], 'readwrite', async s => { const job = mine(await req(s.jobs.get(jobId)), validId(bucketId)); for (const key of keys) if (key in changes) job[key] = changes[key]; s.jobs.put(job); return job; });
+      try { return await apply(['state', 'attempts', 'error', 'thumbnail']); }
+      catch (error) { if (!('thumbnail' in changes)) throw error; return apply(['state', 'attempts', 'error']); }
+    },
     commit: (bucketId, jobId, image) => transaction(['buckets', 'photos', 'images', 'jobs', 'sources'], 'readwrite', async s => {
       validId(bucketId); validImage(image); writable(await req(s.buckets.get(bucketId)));
       const existing = await req(s.photos.get(jobId));
@@ -113,6 +129,6 @@ export function guestAdapter(contributorId) {
       const photo = { ...previous, thumbnail: image.thumbnail, size: image.blob.size, revision: previous.revision + 1, updatedAt: Date.now() }; s.photos.put(photo); s.images.put({ id: photoId, blob: image.blob }); return photo;
     }),
     delete: (bucketId, photoId) => transaction(['photos', 'images'], 'readwrite', async s => { mine(await req(s.photos.get(photoId)), validId(bucketId)); s.photos.delete(photoId); s.images.delete(photoId); }),
-    discardJob: (bucketId, jobId) => transaction(['jobs', 'sources'], 'readwrite', async s => { mine(await req(s.jobs.get(jobId)), validId(bucketId)); s.jobs.delete(jobId); s.sources.delete(jobId); }),
+    discardJob: (bucketId, jobId) => transaction(['jobs', 'sources'], 'readwrite', async s => { mine(await req(s.jobs.get(jobId)), validId(bucketId)); memorySources.delete(jobId); s.jobs.delete(jobId); s.sources.delete(jobId); }),
   };
 }

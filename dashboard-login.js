@@ -10,7 +10,7 @@ import {
 
 import * as accountApi from "./firebase-config.js";
 import { isPlatformAdmin, redeemCustomerGrants } from "./account-access.js";
-import { photoBucketReturn } from "./photo-bucket/return-link.js";
+import { photoBucketReturn, soleBucketTarget } from "./photo-bucket/return-link.js";
 
 const params = new URLSearchParams(window.location.search);
 
@@ -129,7 +129,7 @@ function setSubmitLoading(isLoading) {
   elements.submitArrow.hidden = isLoading;
 }
 
-function redirectAfterLogin() {
+async function redirectAfterLogin() {
   isRedirecting = true;
   // Photo Bucket links: after sign-in go straight back to that page instead of the dashboard.
   const photoBucketPage = photoBucketReturn(params.get("next"), window.location.href);
@@ -147,6 +147,20 @@ function redirectAfterLogin() {
     }
     window.location.replace(target.toString());
     return;
+  }
+  if (!services.isAdmin) {
+    // A customer whose account has exactly one Photo Bucket goes straight to it; anyone else sees My Events.
+    try {
+      const { createOwnerAdapter } = await import("./photo-bucket/adapters.js");
+      const list = (await createOwnerAdapter(services.auth.currentUser)).list();
+      const target = soleBucketTarget(await Promise.race([list, new Promise((resolve) => setTimeout(resolve, 5000, []))]));
+      if (target) {
+        window.location.replace(target);
+        return;
+      }
+    } catch (error) {
+      console.warn("Photo Bucket lookup skipped.", error);
+    }
   }
   window.location.replace(services.isAdmin ? "./all-events.html" : "./customer-events.html");
 }

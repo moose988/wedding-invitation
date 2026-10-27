@@ -11,9 +11,8 @@ export function photoBucketReturn(raw, base) {
 }
 // Where to send a signed-out visitor so they come back here after signing in.
 export const loginWithReturn = (page = location) => `./dashboard-login.html?message=session-required&next=${encodeURIComponent(page.pathname.split('/').pop() + page.search)}`;
-// A customer with exactly one Photo Bucket skips the My Events list and opens it directly. Done once per sign-in
-// so they can still return to My Events (for example if more events are added later).
-export function autoOpenTarget({ customer, buckets, seen }) {
-  const id = buckets?.length === 1 ? buckets[0].id : '';
-  return customer && !seen && /^[a-zA-Z0-9_-]{1,80}$/.test(id || '') ? `./photo-bucket-manage.html?bucket=${encodeURIComponent(id)}` : '';
+// A customer who has exactly one Photo Bucket is sent straight to it right after signing in.
+export function soleBucketTarget(buckets) {
+  const id = Array.isArray(buckets) && buckets.length === 1 ? buckets[0]?.id : '';
+  return /^[a-zA-Z0-9_-]{1,80}$/.test(id || '') ? `./photo-bucket-manage.html?bucket=${encodeURIComponent(id)}` : '';
 }

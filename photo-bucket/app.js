@@ -1,3 +1,7 @@
+// Very old Android WebViews lack <dialog>.showModal; minimal stand-ins keep the dialogs usable.
+if (typeof HTMLDialogElement !== 'undefined' && !HTMLDialogElement.prototype.showModal) {
+  Object.assign(HTMLDialogElement.prototype, { showModal() { this.setAttribute('open', ''); }, close() { if (!this.hasAttribute('open')) return; this.removeAttribute('open'); this.dispatchEvent(new Event('close')); } });
+}
 import { createOwnerAdapter, createGuestAdapter, defaultTransport, online } from './adapters.js';
 import { guestUrl, readGuestUrl, validId, dateLabel, isLoopback } from './links.js';
 import { LIMITS, validateFile, friendlyError } from './limits.js';

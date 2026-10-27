@@ -1,8 +1,20 @@
 import { LIMITS, validateFile } from './limits.js';
+function imageFallback(blob) {
+  return new Promise((resolve, reject) => {
+    const url = URL.createObjectURL(blob), img = new Image();
+    img.onload = () => { img.close = () => URL.revokeObjectURL(url); resolve(img); };
+    img.onerror = () => { URL.revokeObjectURL(url); reject(new Error('decode failed')); };
+    img.src = url;
+  });
+}
 export async function decode(blob) {
   let bitmap;
+  // Older Android/Huawei browsers lack createImageBitmap or its options; fall back to an <img> (which applies EXIF rotation itself).
   try { bitmap = await createImageBitmap(blob, { imageOrientation: 'from-image' }); }
-  catch { throw new Error('This photo could not be opened. Try exporting it as JPEG or choose another photo.'); }
+  catch {
+    try { bitmap = await imageFallback(blob); }
+    catch { throw new Error('This photo could not be opened. Try exporting it as JPEG or choose another photo.'); }
+  }
   if (bitmap.width * bitmap.height > LIMITS.pixels) { bitmap.close(); throw new Error('Choose a photo under 40 megapixels.'); }
   return bitmap;
 }

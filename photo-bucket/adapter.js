@@ -33,7 +33,9 @@ async function transaction(names, mode, work) {
   try { const result = await work(tables); await done; return result; }
   catch (error) { try { tx.abort(); } catch {} await done.catch(() => {}); throw error; }
 }
-const id = () => crypto.randomUUID();
+// randomUUID is missing on older Android/Huawei browsers; fall back to getRandomValues.
+const id = () => globalThis.crypto?.randomUUID ? crypto.randomUUID() : ([1e7] + -1e3 + -4e3 + -8e3 + -1e11).replace(/[018]/g, c => (c ^ crypto.getRandomValues(new Uint8Array(1))[0] & 15 >> c / 4).toString(16));
+const readBytes = file => file.arrayBuffer ? file.arrayBuffer() : new Promise((resolve, reject) => { const r = new FileReader(); r.onload = () => resolve(r.result); r.onerror = () => reject(r.error); r.readAsArrayBuffer(file); });
 function identity(value) { if (typeof value !== 'string' || !value || value.length > 160) throw new Error('A valid local identity is required.'); return value; }
 function checkBucket(bucket, ownerId) { if (!bucket || bucket.ownerId !== ownerId) throw new Error('This bucket is not available to your account on this browser.'); return bucket; }
 function checkPhoto(photo, bucketId, contributorId) {
@@ -94,7 +96,7 @@ export function guestAdapter(contributorId) {
       validateFile(file); validId(bucketId);
       // Copy the picked file into memory first: a stale picker handle can fail when stored later.
       let copy;
-      try { copy = new Blob([await file.arrayBuffer()], { type: file.type }); }
+      try { copy = new Blob([await readBytes(file)], { type: file.type }); }
       catch { throw new Error('This photo could not be read. Wait for it to finish downloading on your phone, then choose it again.'); }
       const create = keepSource => transaction(['buckets', 'jobs', 'sources'], 'readwrite', async s => {
         writable(await req(s.buckets.get(bucketId)));

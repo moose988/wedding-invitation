@@ -79,3 +79,11 @@
   .pagination-controls { order:8; }
   .empty-state { order:9; }
 }
+
+#photoBucketStep[hidden], .event-category-card[hidden] { display:none!important; }
+.local-photo-buckets { margin:0 0 32px; order:6; width:100%; }
+.local-photo-buckets > h2 { font:500 1.7rem Georgia,serif; margin-bottom:8px; }
+.local-photo-buckets > p { color:#626c65; font-size:13px; }
+.local-photo-buckets .wedding-card { min-height:0; gap:12px; }
+.local-photo-buckets h3,.local-photo-buckets p { margin:0; overflow-wrap:anywhere; }
+.local-photo-buckets a { text-decoration:none;text-align:center; }

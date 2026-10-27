@@ -14,5 +14,6 @@ export const handler = createHandler({
   verifyOwner: async token => (await jwtVerify(token, jwks, { issuer: `https://securetoken.google.com/${env.FIREBASE_PROJECT_ID}`, audience: env.FIREBASE_PROJECT_ID })).payload.sub,
   secret: env.GUEST_TOKEN_SECRET,
   eventId: env.EVENT_ID,
+  adminUids: (env.ADMIN_UIDS || '').split(',').map(s => s.trim()).filter(Boolean),
   ownerUids: env.OWNER_UIDS.split(',').map(s => s.trim()).filter(Boolean),
 });

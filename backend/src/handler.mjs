@@ -4,12 +4,15 @@ import { HttpError, LIMITS, assertPhotoBytes, cleanDetails, signGuestToken, vali
 const reply = (statusCode, body) => ({ statusCode, headers: { 'content-type': 'application/json', 'cache-control': 'no-store' }, body: body === undefined ? '' : JSON.stringify(body) });
 const publicPhoto = p => ({ id: p.id, bucketId: p.bucketId, contributorId: p.contributorId, name: p.name, source: p.source, size: p.size, createdAt: p.createdAt, updatedAt: p.updatedAt, revision: p.revision });
 const publicMeta = m => ({ id: m.bucketId, name: m.name, date: m.date, location: m.location, paused: m.paused, createdAt: m.createdAt, updatedAt: m.updatedAt });
-const ownerMeta = m => ({ ...publicMeta(m), ownerId: m.ownerId, usedBytes: m.totalBytes, limitBytes: LIMITS.usableBytes, backupBytes: m.backupBytes, backupLimitBytes: LIMITS.backupBytes });
+const ownerMeta = m => ({ ...publicMeta(m), ownerId: m.ownerId, usedBytes: m.totalBytes, limitBytes: LIMITS.usableBytes, backupBytes: m.backupBytes, backupLimitBytes: LIMITS.backupBytes, frozen: Boolean(m.frozen) });
+const PAUSED_MESSAGE = 'This photo collection is paused until the event. Please check back later.';
 const uploadId = value => { if (!/^[a-f0-9]{32}$/.test(value || '')) throw new HttpError(400, 'Invalid upload.'); return value; };
 const photoId = value => { if (!validId(value)) throw new HttpError(400, 'Invalid photo.'); return value; };
 
 export function createHandler(deps) {
-  const { store, files, verifyOwner, secret, eventId, ownerUids, now = Date.now } = deps;
+  const { store, files, verifyOwner, secret, eventId, ownerUids, adminUids = [], now = Date.now } = deps;
+  // Only the main admins (adminUids) can pause or resume the whole event; the customer account cannot.
+  const view = (a, m) => ({ ...ownerMeta(m), canFreeze: Boolean(a.isAdmin) });
 
   async function actor(headers) {
     const header = headers.authorization || '';
@@ -23,7 +26,7 @@ export function createHandler(deps) {
     let uid;
     try { uid = await verifyOwner(token); } catch { throw new HttpError(401, 'Sign in again.'); }
     if (!uid || !ownerUids.includes(uid)) throw new HttpError(403, 'This account cannot manage this event.');
-    return { role: 'owner', uid };
+    return { role: 'owner', uid, isAdmin: adminUids.includes(uid) };
   }
   const needMeta = async () => { const meta = await store.getMeta(); if (!meta) throw new HttpError(404, 'This photo collection does not exist.'); return meta; };
   // Every uid in ownerUids (the planner and the customer) may manage this one event; nobody else can.
@@ -65,17 +68,21 @@ export function createHandler(deps) {
       const meta = { bucketId: eventId, ownerId: a.uid, ...cleanDetails(body), paused: false, totalBytes: 0, backupBytes: 0, createdAt: stamp, updatedAt: stamp };
       try { await store.createMeta(meta); } catch (error) {
         if (!error.conflict) throw error;
-        return reply(200, ownerMeta(await needMeta()));
+        return reply(200, view(a, await needMeta()));
       }
-      return reply(201, ownerMeta(meta));
+      return reply(201, view(a, meta));
     }
-    if (method === 'GET' && path === '/owner/list') { const meta = await store.getMeta(); return reply(200, meta && a.role === 'owner' ? [ownerMeta(meta)] : []); }
+    if (method === 'GET' && path === '/owner/list') { const meta = await store.getMeta(); return reply(200, meta && a.role === 'owner' ? [view(a, meta)] : []); }
     if (!(m = path.match(/^\/b\/([^/]+)(\/.*)?$/))) throw new HttpError(404, 'Not found.');
     if (m[1] !== eventId) throw new HttpError(404, 'This photo collection does not exist.');
     const rest = m[2] || '';
-    if (method === 'GET' && rest === '') return reply(200, ownerMeta(await ownedMeta(a)));
-    if (method === 'PATCH' && rest === '') { const meta = await ownedMeta(a); return reply(200, ownerMeta(await store.updateMeta({ ...cleanDetails({ ...meta, ...body }), updatedAt: now() }))); }
-    if (method === 'POST' && rest === '/pause') { await ownedMeta(a); return reply(200, ownerMeta(await store.updateMeta({ paused: Boolean(body.paused), updatedAt: now() }))); }
+    if (method === 'GET' && rest === '') return reply(200, view(a, await ownedMeta(a)));
+    if (method === 'PATCH' && rest === '') { const meta = await ownedMeta(a); return reply(200, view(a, await store.updateMeta({ ...cleanDetails({ ...meta, ...body }), updatedAt: now() }))); }
+    if (method === 'POST' && rest === '/freeze') {
+      if (a.role !== 'owner' || !a.isAdmin) throw new HttpError(403, 'Only the main admin can pause or resume the whole event.');
+      await needMeta(); return reply(200, view(a, await store.updateMeta({ frozen: Boolean(body.frozen), updatedAt: now() })));
+    }
+    if (method === 'POST' && rest === '/pause') { await ownedMeta(a); return reply(200, view(a, await store.updateMeta({ paused: Boolean(body.paused), updatedAt: now() }))); }
     if (method === 'GET' && rest === '/photos') {
       await needMeta();
       const all = await store.listPhotos(); return reply(200, all.filter(p => a.role === 'owner' || p.contributorId === a.contributorId).map(publicPhoto));
@@ -115,6 +122,14 @@ export function createHandler(deps) {
       if (event.body && event.body.length > 64 * 1024) throw new HttpError(413, 'Request too large.');
       let body = {};
       if (event.body) { try { body = JSON.parse(event.isBase64Encoded ? Buffer.from(event.body, 'base64').toString() : event.body); } catch { throw new HttpError(400, 'Invalid request.'); } }
+      const frozenMeta = await store.getMeta();
+      if (frozenMeta?.frozen) {
+        // Paused: only a main admin can still look at the event and resume it. Everyone else gets a friendly message.
+        const admin = await actor(event.headers || {}).catch(() => null);
+        const allowed = admin?.role === 'owner' && admin.isAdmin && ((method === 'GET' && (path === `/b/${eventId}` || path === '/owner/list')) || (method === 'POST' && path === `/b/${eventId}/freeze`));
+        if (!allowed) return reply(503, { error: PAUSED_MESSAGE });
+        return await route(method, path, event.queryStringParameters || {}, body, admin);
+      }
       const bid = path.match(/^\/b\/([^/]+)\/public$/);
       if (method === 'GET' && bid) { if (bid[1] !== eventId) throw new HttpError(404, 'This photo collection does not exist.'); return reply(200, publicMeta(await needMeta())); }
       const guestStart = path.match(/^\/b\/([^/]+)\/guest$/);

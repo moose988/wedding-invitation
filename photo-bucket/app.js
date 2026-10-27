@@ -24,6 +24,7 @@ const icons = {
 const icon = name => `<svg viewBox="0 0 24 24" aria-hidden="true">${icons[name]}</svg>`;
 const brand = back => `<nav class="pb-brand" aria-label="Photo Bucket"><${back ? 'a href="./all-events.html"' : 'span'} class="pb-wordmark">${icon('camera')} PHOTO BUCKET</${back ? 'a' : 'span'}><span class="pb-demo">${online ? 'Live' : 'Local demo · this browser'}</span></nav>`;
 const meta = () => `<p class="pb-event-meta"><span>${h(dateLabel(bucket.date))}</span><span>${h(bucket.location)}</span></p>`;
+const frozenNotice = () => `<div id="frozenNotice" class="pb-notice pb-notice--frozen" role="status" ${bucket.frozen ? '' : 'hidden'}><strong>Everything is paused.</strong> Guests and the customer see a "paused until the event" message, and nothing is running. Your photos are safe. Press "Resume everything" when you are ready.</div>`;
 const notice = () => `<div id="pauseNotice" class="pb-notice" role="status" ${bucket.paused ? '' : 'hidden'}>New photos are paused. ${owner ? 'Resume whenever you are ready.' : 'Your host will welcome more photos soon. You can still edit your saved moments.'}</div>`;
 function message(text, error = false) { const node = $('#message'); if (node) { node.textContent = text; node.classList.toggle('pb-error', error); } }
 function run(work) { return async event => { try { await work(event); } catch (error) { message(friendlyError(error), true); } }; }
@@ -74,8 +75,8 @@ function renderGuest() {
   <section aria-labelledby="galleryHeading"><div class="pb-section-head"><h2 id="galleryHeading">Your moments</h2><span id="photoCount" class="pb-count"></span></div><div id="gallery" class="pb-grid"></div><div id="galleryState" class="pb-state" role="status">Loading your photos…</div></section>${dialogs()}`;
 }
 function renderOwner() {
-  app.innerHTML = `${brand(true)}<header class="pb-owner-heading"><div><h1 id="eventName">${h(bucket.name)}</h1><div id="eventMeta">${meta()}</div></div></header>${notice()}<p id="message" class="pb-message" role="status" aria-live="polite"></p>
-  <div class="pb-owner-layout"><section aria-labelledby="galleryHeading"><div class="pb-section-head pb-gallery-head"><h2 id="galleryHeading">The photo collection</h2><span id="photoCount" class="pb-count"></span></div><div class="pb-gallery-toolbar"><button type="button" id="zipButton">Download all as ZIP</button><button type="button" id="pauseButton">${bucket.paused ? 'Resume uploads' : 'Pause uploads'}</button><label class="pb-sort">Sort photos<select id="sortSelect"><option value="newest">Newest first</option><option value="oldest">Oldest first</option></select></label></div><p id="zipStatus" class="pb-subtle" role="status"></p><div id="gallery" class="pb-grid"></div><div id="galleryState" class="pb-state" role="status">Loading your photos…</div>
+  app.innerHTML = `${brand(true)}<header class="pb-owner-heading"><div><h1 id="eventName">${h(bucket.name)}</h1><div id="eventMeta">${meta()}</div></div></header>${frozenNotice()}${notice()}<p id="message" class="pb-message" role="status" aria-live="polite"></p>
+  <div class="pb-owner-layout"><section aria-labelledby="galleryHeading"><div class="pb-section-head pb-gallery-head"><h2 id="galleryHeading">The photo collection</h2><span id="photoCount" class="pb-count"></span></div><div class="pb-gallery-toolbar"><button type="button" id="zipButton">Download all as ZIP</button><button type="button" id="pauseButton">${bucket.paused ? 'Resume uploads' : 'Pause uploads'}</button>${bucket.canFreeze ? `<button type="button" id="freezeButton" class="pb-danger">${bucket.frozen ? 'Resume everything' : 'Pause everything'}</button>` : ''}<label class="pb-sort">Sort photos<select id="sortSelect"><option value="newest">Newest first</option><option value="oldest">Oldest first</option></select></label></div><p id="zipStatus" class="pb-subtle" role="status"></p><div id="gallery" class="pb-grid"></div><div id="galleryState" class="pb-state" role="status">Loading your photos…</div>
   </section>
   <aside><section class="pb-panel pb-sharing" aria-labelledby="shareHeading"><h2 id="shareHeading">Invite their perspective</h2><div id="qrSlot" class="pb-qr-slot" role="status">Preparing QR code…</div><button type="button" id="copyLink">Copy guest link</button><a id="guestLink" class="pb-button" target="_blank" rel="noopener">Open guest page</a><button type="button" id="downloadQr">Download QR image</button><a class="pb-button" href="./photo-bucket-poster.html?bucket=${encodeURIComponent(bucket.id)}">Preview & print A5 card</a></section>
   <details class="pb-panel pb-owner-details"><summary>Edit details</summary><form id="detailsForm"><label>Event title<input name="name" required maxlength="100" value="${h(bucket.name)}"></label><label>Date<input name="date" type="date" required value="${h(bucket.date)}"></label><label>Place<input name="location" required maxlength="160" value="${h(bucket.location)}"></label><button type="submit" class="pb-primary">Save</button></form></details></aside></div>${dialogs()}`;
@@ -91,6 +92,7 @@ function autoRefresh() {
 }
 async function refreshGallery(quiet = false) {
   if (disposed) return;
+  if (owner && bucket.frozen) { $('#galleryState').hidden = false; $('#galleryState').textContent = 'Everything is paused. Resume everything to see the photos.'; $('#gallery').innerHTML = ''; return; }
   if (refreshing) { pendingRefresh = true; return; } refreshing = true;
   try {
     const next = (await adapter.photos(bucket.id)).sort(byTime);
@@ -261,6 +263,13 @@ async function renderShare() {
   catch (error) { $('#qrSlot').textContent = error.message; $('#downloadQr').disabled = true; }
 }
 function bindOwner() {
+  listen('#freezeButton', 'click', async () => {
+    const pausing = !bucket.frozen;
+    if (pausing && !confirm('Pause everything?\n\nGuests and the customer will see a "paused until the event" message and nothing will run, so no usage is charged. Your photos are kept. You can resume any time.')) return;
+    bucket = await adapter.setFrozen(bucket.id, pausing); syncDetails();
+    message(pausing ? 'Everything is paused. Press Resume everything when you are ready.' : 'Everything is running again.');
+    if (!pausing) await refreshGallery();
+  });
   if ($('#sortSelect')) $('#sortSelect').value = sortOrder;
   listen('#sortSelect', 'change', async () => {
     sortOrder = $('#sortSelect').value === 'oldest' ? 'oldest' : 'newest';
@@ -290,6 +299,8 @@ function bindOwner() {
 function syncDetails() {
   $('#eventName').textContent = bucket.name; $('#eventMeta').innerHTML = meta(); $('#pauseNotice').hidden = !bucket.paused;
   if (owner) $('#pauseButton').textContent = bucket.paused ? 'Resume uploads' : 'Pause uploads';
+  if (owner && $('#frozenNotice')) $('#frozenNotice').hidden = !bucket.frozen;
+  if (owner && $('#freezeButton')) $('#freezeButton').textContent = bucket.frozen ? 'Resume everything' : 'Pause everything';
 }
 async function renderPoster() {
   app.innerHTML = `<nav class="pb-poster-controls"><a class="pb-button" href="./photo-bucket-manage.html?bucket=${encodeURIComponent(bucket.id)}">Back to collection</a><button type="button" class="pb-primary" id="printPoster">Print / Save as PDF</button></nav><article class="pb-poster" aria-label="A5 photo sharing table card"><img class="pb-floral pb-floral--tl" src="./photo-bucket/assets/botanical.svg" alt=""><img class="pb-floral pb-floral--br" src="./photo-bucket/assets/botanical.svg" alt=""><p class="pb-kicker">A collection of beautiful memories</p><h1>Share the moments</h1><h2>${h(bucket.name)}</h2>${meta()}<div id="posterQr"></div><p class="pb-poster-scan">Scan to share your photos</p><p class="pb-subtle">No login needed</p><p class="pb-poster-demo">${online ? 'Share your photos with the hosts' : 'Local demo · Photos stay on your device'}</p></article><p class="pb-print-note" id="posterNote"></p><p class="pb-print-note">A5 portrait · Print at 100% with browser headers and footers off.<br>Choose “Save as PDF” in your browser’s print dialog.</p>`;

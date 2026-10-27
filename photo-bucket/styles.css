@@ -151,3 +151,6 @@
 .pb-sort { display:flex;align-items:center;gap:8px;font-size:13px; }
 .pb-sort select { min-height:44px;padding:8px 10px;border-radius:12px;font:inherit; }
 @media(max-width:540px) { .pb .pb-viewer .pb-nav { width:46px;min-height:68px;height:68px;font-size:34px; }.pb-viewer img { height:calc(100dvh - 190px);padding:8px 0; }.pb-sort { flex:1 1 100%;justify-content:space-between; }.pb-sort select { flex:1;min-width:0; }.pb-tile-time { margin-bottom:6px; } }
+
+.pb-notice--frozen { background:#f4dcd6;border-color:#d9a89d;color:#5b1f14; }
+#freezeButton { min-height:44px; }

@@ -16,6 +16,10 @@ Parameters:
   BackupBucketName: { Type: String }
   BackupRegion: { Type: String }
   GuestTokenSecret: { Type: String, NoEcho: true, MinLength: 32 }
+  AdminUids:
+    Type: String
+    Default: ''
+    Description: Comma-separated Firebase UIDs of the main admins. Only they can pause or resume the whole event.
 Resources:
   Table:
     Type: AWS::DynamoDB::Table
@@ -84,6 +88,7 @@ Resources:
           FIREBASE_PROJECT_ID: !Ref FirebaseProjectId
           OWNER_UIDS: !Ref OwnerUids
           GUEST_TOKEN_SECRET: !Ref GuestTokenSecret
+          ADMIN_UIDS: !Ref AdminUids
       Policies:
         - DynamoDBCrudPolicy: { TableName: !Ref Table }
         - Statement:

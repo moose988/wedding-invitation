@@ -33,7 +33,7 @@ function harness() {
     copy: async (from, to) => objects.set(to, objects.get(from)),
     remove: async (keys, bk = []) => { keys.forEach(k => objects.delete(k)); bk.forEach(k => backups.add(k)); },
   };
-  const handler = createHandler({ store, files, secret: SECRET, eventId: EVENT, ownerUids: [OWNER, 'customer-uid'], verifyOwner: async t => (t === 'owner-token' ? OWNER : t === 'customer-token' ? 'customer-uid' : t === 'stranger-token' ? 'stranger' : (() => { throw new Error('bad'); })()) });
+  const handler = createHandler({ store, files, secret: SECRET, eventId: EVENT, ownerUids: [OWNER, 'customer-uid'], adminUids: [OWNER], verifyOwner: async t => (t === 'owner-token' ? OWNER : t === 'customer-token' ? 'customer-uid' : t === 'stranger-token' ? 'stranger' : (() => { throw new Error('bad'); })()) });
   const call = async (method, path, { token, body, query } = {}) => {
     const r = await handler({ requestContext: { http: { method } }, rawPath: path, queryStringParameters: query, headers: token ? { authorization: `Bearer ${token}` } : {}, body: body && JSON.stringify(body) });
     return { status: r.statusCode, body: r.body ? JSON.parse(r.body) : null };
@@ -164,4 +164,25 @@ test('the customer account can manage this event too, strangers still cannot', a
   assert.equal((await h.call('DELETE', `/b/${EVENT}/photos/p1`, { token: 'customer-token' })).status, 204);
   assert.equal((await h.call('GET', '/owner/list', { token: 'stranger-token' })).status, 403);
   assert.equal((await h.call('PATCH', `/b/${EVENT}`, { token: 'stranger-token', body: { name: 'x' } })).status, 403);
+});
+
+test('only the main admin can pause the whole event; paused means everyone else gets a friendly 503', async () => {
+  const h = harness(); const { a } = await ready(h);
+  assert.equal((await h.call('POST', `/b/${EVENT}/freeze`, { token: 'customer-token', body: { frozen: true } })).status, 403);
+  assert.equal((await h.call('POST', `/b/${EVENT}/freeze`, { token: 'stranger-token', body: { frozen: true } })).status, 403);
+  assert.equal((await h.call('POST', `/b/${EVENT}/freeze`, { token: a.token, body: { frozen: true } })).status, 403);
+  assert.equal((await h.call('GET', `/b/${EVENT}`, { token: 'owner-token' })).body.canFreeze, true);
+  assert.equal((await h.call('GET', `/b/${EVENT}`, { token: 'customer-token' })).body.canFreeze, false);
+  const frozen = await h.call('POST', `/b/${EVENT}/freeze`, { token: 'owner-token', body: { frozen: true } });
+  assert.equal(frozen.status, 200); assert.equal(frozen.body.frozen, true);
+  for (const [method, path, token] of [['GET', `/b/${EVENT}/public`], ['POST', `/b/${EVENT}/guest`], ['GET', `/b/${EVENT}/photos`, a.token], ['GET', `/b/${EVENT}`, 'customer-token'], ['GET', '/owner/list', 'customer-token'], ['POST', `/b/${EVENT}/freeze`, 'customer-token']]) {
+    const r = await h.call(method, path, { token, body: { frozen: false } });
+    assert.equal(r.status, 503, `${method} ${path}`); assert.match(r.body.error, /paused until the event/);
+  }
+  assert.equal((await h.call('GET', `/b/${EVENT}`, { token: 'owner-token' })).body.frozen, true);
+  assert.equal((await h.call('GET', `/b/${EVENT}/photos`, { token: 'owner-token' })).status, 503);
+  const resumed = await h.call('POST', `/b/${EVENT}/freeze`, { token: 'owner-token', body: { frozen: false } });
+  assert.equal(resumed.body.frozen, false);
+  assert.equal((await h.call('GET', `/b/${EVENT}/public`)).status, 200);
+  assert.equal((await h.call('GET', `/b/${EVENT}/photos`, { token: a.token })).status, 200);
 });

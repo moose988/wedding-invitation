@@ -55,6 +55,8 @@ export function ownerAdapterApi(user) {
     list: () => api('GET', '/owner/list'),
     get: bucketId => api('GET', `/b/${validId(bucketId)}`),
     update: (bucketId, input) => api('PATCH', `/b/${validId(bucketId)}`, { body: details(input) }),
+    // Main admin only (the server refuses anyone else): pause or resume the whole event.
+    setFrozen: (bucketId, frozen) => api('POST', `/b/${validId(bucketId)}/freeze`, { body: { frozen: Boolean(frozen) } }),
     setPaused: (bucketId, paused) => api('POST', `/b/${validId(bucketId)}/pause`, { body: { paused: Boolean(paused) } }),
     async photos(bucketId) { const list = await api('GET', `/b/${validId(bucketId)}/photos`); return withThumbnails(await token(), bucketId, list); },
     async image(bucketId, photoId) { return blobFor(await token(), bucketId, photoId, 'image'); },

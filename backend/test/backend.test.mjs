@@ -33,7 +33,7 @@ function harness() {
     copy: async (from, to) => objects.set(to, objects.get(from)),
     remove: async (keys, bk = []) => { keys.forEach(k => objects.delete(k)); bk.forEach(k => backups.add(k)); },
   };
-  const handler = createHandler({ store, files, secret: SECRET, eventId: EVENT, ownerUids: [OWNER], verifyOwner: async t => (t === 'owner-token' ? OWNER : t === 'stranger-token' ? 'stranger' : (() => { throw new Error('bad'); })()) });
+  const handler = createHandler({ store, files, secret: SECRET, eventId: EVENT, ownerUids: [OWNER, 'customer-uid'], verifyOwner: async t => (t === 'owner-token' ? OWNER : t === 'customer-token' ? 'customer-uid' : t === 'stranger-token' ? 'stranger' : (() => { throw new Error('bad'); })()) });
   const call = async (method, path, { token, body, query } = {}) => {
     const r = await handler({ requestContext: { http: { method } }, rawPath: path, queryStringParameters: query, headers: token ? { authorization: `Bearer ${token}` } : {}, body: body && JSON.stringify(body) });
     return { status: r.statusCode, body: r.body ? JSON.parse(r.body) : null };
@@ -149,4 +149,19 @@ test('templates define PITR, versioning, private buckets and backup wiring', () 
   assert.ok(event.Resources.PhotoBucket.Properties.NotificationConfiguration.LambdaConfigurations.length);
   const backup = parse(readFileSync(new URL('../backup.yaml', import.meta.url), 'utf8'), { customTags: tags });
   assert.equal(backup.Resources.BackupBucket.Properties.PublicAccessBlockConfiguration.BlockPublicAcls, true);
+});
+
+test('the customer account can manage this event too, strangers still cannot', async () => {
+  const h = harness(); const { a } = await ready(h);
+  assert.equal((await h.call('GET', '/owner/list', { token: 'customer-token' })).body.length, 1);
+  assert.equal((await h.call('GET', `/b/${EVENT}`, { token: 'customer-token' })).body.name, details.name);
+  assert.equal((await h.call('PATCH', `/b/${EVENT}`, { token: 'customer-token', body: { name: 'Renamed' } })).body.name, 'Renamed');
+  const image = await jpeg(), thumb = await jpeg(60, 40);
+  const g = await h.upload(a.token, 'p1', image, thumb);
+  await h.call('POST', `/b/${EVENT}/photos/p1/commit`, { token: a.token, body: { uploadId: g.body.uploadId } });
+  assert.equal((await h.call('GET', `/b/${EVENT}/photos`, { token: 'customer-token' })).body.length, 1);
+  assert.equal((await h.call('POST', `/b/${EVENT}/pause`, { token: 'customer-token', body: { paused: true } })).body.paused, true);
+  assert.equal((await h.call('DELETE', `/b/${EVENT}/photos/p1`, { token: 'customer-token' })).status, 204);
+  assert.equal((await h.call('GET', '/owner/list', { token: 'stranger-token' })).status, 403);
+  assert.equal((await h.call('PATCH', `/b/${EVENT}`, { token: 'stranger-token', body: { name: 'x' } })).status, 403);
 });

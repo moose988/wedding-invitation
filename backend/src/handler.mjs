@@ -26,7 +26,8 @@ export function createHandler(deps) {
     return { role: 'owner', uid };
   }
   const needMeta = async () => { const meta = await store.getMeta(); if (!meta) throw new HttpError(404, 'This photo collection does not exist.'); return meta; };
-  const ownedMeta = async a => { if (a.role !== 'owner') throw new HttpError(403, 'Only the host can do this.'); const meta = await needMeta(); if (meta.ownerId !== a.uid) throw new HttpError(403, 'This event belongs to another account.'); return meta; };
+  // Every uid in ownerUids (the planner and the customer) may manage this one event; nobody else can.
+  const ownedMeta = async a => { if (a.role !== 'owner') throw new HttpError(403, 'Only the host can do this.'); return needMeta(); };
   const guestOnly = a => { if (a.role !== 'guest') throw new HttpError(403, 'Open the guest link on a guest device to upload.'); };
   const mayTouch = (a, photo) => { if (a.role === 'guest' && photo.contributorId !== a.contributorId) throw new HttpError(404, 'This photo is not available to you.'); };
 
@@ -64,11 +65,11 @@ export function createHandler(deps) {
       const meta = { bucketId: eventId, ownerId: a.uid, ...cleanDetails(body), paused: false, totalBytes: 0, backupBytes: 0, createdAt: stamp, updatedAt: stamp };
       try { await store.createMeta(meta); } catch (error) {
         if (!error.conflict) throw error;
-        const current = await needMeta(); if (current.ownerId !== a.uid) throw new HttpError(409, 'This event already has a host.'); return reply(200, ownerMeta(current));
+        return reply(200, ownerMeta(await needMeta()));
       }
       return reply(201, ownerMeta(meta));
     }
-    if (method === 'GET' && path === '/owner/list') { const meta = await store.getMeta(); return reply(200, meta && a.role === 'owner' && meta.ownerId === a.uid ? [ownerMeta(meta)] : []); }
+    if (method === 'GET' && path === '/owner/list') { const meta = await store.getMeta(); return reply(200, meta && a.role === 'owner' ? [ownerMeta(meta)] : []); }
     if (!(m = path.match(/^\/b\/([^/]+)(\/.*)?$/))) throw new HttpError(404, 'Not found.');
     if (m[1] !== eventId) throw new HttpError(404, 'This photo collection does not exist.');
     const rest = m[2] || '';
@@ -76,7 +77,7 @@ export function createHandler(deps) {
     if (method === 'PATCH' && rest === '') { const meta = await ownedMeta(a); return reply(200, ownerMeta(await store.updateMeta({ ...cleanDetails({ ...meta, ...body }), updatedAt: now() }))); }
     if (method === 'POST' && rest === '/pause') { await ownedMeta(a); return reply(200, ownerMeta(await store.updateMeta({ paused: Boolean(body.paused), updatedAt: now() }))); }
     if (method === 'GET' && rest === '/photos') {
-      const meta = await needMeta(); if (a.role === 'owner' && meta.ownerId !== a.uid) throw new HttpError(403, 'This event belongs to another account.');
+      await needMeta();
       const all = await store.listPhotos(); return reply(200, all.filter(p => a.role === 'owner' || p.contributorId === a.contributorId).map(publicPhoto));
     }
     if (method === 'POST' && rest === '/uploads') {

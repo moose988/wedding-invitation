@@ -232,7 +232,10 @@ test("Layla opening accepts clicks across the cover and hides its prompt on the 
     readFile(new URL("../invitations/wedding-designs/layla-zaid/styles.css", import.meta.url), "utf8"),
   ]);
   assert.match(script, /introScreen\?\.addEventListener\("click", \(event\) => \{[\s\S]*?if \(!isLaylaInvitation\(\)\) return;[\s\S]*?event\.target\.closest\("#openInvitation, #skipOpening"\)[\s\S]*?handleOpenInvitation\(\)/);
+  assert.doesNotMatch(script, /introBuffering|The envelope animation is loading/);
   assert.match(styles, /envelope-intro\.is-playing \.envelope-intro__caption \{ opacity: 0; \}/);
+  assert.match(styles, /@media \(max-width: 600px\)[\s\S]*?\.envelope-intro \{[\s\S]*?height: 100lvh;[\s\S]*?padding: 0;/);
+  assert.match(styles, /\.envelope-intro__stage \{[\s\S]*?width: 100vw;[\s\S]*?height: 100%;[\s\S]*?aspect-ratio: auto;/);
 });
 
 test("opening tap reveals templates that do not provide an envelope video", async () => {

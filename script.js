@@ -103,12 +103,11 @@ const laylaCopy = {
   playMusic: { en: "Play event music", ar: "تشغيل موسيقى الحفل" },
   stopMusic: { en: "Pause event music", ar: "إيقاف موسيقى الحفل" },
   musicUnavailable: { en: "Event music unavailable", ar: "موسيقى الحفل غير متاحة" },
-  introCaption: { en: "Your invitation awaits — tap to open", ar: "دعوتكم بانتظاركم — اضغطوا لفتحها" },
+  introCaption: { en: "A love story awaits — tap to open", ar: "تنتظركم حكاية حب — اضغطوا لفتح الدعوة" },
   invitationPreparing: { en: "Preparing your invitation…", ar: "جارٍ تجهيز دعوتكم…" },
   openInvitation: { en: "Open your wedding invitation", ar: "افتحوا دعوة زفافكم" },
   retryOpening: { en: "Tap to retry opening", ar: "اضغطوا لإعادة محاولة الفتح" },
   introLoading: { en: "Opening your invitation…", ar: "جارٍ فتح دعوتكم…" },
-  introBuffering: { en: "The envelope animation is loading…", ar: "جارٍ تحميل حركة الظرف…" },
   introRetry: { en: "Still loading. Tap the envelope to retry or skip.", ar: "ما زال التحميل جارياً. اضغطوا على الظرف لإعادة المحاولة أو تخطّي الحركة." },
   introBlocked: { en: "The animation could not start. Tap the envelope to retry or skip.", ar: "تعذّر بدء الحركة. اضغطوا على الظرف لإعادة المحاولة أو تخطّي الحركة." },
   introError: { en: "The animation is unavailable. Tap the envelope to retry or skip.", ar: "الحركة غير متاحة. اضغطوا على الظرف لإعادة المحاولة أو تخطّي الحركة." },
@@ -348,7 +347,6 @@ function updateIntroPresentation(phase) {
 
   const statusKey = {
     loading: "introLoading",
-    buffering: "introBuffering",
     retry: "introRetry",
     blocked: "introBlocked",
     error: "introError",

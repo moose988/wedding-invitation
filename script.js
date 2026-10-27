@@ -15,7 +15,7 @@ import {
   resolveTableName,
 } from "./seating-utils.js?v=20261018-invitation-seat-map";
 import { getEventDisplayTitle, isCelebrationEvent } from "./event-utils.js";
-import { getPartySeatSelection, resolvePartySeatTarget, retainPartySeatSelection } from "./invitations/wedding-designs/layla-zaid/party-seat-selector.js?v=20261026-party-chair-1";
+import { formatPartySeatLabel, getPartySeatSelection, resolvePartySeatTarget, retainPartySeatSelection } from "./invitations/wedding-designs/layla-zaid/party-seat-selector.js?v=20261027-seat-label-1";
 import { renderLaylaScheduleIcon, resolveLaylaScheduleIcon } from "./invitations/wedding-designs/layla-zaid/schedule-icons.js?v=20261027-timeline-icons-2";
 
 const demoWedding = {
@@ -103,12 +103,11 @@ const laylaCopy = {
   playMusic: { en: "Play event music", ar: "تشغيل موسيقى الحفل" },
   stopMusic: { en: "Pause event music", ar: "إيقاف موسيقى الحفل" },
   musicUnavailable: { en: "Event music unavailable", ar: "موسيقى الحفل غير متاحة" },
-  introCaption: { en: "Your invitation awaits — tap to open", ar: "دعوتكم بانتظاركم — اضغطوا لفتحها" },
+  introCaption: { en: "A love story awaits — tap to open", ar: "تنتظركم حكاية حب — اضغطوا لفتح الدعوة" },
   invitationPreparing: { en: "Preparing your invitation…", ar: "جارٍ تجهيز دعوتكم…" },
   openInvitation: { en: "Open your wedding invitation", ar: "افتحوا دعوة زفافكم" },
   retryOpening: { en: "Tap to retry opening", ar: "اضغطوا لإعادة محاولة الفتح" },
   introLoading: { en: "Opening your invitation…", ar: "جارٍ فتح دعوتكم…" },
-  introBuffering: { en: "The envelope animation is loading…", ar: "جارٍ تحميل حركة الظرف…" },
   introRetry: { en: "Still loading. Tap the envelope to retry or skip.", ar: "ما زال التحميل جارياً. اضغطوا على الظرف لإعادة المحاولة أو تخطّي الحركة." },
   introBlocked: { en: "The animation could not start. Tap the envelope to retry or skip.", ar: "تعذّر بدء الحركة. اضغطوا على الظرف لإعادة المحاولة أو تخطّي الحركة." },
   introError: { en: "The animation is unavailable. Tap the envelope to retry or skip.", ar: "الحركة غير متاحة. اضغطوا على الظرف لإعادة المحاولة أو تخطّي الحركة." },
@@ -272,8 +271,8 @@ function setupIntroSequence() {
     video: elements.openingVideo,
     startupTimeout: isLaylaInvitation() ? 10000 : undefined,
     bufferTimeout: isLaylaInvitation() ? 10000 : undefined,
-    // The Layla video's motion stops at ~3.2s; the last ~1.8s is a still frame.
-    finishAt: isLaylaInvitation() ? 3.1 : null,
+    // The Layla envelope video's motion settles at ~3s of its 4.5s; the rest is a still frame.
+    finishAt: isLaylaInvitation() ? 3 : null,
     onState: updateIntroPresentation,
     onFrame: () => {
       elements.introScreen?.classList.add("is-playing");
@@ -350,7 +349,6 @@ function updateIntroPresentation(phase) {
 
   const statusKey = {
     loading: "introLoading",
-    buffering: "introBuffering",
     retry: "introRetry",
     blocked: "introBlocked",
     error: "introError",
@@ -377,6 +375,7 @@ function disposeIntroSequence() {
 
 async function boot() {
   bindBaseEvents();
+  if (isLaylaInvitation()) setupLaylaNoticeClearance();
   setupIntroSequence();
   void warmEnvelopeAssets();
   setupRevealObserver();
@@ -628,7 +627,17 @@ function populateInvitation() {
   setText("closingArabic", wedding.closingAr);
   setText("closingEnglish", wedding.closingEn);
   const dateText = state.laylaLanguage === "ar" ? formatArabicDate(wedding.eventDateISO) : formatDate(wedding.eventDateISO);
-  setText("heroEventLine", [dateText, laylaValue(wedding.timeEn, wedding.timeAr), laylaValue(wedding.venueEn || wedding.venueName, wedding.venueAr || wedding.venueNameAr)].filter(Boolean).map((part, index, parts) => (index < parts.length - 1 ? part.replace(/ /g, "\u00a0") : part)).join(" · "));
+  const heroDetails = [dateText, laylaValue(wedding.timeEn, wedding.timeAr), laylaValue(wedding.venueEn || wedding.venueName, wedding.venueAr || wedding.venueNameAr)].filter(Boolean);
+  const eventLine = document.getElementById("heroEventLine");
+  if (isLaylaInvitation() && eventLine) {
+    eventLine.replaceChildren(...heroDetails.map((text) => {
+      const line = document.createElement("span");
+      line.textContent = text;
+      return line;
+    }));
+  } else {
+    setText("heroEventLine", heroDetails.join(" · "));
+  }
   if (elements.weddingAudio?.querySelector("source") && wedding.media.audio) {
     const source = elements.weddingAudio.querySelector("source");
     const nextSource = new URL(wedding.media.audio, document.baseURI).toString();
@@ -901,6 +910,9 @@ function renderSchedule() {
     const iconClass = isLayla ? ` schedule-item--${iconType}` : "";
     return `<li class="schedule-item${arabic ? " schedule-item--arabic" : ""}${iconClass}" style="--item-index:${index}" ${arabic ? 'lang="ar" dir="rtl"' : ""}><time class="schedule-item__time" dir="auto"${timeLang}><bdi dir="auto">${escapeHtml(time)}</bdi></time>${eventIcon}<div class="schedule-item__copy"><h3${titleLang}>${escapeHtml(title)}</h3>${description ? `<p${descriptionLang}>${escapeHtml(description)}</p>` : ""}</div></li>`;
   }).join("");
+  const calendarAction = document.querySelector("[data-calendar-download]");
+  const calendarTarget = document.getElementById(items.length ? "scheduleActions" : "venueActions");
+  if (calendarAction && calendarTarget) calendarTarget.append(calendarAction);
   if (isLayla && items.length) updateLaylaScheduleConnector(mount);
 }
 
@@ -908,9 +920,13 @@ function updateLaylaScheduleConnector(mount) {
   const measure = () => {
     const items = [...mount.querySelectorAll(".schedule-item")];
     if (!items.length) return;
-    const firstCenter = items[0].offsetTop + items[0].offsetHeight / 2;
+    const iconCenter = (item) => {
+      const icon = item.querySelector(".schedule-item__icon");
+      return item.offsetTop + (icon ? icon.offsetTop + icon.getBoundingClientRect().height / 2 : item.offsetHeight / 2);
+    };
+    const firstCenter = iconCenter(items[0]);
     const lastItem = items.at(-1);
-    const lastCenter = lastItem.offsetTop + lastItem.offsetHeight / 2;
+    const lastCenter = iconCenter(lastItem);
     mount.style.setProperty("--schedule-line-start", `${firstCenter}px`);
     mount.style.setProperty("--schedule-line-end", `${Math.max(0, mount.scrollHeight - lastCenter)}px`);
   };
@@ -919,6 +935,7 @@ function updateLaylaScheduleConnector(mount) {
     mount._laylaScheduleResizeObserver.observe(mount);
   }
   requestAnimationFrame(measure);
+  document.fonts?.ready.then(() => { if (mount.isConnected) measure(); });
 }
 
 const arabicScheduleFallbacks = new Map([
@@ -983,6 +1000,7 @@ function renderLocationMap() {
       ${mapActionMarkup}
     </div>
   `;
+  if (isLaylaInvitation() && mapsLink && directions) mount.querySelector(".venue-map-card")?.append(mapsLink);
 
   const preview = mount.querySelector("[data-map-preview]");
   const retryButton = preview?.querySelector("[data-load-map-preview]");
@@ -1105,7 +1123,7 @@ function renderFirebaseRsvp(mount) {
   mount.innerHTML = `
     <form class="firebase-rsvp-panel rsvp-form" id="firebaseRsvpForm">
       ${greeting}
-      ${statusCopy ? `<p class="firebase-rsvp-status" role="status" aria-live="polite">${statusCopy}</p>` : ""}
+      ${statusCopy ? `<p class="firebase-rsvp-status" data-tone="${errorCopy ? "error" : "status"}" role="${errorCopy ? "alert" : "status"}" aria-live="polite">${statusCopy}</p>` : ""}
       <div class="rsvp-phases">
         <section class="rsvp-phase" data-rsvp-step="1">
           ${isLaylaInvitation() ? "" : '<p class="rsvp-phase__number">01</p><h3>Are you attending?</h3>'}
@@ -1273,7 +1291,7 @@ function renderLaylaPartyChairMember(member, selectedPersonKey) {
   const isUnassigned = !target;
   const tableName = assignment?.tableName || laylaText("yourTable");
   const assignmentLabel = target
-    ? laylaText("tableChair").replace("{table}", tableName).replace("{chair}", target.seatNumber)
+    ? formatPartySeatLabel(tableName, target.seatNumber, state.laylaLanguage)
     : laylaText("seatNotAssigned");
   const accessibleLabel = `${member.index + 1}. ${member.label}. ${assignmentLabel}${target ? ". Select to focus this chair on the seating map." : ". Select for seat status; no chair is assigned yet."}`;
   const targetAttributes = target
@@ -1415,7 +1433,31 @@ function renderSeatingMap(tables, assignments = [], selectedTarget = null) {
     delete map.dataset.selectedChairId;
   }
   bindSeatPlanInteractions();
-  requestAnimationFrame(() => selectedTarget ? focusInvitationChair(selectedTarget) : fitInvitationSeatingPlan(false));
+  const fitWhenReady = () => requestAnimationFrame(() => {
+    if (!map.isConnected) return;
+    // A guest may start interacting while fonts load. Respect that new view.
+    if (state.seatPlanViewMode === "person") focusInvitationChair(state.seatPlanSelectedTarget);
+    else fitInvitationSeatingPlan(false);
+  });
+  if (isLaylaInvitation() && document.fonts) document.fonts.ready.then(fitWhenReady);
+  else requestAnimationFrame(() => selectedTarget ? focusInvitationChair(selectedTarget) : fitInvitationSeatingPlan(false));
+}
+
+function setupLaylaNoticeClearance() {
+  const measure = () => {
+    const height = [...document.body.children].filter((node) => node.matches('aside[role="status"]') && getComputedStyle(node).position === "sticky")
+      .reduce((max, node) => Math.max(max, node.getBoundingClientRect().height), 0);
+    document.body.style.setProperty("--layla-notice-height", `${Math.ceil(height)}px`);
+  };
+  const resize = typeof ResizeObserver === "function" ? new ResizeObserver(measure) : null;
+  const observeNotices = () => {
+    resize?.disconnect();
+    document.querySelectorAll('body > aside[role="status"]').forEach((node) => resize?.observe(node));
+    measure();
+  };
+  new MutationObserver(observeNotices).observe(document.body, { childList: true });
+  window.addEventListener("resize", measure, { passive: true });
+  observeNotices();
 }
 
 function getPartySize(guest) {
@@ -1881,6 +1923,11 @@ async function updateRsvp(status, additionalGuests) {
   liveForm?.querySelectorAll("button, input, textarea").forEach((control) => { control.disabled = true; });
   const statusNode = liveForm?.querySelector(".firebase-rsvp-status");
   if (statusNode) statusNode.textContent = isLaylaInvitation() ? laylaText("responseSaving") : "Saving your response…";
+  if (isLaylaInvitation() && liveForm) {
+    liveForm.setAttribute("aria-busy", "true");
+    const label = liveForm.querySelector(".rsvp-form__submit span");
+    if (label) label.textContent = laylaText("responseSaving");
+  }
 
   try {
     const message = state.rsvpMessage.trim();
@@ -1899,14 +1946,14 @@ async function updateRsvp(status, additionalGuests) {
     state.rsvpSelection = "";
     state.rsvpMessage = "";
     renderFirebaseRsvp(document.getElementById("rsvpMount"));
-    showToast(isLaylaInvitation() ? laylaText("responseSaved") : "Your response has been saved.", "success");
+    if (!isLaylaInvitation()) showToast("Your response has been saved.", "success");
   } catch (error) {
     console.error("Invitation RSVP save failed.", error.code || "unavailable");
     state.isRsvpSaving = false;
     state.rsvpSaveError = error.transient || error.code === "permission-denied" ? error.message : isLaylaInvitation() ? laylaText("responseSaveError") : "We could not save your response. Please try again.";
     state.rsvpSelection = status;
     renderFirebaseRsvp(document.getElementById("rsvpMount"));
-    showToast(state.rsvpSaveError, "error");
+    if (!isLaylaInvitation()) showToast(state.rsvpSaveError, "error");
   }
 }
 
@@ -1942,7 +1989,10 @@ function bindBaseEvents() {
     }
 
     if (event.target.closest("[data-scroll-details]")) {
-      document.getElementById("detailsSection")?.scrollIntoView({ behavior: "smooth", block: "start" });
+      const detailsTarget = isLaylaInvitation()
+        ? document.querySelector("#countdownSection .section-frame")
+        : document.getElementById("detailsSection");
+      detailsTarget?.scrollIntoView({ behavior: "smooth", block: "start" });
     }
 
     const rsvpTrigger = event.target.closest("[data-scroll-rsvp]");

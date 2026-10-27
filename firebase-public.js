@@ -14,7 +14,11 @@ import { getFirebaseConfig, isFirebaseConfigAvailable } from "./firebase-setting
 
 const serviceCache = createScopedServiceCache();
 const localHost = ["localhost", "127.0.0.1", "[::1]"].includes(window.location.hostname);
-if (localHost && new URLSearchParams(window.location.search).get("emulator") === "1") {
+const localParams = new URLSearchParams(window.location.search);
+if (localHost && localParams.get("live") === "1") {
+  sessionStorage.removeItem("wedding:localEmulators");
+}
+if (localHost && localParams.get("emulator") === "1") {
   sessionStorage.setItem("wedding:localEmulators", "1");
 }
 const localEmulators = localHost && sessionStorage.getItem("wedding:localEmulators") === "1";

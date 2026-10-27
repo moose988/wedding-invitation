@@ -10,6 +10,10 @@ export function createDashboardPersistence({ api, db, weddingId, checkinRead = f
   let sceneRevision = 0;
   const markGuest = (id, seating, repair = false) => pending.guests.set(id, { seating: seating || pending.guests.get(id)?.seating || false, repair: repair || pending.guests.get(id)?.repair || false });
   let publishing = null, lastError = null;
+  const maxAutomaticRetries = 3;
+  const transientCodes = new Set(["aborted", "deadline-exceeded", "network-request-failed", "resource-exhausted", "unavailable"]);
+  const isTransient = (error) => transientCodes.has(String(error?.code || "").replace(/^firestore\//, ""));
+  const retryDelay = (attempt) => new Promise((resolve) => setTimeout(resolve, Math.min(250 * (2 ** attempt), 2000)));
   const current = () => { if (!isCurrent()) throw Object.assign(new Error("This editing session has ended."), { code: "cancelled" }); };
   function collect(intents, reads = new Map()) {
     for (const { type, ref, data = {}, publishSchedule = false } of intents) {
@@ -28,31 +32,44 @@ export function createDashboardPersistence({ api, db, weddingId, checkinRead = f
       }
     }
   }
+  async function drain() {
+    // Bounded coalescing. Further explicit mutations can drain remaining work.
+    for (let pass = 0; pass < 2 && isCurrent(); pass++) {
+      const scene = pending.scene, venue = pending.venue, revision = sceneRevision;
+      if (scene) {
+        await publisher.publishScene({ venue, schedule: pending.schedule, repair: pending.repair });
+        if (revision === sceneRevision) { pending.scene = false; pending.venue = false; pending.schedule = false; pending.repair = false; }
+      }
+      const jobs = [...pending.guests].slice(0, 50);
+      for (const [id, job] of jobs) {
+        current();
+        if (job.repair) await publisher.repairGuest(id, { checkinRead });
+        else await publisher.publishGuest(id, job.seating);
+        if (pending.guests.get(id) === job) pending.guests.delete(id);
+      }
+      if (!pending.scene && !pending.guests.size) break;
+    }
+  }
   async function flush() {
     if (publishing) return publishing;
     publishing = (async () => {
       lastError = null;
-      // Bounded coalescing. Further explicit mutations or Refresh can drain
-      // remaining work; a failure never starts another application retry.
-      for (let pass = 0; pass < 2 && isCurrent(); pass++) {
-        const scene = pending.scene, venue = pending.venue, revision = sceneRevision;
-        if (scene) {
-          await publisher.publishScene({ venue, schedule: pending.schedule, repair: pending.repair });
-          if (revision === sceneRevision) { pending.scene = false; pending.venue = false; pending.schedule = false; pending.repair = false; }
+      for (let attempt = 0; ; attempt++) {
+        try {
+          await drain();
+          lastError = null;
+          return true;
+        } catch (error) {
+          if (!isCurrent()) return false;
+          if (!isTransient(error) || attempt >= maxAutomaticRetries) throw error;
+          await retryDelay(attempt);
         }
-        const jobs = [...pending.guests].slice(0, 50);
-        for (const [id, job] of jobs) {
-          current();
-          if (job.repair) await publisher.repairGuest(id, { checkinRead });
-          else await publisher.publishGuest(id, job.seating);
-          if (pending.guests.get(id) === job) pending.guests.delete(id);
-        }
-        if (!pending.scene && !pending.guests.size) break;
       }
     })().catch((error) => {
       if (!isCurrent()) return;
       lastError = error;
       onPublishFailure(error);
+      return false;
     }).finally(() => { publishing = null; });
     return publishing;
   }

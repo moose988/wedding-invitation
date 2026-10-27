@@ -2925,6 +2925,35 @@ body.is-seating-view .planner-panel__stack {
   background: #9f4b41;
 }
 
+.toast--invitation-flow {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.toast--invitation-flow > span {
+  min-width: 0;
+}
+
+.toast__retry {
+  flex: 0 0 auto;
+  min-height: 36px;
+  padding: 6px 12px;
+  border: 1px solid currentColor;
+  border-radius: 999px;
+  color: inherit;
+  background: transparent;
+  font: inherit;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.toast__retry:disabled {
+  opacity: .65;
+  cursor: wait;
+}
+
 .toast.is-leaving {
   opacity: 0;
   transform: translateY(6px);

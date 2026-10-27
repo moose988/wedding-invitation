@@ -64,7 +64,7 @@ test("dashboard token creation is transactional and offers explicit revoke/regen
   assert.match(dashboard, /state\.invitationTokenCache\.clear\(\)/);
   assert.match(dashboard, /createInvitationTokenService\(/);
   assert.match(dashboard, /async function ensureGuestInvitationToken\(guestId\)/);
-  assert.match(dashboard, /const cachedToken = state\.invitationTokenCache\.get\(guestId\);\s*if \(isValidInvitationToken\(cachedToken\)\) return cachedToken;/);
+  assert.match(dashboard, /const cachedToken = state\.invitationTokenCache\.get\(guestId\) \|\| guest\.guestToken;[\s\S]*?await persistence\.flush\(\);[\s\S]*?getPendingPublicationError\(persistence\);[\s\S]*?return cachedToken;/);
   assert.match(dashboard, /service\.regenerate\(scope, requestId\)/);
   assert.match(dashboard, /subscribeToGuestInvitationResponses\(state\.listenerGeneration\)/);
   assert.match(dashboard, /if \(guest && state\.mode === "live"\)/);

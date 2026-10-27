@@ -2,10 +2,24 @@ import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import test from "node:test";
 import {
+  formatPartySeatLabel,
   getPartySeatSelection,
   resolvePartySeatTarget,
   retainPartySeatSelection,
 } from "../invitations/wedding-designs/layla-zaid/party-seat-selector.js";
+
+test("seat labels avoid duplicate table prefixes without changing assignment data", () => {
+  const assignment = { tableName: "Table 1", seatNumber: "7" };
+  assert.equal(formatPartySeatLabel(assignment.tableName, assignment.seatNumber), "Table 1 · Chair 7");
+  assert.equal(assignment.tableName, "Table 1");
+  assert.equal(formatPartySeatLabel("1", "2"), "Table 1 · Chair 2");
+  assert.equal(formatPartySeatLabel("East Garden", "9"), "Table East Garden · Chair 9");
+  assert.equal(formatPartySeatLabel(" table 1 ", "3"), "table 1 · Chair 3");
+  assert.equal(formatPartySeatLabel("Your table", "4"), "Your table · Chair 4");
+  assert.equal(formatPartySeatLabel("الطاولة ١", "٧", "ar"), "الطاولة ١ · المقعد ٧");
+  assert.equal(formatPartySeatLabel("١", "٢", "ar"), "الطاولة ١ · المقعد ٢");
+  assert.equal(formatPartySeatLabel("طاولة العائلة", "٣", "ar"), "طاولة العائلة · المقعد ٣");
+});
 
 const tables = [
   { id: "table-east", chairs: [{ id: "east-chair-4", seatNumber: 4 }, { id: "east-chair-7", seatNumber: 7 }] },

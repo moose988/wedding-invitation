@@ -90,6 +90,18 @@ test("actual guest-save and shared publishing paths remain bounded, live and iso
     assert.equal(spy.counts.queries, 0);
     assert.ok(spy.counts.reads <= 6, JSON.stringify(spy.counts));
     assert.equal(spy.counts.publicGuestWrites, 1);
+    assert.equal((await api.getDoc(ref(db, "publicGuests", token))).data().guest.fullName, "Edited existing synthetic guest", "canonical save is visible in the invitation before the link is ready");
+    await p.flush(); // Same wait used by the cached-token copy path.
+    const immediatelyOpened = await new Promise((resolve, reject) => {
+      let stop;
+      const timeout = setTimeout(() => { stop?.(); reject(new Error("Saved invitation did not open with the latest guest details")); }, 10000);
+      stop = createInvitationSubscription({ api, db: anonymous, context: { weddingId: "a", guestToken: token, guestId: "g0" },
+        onChange(value) { if (value.guest.fullName === "Edited existing synthetic guest") { clearTimeout(timeout); stop(); resolve(value); } },
+        onError(error) { clearTimeout(timeout); stop?.(); reject(error); },
+      });
+    });
+    assert.equal(immediatelyOpened.guest.fullName, "Edited existing synthetic guest", "opening immediately after save reads the latest invitation without refresh");
+    assert.equal((await api.getDoc(ref(db, "invitationSecrets", "g0"))).data().token, token, "save and open preserve the stable invitation token");
     assert.deepEqual((await api.getDoc(ref(db, "publicGuests", token))).data().wedding, legacyWedding);
     const thirtyCounts = { ...spy.counts };
     // Owners can edit imported legacy guests even when untouched legacy values
@@ -136,6 +148,8 @@ test("actual guest-save and shared publishing paths remain bounded, live and iso
       const notify = (value) => { if (predicate(value)) { clearTimeout(timeout); updates = updates.filter((item) => item !== notify); resolve(value); } }; updates.push(notify);
     });
     await waitFor((value) => value.wedding.tables?.some((row) => row.id === "t"));
+    await waitFor((value) => value.guest.fullName === "Edited existing synthetic guest");
+    assert.equal((await api.getDoc(ref(db, "invitationSecrets", "g0"))).data().token, token, "real-time invitation refresh preserves the stable guest token");
     spy.reset();
     await p.updateDoc(ref(db, "tables", "t"), { x: 55, updatedAt: api.serverTimestamp() });
     await waitFor((value) => value.wedding.tables?.find((row) => row.id === "t")?.x === 55);
@@ -227,13 +241,41 @@ test("actual guest-save and shared publishing paths remain bounded, live and iso
     await assertFails(api.getDoc(ref(anonymous, "publicGuests", token)));
     assert.equal((await api.getDoc(ref(db, "invitationSecrets", "g0"))).data().status, "revoked");
 
-    let publishingAttempts = 0;
-    const failedPublisher = createDashboardPersistence({ api, db, weddingId: "a", beforePublish() { if (++publishingAttempts === 1) throw Object.assign(new Error("Simulated quota"), { code: "resource-exhausted" }); } });
+    let publishingAttempts = 0, remainingPublishFailures = 4;
+    const failedPublisher = createDashboardPersistence({ api, db, weddingId: "a", beforePublish() {
+      publishingAttempts += 1;
+      if (remainingPublishFailures-- > 0) throw Object.assign(new Error("Simulated quota"), { code: "resource-exhausted" });
+    } });
     await edit("g1", { fullName: "Persisted before derived failure" }, failedPublisher);
     assert.equal((await api.getDoc(ref(db, "guests", "g1"))).data().fullName, "Persisted before derived failure");
-    assert.equal(failedPublisher.publicationError.code, "resource-exhausted"); assert.equal(publishingAttempts, 1);
+    assert.equal(failedPublisher.publicationError.code, "resource-exhausted"); assert.equal(publishingAttempts, 4, "transient publication retries are bounded");
     assert.match(saveFailureMessage(failedPublisher.publicationError, { committed: true }), /Guest saved.*quota/);
-    await failedPublisher.flush(); assert.equal(publishingAttempts, 2); assert.equal(failedPublisher.publicationError, null);
+    remainingPublishFailures = 0;
+    await Promise.all([failedPublisher.flush(), failedPublisher.flush()]);
+    assert.equal(publishingAttempts, 5, "overlapping retry requests share a single in-flight publication");
+    assert.equal(failedPublisher.publicationError, null);
+
+    let activePublishes = 0, maxActivePublishes = 0;
+    const slowPublisher = createDashboardPersistence({ api, db, weddingId: "a", async beforePublish() {
+      activePublishes += 1; maxActivePublishes = Math.max(maxActivePublishes, activePublishes);
+      await new Promise((resolve) => setTimeout(resolve, 100)); activePublishes -= 1;
+    } });
+    await edit("g2", { fullName: "Slow connection latest value" }, slowPublisher);
+    assert.equal(maxActivePublishes, 1, "slow updates do not overlap invitation publication retries");
+    assert.equal((await api.getDoc(ref(db, "publicGuests", partyToken))).data().guest.fullName, "Slow connection latest value");
+
+    let permissionFailure = true, permanentAttempts = 0;
+    const permanentPublisher = createDashboardPersistence({ api, db, weddingId: "a", beforePublish() {
+      permanentAttempts += 1;
+      if (permissionFailure) throw Object.assign(new Error("Simulated permission denial"), { code: "permission-denied" });
+    } });
+    await edit("g3", { fullName: "Permission failure saved" }, permanentPublisher);
+    assert.equal(permanentAttempts, 1, "permanent failures are not automatically retried");
+    assert.equal(permanentPublisher.publicationError.code, "permission-denied");
+    permissionFailure = false;
+    await permanentPublisher.flush();
+    assert.equal(permanentPublisher.publicationError, null, "a manual retry action can recover a genuine publication failure");
+
     for (const code of ["resource-exhausted", "permission-denied", "unavailable"]) {
       const failing = createDashboardPersistence({ api, db, weddingId: "a", beforeCanonical() { throw Object.assign(new Error(`Simulated ${code}`), { code }); } });
       await assert.rejects(edit("g1", { fullName: "Unsaved draft" }, failing), (error) => error.code === code);

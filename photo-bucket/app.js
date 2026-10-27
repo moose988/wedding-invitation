@@ -11,7 +11,8 @@ import { qrCanvas, canvasBlob } from './qr.js';
 import { download, makeZip, photoFilename } from './zip.js';
 const app = document.getElementById('app'), mode = document.body.dataset.mode;
 const owner = mode !== 'guest';
-let adapter, bucket, queue, photos = [], filter = '', queueStates = new Map(), galleryUrls = [], viewerUrl, editor, refreshing = false, pendingRefresh = false, disposed = false;
+let adapter, bucket, queue, photos = [], filter = '', queueStates = new Map(), galleryUrls = [], viewerUrl, editor, refreshing = false, pendingRefresh = false, disposed = false, sortOrder = 'newest', viewerId = '';
+try { if (localStorage.getItem('photo-bucket:sort') === 'oldest') sortOrder = 'oldest'; } catch { /* storage blocked: default order */ }
 const jobUrls = new Map();
 const $ = selector => document.querySelector(selector);
 const h = value => String(value ?? '').replace(/[&<>"']/g, c => ({ '&':'&amp;', '<':'&lt;', '>':'&gt;', '"':'&quot;', "'":'&#39;' }[c]));
@@ -30,7 +31,7 @@ function listen(selector, type, work) { $(selector)?.addEventListener(type, run(
 function revokeGallery() { galleryUrls.forEach(url => URL.revokeObjectURL(url)); galleryUrls = []; }
 function thumb(blob) { const url = URL.createObjectURL(blob); galleryUrls.push(url); return url; }
 function dialogs() {
-  return `<dialog id="viewer" class="pb-dialog pb-viewer" aria-labelledby="viewerTitle"><header><h2 id="viewerTitle">A shared moment</h2><button type="button" class="pb-icon-button" data-close="viewer" aria-label="Close photo viewer">×</button></header><img id="viewerImage" alt="Selected event photo"><div class="pb-dialog-body"><p id="viewerCaption"></p></div></dialog>
+  return `<dialog id="viewer" class="pb-dialog pb-viewer" aria-labelledby="viewerTitle"><header><h2 id="viewerTitle">A shared moment</h2><button type="button" class="pb-icon-button" data-close="viewer" aria-label="Close photo viewer">×</button></header><button type="button" class="pb-nav pb-nav-prev" id="prevPhoto" aria-label="Previous photo">‹</button><img id="viewerImage" alt="Selected event photo" draggable="false"><button type="button" class="pb-nav pb-nav-next" id="nextPhoto" aria-label="Next photo">›</button><div class="pb-dialog-body"><p id="viewerCaption"></p></div></dialog>
   <dialog id="confirmDelete" class="pb-dialog" aria-labelledby="deleteTitle"><header><h2 id="deleteTitle">Delete this photo?</h2></header><div class="pb-dialog-body"><p>This removes the saved photo${online ? '' : ' from this browser'}. This cannot be undone.</p><p id="deleteError" class="pb-error" role="alert"></p></div><footer><button type="button" data-close="confirmDelete" autofocus>Keep photo</button><button id="deleteConfirm" type="button" class="pb-danger">Delete photo</button></footer></dialog>
   ${owner ? '' : `<dialog id="editor" class="pb-dialog pb-editor" aria-labelledby="editorTitle"><header><h2 id="editorTitle">Make it yours</h2><button type="button" class="pb-icon-button" data-close="editor" aria-label="Cancel photo editing">×</button></header><div class="pb-dialog-body"><div class="pb-editor-stage"><canvas id="editCanvas" aria-label="Photo preview with crop boundary"></canvas></div><div class="pb-editor-tools"><button type="button" id="rotateButton">↻ Rotate</button><button type="button" id="replaceButton">Replace photo</button></div><div class="pb-crop-controls"><label>Crop size <input id="cropSize" type="range" min="40" max="100" value="100"></label><label>Horizontal position<input id="cropX" type="range" min="0" max="100" value="50"></label><label>Vertical position<input id="cropY" type="range" min="0" max="100" value="50"></label></div><p class="pb-subtle">Move the crop with the sliders. Save keeps the area inside the frame.</p><p id="editError" class="pb-error" role="alert"></p><input id="replaceInput" type="file" accept="image/jpeg,image/png,image/webp,image/avif" hidden></div><footer><button type="button" data-close="editor">Cancel</button><button id="saveEdit" type="button" class="pb-primary">Save photo</button></footer></dialog>`}`;
 }
@@ -54,7 +55,7 @@ async function boot() {
       }));
     }
     else {
-      owner ? renderOwner() : renderGuest(); bindCommon();
+      owner ? renderOwner() : renderGuest(); bindCommon(); bindViewer();
       if (owner) { bindOwner(); await renderShare(); setInterval(autoRefresh, 5000); }
       else { bindGuest(); queue = uploadQueue({ adapter, bucketId: bucket.id, changed: onJobChange, transport: defaultTransport() }); await loadQueue(); await queue.start(); }
       await refreshGallery();
@@ -74,12 +75,14 @@ function renderGuest() {
 }
 function renderOwner() {
   app.innerHTML = `${brand(true)}<header class="pb-owner-heading"><div><h1 id="eventName">${h(bucket.name)}</h1><div id="eventMeta">${meta()}</div></div></header>${notice()}<p id="message" class="pb-message" role="status" aria-live="polite"></p>
-  <div class="pb-owner-layout"><section aria-labelledby="galleryHeading"><div class="pb-section-head pb-gallery-head"><h2 id="galleryHeading">The photo collection</h2><span id="photoCount" class="pb-count"></span></div><div class="pb-gallery-toolbar"><button type="button" id="zipButton">Download all as ZIP</button><button type="button" id="pauseButton">${bucket.paused ? 'Resume uploads' : 'Pause uploads'}</button></div><p id="zipStatus" class="pb-subtle" role="status"></p><div id="gallery" class="pb-grid"></div><div id="galleryState" class="pb-state" role="status">Loading your photos…</div>
+  <div class="pb-owner-layout"><section aria-labelledby="galleryHeading"><div class="pb-section-head pb-gallery-head"><h2 id="galleryHeading">The photo collection</h2><span id="photoCount" class="pb-count"></span></div><div class="pb-gallery-toolbar"><button type="button" id="zipButton">Download all as ZIP</button><button type="button" id="pauseButton">${bucket.paused ? 'Resume uploads' : 'Pause uploads'}</button><label class="pb-sort">Sort photos<select id="sortSelect"><option value="newest">Newest first</option><option value="oldest">Oldest first</option></select></label></div><p id="zipStatus" class="pb-subtle" role="status"></p><div id="gallery" class="pb-grid"></div><div id="galleryState" class="pb-state" role="status">Loading your photos…</div>
   </section>
   <aside><section class="pb-panel pb-sharing" aria-labelledby="shareHeading"><h2 id="shareHeading">Invite their perspective</h2><div id="qrSlot" class="pb-qr-slot" role="status">Preparing QR code…</div><button type="button" id="copyLink">Copy guest link</button><a id="guestLink" class="pb-button" target="_blank" rel="noopener">Open guest page</a><button type="button" id="downloadQr">Download QR image</button><a class="pb-button" href="./photo-bucket-poster.html?bucket=${encodeURIComponent(bucket.id)}">Preview & print A5 card</a></section>
   <details class="pb-panel pb-owner-details"><summary>Edit details</summary><form id="detailsForm"><label>Event title<input name="name" required maxlength="100" value="${h(bucket.name)}"></label><label>Date<input name="date" type="date" required value="${h(bucket.date)}"></label><label>Place<input name="location" required maxlength="160" value="${h(bucket.location)}"></label><button type="submit" class="pb-primary">Save</button></form></details></aside></div>${dialogs()}`;
 }
 let gallerySignature = '';
+const byTime = (a, b) => sortOrder === 'oldest' ? a.createdAt - b.createdAt : b.createdAt - a.createdAt;
+const timeLabel = ms => { try { return new Intl.DateTimeFormat(undefined, { day: 'numeric', month: 'short', hour: 'numeric', minute: '2-digit' }).format(ms); } catch { return ''; } };
 // quiet = background refresh: no redraw when nothing changed, and no error banner if the network blips.
 // Host page only: pick up new guest uploads every 5 seconds while the tab is visible and nothing is open.
 function autoRefresh() {
@@ -90,7 +93,7 @@ async function refreshGallery(quiet = false) {
   if (disposed) return;
   if (refreshing) { pendingRefresh = true; return; } refreshing = true;
   try {
-    const next = (await adapter.photos(bucket.id)).sort((a,b) => b.createdAt - a.createdAt);
+    const next = (await adapter.photos(bucket.id)).sort(byTime);
     if (disposed) return;
     const signature = next.map(p => `${p.id}:${p.revision}`).join('|');
     if (quiet && signature === gallerySignature) return;
@@ -107,7 +110,7 @@ function drawGallery() {
   $('#photoCount').textContent = `${visible.length} ${visible.length === 1 ? 'photo' : 'photos'}`;
   $('#galleryState').hidden = Boolean(visible.length);
   $('#galleryState').innerHTML = filter ? '<strong>No photos from this contributor</strong>Choose Everyone to see the collection.' : `<strong>${owner ? 'The best moments are still to come' : 'Your story starts here'}</strong>${owner ? 'Share the guest link or add demo samples below.' : 'Take a photo or choose a favourite from your gallery.'}`;
-  $('#gallery').innerHTML = visible.map(photo => `<article class="pb-tile"><button class="pb-image-button" type="button" data-photo="${h(photo.id)}" data-action="view" aria-label="Open photo by ${h(photo.name || 'Anonymous guest')}"><img src="${thumb(photo.thumbnail)}" alt="Event memory shared by ${h(photo.name || 'Anonymous guest')}" loading="lazy" width="240" height="300"></button><div class="pb-tile-body"><p>${h(owner ? photo.name || 'Anonymous guest' : (online ? 'Saved online' : 'Saved on this device'))}${photo.source === 'fixture' ? ' · Demo sample' : ''}</p><div class="pb-tile-actions"><button type="button" data-photo="${h(photo.id)}" data-action="${owner ? 'download' : 'edit'}">${owner ? 'Download' : 'Edit photo'}</button><button type="button" class="pb-danger" data-photo="${h(photo.id)}" data-action="delete" aria-label="Delete photo by ${h(photo.name || 'Anonymous guest')}">Delete</button></div></div></article>`).join('');
+  $('#gallery').innerHTML = visible.map(photo => `<article class="pb-tile"><button class="pb-image-button" type="button" data-photo="${h(photo.id)}" data-action="view" aria-label="Open photo by ${h(photo.name || 'Anonymous guest')}"><img src="${thumb(photo.thumbnail)}" alt="Event memory shared by ${h(photo.name || 'Anonymous guest')}" loading="lazy" width="240" height="300"></button><div class="pb-tile-body"><p>${h(owner ? photo.name || 'Anonymous guest' : (online ? 'Saved online' : 'Saved on this device'))}${photo.source === 'fixture' ? ' · Demo sample' : ''}</p><small class="pb-tile-time">${h(timeLabel(photo.createdAt))}</small><div class="pb-tile-actions"><button type="button" data-photo="${h(photo.id)}" data-action="${owner ? 'download' : 'edit'}">${owner ? 'Download' : 'Edit photo'}</button><button type="button" class="pb-danger" data-photo="${h(photo.id)}" data-action="delete" aria-label="Delete photo by ${h(photo.name || 'Anonymous guest')}">Delete</button></div></div></article>`).join('');
   if (owner) $('#zipButton').disabled = !visible.length;
   if (focusId) {
     const replacement = [...$('#gallery').querySelectorAll('[data-photo]')].find(n => n.dataset.photo === focusId && n.dataset.action === focusAction);
@@ -115,14 +118,51 @@ function drawGallery() {
     else { $('#galleryHeading').tabIndex = -1; $('#galleryHeading').focus(); }
   }
 }
+// Photo viewer: previous/next buttons, arrow keys and swipe all move through the photos in the order shown.
+const viewerCache = new Map();
+function viewerBlob(id) {
+  if (!viewerCache.has(id)) { viewerCache.set(id, adapter.image(bucket.id, id)); if (viewerCache.size > 8) viewerCache.delete(viewerCache.keys().next().value); }
+  return viewerCache.get(id).catch(error => { viewerCache.delete(id); throw error; });
+}
+async function openViewer(photoId) {
+  const list = visiblePhotos(), index = list.findIndex(p => p.id === photoId);
+  if (index < 0) return;
+  const photo = list[index]; viewerId = photo.id;
+  const blob = await viewerBlob(photo.id);
+  if (viewerId !== photo.id) return; // the viewer moved on while this photo was loading
+  if (viewerUrl) URL.revokeObjectURL(viewerUrl); viewerUrl = URL.createObjectURL(blob);
+  $('#viewerImage').src = viewerUrl;
+  $('#viewerCaption').textContent = [photo.name || 'Anonymous guest', photo.source === 'fixture' ? 'Demo sample' : '', timeLabel(photo.createdAt), `${index + 1} of ${list.length}`].filter(Boolean).join(' · ');
+  $('#prevPhoto').disabled = index === 0; $('#nextPhoto').disabled = index === list.length - 1;
+  if (!$('#viewer').open) $('#viewer').showModal();
+  for (const near of [list[index + 1], list[index - 1]]) if (near) viewerBlob(near.id).catch(() => {});
+}
+function stepViewer(delta) {
+  const list = visiblePhotos(), target = list[list.findIndex(p => p.id === viewerId) + delta];
+  if (target) run(() => openViewer(target.id))();
+}
+function bindViewer() {
+  const viewer = $('#viewer'); if (!viewer) return;
+  $('#prevPhoto').addEventListener('click', () => stepViewer(-1));
+  $('#nextPhoto').addEventListener('click', () => stepViewer(1));
+  viewer.addEventListener('keydown', event => { if (event.key === 'ArrowLeft') stepViewer(-1); else if (event.key === 'ArrowRight') stepViewer(1); });
+  viewer.addEventListener('close', () => { viewerId = ''; });
+  let start = null;
+  viewer.addEventListener('pointerdown', event => { start = event.target.closest('button') ? null : { x: event.clientX, y: event.clientY }; });
+  viewer.addEventListener('pointercancel', () => { start = null; });
+  viewer.addEventListener('pointerup', event => {
+    if (!start) return;
+    const dx = event.clientX - start.x, dy = event.clientY - start.y; start = null;
+    if (Math.abs(dx) > 50 && Math.abs(dx) > Math.abs(dy) * 1.5) stepViewer(dx < 0 ? 1 : -1);
+  });
+}
 function bindCommon() {
   app.addEventListener('click', run(async event => {
     const close = event.target.closest('[data-close]'); if (close) { if (editor?.busy && close.dataset.close === 'editor') return; document.getElementById(close.dataset.close).close(); return; }
     const action = event.target.closest('[data-action][data-photo]'); if (!action) return;
     const photo = photos.find(p => p.id === action.dataset.photo); if (!photo) return;
     if (action.dataset.action === 'view') {
-      const blob = await adapter.image(bucket.id, photo.id); if (viewerUrl) URL.revokeObjectURL(viewerUrl); viewerUrl = URL.createObjectURL(blob);
-      $('#viewerImage').src = viewerUrl; $('#viewerCaption').textContent = `${photo.name || 'Anonymous guest'}${photo.source === 'fixture' ? ' · Demo sample' : ''}`; $('#viewer').showModal();
+      await openViewer(photo.id);
     }
     if (action.dataset.action === 'download') download(await adapter.image(bucket.id, photo.id), photoFilename(photo));
     if (action.dataset.action === 'edit') await openEditor(photo);
@@ -221,6 +261,12 @@ async function renderShare() {
   catch (error) { $('#qrSlot').textContent = error.message; $('#downloadQr').disabled = true; }
 }
 function bindOwner() {
+  if ($('#sortSelect')) $('#sortSelect').value = sortOrder;
+  listen('#sortSelect', 'change', async () => {
+    sortOrder = $('#sortSelect').value === 'oldest' ? 'oldest' : 'newest';
+    try { localStorage.setItem('photo-bucket:sort', sortOrder); } catch { /* ignore */ }
+    photos = [...photos].sort(byTime); gallerySignature = photos.map(p => `${p.id}:${p.revision}`).join('|'); drawGallery();
+  });
   listen('#pauseButton', 'click', async () => { bucket = await adapter.setPaused(bucket.id, !bucket.paused); syncDetails(); message(bucket.paused ? (online ? 'New uploads are paused.' : 'New local uploads are paused.') : (online ? 'New uploads can resume.' : 'New local uploads can resume.')); });
   listen('#copyLink', 'click', async () => {
     const url = guestUrl(bucket);

@@ -14,6 +14,13 @@ export function mockTransport({ failures = () => 0, delay = 100, backoff = 350 }
     wait: attempt => sleep(backoff * 2 ** (attempt - 1)),
   };
 }
+// Real uploads: the adapter's commit() sends the processed photo to the server and reports retryable network errors.
+export function liveTransport({ backoff = 1000 } = {}) {
+  return {
+    async run(job, file, progress) { const image = await processImage(file); await progress(25, image.thumbnail); return image; },
+    wait: attempt => sleep(backoff * 2 ** (attempt - 1)),
+  };
+}
 export function uploadQueue({ adapter, bucketId, changed = () => {}, transport = mockTransport() }) {
   const running = new Set(); let stopped = false, pumping = false;
   async function process(job) {

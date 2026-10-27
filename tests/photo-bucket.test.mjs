@@ -48,7 +48,7 @@ test('Photo Bucket is third and its branch exits before all legacy backend write
   }
   const source = await readFile(new URL('../weddings.js',import.meta.url),'utf8');
   const branch = source.slice(source.indexOf('async function saveWedding'),source.indexOf('if (!state.isAdmin) return;',source.indexOf('async function saveWedding')));
-  assert.match(branch,/ownerAdapter\(state.user.uid\)\.create/); assert.match(branch,/return;\s*}\s*$/);
+  assert.match(branch,/createOwnerAdapter\(state.user\)\)\.create/); assert.match(branch,/return;\s*}\s*$/);
   assert.doesNotMatch(branch,/writeBatch|setDoc|updateDoc|serverTimestamp/);
 });
 test('local modules do not send data to a backend and guest entry never imports Auth', async () => {

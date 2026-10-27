@@ -4,7 +4,7 @@ import { isPlatformAdmin, redeemCustomerGrants } from "./account-access.js";
 import { EVENT_CATEGORIES, eventUsesGuestSides, getEventCategory, getEventDisplayTitle, isCelebrationEvent, isGenderRevealEvent } from "./event-utils.js";
 import { eventDateTimeParts, localDateTimeToIso } from "./event-date-time.js";
 import { paginateRows } from "./workspace-pagination.js";
-import { ownerAdapter } from "./photo-bucket/adapter.js";
+import { createOwnerAdapter } from "./photo-bucket/adapters.js";
 import { renderLocalBuckets } from "./photo-bucket/workspace.js";
 
 const state = { services: null, user: null, weddings: [], workspaceLoaded: false, canSeeSampleInvitation: false, isAdmin: false, roleResolved: false, filter: "all", currentPage: 1, pageSize: 6, editId: "", deleteId: "", workspaceTimer: null, unsubscribeAuth: null, initialized: false, snapshotGeneration: 0, workspaceRequest: 0 };
@@ -75,7 +75,7 @@ function init() {
     }
     if (!user) return location.replace(document.body.dataset.accountSurface === "customer" ? "./customer-login.html?message=session-required" : "./dashboard-login.html?message=session-required");
     state.user = user;
-    void renderLocalBuckets(user.uid);
+    void renderLocalBuckets(user.uid, user);
     try {
       state.isAdmin = await isPlatformAdmin(accountApi, state.services.db, user.uid);
       state.roleResolved = true;
@@ -501,7 +501,7 @@ async function saveWedding(event) {
     const status = document.getElementById("photoBucketCreateError"); status.textContent = "";
     try {
       const f = el.weddingForm.elements;
-      const bucket = await ownerAdapter(state.user.uid).create({ name: f.bucketName.value, date: f.bucketDate.value, location: f.bucketLocation.value });
+      const bucket = await (await createOwnerAdapter(state.user)).create({ name: f.bucketName.value, date: f.bucketDate.value, location: f.bucketLocation.value });
       location.href = `./photo-bucket-manage.html?bucket=${encodeURIComponent(bucket.id)}`;
     } catch (error) { status.textContent = error.name === "QuotaExceededError" ? "This browser is out of storage. Free some space and try again." : error.message; }
     finally { el.saveWeddingButton.disabled = false; }

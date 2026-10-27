@@ -1,0 +1,20 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: Photo Bucket compressed-backup bucket for ONE event. Deploy in the backup region first.
+Parameters:
+  EventId:
+    Type: String
+    AllowedPattern: '^[a-z0-9-]{3,30}$'
+Resources:
+  BackupBucket:
+    Type: AWS::S3::Bucket
+    DeletionPolicy: Retain
+    Properties:
+      BucketName: !Sub 'pb-${EventId}-backup-${AWS::AccountId}-${AWS::Region}'
+      PublicAccessBlockConfiguration: { BlockPublicAcls: true, BlockPublicPolicy: true, IgnorePublicAcls: true, RestrictPublicBuckets: true }
+      BucketEncryption:
+        ServerSideEncryptionConfiguration: [{ ServerSideEncryptionByDefault: { SSEAlgorithm: AES256 } }]
+      LifecycleConfiguration:
+        Rules: [{ Id: abort-partial-uploads, Status: Enabled, AbortIncompleteMultipartUpload: { DaysAfterInitiation: 1 } }]
+Outputs:
+  BackupBucketName: { Value: !Ref BackupBucket }
+  BackupRegion: { Value: !Ref 'AWS::Region' }

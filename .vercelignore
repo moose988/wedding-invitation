@@ -15,3 +15,4 @@ firestore.rules
 firestore.indexes.json
 firebase.json
 package-lock.json
+backend

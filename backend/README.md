@@ -24,6 +24,8 @@ export PACKAGE_BUCKET=my-deploy-bucket
 2. The CSP in `firebase.json` allows `eu-north-1`. For another region, change both `*.execute-api.<region>` and `*.s3.<region>` entries.
 3. Sign in to the dashboard and create the Photo Bucket once. Only UIDs in `OwnerUids` can host; the first creation claims the event.
 
+`deploy.sh` can be re-run to change the allowed website(s); `<site-origin>` accepts several, comma-separated. Each run creates a new guest-login secret, which signs guests out and detaches them from photos they uploaded earlier, so only re-run it before the event or when no guests are active.
+
 Find your Firebase UID in Firebase Console, Authentication, Users.
 
 ## Finish an event

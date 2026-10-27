@@ -42,13 +42,28 @@ Install Node.js 22 or newer, Java 21 or newer, and the Firebase CLI. In Windows 
 
 ```powershell
 npm ci
+npm run dev
+```
+
+Open `http://127.0.0.1:5173/` (customer sign-in) or `http://127.0.0.1:5173/dashboard-login.html` (administrator sign-in). The local preview serves the existing HTML routes and Firebase-backed navigation without changing the app's live project configuration. **The preview defaults to live Firebase: saves, event creation, RSVP submissions, and other writes affect live data.** A persistent banner identifies the active mode and links to the other mode.
+
+To use isolated local demo data instead, stop the live preview and run:
+
+```powershell
+npm run dev:emulator
+```
+
+Then open `http://127.0.0.1:5173/customer-login.html?emulator=1`. This starts Firebase Auth and Firestore emulators for `demo-wedding-security` on `127.0.0.1:9099` and `127.0.0.1:8080`; the app's local-only guard routes Firebase traffic there. Emulator writes stay local. Seed the synthetic demo accounts/events in a second terminal with `npm run seed:local`; optional guest/table fixtures are available with `node scripts/seed-local-access.mjs --fixtures`. Example login: `admin@example.test` / `emulator-only`. Stop the preview and emulators with Ctrl+C.
+
+Other existing local testing commands:
+
+```powershell
 $env:JAVA_HOME = 'C:\Program Files\Microsoft\jdk-21.0.12.101-hotspot'
 $env:Path = "$env:JAVA_HOME\bin;$env:Path"
-npm test
 npm run test:security
 ```
 
-The security command starts only the Firestore emulator. It does not connect to or modify production data.
+The security command starts only the Firestore emulator. It does not connect to or modify production data. For mobile layout review, open the same local URL in a browser and use its device/mobile viewport preview; the pages load their responsive styles at narrow screen widths.
 
 ## Firebase Console setup and deployment
 

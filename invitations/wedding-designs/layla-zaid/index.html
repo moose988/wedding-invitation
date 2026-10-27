@@ -7,12 +7,14 @@
     <meta name="theme-color" content="#f5efe4" />
     <meta name="description" content="A personal wedding invitation from Layla and Zaid." />
     <title>Wedding Invitation</title>
+    <link rel="icon" type="image/svg+xml" href="./invitations/wedding-designs/layla-zaid/assets/layla-zaid-favicon.svg" />
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link href="https://fonts.googleapis.com/css2?family=Amiri:wght@400;700&family=Aref+Ruqaa:wght@400;700&family=Cormorant+Garamond:ital,wght@0,400;0,500;0,600;1,500&family=Great+Vibes&family=Lora:wght@400;500;600&display=swap" rel="stylesheet" />
-    <link rel="stylesheet" href="./invitations/wedding-designs/layla-zaid/styles.css?v=20261019-rsvp-note-width-1" />
+    <link rel="stylesheet" href="./invitations/wedding-designs/layla-zaid/styles.css?v=20261027-venue-map-frame-1" />
   </head>
   <body class="layla-zaid-invitation">
+    <div class="layla-details-backdrop" aria-hidden="true"><img src="./invitations/wedding-designs/layla-zaid/assets/layla-zaid-bridal-ribbon-rings-background.webp" alt="" /></div>
     <div class="layla-language-toggle" id="laylaLanguageToggle" role="group" aria-label="Invitation language">
       <button type="button" data-language="en" aria-pressed="true">EN</button>
       <button type="button" data-language="ar" aria-pressed="false" lang="ar">ع</button>
@@ -91,7 +93,7 @@
 
       <section class="section reveal schedule-section" id="scheduleSection" hidden>
         <div class="section-frame">
-          <div class="section-heading section-heading--center"><p class="section-kicker" data-layla-text="scheduleLabel">Our plan</p><h2 data-layla-text="scheduleHeading">The evening together</h2></div>
+          <div class="section-heading section-heading--center"><p class="section-kicker" data-layla-text="scheduleLabel">The Wedding Evening</p><h2 data-layla-text="scheduleHeading">A celebration of love</h2></div>
           <ol class="schedule-timeline" id="scheduleMount"></ol>
         </div>
       </section>
@@ -99,7 +101,12 @@
       <section class="section reveal" id="guestSpotlightSection" hidden><div class="section-frame guest-honoree-card"><h2 id="guestGreetingTitle">Dear Guest</h2><p id="guestGreetingArabic" lang="ar" dir="rtl"></p><p id="guestGreetingEnglish"></p></div></section>
 
       <section class="section reveal" id="seatingSection" hidden>
-        <div class="section-frame seating-card"><div class="section-heading section-heading--center"><p class="section-kicker" data-layla-text="seatLabel">Your seat</p><h2 data-layla-text="seatingHeading">A place reserved for you</h2></div><div id="seatDetailsMount"></div><div class="seating-map-shell"><div class="seating-map" id="seatingMap"></div></div></div>
+        <div class="section-frame seating-card">
+          <p class="section-kicker seating-section-label" data-layla-text="seatLabel">Your seats</p>
+          <div class="section-heading section-heading--center"><h2 data-layla-text="seatingHeading">A place reserved for you</h2></div>
+          <div id="seatDetailsMount"></div>
+          <div class="seating-content-outline"><div class="seating-map-shell"><div class="seating-map" id="seatingMap"></div></div></div>
+        </div>
       </section>
 
       <section class="section reveal" id="rsvpSection" aria-labelledby="rsvpTitle">
@@ -115,10 +122,10 @@
       </section>
 
       <section class="section reveal closing-section"><div class="section-frame closing-card"><p class="closing-card__arabic" id="closingArabic" data-layla-language="ar" lang="ar" dir="rtl"></p><p class="closing-card__english" id="closingEnglish" data-layla-language="en"></p><span class="closing-flourish" aria-hidden="true">❦</span></div></section>
-      <footer class="qd-footer"><span data-layla-text="madeBy">Made by</span> <a href="https://qdsystems.ae" target="_blank" rel="noopener noreferrer">QD Systems</a></footer>
+      <footer class="qd-footer"><span data-layla-text="madeBy">Made by</span> <a href="https://qdsystems.ae" target="_blank" rel="noopener noreferrer">QDsystems</a></footer>
     </main>
     <nav class="sticky-actions" id="stickyActions" aria-label="Quick event actions" hidden></nav>
     <div class="toast-rail" id="toastRail" aria-live="polite" aria-atomic="true"></div>
-        <script type="module" src="./script.js?v=20261019-arabic-schedule-1"></script>
+        <script type="module" src="./script.js?v=20261027-venue-map-frame-1"></script>
   </body>
 </html>

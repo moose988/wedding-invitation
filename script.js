@@ -18,6 +18,8 @@ import {
 } from "./seating-utils.js?v=20261018-invitation-seat-map";
 import { invitationSeatingEnabled } from "./invitations/shared/invitation-data.js?v=20261018-guest-invitation-regressions-2";
 import { getEventDisplayTitle, isCelebrationEvent } from "./event-utils.js";
+import { getPartySeatSelection, resolvePartySeatTarget, retainPartySeatSelection } from "./invitations/wedding-designs/layla-zaid/party-seat-selector.js?v=20261026-party-chair-1";
+import { renderLaylaScheduleIcon, resolveLaylaScheduleIcon } from "./invitations/wedding-designs/layla-zaid/schedule-icons.js?v=20261027-timeline-icons-2";
 
 const demoWedding = {
   coupleName: "Layla & Zaid",
@@ -123,10 +125,10 @@ const laylaCopy = {
   hall: { en: "Hall", ar: "الصالة" },
   detailsLabel: { en: "Details", ar: "التفاصيل" },
   detailsHeading: { en: "A place to gather", ar: "مكان يجمعنا" },
-  scheduleLabel: { en: "Our plan", ar: "برنامج أمسيتنا" },
-  scheduleHeading: { en: "The evening together", ar: "تفاصيل أمسيتنا" },
+  scheduleLabel: { en: "The Wedding Evening", ar: "أمسية الزفاف" },
+  scheduleHeading: { en: "A celebration of love", ar: "احتفال بالحب" },
   seatingHeading: { en: "A place reserved for you", ar: "مقاعدنا بانتظاركم" },
-  seatLabel: { en: "Your Seat", ar: "مقعدك" },
+  seatLabel: { en: "Your Seats", ar: "مقاعدك" },
   rsvpLabel: { en: "RSVP", ar: "تأكيد الحضور" },
   rsvpHeading: { en: "Will you join us?", ar: "هل ستشاركوننا فرحتنا؟" },
   passLabel: { en: "Entrance Pass", ar: "بطاقة الدخول" },
@@ -148,10 +150,10 @@ const laylaCopy = {
   messagePlaceholder: { en: "Write a note…", ar: "اكتبوا رسالتكم…" },
   sendRsvp: { en: "Send RSVP", ar: "إرسال التأكيد" },
   rsvpConfirmed: { en: "RSVP Confirmed", ar: "تم تأكيد الحضور" },
-  attendanceConfirmed: { en: "Your attendance is confirmed", ar: "تم تأكيد حضورك" },
+  attendanceConfirmed: { en: "Thank you, {name}!", ar: "شكرًا لك، {name}!" },
   attendanceConfirmedThanks: {
-    en: "Thank you, {name}. We look forward to celebrating with you.",
-    ar: "شكرًا لك، {name}. نتطلع للاحتفال معك.",
+    en: "We can’t wait to celebrate with you.",
+    ar: "نتطلع للاحتفال معك.",
   },
   attendanceDeclined: { en: "Your response is recorded as not attending.", ar: "تم تسجيل ردك بعدم الحضور." },
   changeResponse: { en: "Change response", ar: "تغيير الرد" },
@@ -166,8 +168,14 @@ const laylaCopy = {
   madeBy: { en: "Made by", ar: "تصميم" },
   deadline: { en: "Kindly reply by", ar: "يرجى الرد قبل" },
   dear: { en: "Dear", ar: "عزيزنا" },
-  mySeats: { en: "My seats", ar: "مقاعدي" }, fit: { en: "Fit", ar: "ملاءمة" },
-  seatLegend: { en: "Your party’s seats are marked in gold; other chairs are shown for context.", ar: "مقاعد مجموعتكم مميزة بالذهبي، وتظهر المقاعد الأخرى لتوضيح المخطط." },
+  companion: { en: "Companion", ar: "المرافق" },
+  guestFallback: { en: "Guest", ar: "ضيف" },
+  partySeatSelectorLabel: { en: "Choose a party member to find their seat", ar: "اختر فرداً من مجموعتك للعثور على مقعده" },
+  seatNotAssigned: { en: "Seat not assigned yet", ar: "لم يتم تخصيص مقعد بعد" },
+  seatNotAssignedSelected: { en: "This guest does not have an assigned seat yet.", ar: "لم يتم تخصيص مقعد لهذا الضيف بعد." },
+  selectedSeatStatus: { en: "Map focused on {name}’s assigned chair.", ar: "تم تحديد مقعد {name} على المخطط." },
+  tableChair: { en: "Table {table} · Chair {chair}", ar: "الطاولة {table} · المقعد {chair}" },
+  fit: { en: "Fit", ar: "ملاءمة" },
   seatsPending: { en: "Your seats have not been assigned yet.", ar: "لم يتم تخصيص مقاعد لكم بعد." },
   yourTable: { en: "Your table", ar: "طاولتك" }, seatingEmpty: { en: "A seating map will appear here once the venue layout is published.", ar: "ستظهر خريطة المقاعد هنا عند نشر مخطط القاعة." },
 };
@@ -188,6 +196,8 @@ const state = {
   seatPlanHasFitted: false,
   seatPlanViewMode: "fit",
   seatPlanFocusedAssignments: [],
+  seatPlanSelectedTarget: null,
+  seatingSelectedPersonKey: "",
   firebaseReady: false,
   laylaLanguage: document.body?.classList.contains("layla-zaid-invitation") && localStorage.getItem(laylaLanguageStorageKey) === "ar" ? "ar" : "en",
   invitationOpening: false,
@@ -576,6 +586,12 @@ function applyLaylaLanguage() {
   document.documentElement.dir = "ltr";
   document.body.classList.toggle("layla-arabic", arabic);
   document.querySelectorAll("[data-layla-text]").forEach((node) => { node.textContent = laylaText(node.dataset.laylaText); });
+  const wedding = state.wedding || {};
+  for (const [key, selector] of [["scheduleLabel", "#scheduleSection [data-layla-text='scheduleLabel']"], ["scheduleHeading", "#scheduleSection [data-layla-text='scheduleHeading']"]]) {
+    const node = document.querySelector(selector);
+    const configured = wedding[`${key}${arabic ? "Ar" : "En"}`] || wedding[key];
+    if (node && typeof configured === "string" && configured.trim()) node.textContent = configured.trim();
+  }
   document.querySelectorAll("[data-layla-language]").forEach((node) => { node.hidden = node.dataset.laylaLanguage !== state.laylaLanguage; });
   document.querySelectorAll("#laylaLanguageToggle [data-language]").forEach((button) => {
     button.setAttribute("aria-pressed", String(button.dataset.language === state.laylaLanguage));
@@ -737,6 +753,7 @@ function renderSchedule() {
   if (!section || !mount) return;
   const items = Array.isArray(state.wedding?.schedule) ? state.wedding.schedule.filter((item) => item && (item.titleEn || item.titleAr)) : [];
   section.hidden = !items.length;
+  const isLayla = isLaylaInvitation();
   mount.innerHTML = items.map((item, index) => {
     const arabic = isLaylaInvitation() && state.laylaLanguage === "ar";
     const titleArabic = String(item.titleAr || "").trim() || getArabicScheduleFallback(item.titleEn);
@@ -746,10 +763,32 @@ function renderSchedule() {
     const time = arabic
       ? formatArabicScheduleTime(String(item.timeAr || "").trim() || item.timeEn || item.time)
       : (item.timeEn || item.time || item.timeAr || "");
+    const timeLang = /\p{Script=Arabic}/u.test(time) ? ' lang="ar"' : ' lang="en"';
     const titleLang = arabic ? (titleArabic ? ' lang="ar" dir="rtl"' : ' lang="en" dir="ltr"') : "";
     const descriptionLang = arabic ? (descriptionArabic ? ' lang="ar" dir="rtl"' : ' lang="en" dir="ltr"') : "";
-    return `<li class="schedule-item${arabic ? " schedule-item--arabic" : ""}" style="--item-index:${index}" ${arabic ? 'lang="ar" dir="rtl"' : ""}><time class="schedule-item__time"${arabic ? ' lang="ar" dir="rtl"' : ""}>${escapeHtml(time)}</time><span class="schedule-item__marker" aria-hidden="true"></span><div class="schedule-item__copy"><h3${titleLang}>${escapeHtml(title)}</h3>${description ? `<p${descriptionLang}>${escapeHtml(description)}</p>` : ""}</div></li>`;
+    const iconType = isLayla ? resolveLaylaScheduleIcon(item) : "";
+    const eventIcon = isLayla ? renderLaylaScheduleIcon(iconType) : '<span class="schedule-item__marker" aria-hidden="true"></span>';
+    const iconClass = isLayla ? ` schedule-item--${iconType}` : "";
+    return `<li class="schedule-item${arabic ? " schedule-item--arabic" : ""}${iconClass}" style="--item-index:${index}" ${arabic ? 'lang="ar" dir="rtl"' : ""}><time class="schedule-item__time" dir="auto"${timeLang}><bdi dir="auto">${escapeHtml(time)}</bdi></time>${eventIcon}<div class="schedule-item__copy"><h3${titleLang}>${escapeHtml(title)}</h3>${description ? `<p${descriptionLang}>${escapeHtml(description)}</p>` : ""}</div></li>`;
   }).join("");
+  if (isLayla && items.length) updateLaylaScheduleConnector(mount);
+}
+
+function updateLaylaScheduleConnector(mount) {
+  const measure = () => {
+    const items = [...mount.querySelectorAll(".schedule-item")];
+    if (!items.length) return;
+    const firstCenter = items[0].offsetTop + items[0].offsetHeight / 2;
+    const lastItem = items.at(-1);
+    const lastCenter = lastItem.offsetTop + lastItem.offsetHeight / 2;
+    mount.style.setProperty("--schedule-line-start", `${firstCenter}px`);
+    mount.style.setProperty("--schedule-line-end", `${Math.max(0, mount.scrollHeight - lastCenter)}px`);
+  };
+  if ("ResizeObserver" in window && !mount._laylaScheduleResizeObserver) {
+    mount._laylaScheduleResizeObserver = new ResizeObserver(measure);
+    mount._laylaScheduleResizeObserver.observe(mount);
+  }
+  requestAnimationFrame(measure);
 }
 
 const arabicScheduleFallbacks = new Map([
@@ -797,12 +836,16 @@ function renderLocationMap() {
   const mapActionMarkup = mapsLink
     ? (directions ? "" : `<p class="venue-map-card__fallback">${escapeHtml(unavailable)}</p>`)
     : (directions ? `<a class="detail-card__action" href="${escapeAttribute(directions)}" target="_blank" rel="noopener noreferrer">${icons.location}<span>${label}</span></a>` : `<p class="venue-map-card__fallback">${escapeHtml(unavailable)}</p>`);
+  const mapPreviewMarkup = iframeUrl
+    ? `<div class="venue-map-preview"><iframe src="${escapeAttribute(iframeUrl)}" title="${escapeAttribute(mapTitle)}" loading="lazy" referrerpolicy="strict-origin-when-cross-origin" tabindex="-1" aria-hidden="true"></iframe></div>`
+    : `<div class="venue-map-preview venue-map-preview--fallback" role="img" aria-label="${escapeAttribute(unavailable)}"><span aria-hidden="true">⌖</span><p>${escapeHtml(unavailable)}</p></div>`;
+  const mapFrameMarkup = isLaylaInvitation()
+    ? `<div class="venue-map-frame"><span class="venue-map-corner venue-map-corner--top-left" aria-hidden="true"></span><span class="venue-map-corner venue-map-corner--bottom-right" aria-hidden="true"></span>${mapPreviewMarkup}</div>`
+    : mapPreviewMarkup;
   mount.innerHTML = `
     <div class="venue-map-card" aria-label="${escapeAttribute(venue || "Venue map")}">
       ${venue ? `<p class="venue-map-card__venue">${escapeHtml(venue)}</p>` : ""}
-      ${iframeUrl
-        ? `<div class="venue-map-preview"><iframe src="${escapeAttribute(iframeUrl)}" title="${escapeAttribute(mapTitle)}" loading="lazy" referrerpolicy="strict-origin-when-cross-origin" tabindex="-1" aria-hidden="true"></iframe></div>`
-        : `<div class="venue-map-preview venue-map-preview--fallback" role="img" aria-label="${escapeAttribute(unavailable)}"><span aria-hidden="true">⌖</span><p>${escapeHtml(unavailable)}</p></div>`}
+      ${mapFrameMarkup}
       ${mapActionMarkup}
     </div>
   `;
@@ -845,7 +888,9 @@ function renderFirebaseRsvp(mount) {
   const languageAttributes = isLayla && state.laylaLanguage === "ar" ? 'lang="ar" dir="rtl"' : "";
   if (view.showSummary && !state.isRsvpEditing) {
     const confirmationLabel = view.status === "confirmed" ? copy("rsvpConfirmed", "Response saved") : copy("declinedLabel", "Response saved");
-    const confirmationHeading = view.status === "confirmed" ? copy("attendanceConfirmed", "Your attendance is confirmed") : copy("attendanceDeclined", "Your response is recorded as not attending.");
+    const confirmationHeading = view.status === "confirmed"
+      ? (isLayla ? laylaText("attendanceConfirmed").replace("{name}", escapeHtml(guest.fullName || laylaText("guestFallback"))) : copy("attendanceConfirmed", "Your attendance is confirmed"))
+      : copy("attendanceDeclined", "Your response is recorded as not attending.");
     const confirmationMessage = view.status === "confirmed"
       ? (isLayla ? laylaText("attendanceConfirmedThanks").replace("{name}", escapeHtml(guest.fullName || laylaText("dear"))) : `Thank you, ${escapeHtml(guest.fullName || "guest")}. We look forward to celebrating with you.`)
       : copy("attendanceDeclinedThanks", "Thank you for letting us know.");
@@ -863,10 +908,12 @@ function renderFirebaseRsvp(mount) {
   const pendingCopy = copy("pendingResponse", "Your response is pending. Please choose an option.");
   const savingCopy = copy("responseSaving", "Saving your response…");
   const errorCopy = state.rsvpSaveError || "";
+  const greeting = isLayla ? "" : `<p class="firebase-rsvp-greeting">${copy("dear", "Dear")} ${escapeHtml(guest.fullName || "Guest")}</p>`;
+  const statusCopy = state.isRsvpSaving ? savingCopy : (errorCopy || (isLayla ? "" : pendingCopy));
   mount.innerHTML = `
     <form class="firebase-rsvp-panel rsvp-form" id="firebaseRsvpForm">
-      <p class="firebase-rsvp-greeting" ${isLayla && state.laylaLanguage === "ar" ? 'lang="ar" dir="rtl"' : ""}>${copy("dear", "Dear")} ${escapeHtml(guest.fullName || (isLayla ? laylaText("dear") : "Guest"))}</p>
-      <p class="firebase-rsvp-status" role="status" aria-live="polite">${state.isRsvpSaving ? savingCopy : (errorCopy || pendingCopy)}</p>
+      ${greeting}
+      ${statusCopy ? `<p class="firebase-rsvp-status" role="status" aria-live="polite">${statusCopy}</p>` : ""}
       <div class="rsvp-phases">
         <section class="rsvp-phase" data-rsvp-step="1">
           ${isLaylaInvitation() ? "" : '<p class="rsvp-phase__number">01</p><h3>Are you attending?</h3>'}
@@ -905,11 +952,14 @@ function renderDemoRsvp(mount, { sample = false } = {}) {
     const confirmed = saved.status === "confirmed";
     const name = sample ? sampleRsvpGuestName : demoGuest.fullName;
     const languageAttributes = isLaylaInvitation() && state.laylaLanguage === "ar" ? 'lang="ar" dir="rtl"' : "";
+    const confirmationHeading = confirmed
+      ? laylaText("attendanceConfirmed").replace("{name}", name)
+      : laylaText("attendanceDeclined");
     mount.innerHTML = `
       <div class="rsvp-summary rsvp-summary--${confirmed ? "confirmed" : "declined"}" aria-live="polite" ${sample ? languageAttributes : ""}>
         <span class="rsvp-confirmation-mark" aria-hidden="true">${confirmed ? "✓" : "♡"}</span>
         <p class="rsvp-summary__eyebrow">${escapeHtml(confirmed ? laylaText("rsvpConfirmed") : laylaText("declinedLabel"))}</p>
-        <h3>${escapeHtml(confirmed ? laylaText("attendanceConfirmed") : laylaText("attendanceDeclined"))}</h3>
+        <h3>${escapeHtml(confirmationHeading)}</h3>
         <p>${escapeHtml(confirmed ? laylaText("attendanceConfirmedThanks").replace("{name}", name) : laylaText("attendanceDeclinedThanks"))}</p>
         ${saved.message ? `<p class="rsvp-summary__message">${escapeHtml(saved.message)}</p>` : ""}
         ${sample ? `<p class="sample-rsvp-note" role="note">${escapeHtml(laylaText("sampleRsvpNote"))}</p>` : ""}
@@ -921,11 +971,12 @@ function renderDemoRsvp(mount, { sample = false } = {}) {
 
   const guestName = sample ? sampleRsvpGuestName : demoGuest.fullName;
   const languageAttributes = isLaylaInvitation() && state.laylaLanguage === "ar" ? 'lang="ar" dir="rtl"' : "";
+  const demoStatusCopy = state.rsvpSaveError || (isLaylaInvitation() ? "" : laylaText("pendingResponse"));
   mount.innerHTML = `
     <form class="rsvp-form" id="${sample ? "sampleRsvpForm" : "rsvpForm"}" ${sample ? languageAttributes : ""}>
       ${sample ? `<p class="sample-rsvp-note" role="note">${escapeHtml(laylaText("sampleRsvpNote"))}</p>` : ""}
-      <p class="rsvp-demo-greeting">${escapeHtml(laylaText("dear"))} ${escapeHtml(guestName)}</p>
-      <p class="firebase-rsvp-status" role="status" aria-live="polite">${escapeHtml(state.rsvpSaveError || laylaText("pendingResponse"))}</p>
+      ${isLaylaInvitation() ? "" : `<p class="rsvp-demo-greeting">${escapeHtml(laylaText("dear"))} ${escapeHtml(guestName)}</p>`}
+      ${demoStatusCopy ? `<p class="firebase-rsvp-status" role="status" aria-live="polite">${escapeHtml(demoStatusCopy)}</p>` : ""}
       <div class="rsvp-phases">
         <section class="rsvp-phase" data-rsvp-step="1">
           ${isLaylaInvitation() ? "" : `<p class="rsvp-phase__number">01</p><h3>Are you attending?</h3>`}
@@ -966,16 +1017,23 @@ function renderSeatSection() {
 
   if (document.body.classList.contains("layla-zaid-invitation")) {
     const partyMembers = getInvitationPartyMembers(state.guest, assignments);
+    state.seatingSelectedPersonKey = retainPartySeatSelection(state.seatingSelectedPersonKey, partyMembers);
+    const selection = getPartySeatSelection(state.seatingSelectedPersonKey, partyMembers, state.tables);
+    const selectedTarget = selection.target ? { ...selection.target, personKey: selection.member.personKey } : null;
+    state.seatPlanSelectedTarget = selectedTarget;
+    state.seatPlanFocusedAssignments = selection.member?.assignment && selectedTarget ? [selection.member.assignment] : [];
+    if (state.seatingSelectedPersonKey && !selectedTarget) state.seatPlanViewMode = "manual";
     document.getElementById("seatDetailsMount").innerHTML = `
       <div class="layla-seat-greeting">
-        <h3 ${state.laylaLanguage === "ar" ? 'lang="ar" dir="rtl" class="rtl-copy"' : ""}>${laylaValue(`${laylaText("dear")} ${escapeHtml(state.guest.fullName || "Guest")}`, `${laylaText("dear")} ${escapeHtml(state.guest.fullName || "Guest")}`)}</h3>
+        <h3 ${state.laylaLanguage === "ar" ? 'lang="ar" dir="rtl" class="rtl-copy"' : ""}>${laylaValue(`${laylaText("dear")} ${escapeHtml(state.guest.fullName || laylaText("guestFallback"))}`, `${laylaText("dear")} ${escapeHtml(state.guest.fullName || laylaText("guestFallback"))}`)}</h3>
       </div>
-      <div class="guest-seat-list guest-seat-list--party" aria-label="Your party seating assignments">
-        ${partyMembers.map(renderInvitationPartyMember).join("")}
+      <div class="layla-party-seat-selector${partyMembers.length <= 3 ? " is-compact" : ""}" id="laylaPartySeatSelector" role="group" aria-label="${escapeAttribute(laylaText("partySeatSelectorLabel"))}">
+        ${partyMembers.map((member) => renderLaylaPartyChairMember(member, state.seatingSelectedPersonKey)).join("")}
       </div>
+      <p class="layla-party-seat-status" id="laylaPartySeatStatus" role="status" aria-live="polite"${state.seatingSelectedPersonKey ? "" : " hidden"}>${escapeHtml(getPartySeatStatus(selection.member, selectedTarget))}</p>
     `;
-    bindInvitationPartySummary();
-    renderSeatingMap(state.tables, assignments);
+    bindLaylaPartySeatSelector();
+    renderSeatingMap(state.tables, assignments, selectedTarget);
     return;
   }
 
@@ -1001,10 +1059,85 @@ function getInvitationPartyMembers(guest, assignments) {
     const personKey = personKeyForIndex(index);
     return {
       index,
-      label: index === 0 ? (guest.fullName || "Primary guest") : `Companion ${index}`,
+      personKey,
+      label: index === 0
+        ? (guest.fullName || (isLaylaInvitation() ? laylaText("guestFallback") : "Primary guest"))
+        : `${isLaylaInvitation() ? laylaText("companion") : "Companion"} ${index}`,
       assignment: byKey.get(personKey) || null,
     };
   });
+}
+
+function getPartySeatStatus(member, target) {
+  if (!member) return "";
+  if (!target) return laylaText("seatNotAssignedSelected");
+  return laylaText("selectedSeatStatus").replace("{name}", member.label);
+}
+
+function renderLaylaPartyChairMember(member, selectedPersonKey) {
+  const assignment = member.assignment;
+  const target = assignment ? resolvePartySeatTarget(assignment, state.tables) : null;
+  const selected = member.personKey === selectedPersonKey;
+  const isUnassigned = !target;
+  const tableName = assignment?.tableName || laylaText("yourTable");
+  const assignmentLabel = target
+    ? laylaText("tableChair").replace("{table}", tableName).replace("{chair}", target.seatNumber)
+    : laylaText("seatNotAssigned");
+  const accessibleLabel = `${member.index + 1}. ${member.label}. ${assignmentLabel}${target ? ". Select to focus this chair on the seating map." : ". Select for seat status; no chair is assigned yet."}`;
+  const targetAttributes = target
+    ? `data-assignment-table-id="${escapeAttribute(target.tableId)}" data-assignment-chair-id="${escapeAttribute(target.chairId)}" data-assignment-seat-number="${escapeAttribute(target.seatNumber)}"`
+    : "";
+  return `
+    <button class="layla-party-chair ${selected ? "is-selected" : ""} ${isUnassigned ? "is-unassigned" : "is-assigned"}" type="button" data-party-person-key="${escapeAttribute(member.personKey)}" ${targetAttributes} aria-pressed="${selected}" aria-label="${escapeAttribute(accessibleLabel)}">
+      <span class="layla-party-chair__art" aria-hidden="true">
+        <img src="./invitations/wedding-designs/layla-zaid/assets/layla-zaid-louis-chair.webp?v=20261026-chair-selector-1" alt="" loading="lazy" decoding="async" />
+        <span class="layla-party-chair__number">${member.index + 1}</span>
+      </span>
+      <strong class="layla-party-chair__name">${escapeHtml(member.label)}</strong>
+      <span class="layla-party-chair__assignment">${escapeHtml(assignmentLabel)}</span>
+    </button>
+  `;
+}
+
+function bindLaylaPartySeatSelector() {
+  document.querySelectorAll("[data-party-person-key]").forEach((button) => {
+    button.addEventListener("click", () => selectLaylaPartyMember(button.dataset.partyPersonKey));
+  });
+}
+
+function selectLaylaPartyMember(personKey) {
+  const assignments = getInvitationSeatAssignments(state.guest);
+  const partyMembers = getInvitationPartyMembers(state.guest, assignments);
+  const selection = getPartySeatSelection(personKey, partyMembers, state.tables);
+  if (!selection.member) return;
+
+  state.seatingSelectedPersonKey = selection.member.personKey;
+  const target = selection.target ? { ...selection.target, personKey: selection.member.personKey } : null;
+  state.seatPlanSelectedTarget = target;
+  document.querySelectorAll("[data-party-person-key]").forEach((button) => {
+    const selected = button.dataset.partyPersonKey === state.seatingSelectedPersonKey;
+    button.classList.toggle("is-selected", selected);
+    button.setAttribute("aria-pressed", String(selected));
+  });
+
+  const status = document.getElementById("laylaPartySeatStatus");
+  if (status) {
+    status.hidden = false;
+    status.textContent = getPartySeatStatus(selection.member, target);
+  }
+  state.seatPlanFocusedAssignments = target ? [selection.member.assignment] : [];
+  if (target) {
+    focusInvitationChair(target);
+  } else {
+    if (state.seatPlanViewMode === "person") state.seatPlanViewMode = "manual";
+    document.querySelectorAll("#seatingMap .seat-plan-chair.is-selected").forEach((chair) => chair.classList.remove("is-selected"));
+    const map = document.getElementById("seatingMap");
+    if (map) {
+      delete map.dataset.selectedPersonKey;
+      delete map.dataset.selectedTableId;
+      delete map.dataset.selectedChairId;
+    }
+  }
 }
 
 function renderInvitationPartyMember(member) {
@@ -1027,7 +1160,7 @@ function bindInvitationPartySummary() {
   });
 }
 
-function renderSeatingMap(tables, assignments = []) {
+function renderSeatingMap(tables, assignments = [], selectedTarget = null) {
   const map = document.getElementById("seatingMap");
   if (!map) {
     return;
@@ -1043,7 +1176,7 @@ function renderSeatingMap(tables, assignments = []) {
   const assignedSeatKeys = buildSeatAssignmentKeys(assignments);
   map.innerHTML = `
     <div class="seat-plan-toolbar" aria-label="Seating plan controls">
-      <button type="button" data-seat-plan-control="my-seats" ${assignments.length ? "" : "disabled"}>${isLaylaInvitation() ? laylaText("mySeats") : "My seats"}</button>
+      ${isLaylaInvitation() ? "" : `<button type="button" data-seat-plan-control="my-seats" ${assignments.length ? "" : "disabled"}>My seats</button>`}
       <button type="button" data-seat-plan-control="zoom-out">-</button>
       <button type="button" data-seat-plan-control="fit">${isLaylaInvitation() ? laylaText("fit") : "Fit"}</button>
       <button type="button" data-seat-plan-control="zoom-in">+</button>
@@ -1065,7 +1198,7 @@ function renderSeatingMap(tables, assignments = []) {
           class="seat-plan-table seat-plan-table--${shape} ${isAssigned ? "is-assigned" : ""}"
           style="left:${Number(table.x || 0)}%;top:${Number(table.y || 0)}%;width:${width}px;height:${height}px;transform:translate(-50%, -50%) rotate(${Number(table.rotation || 0)}deg);--table-fill:${escapeAttribute(table.tableColor || "#f3ebdc")};--table-border:${escapeAttribute(table.borderColor || "#bc9b61")};--chair-color:${escapeAttribute(table.chairColor || "#24554a")};--chair-ink:${getContrastingTextColor(table.chairColor || "#24554a")};"
         >
-          ${(table.chairs || []).map((chair, index) => renderInvitationChair(table, chair, assignedSeatKeys, positionBySeat.get(String(chair.seatNumber)) || positions[index])).join("")}
+          ${(table.chairs || []).map((chair, index) => renderInvitationChair(table, chair, assignedSeatKeys, positionBySeat.get(String(chair.seatNumber)) || positions[index], selectedTarget)).join("")}
           <div class="seat-plan-table__surface seat-plan-table__surface--${shape}">
             <div class="seat-plan-table__label">
               <strong>${escapeHtml(resolveTableName(table))}</strong>
@@ -1078,10 +1211,19 @@ function renderSeatingMap(tables, assignments = []) {
     .join("")}
       </div>
     </div>
-    <p class="seat-plan-caption" role="status">${assignments.length ? `<span class="seat-plan-caption__swatch" aria-hidden="true"></span>${isLaylaInvitation() ? laylaText("seatLegend") : "Your party’s seats are marked in gold; other chairs are shown for context."}` : (isLaylaInvitation() ? laylaText("seatsPending") : "Your seats have not been assigned yet.")}</p>
+    ${isLaylaInvitation() ? (assignments.length ? "" : `<p class="seat-plan-caption" role="status">${laylaText("seatsPending")}</p>`) : `<p class="seat-plan-caption" role="status">${assignments.length ? `<span class="seat-plan-caption__swatch" aria-hidden="true"></span>Your party’s seats are marked in gold; other chairs are shown for context.` : "Your seats have not been assigned yet."}</p>`}
   `;
+  if (selectedTarget) {
+    map.dataset.selectedPersonKey = selectedTarget.personKey || "";
+    map.dataset.selectedTableId = selectedTarget.tableId;
+    map.dataset.selectedChairId = selectedTarget.chairId;
+  } else {
+    delete map.dataset.selectedPersonKey;
+    delete map.dataset.selectedTableId;
+    delete map.dataset.selectedChairId;
+  }
   bindSeatPlanInteractions();
-  requestAnimationFrame(() => fitInvitationSeatingPlan(false));
+  requestAnimationFrame(() => selectedTarget ? focusInvitationChair(selectedTarget) : fitInvitationSeatingPlan(false));
 }
 
 function getPartySize(guest) {
@@ -1120,13 +1262,12 @@ function getInvitationSeatAssignments(guest) {
     .map((assignment, index) => {
       const personKey = assignment.personKey || personKeyForIndex(Number.isInteger(Number(assignment.partyMemberIndex)) ? Number(assignment.partyMemberIndex) : index);
       const partyIndex = partyIndexFromKey(personKey);
-      const table = state.tables.find((item) => item.id === assignment.tableId);
-      const chair = table?.chairs?.find((item) => String(item.seatNumber) === String(assignment.seatNumber));
-      if (!table || !chair) return null;
+      const table = state.tables.find((item) => String(item.id) === String(assignment.tableId));
+      const target = resolvePartySeatTarget(assignment, state.tables);
+      if (!table || !target) return null;
       return {
-        tableId: assignment.tableId || "",
-        tableName: table ? resolveTableName(table) : assignment.tableName || "",
-        seatNumber: String(assignment.seatNumber || ""),
+        ...target,
+        tableName: resolveTableName(table),
         personKey,
         label: assignment.label || partyLabelForIndex(partyIndex),
       };
@@ -1160,10 +1301,11 @@ function getTableAuthoritativeSeatAssignments(guest) {
         const assignedGuestId = String(assignment.guestId || chair.guestId || "");
         if (assignedGuestId !== guestId) return null;
         const partyMemberIndex = Number.isInteger(Number(assignment.partyMemberIndex)) ? Number(assignment.partyMemberIndex) : index;
+        const target = resolvePartySeatTarget({ tableId: table.id, chairId: chair.id }, [table]);
+        if (!target) return null;
         return {
-          tableId: table.id,
+          ...target,
           tableName: resolveTableName(table),
-          seatNumber: String(assignment.seatNumber || chair.seatNumber || ""),
           personKey: assignment.personKey || personKeyForIndex(partyMemberIndex),
           label: assignment.label || partyLabelForIndex(partyMemberIndex),
         };
@@ -1173,14 +1315,17 @@ function getTableAuthoritativeSeatAssignments(guest) {
     .sort((a, b) => partyIndexFromKey(a.personKey) - partyIndexFromKey(b.personKey));
 }
 
-function renderInvitationChair(table, chair, assignedSeatKeys, position = chair) {
+function renderInvitationChair(table, chair, assignedSeatKeys, position = chair, selectedTarget = null) {
   const key = `${table.id}::${chair.seatNumber}`;
   const isAssignedToInvite = assignedSeatKeys.has(key);
+  const isSelectedForPerson = String(selectedTarget?.tableId || "") === String(table.id) && String(selectedTarget?.chairId || "") === String(chair.id);
   const hasSavedPosition = chair.x !== undefined && chair.x !== null && chair.y !== undefined && chair.y !== null && Number.isFinite(Number(chair.x)) && Number.isFinite(Number(chair.y));
   const chairPosition = hasSavedPosition ? chair : position;
   return `
     <span
-      class="seat-plan-chair ${isAssignedToInvite ? "is-yours is-occupied" : "is-empty"}"
+      class="seat-plan-chair ${isAssignedToInvite ? "is-yours is-occupied" : "is-empty"} ${isSelectedForPerson ? "is-selected" : ""}"
+      data-seat-table-id="${escapeAttribute(table.id)}"
+      data-seat-chair-id="${escapeAttribute(chair.id)}"
       style="left:${Number(chairPosition?.x ?? 0)}%;top:${Number(chairPosition?.y ?? 0)}%;--chair-rotation:${Number(chairPosition?.rotation || 0)}deg;--chair-color:${escapeAttribute(table.chairColor || "#24554a")};--chair-ink:${getContrastingTextColor(table.chairColor || "#24554a")};"
       title="${escapeAttribute(`${isAssignedToInvite ? "Your party seat" : "Seat"} ${chair.seatNumber}`)}"
       aria-label="${escapeAttribute(`${isAssignedToInvite ? "Your party seat" : "Seat"} ${chair.seatNumber}`)}"
@@ -1309,7 +1454,9 @@ function bindSeatPlanInteractions() {
       lastHeight = nextHeight;
       requestAnimationFrame(() => {
         if (!viewport.isConnected) return;
-        if (state.seatPlanViewMode === "seats") {
+        if (state.seatPlanViewMode === "person") {
+          focusInvitationChair(state.seatPlanSelectedTarget);
+        } else if (state.seatPlanViewMode === "seats") {
           centerInvitationSeats(state.seatPlanFocusedAssignments);
         } else if (state.seatPlanViewMode === "fit") {
           fitInvitationSeatingPlan(true);
@@ -1326,6 +1473,53 @@ function bindSeatPlanInteractions() {
     observer.observe(viewport);
     viewport._seatPlanResizeObserver = observer;
   }
+}
+
+function focusInvitationChair(target) {
+  const resolvedTarget = resolvePartySeatTarget(target, state.tables);
+  const viewport = document.getElementById("seatPlanViewport");
+  const canvas = document.getElementById("seatPlanCanvas");
+  const map = document.getElementById("seatingMap");
+  if (!resolvedTarget || !viewport || !canvas || !map || !viewport.clientWidth || !viewport.clientHeight) return false;
+
+  const table = state.tables.find((item) => String(item.id) === resolvedTarget.tableId);
+  const chair = table?.chairs?.find((item) => String(item.id) === resolvedTarget.chairId);
+  if (!table || !chair) return false;
+  const width = Number(table.width || defaultTableWidth(table.shape));
+  const height = Number(table.height || defaultTableHeight(table.shape));
+  const positions = buildChairPositions(table.shape, table.chairs?.length || table.seatCount || table.capacity || 0, width, height);
+  const hasSavedPosition = chair.x !== undefined && chair.x !== null && chair.y !== undefined && chair.y !== null && Number.isFinite(Number(chair.x)) && Number.isFinite(Number(chair.y));
+  const chairIndex = table.chairs.findIndex((item) => String(item.id) === resolvedTarget.chairId);
+  const position = hasSavedPosition ? chair : (positions[chairIndex] || positions.find((item, index) => String(index + 1) === resolvedTarget.seatNumber));
+  if (!position || !Number.isFinite(Number(position.x)) || !Number.isFinite(Number(position.y))) return false;
+
+  const tableCenterX = (Number(table.x ?? 50) / 100) * 1100;
+  const tableCenterY = (Number(table.y ?? 50) / 100) * 900;
+  const localX = (Number(position.x) / 100) * width - width / 2;
+  const localY = (Number(position.y) / 100) * height - height / 2;
+  const radians = (Number(table.rotation || 0) * Math.PI) / 180;
+  const chairX = tableCenterX + localX * Math.cos(radians) - localY * Math.sin(radians);
+  const chairY = tableCenterY + localX * Math.sin(radians) + localY * Math.cos(radians);
+  const scale = clamp(Math.min((viewport.clientWidth - 56) / 260, (viewport.clientHeight - 72) / 300), 0.42, 1.1);
+
+  state.seatPlanViewMode = "person";
+  state.seatPlanSelectedTarget = { ...resolvedTarget, personKey: target.personKey || "" };
+  state.seatPlanFocusedAssignments = [{ ...resolvedTarget }];
+  state.seatPlanTransform = {
+    scale,
+    x: Math.round(viewport.clientWidth / 2 - chairX * scale),
+    y: Math.round(viewport.clientHeight / 2 - chairY * scale),
+  };
+  state.seatPlanHasFitted = true;
+  canvas.style.transform = `translate3d(${state.seatPlanTransform.x}px, ${state.seatPlanTransform.y}px, 0) scale(${scale})`;
+  map.dataset.selectedPersonKey = target.personKey || "";
+  map.dataset.selectedTableId = resolvedTarget.tableId;
+  map.dataset.selectedChairId = resolvedTarget.chairId;
+  map.querySelectorAll(".seat-plan-chair").forEach((seat) => {
+    const selected = seat.dataset.seatTableId === resolvedTarget.tableId && seat.dataset.seatChairId === resolvedTarget.chairId;
+    seat.classList.toggle("is-selected", selected);
+  });
+  return true;
 }
 
 function fitInvitationSeatingPlan(reset = true) {
@@ -1640,6 +1834,7 @@ function revealInvitation() {
   const siteContent = document.getElementById("siteContent");
   if (siteContent) siteContent.inert = false;
   if (elements.skipOpeningButton) elements.skipOpeningButton.hidden = true;
+  if (isLaylaInvitation()) setupLaylaDetailsBackdrop();
   elements.musicToggle.hidden = false;
   elements.stickyActions.hidden = false;
   setupRevealObserver();
@@ -1774,6 +1969,36 @@ function normalizeAdditionalGuests(value) {
 
 function clamp(value, min, max) {
   return Math.min(Math.max(Number(value) || 0, min), max);
+}
+
+function setupLaylaDetailsBackdrop() {
+  const firstDetailsSection = document.getElementById("countdownSection");
+  if (!firstDetailsSection) return;
+  const revealBackdrop = () => document.body.classList.add("layla-details-visible");
+  if ("IntersectionObserver" in window) {
+    const observer = new IntersectionObserver(([entry]) => {
+      if (!entry.isIntersecting) return;
+      revealBackdrop();
+      observer.disconnect();
+    }, { threshold: 0 });
+    observer.observe(firstDetailsSection);
+    const detailsRect = firstDetailsSection.getBoundingClientRect();
+    if (detailsRect.top < window.innerHeight && detailsRect.bottom > 0) {
+      revealBackdrop();
+      observer.disconnect();
+    }
+    return;
+  }
+  const update = () => {
+    const rect = firstDetailsSection.getBoundingClientRect();
+    if (rect.top >= window.innerHeight || rect.bottom <= 0) return;
+    revealBackdrop();
+    window.removeEventListener("scroll", update);
+    window.removeEventListener("resize", update);
+  };
+  window.addEventListener("scroll", update, { passive: true });
+  window.addEventListener("resize", update);
+  update();
 }
 
 function setupRevealObserver() {

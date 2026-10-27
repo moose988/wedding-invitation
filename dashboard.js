@@ -26,7 +26,7 @@ import {
 import * as accountApi from "./firebase-config.js";
 import { isPlatformAdmin } from "./account-access.js";
 import { persistCanonicalSeatDiff as persistCanonicalSeatDiffWithApi } from "./seating-transactions.js";
-import { createDashboardPersistence } from "./dashboard-persistence.js?v=20261018-guest-invitation-regressions-2";
+import { createDashboardPersistence } from "./dashboard-persistence.js?v=20261028-invitation-sync-retry-1";
 import { commitGuestEdit, guestFormPatch, saveFailureMessage } from "./guest-edit.js?v=20261018-guest-invitation-regressions-2";
 import { projectionEqual } from "./event-publishing.js?v=20261018-guest-invitation-regressions-2";
 import { mountCustomerAccess } from "./customer-access-ui.js";
@@ -2315,6 +2315,11 @@ function getDashboardPersistence() {
   });
   persistenceRecord = { uid, weddingId, generation, service };
   return service;
+}
+function getPendingPublicationError(persistence = getDashboardPersistence()) {
+  return persistence.publicationError || (persistence.pendingCount
+    ? Object.assign(new Error("Invitation updates are still pending."), { code: "unavailable" })
+    : null);
 }
 function runTransaction(...args) { return getDashboardPersistence().runTransaction(...args); }
 function writeBatch(...args) { return getDashboardPersistence().writeBatch(...args); }
@@ -5011,9 +5016,9 @@ async function manageGuestInvitationLink(guestId, action) {
   }
 }
 
-async function copyPreparedInvitationLink(url, successMessage = "Invitation link copied.") {
+async function copyPreparedInvitationLink(url, successMessage = "Invitation link copied.", notify = true) {
   if (await copyText(url)) {
-    showToast(successMessage, "success");
+    if (notify) showToast(successMessage, "success");
     return true;
   }
   const dialog = document.createElement("dialog");
@@ -5035,8 +5040,20 @@ async function copyPreparedInvitationLink(url, successMessage = "Invitation link
   dialog.showModal();
   input.focus();
   input.select();
-  showToast("The invitation link is saved. Select and copy the link.", "info");
+  if (notify) showToast("The invitation link is saved. Select and copy the link.", "info");
   return false;
+}
+
+async function copyGuestInvitation(guestId) {
+  showInvitationFlowStatus("Checking saved details and preparing invitation link…", "info");
+  try {
+    const token = await ensureGuestInvitationToken(guestId);
+    const copied = await copyPreparedInvitationLink(buildInviteLink(token, guestId), "Invitation link copied and ready to open.", false);
+    showInvitationFlowStatus(copied ? "Invitation link copied and ready to open." : "Invitation link is ready in the copy dialog.", "success");
+  } catch (error) {
+    console.error("Invitation could not be synchronized", error?.code || "unavailable");
+    showInvitationFlowStatus("Invitation updates could not be confirmed. Retry to sync and copy the link.", "error", () => copyGuestInvitation(guestId));
+  }
 }
 
 async function ensureGuestInvitationToken(guestId) {
@@ -5052,8 +5069,17 @@ async function ensureGuestInvitationToken(guestId) {
   if (state.mode !== "live" || !can("canEditGuests") || !state.services?.db || !state.currentUser?.uid) {
     throw new Error("Invitation unavailable.");
   }
-  const cachedToken = state.invitationTokenCache.get(guestId);
-  if (isValidInvitationToken(cachedToken)) return cachedToken;
+  const cachedToken = state.invitationTokenCache.get(guestId) || guest.guestToken;
+  if (isValidInvitationToken(cachedToken)) {
+    // A cached stable token is not proof that the latest canonical guest data
+    // reached its public invitation. Drain the exact queued publication first;
+    // that publisher preserves the existing public event/layout projection.
+    const persistence = getDashboardPersistence();
+    await persistence.flush();
+    const publicationError = getPendingPublicationError(persistence);
+    if (publicationError) throw publicationError;
+    return cachedToken;
+  }
   return updateInvitationToken(guestId, "ensure");
 }
 
@@ -5068,6 +5094,18 @@ function getInvitationTokenService() {
   return state.invitationTokenService;
 }
 
+async function retryTransientInvitationOperation(operation) {
+  const transient = new Set(["aborted", "deadline-exceeded", "network-request-failed", "resource-exhausted", "unavailable"]);
+  for (let attempt = 0; ; attempt += 1) {
+    try { return await operation(); }
+    catch (error) {
+      const code = String(error?.code || "").replace(/^firestore\//, "");
+      if (!transient.has(code) || attempt >= 3) throw error;
+      await new Promise((resolve) => window.setTimeout(resolve, Math.min(250 * (2 ** attempt), 2000)));
+    }
+  }
+}
+
 async function updateInvitationToken(guestId, action, requestId = "") {
   const guest = state.guests.find((item) => item.id === guestId);
   if (!guest || state.mode !== "live" || !can("canEditGuests") || !state.services?.db || !state.currentUser?.uid) {
@@ -5077,12 +5115,13 @@ async function updateInvitationToken(guestId, action, requestId = "") {
   const weddingId = state.weddingId;
   const generation = state.listenerGeneration;
   await getDashboardPersistence().prepareScene();
-  if (getDashboardPersistence().publicationError) throw getDashboardPersistence().publicationError;
+  const publicationError = getPendingPublicationError();
+  if (publicationError) throw publicationError;
   const scope = { uid, weddingId, guestId, tables: state.tables, wedding: state.wedding, customer: state.permissions?.role === "customer" };
   const service = getInvitationTokenService();
-  const token = action === "revoke" ? await service.revoke(scope)
-    : action === "regenerate" ? await service.regenerate(scope, requestId)
-      : await service.ensure(scope);
+  const token = await retryTransientInvitationOperation(() => action === "revoke" ? service.revoke(scope)
+    : action === "regenerate" ? service.regenerate(scope, requestId)
+      : service.ensure(scope));
   // Do not attach a late result to a different event or account after a
   // navigation/session change while the callable was in flight.
   if (uid !== state.currentUser?.uid || weddingId !== state.weddingId || generation !== state.listenerGeneration ||
@@ -5435,13 +5474,7 @@ async function handleAction(action, dataset, event = null) {
         (item) => item.id === dataset.id || item.id === dataset.guestId,
       );
       if (guest) {
-        try {
-          showToast("Preparing a secure invitation link…", "info");
-          const token = await ensureGuestInvitationToken(guest.id);
-          await copyPreparedInvitationLink(buildInviteLink(token, guest.id), "Invitation link copied and ready to open.");
-        } catch {
-          showToast("We could not prepare this invitation. Please try again.", "error");
-        }
+        await copyGuestInvitation(guest.id);
       }
       return;
     }
@@ -6372,7 +6405,7 @@ async function saveGuest(event) {
 
   state.guestSavePending = true;
   const saveFeedback = document.getElementById("guestSaveFeedback");
-  if (saveFeedback) saveFeedback.textContent = "Saving guest…";
+  if (saveFeedback) saveFeedback.textContent = "Saving guest and syncing invitation…";
   const submitButton = elements.guestForm.querySelector('[type="submit"]');
   if (submitButton) submitButton.disabled = true;
   try {
@@ -6389,12 +6422,13 @@ async function saveGuest(event) {
     }
     state.dirtyGuestForm = false;
     elements.guestModal.close();
-    const publishingError = getDashboardPersistence().publicationError;
-    showToast(publishingError ? saveFailureMessage(publishingError, { committed: true }) + " Use Refresh to retry publishing once." : "Guest saved successfully.", publishingError ? "error" : "success");
+    const publishingError = getPendingPublicationError();
+    if (publishingError) showGuestSyncFailure(guestId, publishingError);
+    else showInvitationFlowStatus("Guest saved.", "success");
   } catch (error) {
     console.error("Guest canonical save failed", error.code || "unknown");
     if (saveFeedback) saveFeedback.textContent = saveFailureMessage(error);
-    showToast(saveFailureMessage(error), "error");
+    showInvitationFlowStatus(saveFailureMessage(error), "error");
   } finally {
     state.guestSavePending = false;
     if (submitButton) submitButton.disabled = false;
@@ -6587,13 +6621,15 @@ async function updateGuest(guestId, payload) {
     return;
   }
 
+  showInvitationFlowStatus(can("canEditGuests") ? "Saving guest and syncing invitation…" : "Saving guest…", "info");
   try {
     await persistGuestAndInvitation(guestId, payload);
-    const publishingError = getDashboardPersistence().publicationError;
-    showToast(publishingError ? saveFailureMessage(publishingError, { committed: true }) + " Use Refresh to retry publishing once." : "Guest updated.", publishingError ? "error" : "success");
+    const publishingError = can("canEditGuests") ? getPendingPublicationError() : null;
+    if (publishingError) showGuestSyncFailure(guestId, publishingError);
+    else showInvitationFlowStatus("Guest updated.", "success");
   } catch (error) {
     console.error("Guest update failed", error.code || "unknown");
-    showToast(saveFailureMessage(error), "error");
+    showInvitationFlowStatus(saveFailureMessage(error), "error");
   }
 }
 
@@ -9681,11 +9717,55 @@ function demoNow() {
   return new Date().toLocaleString();
 }
 
-function showToast(message, tone = "info") {
-  if (tone === "success" && persistenceRecord?.service?.publicationError && persistenceRecord.service.isCurrent()) {
-    message += " Saved changes are confirmed; invitation updates are pending. Use Refresh to retry once.";
-    tone = "error";
+let invitationFlowToastTimer = 0;
+function showInvitationFlowStatus(message, tone = "info", retry = null) {
+  window.clearTimeout(invitationFlowToastTimer);
+  elements.toastRail.querySelector(".toast--invitation-flow")?.remove();
+  const toast = document.createElement("div");
+  toast.className = `toast toast--${tone} toast--invitation-flow`;
+  const text = document.createElement("span");
+  text.textContent = message;
+  toast.append(text);
+  if (retry) {
+    const button = document.createElement("button");
+    button.className = "toast__retry";
+    button.type = "button";
+    button.textContent = "Retry";
+    button.addEventListener("click", async () => {
+      button.disabled = true;
+      try { await retry(); }
+      finally { button.disabled = false; }
+    });
+    toast.append(button);
   }
+  elements.toastRail.append(toast);
+  if (tone === "success") {
+    invitationFlowToastTimer = window.setTimeout(() => {
+      toast.classList.add("is-leaving");
+      window.setTimeout(() => toast.remove(), 260);
+    }, 2600);
+  }
+}
+
+function showGuestSyncFailure(guestId, error) {
+  const reason = saveFailureMessage(error, { committed: true }).replace(/^Guest saved\. Invitation refresh is pending\. /, "");
+  showInvitationFlowStatus(`Guest saved. Invitation sync failed: ${reason}`, "error", async () => {
+    showInvitationFlowStatus("Retrying invitation sync…", "info");
+    try {
+      const persistence = getDashboardPersistence();
+      await persistence.flush();
+      const error = getPendingPublicationError(persistence);
+      if (error) throw error;
+      showInvitationFlowStatus("Guest saved and invitation updates are synced.", "success");
+    } catch (retryError) {
+      console.error("Invitation sync retry failed", retryError?.code || "unavailable");
+      showGuestSyncFailure(guestId, retryError);
+    }
+  });
+}
+
+function showToast(message, tone = "info") {
+  elements.toastRail.querySelector(".toast--invitation-flow")?.remove();
   const toast = document.createElement("div");
   toast.className = `toast toast--${tone}`;
   toast.textContent = message;

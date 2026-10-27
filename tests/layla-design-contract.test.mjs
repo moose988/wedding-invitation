@@ -15,7 +15,7 @@ test("Layla landing uses the envelope cover and restored envelope opening video"
   assert.match(html, /poster="\.\/invitations\/wedding-designs\/layla-zaid\/assets\/Ivory Wedding Envelope with LZ Seal\.png"/);
   assert.match(html, /data-layla-text="introCaption">Your invitation awaits/);
   assert.match(html, /data-layla-text="introCaption"/);
-  assert.match(html, /playsinline webkit-playsinline muted preload="none"/);
+  assert.match(html, /playsinline webkit-playsinline muted preload="auto"/);
   assert.match(html, /id="skipOpening"/);
   assert.doesNotMatch(html, /envelope-layer--seal|envelope-layer--card|heroBackdrop/);
   assert.match(css, /url\("\.\/assets\/Sculpted Ivory Paper Wedding Invitation\.png"\)/);

@@ -7,9 +7,11 @@ import {
   onSnapshot,
   serverTimestamp,
   writeBatch,
-} from "../../firebase-config.js";
+} from "../../firebase-public.js";
 import { isValidInvitationToken } from "./invitation-token.js?v=20261018-guest-invitation-regressions-2";
 import { composeInvitation, createInvitationSubscription, invitationReadError } from "./invitation-live.js?v=20261018-guest-invitation-regressions-2";
+
+export { isFirebaseConfigured };
 
 const INVITATION_TOKEN_PATTERN = /^[A-Za-z0-9_-]{43}$/;
 
@@ -37,14 +39,16 @@ export async function loadInvitationContext({ weddingId, guestToken, guestId = "
   if (!isFirebaseConfigured()) throw new Error("Invitation service is unavailable.");
   const { db } = initPublicFirebase();
   try {
-    const snapshot = await getDoc(doc(db, "weddings", weddingId, "publicGuests", guestToken));
+    const [snapshot, shared] = await Promise.all([
+      getDoc(doc(db, "weddings", weddingId, "publicGuests", guestToken)),
+      getDoc(doc(db, "weddings", weddingId, "publicEvent", "details")),
+    ]);
     if (!snapshot.exists()) throw new Error("This invitation is unavailable.");
     const invitation = snapshot.data();
     if (invitation.eventId !== weddingId || !invitation.wedding || !invitation.guest ||
         !["pending", "confirmed", "declined"].includes(invitation.rsvpStatus)) {
       throw new Error("This invitation is unavailable.");
     }
-    const shared = await getDoc(doc(db, "weddings", weddingId, "publicEvent", "details"));
     return composeInvitation({ weddingId, guestToken, guestId }, invitation, shared.exists() ? shared.data() : null, null, null, null);
   } catch (error) {
     throw invitationReadError(error);

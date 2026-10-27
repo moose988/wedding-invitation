@@ -1,5 +1,3 @@
-import { isFirebaseConfigured } from "./firebase-config.js";
-import { getInvitationParams, loadInvitationContext, saveInvitationRsvp, subscribeToInvitation } from "./invitations/shared/invitation-data.js?v=20261018-guest-invitation-regressions-2";
 import { invitationRefreshIsCurrent, invitationRsvpStorageKey, invitationRsvpView } from "./invitations/shared/rsvp-state.js";
 import { buildSatelliteMapEmbedUrl } from "./invitations/shared/map-embed.js";
 import { buildInvitationCalendar } from "./invitations/shared/calendar.js";
@@ -16,7 +14,6 @@ import {
   normalizeTableShape,
   resolveTableName,
 } from "./seating-utils.js?v=20261018-invitation-seat-map";
-import { invitationSeatingEnabled } from "./invitations/shared/invitation-data.js?v=20261018-guest-invitation-regressions-2";
 import { getEventDisplayTitle, isCelebrationEvent } from "./event-utils.js";
 import { getPartySeatSelection, resolvePartySeatTarget, retainPartySeatSelection } from "./invitations/wedding-designs/layla-zaid/party-seat-selector.js?v=20261026-party-chair-1";
 import { renderLaylaScheduleIcon, resolveLaylaScheduleIcon } from "./invitations/wedding-designs/layla-zaid/schedule-icons.js?v=20261027-timeline-icons-2";
@@ -95,9 +92,11 @@ const demoTables = [
 ];
 
 const invitationParams = new URLSearchParams(window.location.search);
+const initialInvitationCredential = new URLSearchParams(String(window.location.hash || "").replace(/^#/, ""));
 const explicitDemoMode = invitationParams.get("demo") === "1";
 const explicitSampleMode = invitationParams.get("sample") === "1" && invitationParams.get("wedding") === "luxury-wedding-demo";
-const rsvpStorageKey = explicitSampleMode ? "" : invitationRsvpStorageKey(invitationParams.get("wedding"), invitationParams.get("guest"));
+const rsvpStorageKey = explicitSampleMode ? "" : invitationRsvpStorageKey(invitationParams.get("wedding"), initialInvitationCredential.get("guest"));
+let invitationDataApiPromise = null;
 const laylaLanguageStorageKey = "layla-zaid-invitation-language";
 const laylaCopy = {
   heroKicker: { en: "Our Wedding Day", ar: "يوم زفافنا" },
@@ -105,6 +104,7 @@ const laylaCopy = {
   stopMusic: { en: "Pause event music", ar: "إيقاف موسيقى الحفل" },
   musicUnavailable: { en: "Event music unavailable", ar: "موسيقى الحفل غير متاحة" },
   introCaption: { en: "Your invitation awaits — tap to open", ar: "دعوتكم بانتظاركم — اضغطوا لفتحها" },
+  invitationPreparing: { en: "Preparing your invitation…", ar: "جارٍ تجهيز دعوتكم…" },
   openInvitation: { en: "Open your wedding invitation", ar: "افتحوا دعوة زفافكم" },
   retryOpening: { en: "Tap to retry opening", ar: "اضغطوا لإعادة محاولة الفتح" },
   introLoading: { en: "Opening your invitation…", ar: "جارٍ فتح دعوتكم…" },
@@ -125,6 +125,11 @@ const laylaCopy = {
   hall: { en: "Hall", ar: "الصالة" },
   detailsLabel: { en: "Details", ar: "التفاصيل" },
   detailsHeading: { en: "A place to gather", ar: "مكان يجمعنا" },
+  detailOptions: { en: "Event details", ar: "تفاصيل المناسبة" },
+  loadMapPreview: { en: "Load map preview", ar: "تحميل معاينة الخريطة" },
+  mapPreviewLoading: { en: "Loading the map preview…", ar: "جارٍ تحميل معاينة الخريطة…" },
+  mapPreviewError: { en: "Map preview could not load. Use the directions link instead.", ar: "تعذر تحميل معاينة الخريطة. استخدموا رابط الاتجاهات." },
+  retryConnection: { en: "Retry connection", ar: "إعادة المحاولة" },
   scheduleLabel: { en: "The Wedding Evening", ar: "أمسية الزفاف" },
   scheduleHeading: { en: "A celebration of love", ar: "احتفال بالحب" },
   seatingHeading: { en: "A place reserved for you", ar: "مقاعدنا بانتظاركم" },
@@ -198,11 +203,16 @@ const state = {
   seatPlanFocusedAssignments: [],
   seatPlanSelectedTarget: null,
   seatingSelectedPersonKey: "",
+  activeDetailTab: "date",
+  detailItems: [],
   firebaseReady: false,
   laylaLanguage: document.body?.classList.contains("layla-zaid-invitation") && localStorage.getItem(laylaLanguageStorageKey) === "ar" ? "ar" : "en",
   invitationOpening: false,
   introCompletion: null,
   introSequence: null,
+  introFinished: false,
+  invitationReady: false,
+  invitationLoadRetryable: false,
   introPageHideHandler: null,
   rsvpMessage: "",
   revealObserver: null,
@@ -222,6 +232,8 @@ const state = {
   unsubGuest: null,
   unsubTables: null,
 };
+
+let laylaMapPreviewObserver = null;
 
 const icons = {
   date: '<svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3.5" y="5.5" width="17" height="15" rx="2.5"></rect><path d="M7 3.5v4M17 3.5v4M3.5 9.5h17"></path></svg>',
@@ -258,20 +270,73 @@ function setupIntroSequence() {
   if (!elements.introScreen || state.introSequence) return;
   state.introSequence = createIntroSequence({
     video: elements.openingVideo,
+    startupTimeout: isLaylaInvitation() ? 10000 : undefined,
+    bufferTimeout: isLaylaInvitation() ? 10000 : undefined,
     onState: updateIntroPresentation,
     onFrame: () => {
       elements.introScreen?.classList.add("is-playing");
     },
-    onComplete: () => revealInvitation(),
+    onComplete: () => completeIntroSequence(),
   });
   state.introCompletion = () => state.introSequence?.skip();
   state.introPageHideHandler = () => disposeIntroSequence();
   window.addEventListener("pagehide", state.introPageHideHandler, { once: true });
 }
 
+function completeIntroSequence() {
+  state.introFinished = true;
+  if (state.invitationReady) {
+    revealInvitation();
+    return;
+  }
+  state.invitationOpening = true;
+  if (elements.introStatus) {
+    elements.introStatus.hidden = false;
+    elements.introStatus.textContent = laylaText("invitationPreparing");
+  }
+  if (elements.skipOpeningButton) elements.skipOpeningButton.hidden = true;
+}
+
+function markInvitationReady() {
+  state.invitationReady = true;
+  if (state.introFinished) revealInvitation();
+}
+
+function getInvitationDataApi() {
+  if (!invitationDataApiPromise) {
+    invitationDataApiPromise = import("./invitations/shared/invitation-data.js?v=20261027-layla-lazy-public-firebase");
+  }
+  return invitationDataApiPromise;
+}
+
+function withTimeout(promise, milliseconds, message) {
+  let timeoutId;
+  return Promise.race([
+    promise,
+    new Promise((_, reject) => {
+      timeoutId = window.setTimeout(() => reject(Object.assign(new Error(message), { transient: true, code: "deadline-exceeded" })), milliseconds);
+    }),
+  ]).finally(() => window.clearTimeout(timeoutId));
+}
+
+function getInvitationParams(location = window.location) {
+  const params = new URLSearchParams(location.search);
+  const credential = new URLSearchParams(String(location.hash || "").replace(/^#/, ""));
+  const guestId = credential.get("recipient")?.trim() || "";
+  return {
+    weddingId: params.get("wedding")?.trim() || "",
+    guestToken: credential.get("guest")?.trim() || "",
+    guestId: /^[A-Za-z0-9_-]{1,128}$/.test(guestId) ? guestId : "",
+  };
+}
+
+function invitationSeatingEnabled(wedding) {
+  return wedding?.seatingEnabled !== false;
+}
+
 function updateIntroPresentation(phase) {
   const retryable = ["retry", "blocked", "error"].includes(phase);
-  const opening = ["loading", "buffering", "retry", "playing"].includes(phase);
+  const opening = ["loading", "buffering", "retry", "playing", "fallback"].includes(phase);
   elements.introScreen?.classList.toggle("is-opening", opening);
   elements.introScreen?.classList.toggle("is-retryable", retryable);
   if (["blocked", "error"].includes(phase)) {
@@ -339,6 +404,7 @@ async function boot() {
     state.hallObjects = hydrateHallObjects(state.wedding.hallObjects);
     populateInvitation();
     setupCountdown();
+    markInvitationReady();
     return;
   }
 
@@ -347,24 +413,32 @@ async function boot() {
     return;
   }
 
-  if (weddingId && guestToken && isFirebaseConfigured()) {
+  if (weddingId && guestToken) {
     try {
-      state.mode = "firebase";
-      await loadFirebaseInvitation(weddingId, guestToken);
-      state.unsubGuest = subscribeToInvitation(
-        { weddingId, guestToken, guestId },
-        (context) => applyInvitationContext(context),
-        (error) => {
-          console.error("Invitation refresh failed.", error);
-          if (error.transient) { showInvitationConnectionError(error.message); return; }
-          renderInvitationAccessError("This invitation is no longer available. Please ask the couple for a new link.");
-        },
-        { schedule: Boolean(document.getElementById("scheduleMount")) },
-      );
-      window.addEventListener("pagehide", () => state.unsubGuest?.(), { once: true });
+      const invitationApi = await withTimeout(getInvitationDataApi(), 12000, "The invitation service is taking longer than expected. Please try again.");
+      if (invitationApi.isFirebaseConfigured()) {
+        state.mode = "firebase";
+        await loadFirebaseInvitation(weddingId, guestToken, invitationApi);
+        state.unsubGuest = invitationApi.subscribeToInvitation(
+          { weddingId, guestToken, guestId },
+          (context) => applyInvitationContext(context),
+          (error) => {
+            console.error("Invitation refresh failed.", error);
+            if (error.transient) { showInvitationConnectionError(error.message); return; }
+            renderInvitationAccessError("This invitation is no longer available. Please ask the couple for a new link.");
+          },
+          { schedule: Boolean(document.getElementById("scheduleMount")) },
+        );
+        window.addEventListener("pagehide", () => state.unsubGuest?.(), { once: true });
+        markInvitationReady();
+      } else if (!explicitDemoMode) {
+        renderInvitationAccessError("This invitation service is not configured. Please ask the couple for a new link.");
+        return;
+      }
     } catch (error) {
       console.error(error);
       state.mode = "unavailable";
+      state.invitationLoadRetryable = Boolean(error.transient || error.name === "TypeError");
       renderInvitationAccessError(error.transient ? error.message : "We could not open this invitation. Please check the link and try again.");
       return;
     }
@@ -375,6 +449,7 @@ async function boot() {
 
   populateInvitation();
   setupCountdown();
+  markInvitationReady();
 }
 
 function renderInvitationAccessError(message) {
@@ -386,7 +461,8 @@ function renderInvitationAccessError(message) {
   const localizedMessage = isArabic
     ? (/incomplete/i.test(message) ? "رابط الدعوة غير مكتمل. يرجى استخدام الرابط الشخصي الذي شاركه العروسان." : /configured/i.test(message) ? "خدمة الدعوة غير مهيأة. يرجى التواصل مع العروسين." : "هذه الدعوة غير متاحة. يرجى طلب رابط جديد من العروسين.")
     : message;
-  document.body.innerHTML = `<main class="invitation-error"><section class="invitation-error__card"><p class="section-kicker">${privateInvite}</p><h1>${unavailable}</h1><p>${escapeHtml(localizedMessage)}</p></section></main>`;
+  document.body.innerHTML = `<main class="invitation-error"><section class="invitation-error__card"><p class="section-kicker">${privateInvite}</p><h1>${unavailable}</h1><p>${escapeHtml(localizedMessage)}</p>${state.invitationLoadRetryable ? `<button class="luxury-button luxury-button--secondary" type="button" data-retry-invitation>${escapeHtml(laylaText("retryConnection"))}</button>` : ""}</section></main>`;
+  document.querySelector("[data-retry-invitation]")?.addEventListener("click", () => location.reload());
 }
 
 function showInvitationConnectionError(message) {
@@ -409,8 +485,12 @@ function getUrlParams() {
   return { ...params, guestToken: explicitSampleMode ? "" : params.guestToken };
 }
 
-async function loadFirebaseInvitation(weddingId, guestToken, requestVersion = ++state.invitationRefreshVersion) {
-  const context = await loadInvitationContext({ weddingId, guestToken, guestId: state.guestId });
+async function loadFirebaseInvitation(weddingId, guestToken, invitationApi, requestVersion = ++state.invitationRefreshVersion) {
+  const context = await withTimeout(
+    invitationApi.loadInvitationContext({ weddingId, guestToken, guestId: state.guestId }),
+    12000,
+    "Guest details are taking longer than expected. Please try again.",
+  );
   if (!invitationRefreshIsCurrent(requestVersion, state.invitationRefreshVersion)) return;
   applyInvitationContext(context);
 }
@@ -731,20 +811,68 @@ function renderDetails() {
     },
   ];
   const hall = laylaValue(wedding.hallEn || wedding.hall || wedding.hallName, wedding.hallAr || wedding.hall);
-  if (hall) detailCards.push({ icon: icons.venue, title: isLaylaInvitation() ? laylaText("hall") : "Hall", en: hall });
+  if (hall && isLaylaInvitation()) {
+    const venueDetail = detailCards.find((detail) => detail.title === laylaText("venue"));
+    if (venueDetail) venueDetail.en = [venueDetail.en, `${laylaText("hall")}: ${hall}`].filter(Boolean).join(" · ");
+  } else if (hall) {
+    detailCards.push({ icon: icons.venue, title: "Hall", en: hall });
+  }
 
-  document.getElementById("detailsGrid").innerHTML = detailCards
-    .map(
-      (detail) => `
-        <article class="detail-card">
-          <div class="detail-card__icon">${detail.icon}</div>
-          <h3 class="detail-card__title">${escapeHtml(detail.title)}</h3>
-          <p class="detail-card__english ${state.laylaLanguage === "ar" && isLaylaInvitation() ? "rtl-copy" : ""}" ${state.laylaLanguage === "ar" && isLaylaInvitation() ? 'lang="ar" dir="rtl"' : ""}>${escapeHtml(detail.en)}</p>
-        </article>
-      `
-    )
-    .join("");
+  const mount = document.getElementById("detailsGrid");
+  if (isLaylaInvitation()) {
+    state.detailItems = detailCards.slice(0, 3).map((detail, index) => ({ ...detail, key: ["date", "venue", "location"][index] }));
+    if (!state.detailItems.some((detail) => detail.key === state.activeDetailTab)) state.activeDetailTab = "date";
+    mount.innerHTML = `
+      <div class="detail-tabs" role="tablist" aria-label="${escapeAttribute(laylaText("detailOptions"))}" ${state.laylaLanguage === "ar" ? 'dir="rtl"' : 'dir="ltr"'}>
+        ${state.detailItems.map((detail) => `<button class="detail-tab" id="detailTab-${detail.key}" type="button" role="tab" data-detail-tab="${detail.key}" aria-controls="detailCardPanel" aria-selected="false" tabindex="-1">${escapeHtml(detail.title)}</button>`).join("")}
+      </div>
+      <article class="detail-card" id="detailCardPanel" role="tabpanel" tabindex="0" aria-labelledby="detailTab-date">
+        <div class="detail-card__icon" aria-hidden="true"></div>
+        <h3 class="detail-card__title"></h3>
+        <p class="detail-card__english"></p>
+      </article>
+    `;
+    renderActiveLaylaDetail();
+  } else {
+    mount.innerHTML = detailCards.map((detail) => `
+      <article class="detail-card">
+        <div class="detail-card__icon">${detail.icon}</div>
+        <h3 class="detail-card__title">${escapeHtml(detail.title)}</h3>
+        <p class="detail-card__english">${escapeHtml(detail.en)}</p>
+      </article>
+    `).join("");
+  }
   renderLocationMap();
+}
+
+function renderActiveLaylaDetail() {
+  const detail = state.detailItems.find((item) => item.key === state.activeDetailTab) || state.detailItems[0];
+  const panel = document.getElementById("detailCardPanel");
+  if (!detail || !panel) return;
+  state.activeDetailTab = detail.key;
+  panel.setAttribute("aria-labelledby", `detailTab-${detail.key}`);
+  panel.querySelector(".detail-card__icon").innerHTML = detail.icon;
+  panel.querySelector(".detail-card__title").textContent = detail.title;
+  const value = panel.querySelector(".detail-card__english");
+  value.textContent = detail.en;
+  value.classList.toggle("rtl-copy", state.laylaLanguage === "ar");
+  value.lang = state.laylaLanguage;
+  value.dir = state.laylaLanguage === "ar" ? "rtl" : "ltr";
+  document.querySelectorAll("[data-detail-tab]").forEach((button) => {
+    const selected = button.dataset.detailTab === detail.key;
+    button.setAttribute("aria-selected", String(selected));
+    button.tabIndex = selected ? 0 : -1;
+  });
+  if (!window.matchMedia("(prefers-reduced-motion: reduce)").matches && typeof panel.animate === "function") {
+    panel.animate([{ opacity: 0.72, transform: "translateY(4px)" }, { opacity: 1, transform: "translateY(0)" }], { duration: 180, easing: "ease-out" });
+  }
+}
+
+function selectLaylaDetailTab(key, focus = false) {
+  if (!state.detailItems.some((item) => item.key === key)) return;
+  state.activeDetailTab = key;
+  renderActiveLaylaDetail();
+  if (focus) document.getElementById(`detailTab-${key}`)?.focus();
 }
 
 function renderSchedule() {
@@ -823,6 +951,8 @@ function formatArabicScheduleTime(value) {
 function renderLocationMap() {
   const mount = document.getElementById("venueMapPreviewMount");
   if (!mount) return;
+  laylaMapPreviewObserver?.disconnect();
+  laylaMapPreviewObserver = null;
   const wedding = state.wedding || {};
   const venue = String(laylaValue(wedding.venueEn || wedding.venueName, wedding.venueAr || wedding.venueNameAr) || "").trim();
   const address = String(laylaValue(wedding.locationEn, wedding.locationAr) || "").trim();
@@ -836,9 +966,11 @@ function renderLocationMap() {
   const mapActionMarkup = mapsLink
     ? (directions ? "" : `<p class="venue-map-card__fallback">${escapeHtml(unavailable)}</p>`)
     : (directions ? `<a class="detail-card__action" href="${escapeAttribute(directions)}" target="_blank" rel="noopener noreferrer">${icons.location}<span>${label}</span></a>` : `<p class="venue-map-card__fallback">${escapeHtml(unavailable)}</p>`);
-  const mapPreviewMarkup = iframeUrl
-    ? `<div class="venue-map-preview"><iframe src="${escapeAttribute(iframeUrl)}" title="${escapeAttribute(mapTitle)}" loading="lazy" referrerpolicy="strict-origin-when-cross-origin" tabindex="-1" aria-hidden="true"></iframe></div>`
-    : `<div class="venue-map-preview venue-map-preview--fallback" role="img" aria-label="${escapeAttribute(unavailable)}"><span aria-hidden="true">⌖</span><p>${escapeHtml(unavailable)}</p></div>`;
+  const mapPreviewMarkup = iframeUrl && isLaylaInvitation()
+    ? `<div class="venue-map-preview venue-map-preview--pending" data-map-preview data-map-url="${escapeAttribute(iframeUrl)}" aria-busy="true"><p role="status">${escapeHtml(laylaText("mapPreviewLoading"))}</p><button class="map-preview-button" type="button" data-load-map-preview hidden>${escapeHtml(laylaText("loadMapPreview"))}</button></div>`
+    : iframeUrl
+      ? `<div class="venue-map-preview"><iframe src="${escapeAttribute(iframeUrl)}" title="${escapeAttribute(mapTitle)}" loading="lazy" referrerpolicy="strict-origin-when-cross-origin" tabindex="-1" aria-hidden="true"></iframe></div>`
+    : `<div class="venue-map-preview venue-map-preview--fallback" role="img" aria-label="${escapeAttribute(unavailable)}"><p>${escapeHtml(unavailable)}</p></div>`;
   const mapFrameMarkup = isLaylaInvitation()
     ? `<div class="venue-map-frame"><span class="venue-map-corner venue-map-corner--top-left" aria-hidden="true"></span><span class="venue-map-corner venue-map-corner--bottom-right" aria-hidden="true"></span>${mapPreviewMarkup}</div>`
     : mapPreviewMarkup;
@@ -849,15 +981,73 @@ function renderLocationMap() {
       ${mapActionMarkup}
     </div>
   `;
-  mount.querySelector("iframe")?.addEventListener("error", () => {
-    const preview = mount.querySelector(".venue-map-preview");
-    if (!preview) return;
-    preview.className = "venue-map-preview venue-map-preview--fallback";
-    preview.replaceChildren();
-    const note = document.createElement("p");
-    note.textContent = unavailable;
-    preview.append(note);
+
+  const preview = mount.querySelector("[data-map-preview]");
+  const retryButton = preview?.querySelector("[data-load-map-preview]");
+  if (preview && retryButton) {
+    const startPreview = () => {
+      if (preview.isConnected) loadLaylaMapPreview(retryButton);
+    };
+    if ("IntersectionObserver" in window) {
+      laylaMapPreviewObserver = new IntersectionObserver((entries, observer) => {
+        if (!entries.some((entry) => entry.isIntersecting)) return;
+        observer.disconnect();
+        laylaMapPreviewObserver = null;
+        startPreview();
+      }, { rootMargin: "240px 0px" });
+      laylaMapPreviewObserver.observe(preview);
+    } else {
+      startPreview();
+    }
+  }
+}
+
+function loadLaylaMapPreview(button) {
+  const preview = button?.closest("[data-map-preview]");
+  const iframeUrl = preview?.dataset.mapUrl;
+  if (!preview || !iframeUrl || preview.querySelector("iframe")) return;
+  const iframe = document.createElement("iframe");
+  iframe.title = `${laylaText("mapTitle")} ${laylaValue(state.wedding?.venueEn, state.wedding?.venueAr)}`;
+  iframe.loading = "lazy";
+  iframe.referrerPolicy = "strict-origin-when-cross-origin";
+  iframe.tabIndex = -1;
+  iframe.setAttribute("aria-hidden", "true");
+  let settled = false;
+  const status = preview.querySelector("p");
+  const timeout = window.setTimeout(() => {
+    if (settled) return;
+    settled = true;
+    iframe.remove();
+    preview.classList.add("venue-map-preview--fallback");
+    preview.setAttribute("aria-busy", "false");
+    if (status) status.textContent = laylaText("mapPreviewError");
+    button.hidden = false;
+  }, 10000);
+  iframe.addEventListener("load", () => {
+    settled = true;
+    window.clearTimeout(timeout);
+    preview.classList.remove("venue-map-preview--pending");
+    preview.setAttribute("aria-busy", "false");
+    button.hidden = true;
+    if (status) status.textContent = "";
   }, { once: true });
+  iframe.addEventListener("error", () => {
+    if (settled) return;
+    settled = true;
+    window.clearTimeout(timeout);
+    iframe.remove();
+    preview.classList.add("venue-map-preview--fallback");
+    preview.setAttribute("aria-busy", "false");
+    if (status) status.textContent = laylaText("mapPreviewError");
+    button.hidden = false;
+  }, { once: true });
+  button.hidden = true;
+  preview.classList.remove("venue-map-preview--fallback");
+  preview.classList.add("venue-map-preview--pending");
+  preview.setAttribute("aria-busy", "true");
+  if (status) status.textContent = laylaText("mapPreviewLoading");
+  preview.append(iframe);
+  iframe.src = iframeUrl;
 }
 
 function safeMapsLink(value) {
@@ -1482,33 +1672,28 @@ function focusInvitationChair(target) {
   const map = document.getElementById("seatingMap");
   if (!resolvedTarget || !viewport || !canvas || !map || !viewport.clientWidth || !viewport.clientHeight) return false;
 
-  const table = state.tables.find((item) => String(item.id) === resolvedTarget.tableId);
-  const chair = table?.chairs?.find((item) => String(item.id) === resolvedTarget.chairId);
-  if (!table || !chair) return false;
-  const width = Number(table.width || defaultTableWidth(table.shape));
-  const height = Number(table.height || defaultTableHeight(table.shape));
-  const positions = buildChairPositions(table.shape, table.chairs?.length || table.seatCount || table.capacity || 0, width, height);
-  const hasSavedPosition = chair.x !== undefined && chair.x !== null && chair.y !== undefined && chair.y !== null && Number.isFinite(Number(chair.x)) && Number.isFinite(Number(chair.y));
-  const chairIndex = table.chairs.findIndex((item) => String(item.id) === resolvedTarget.chairId);
-  const position = hasSavedPosition ? chair : (positions[chairIndex] || positions.find((item, index) => String(index + 1) === resolvedTarget.seatNumber));
-  if (!position || !Number.isFinite(Number(position.x)) || !Number.isFinite(Number(position.y))) return false;
-
-  const tableCenterX = (Number(table.x ?? 50) / 100) * 1100;
-  const tableCenterY = (Number(table.y ?? 50) / 100) * 900;
-  const localX = (Number(position.x) / 100) * width - width / 2;
-  const localY = (Number(position.y) / 100) * height - height / 2;
-  const radians = (Number(table.rotation || 0) * Math.PI) / 180;
-  const chairX = tableCenterX + localX * Math.cos(radians) - localY * Math.sin(radians);
-  const chairY = tableCenterY + localX * Math.sin(radians) + localY * Math.cos(radians);
-  const scale = clamp(Math.min((viewport.clientWidth - 56) / 260, (viewport.clientHeight - 72) / 300), 0.42, 1.1);
+  const bounds = getSeatPlanFocusBounds(
+    state.tables,
+    [{ tableId: resolvedTarget.tableId, seatNumber: resolvedTarget.seatNumber }],
+    1100,
+    900,
+    38,
+    24,
+  );
+  if (!bounds) return false;
+  const boundsWidth = Math.max(1, bounds.maxX - bounds.minX);
+  const boundsHeight = Math.max(1, bounds.maxY - bounds.minY);
+  const scale = clamp(Math.min((viewport.clientWidth - 48) / boundsWidth, (viewport.clientHeight - 48) / boundsHeight), 0.05, 1.1);
+  const centerX = (bounds.minX + bounds.maxX) / 2;
+  const centerY = (bounds.minY + bounds.maxY) / 2;
 
   state.seatPlanViewMode = "person";
   state.seatPlanSelectedTarget = { ...resolvedTarget, personKey: target.personKey || "" };
   state.seatPlanFocusedAssignments = [{ ...resolvedTarget }];
   state.seatPlanTransform = {
     scale,
-    x: Math.round(viewport.clientWidth / 2 - chairX * scale),
-    y: Math.round(viewport.clientHeight / 2 - chairY * scale),
+    x: Math.round(viewport.clientWidth / 2 - centerX * scale),
+    y: Math.round(viewport.clientHeight / 2 - centerY * scale),
   };
   state.seatPlanHasFitted = true;
   canvas.style.transform = `translate3d(${state.seatPlanTransform.x}px, ${state.seatPlanTransform.y}px, 0) scale(${scale})`;
@@ -1698,7 +1883,8 @@ async function updateRsvp(status, additionalGuests) {
   try {
     const message = state.rsvpMessage.trim();
     if (message.length > 1000) throw new Error("Message must be 1000 characters or fewer.");
-    await saveInvitationRsvp({
+    const invitationApi = await getInvitationDataApi();
+    await invitationApi.saveInvitationRsvp({
       weddingId: state.weddingId,
       guestToken: state.guestToken,
       guestId: state.guestId,
@@ -1724,6 +1910,11 @@ async function updateRsvp(status, additionalGuests) {
 
 function bindBaseEvents() {
   elements.openInvitationButton?.addEventListener("click", handleOpenInvitation);
+  elements.introScreen?.addEventListener("click", (event) => {
+    if (!isLaylaInvitation()) return;
+    if (event.target.closest("#openInvitation, #skipOpening")) return;
+    handleOpenInvitation();
+  });
   elements.skipOpeningButton?.addEventListener("click", () => revealInvitation());
   elements.musicToggle?.addEventListener("click", handleMusicToggle);
 
@@ -1731,6 +1922,16 @@ function bindBaseEvents() {
     if (event.target.closest("#laylaLanguageToggle")) {
       const language = event.target.closest("[data-language]")?.dataset.language;
       if (language === "en" || language === "ar") setLaylaLanguage(language);
+      return;
+    }
+    const detailTab = event.target.closest("[data-detail-tab]");
+    if (detailTab) {
+      selectLaylaDetailTab(detailTab.dataset.detailTab);
+      return;
+    }
+    const mapPreviewButton = event.target.closest("[data-load-map-preview]");
+    if (mapPreviewButton) {
+      loadLaylaMapPreview(mapPreviewButton);
       return;
     }
     const calendarButton = event.target.closest("[data-calendar-download]");
@@ -1761,6 +1962,25 @@ function bindBaseEvents() {
     if (rsvpButton) {
       await updateRsvp(rsvpButton.dataset.rsvpStatus);
     }
+  });
+
+  document.addEventListener("keydown", (event) => {
+    const current = event.target.closest("[data-detail-tab]");
+    if (!current) return;
+    const tabs = [...document.querySelectorAll("[data-detail-tab]")];
+    if (!tabs.length) return;
+    const index = tabs.indexOf(current);
+    const rtl = state.laylaLanguage === "ar";
+    const forward = rtl ? "ArrowLeft" : "ArrowRight";
+    const backward = rtl ? "ArrowRight" : "ArrowLeft";
+    let nextIndex = index;
+    if (event.key === forward) nextIndex = (index + 1) % tabs.length;
+    else if (event.key === backward) nextIndex = (index - 1 + tabs.length) % tabs.length;
+    else if (event.key === "Home") nextIndex = 0;
+    else if (event.key === "End") nextIndex = tabs.length - 1;
+    else return;
+    event.preventDefault();
+    selectLaylaDetailTab(tabs[nextIndex].dataset.detailTab, true);
   });
 }
 
@@ -1972,33 +2192,7 @@ function clamp(value, min, max) {
 }
 
 function setupLaylaDetailsBackdrop() {
-  const firstDetailsSection = document.getElementById("countdownSection");
-  if (!firstDetailsSection) return;
-  const revealBackdrop = () => document.body.classList.add("layla-details-visible");
-  if ("IntersectionObserver" in window) {
-    const observer = new IntersectionObserver(([entry]) => {
-      if (!entry.isIntersecting) return;
-      revealBackdrop();
-      observer.disconnect();
-    }, { threshold: 0 });
-    observer.observe(firstDetailsSection);
-    const detailsRect = firstDetailsSection.getBoundingClientRect();
-    if (detailsRect.top < window.innerHeight && detailsRect.bottom > 0) {
-      revealBackdrop();
-      observer.disconnect();
-    }
-    return;
-  }
-  const update = () => {
-    const rect = firstDetailsSection.getBoundingClientRect();
-    if (rect.top >= window.innerHeight || rect.bottom <= 0) return;
-    revealBackdrop();
-    window.removeEventListener("scroll", update);
-    window.removeEventListener("resize", update);
-  };
-  window.addEventListener("scroll", update, { passive: true });
-  window.addEventListener("resize", update);
-  update();
+  document.body.classList.add("layla-details-visible");
 }
 
 function setupRevealObserver() {

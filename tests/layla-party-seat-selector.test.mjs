@@ -65,6 +65,13 @@ test("Layla selector uses HTML-numbered transparent chair art and focuses exact 
 
   assert.match(script, /layla-party-chair__number[^>]*>\$\{member\.index \+ 1\}/);
   assert.match(script, /focusInvitationChair\(target\)/);
+  const focusFunction = script.match(/function focusInvitationChair\(target\)\s*\{([\s\S]*?)\n\}/)?.[1] || "";
+  assert.match(focusFunction, /getSeatPlanFocusBounds\(\s*state\.tables,\s*\[\{\s*tableId: resolvedTarget\.tableId, seatNumber: resolvedTarget\.seatNumber\s*\}\]/);
+  assert.match(focusFunction, /\(viewport\.clientWidth - 48\) \/ boundsWidth/);
+  assert.match(focusFunction, /\(viewport\.clientHeight - 48\) \/ boundsHeight/);
+  assert.match(focusFunction, /bounds\.minX \+ bounds\.maxX/);
+  assert.match(focusFunction, /bounds\.minY \+ bounds\.maxY/);
+  assert.doesNotMatch(focusFunction, /chairX|chairY|260\)|300\)/);
   assert.match(script, /if \(state\.seatPlanViewMode === "person"\)[\s\S]*?focusInvitationChair/);
   assert.match(script, /state\.seatPlanSelectedTarget/);
   assert.match(script, /\.seat-plan-chair\.is-selected/);

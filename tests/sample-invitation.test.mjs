@@ -84,8 +84,10 @@ test("sample RSVP uses fictional in-memory state and never writes to Firebase or
   assert.match(script, /if \(state\.sampleMode\) return;\s*const form = event\.currentTarget;/);
   assert.match(script, /function handleDemoRsvpSubmit\(event\) \{\s*event\.preventDefault\(\);\s*if \(state\.sampleMode\) return;/);
   assert.match(script, /state\.sampleMode \|\| state\.mode !== "firebase" \|\| state\.isRsvpSaving/);
-  assert.match(script, /await saveInvitationRsvp\(/);
+  assert.match(script, /await invitationApi\.saveInvitationRsvp\(/);
   assert.match(script, /const checkinUrl = buildAbsoluteUrl\(`checkin\.html\?wedding=.*#guest=\$\{encodeURIComponent\(state\.guestToken\)\}`\)/);
   assert.match(script, /guestToken: explicitSampleMode \? "" : params\.guestToken/);
-  assert.match(script, /if \(weddingId && guestToken && isFirebaseConfigured\(\)\)/);
+  assert.match(script, /if \(weddingId && guestToken\) \{/);
+  assert.match(script, /getInvitationDataApi\(\)/);
+  assert.match(script, /if \(state\.sampleMode\) \{[\s\S]*?markInvitationReady\(\);\s*return;/);
 });

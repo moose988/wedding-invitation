@@ -10,8 +10,11 @@
     <link rel="icon" type="image/svg+xml" href="./invitations/wedding-designs/layla-zaid/assets/layla-zaid-favicon.svg" />
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-    <link href="https://fonts.googleapis.com/css2?family=Amiri:wght@400;700&family=Aref+Ruqaa:wght@400;700&family=Cormorant+Garamond:ital,wght@0,400;0,500;0,600;1,500&family=Great+Vibes&family=Lora:wght@400;500;600&display=swap" rel="stylesheet" />
-    <link rel="stylesheet" href="./invitations/wedding-designs/layla-zaid/styles.css?v=20261027-venue-map-frame-1" />
+    <link rel="preload" as="style" href="https://fonts.googleapis.com/css2?family=Amiri:wght@400;700&family=Aref+Ruqaa:wght@400;700&family=Cormorant+Garamond:ital,wght@0,400;0,500;0,600;1,500&family=Great+Vibes&family=Lora:wght@400;500;600&display=swap" onload="this.onload=null;this.rel='stylesheet'" />
+    <noscript><link href="https://fonts.googleapis.com/css2?family=Amiri:wght@400;700&family=Aref+Ruqaa:wght@400;700&family=Cormorant+Garamond:ital,wght@0,400;0,500;0,600;1,500&family=Great+Vibes&family=Lora:wght@400;500;600&display=swap" rel="stylesheet" /></noscript>
+    <link rel="preload" as="image" href="./invitations/wedding-designs/layla-zaid/assets/layla-zaid-sculpted-floral-cover.webp?v=20261026-cover-2" fetchpriority="low" />
+    <link rel="preload" as="image" href="./invitations/wedding-designs/layla-zaid/assets/layla-zaid-bridal-ribbon-rings-background.webp" fetchpriority="low" />
+    <link rel="stylesheet" href="./invitations/wedding-designs/layla-zaid/styles.css?v=20261027-layla-prompt-contrast-1" />
   </head>
   <body class="layla-zaid-invitation">
     <div class="layla-details-backdrop" aria-hidden="true"><img src="./invitations/wedding-designs/layla-zaid/assets/layla-zaid-bridal-ribbon-rings-background.webp" alt="" /></div>
@@ -28,14 +31,14 @@
 
     <section class="envelope-intro" id="introScreen" aria-label="Wedding invitation envelope">
       <div class="envelope-intro__stage" id="envelopeStage">
-        <img class="envelope-intro__poster" src="./invitations/wedding-designs/layla-zaid/assets/Ivory Wedding Envelope with LZ Seal.png" alt="Ivory envelope sealed with the Layla and Zaid monogram" />
+        <img class="envelope-intro__poster" src="./invitations/wedding-designs/layla-zaid/assets/Ivory Wedding Envelope with LZ Seal.png" alt="Ivory wedding envelope sealed with the Layla and Zaid monogram" fetchpriority="high" decoding="async" />
         <button class="envelope-intro__open" id="openInvitation" type="button" aria-label="Open your wedding invitation">
           <span class="visually-hidden" id="openInvitationLabelPrimary" data-layla-text="openInvitation">Open invitation</span>
           <span class="envelope-intro__retry-label" id="introRetryLabel" aria-hidden="true"></span>
         </button>
         <p class="envelope-intro__caption" data-layla-text="introCaption">Your invitation awaits — tap to open</p>
-        <video class="envelope-intro__video" id="openingVideo" playsinline webkit-playsinline muted preload="metadata" poster="./invitations/wedding-designs/layla-zaid/assets/Ivory Wedding Envelope with LZ Seal.png" aria-label="The wedding invitation envelope opening">
-          <source src="./invitations/wedding-designs/layla-zaid/assets/opening-envelope.mp4" type="video/mp4" />
+        <video class="envelope-intro__video" id="openingVideo" playsinline webkit-playsinline muted preload="none" poster="./invitations/wedding-designs/layla-zaid/assets/Ivory Wedding Envelope with LZ Seal.png" aria-label="The wedding invitation envelope opening">
+          <source src="./invitations/wedding-designs/layla-zaid/assets/enevlope%20opening.mp4?v=restored-20261027" type="video/mp4" />
         </video>
       </div>
       <p class="envelope-intro__status" id="introStatus" role="status" aria-live="polite" hidden></p>
@@ -82,7 +85,7 @@
         <div class="section-frame venue-section">
           <div class="section-heading section-heading--center"><p class="section-kicker" data-layla-text="detailsLabel">When & where</p><h2 data-layla-text="detailsHeading">A place to gather</h2></div>
           <div class="venue-illustration-wrap" aria-hidden="true"><img class="venue-illustration" src="./invitations/wedding-designs/layla-zaid/assets/Watercolor Ivory Courtyard Wedding Venue.png" alt="" loading="lazy" /></div>
-          <div class="details-grid" id="detailsGrid"></div>
+          <div class="detail-switcher" id="detailsGrid"></div>
           <div class="venue-actions" id="venueActions">
             <a class="luxury-button luxury-button--primary" id="openMapsLink" target="_blank" rel="noopener noreferrer" hidden><span data-layla-text="openInMaps">Open in Maps</span></a>
             <button class="luxury-button luxury-button--secondary" type="button" data-calendar-download><span data-layla-text="calendar">Add to Calendar</span></button>
@@ -126,6 +129,6 @@
     </main>
     <nav class="sticky-actions" id="stickyActions" aria-label="Quick event actions" hidden></nav>
     <div class="toast-rail" id="toastRail" aria-live="polite" aria-atomic="true"></div>
-        <script type="module" src="./script.js?v=20261027-venue-map-frame-1"></script>
+        <script type="module" src="./script.js?v=20261027-layla-door-opening-3"></script>
   </body>
 </html>

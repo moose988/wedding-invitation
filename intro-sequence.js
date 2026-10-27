@@ -1,5 +1,5 @@
-const INTRO_STARTUP_TIMEOUT = 12000;
-const INTRO_BUFFER_TIMEOUT = 18000;
+const INTRO_STARTUP_TIMEOUT = 8000;
+const INTRO_BUFFER_TIMEOUT = 8000;
 
 /**
  * Coordinates the envelope video's first visible frame, playback recovery, and
@@ -85,13 +85,14 @@ export function createIntroSequence({
     return true;
   }
 
-  function fail(reason) {
+  function finishWithFallback(reason) {
     if (completed || !active) return false;
+    completed = true;
     active = false;
     video?.pause?.();
-    framePresented = false;
     cleanup();
-    publish(reason);
+    publish("fallback");
+    onComplete(reason);
     return true;
   }
 
@@ -100,7 +101,7 @@ export function createIntroSequence({
     if (framePresented) return;
     startupTimer = setTimer(() => {
       startupTimer = null;
-      if (active && !framePresented) publish("retry");
+      if (active && !framePresented) finishWithFallback("startup-timeout");
     }, startupTimeout);
   }
 
@@ -139,7 +140,7 @@ export function createIntroSequence({
     clearBufferTimer();
     bufferTimer = setTimer(() => {
       bufferTimer = null;
-      if (active) publish("retry");
+      if (active) finishWithFallback("buffer-timeout");
     }, bufferTimeout);
   }
 
@@ -157,7 +158,7 @@ export function createIntroSequence({
       waiting: markBuffering,
       stalled: markBuffering,
       ended: () => finish("ended"),
-      error: () => fail("error"),
+      error: () => finishWithFallback("media-error"),
     };
     for (const [type, listener] of Object.entries(handlers)) {
       video.addEventListener(type, listener);
@@ -187,8 +188,8 @@ export function createIntroSequence({
   return {
     start,
     retry,
-    playbackRejected: () => fail("blocked"),
-    unavailable: () => publish("error"),
+    playbackRejected: () => finishWithFallback("playback-blocked"),
+    unavailable: () => finishWithFallback("unavailable"),
     skip: () => finish("skip"),
     dispose: () => {
       if (!completed) {

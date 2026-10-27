@@ -2,18 +2,39 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 
-test("Layla details artwork begins as soon as the first post-cover section enters view", async () => {
-  const [script, styles] = await Promise.all([
+test("Layla details artwork is ready on open and stays stable across mobile viewport changes", async () => {
+  const [script, styles, sharedStyles] = await Promise.all([
     readFile(new URL("../script.js", import.meta.url), "utf8"),
     readFile(new URL("../invitations/wedding-designs/layla-zaid/styles.css", import.meta.url), "utf8"),
+    readFile(new URL("../styles.css", import.meta.url), "utf8"),
   ]);
   const setup = script.match(/function setupLaylaDetailsBackdrop\(\) \{[\s\S]*?\n\}/)?.[0] || "";
 
-  assert.match(setup, /getElementById\("countdownSection"\)/);
-  assert.doesNotMatch(setup, /getElementById\("heroSection"\)/);
-  assert.match(setup, /if \(!entry\.isIntersecting\) return;[\s\S]*?revealBackdrop\(\);[\s\S]*?observer\.disconnect\(\)/);
-  assert.match(styles, /\.layla-details-backdrop\s*\{[\s\S]*?position:\s*fixed[\s\S]*?inset:\s*0/);
-  assert.match(styles, /\.invitation-open\.layla-details-visible \.layla-details-backdrop\s*\{\s*opacity:\s*1/);
+  assert.match(setup, /document\.body\.classList\.add\("layla-details-visible"\)/);
+  assert.doesNotMatch(setup, /IntersectionObserver|countdownSection/);
+  assert.match(styles + sharedStyles, /body\.layla-zaid-invitation \.layla-details-backdrop\s*\{[^}]*position:\s*fixed[^}]*inset:\s*0/);
+  assert.match(styles, /body\.layla-zaid-invitation \.layla-details-backdrop\s*\{[^}]*height:\s*100lvh[^}]*transition:\s*none/);
+  assert.match(styles, /body\.layla-zaid-invitation #heroSection \.hero-paper\s*\{[^}]*height:\s*100lvh[^}]*background-size:\s*cover/);
+  assert.match(styles, /body\.layla-zaid-invitation \.envelope-intro\s*\{[^}]*height:\s*100lvh/);
+  assert.match(styles, /body\.layla-zaid-invitation:has\(> aside\[role="status"\]\) \.layla-language-toggle \{ top: max\(52px/);
+  assert.match(styles, /body\.layla-zaid-invitation \.closing-section:has\(\.closing-card__arabic:empty\):has\(\.closing-card__english:empty\) \{ display: none; \}/);
+});
+
+test("Layla details use labeled accessible tabs and the seating viewport is shorter without geometry scaling", async () => {
+  const [script, html, styles, sharedStyles] = await Promise.all([
+    readFile(new URL("../script.js", import.meta.url), "utf8"),
+    readFile(new URL("../invitations/wedding-designs/layla-zaid/index.html", import.meta.url), "utf8"),
+    readFile(new URL("../invitations/wedding-designs/layla-zaid/styles.css", import.meta.url), "utf8"),
+    readFile(new URL("../styles.css", import.meta.url), "utf8"),
+  ]);
+  assert.match(script, /role="tablist"/);
+  assert.match(script, /role="tab"/);
+  assert.match(script, /role="tabpanel"/);
+  assert.match(script, /ArrowRight|ArrowLeft/);
+  assert.match(script, /Home|End/);
+  assert.match(html, /detail-switcher/);
+  assert.match(styles, /body\.layla-zaid-invitation \.seat-plan-viewport\s*\{\s*height:\s*360px;\s*min-height:\s*360px/);
+  assert.doesNotMatch(styles + sharedStyles, /seat-plan-viewport[^{]*\{[^}]*transform:\s*scale\(/s);
 });
 
 test("Layla date, venue, and location cards use the same fine outline without a stray side divider", async () => {

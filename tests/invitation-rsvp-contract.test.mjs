@@ -16,7 +16,11 @@ test("invitation capabilities are accepted only from URL fragments and exact tok
   assert.match(shared, /getDoc\(doc\(db, "weddings", weddingId, "publicGuests", guestToken\)\)/);
   assert.doesNotMatch(shared, /httpsCallable|collection\(db, "weddings", weddingId, "(?:guests|publicGuests|dashboardUsers)"/);
   assert.doesNotMatch(runtime, /clearInvitationCredentialFromUrl|history\.replaceState\(null, "", url\.toString\(\)\)/);
-  assert.match(runtime, /await loadFirebaseInvitation\(weddingId, guestToken\);\s*state\.unsubGuest = subscribeToInvitation/);
+  assert.match(runtime, /const invitationApi = await withTimeout\(getInvitationDataApi\(\), 12000/);
+  assert.match(runtime, /await loadFirebaseInvitation\(weddingId, guestToken, invitationApi\);\s*state\.unsubGuest = invitationApi\.subscribeToInvitation/);
+  assert.match(shared, /Promise\.all\(\[[\s\S]*?getDoc\(doc\(db, "weddings", weddingId, "publicGuests", guestToken\)\)[\s\S]*?getDoc\(doc\(db, "weddings", weddingId, "publicEvent", "details"\)\)/);
+  assert.match(runtime, /import\("\.\/invitations\/shared\/invitation-data\.js\?/);
+  assert.doesNotMatch(runtime.slice(0, runtime.indexOf("async function boot")), /from ["']\.\/firebase-config\.js/);
   assert.match(shared, /createInvitationSubscription/);
   assert.match(shared, /window\.addEventListener\("pagehide", dispose/);
   assert.doesNotMatch(`${dashboard}\n${runtime}`, /getGuestInvitationTokens|manageGuestInvitationAccess|getGuestInvitation|submitGuestInvitationRsvp/);

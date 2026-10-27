@@ -121,20 +121,35 @@ test("poster stays until the first presented frame; ended completes and cleans u
   assert.equal(clock.jobs.size, 0);
 });
 
-test("slow startup and recoverable stalls expose retry without skipping playback", () => {
-  const { clock, video, sequence } = createHarness();
+test("slow startup and stalls gracefully finish the opening when video cannot proceed", () => {
+  const { clock, video, sequence, events } = createHarness();
   sequence.start();
   clock.advance(11999);
   assert.equal(sequence.phase, "loading");
   clock.advance(1);
-  assert.equal(sequence.phase, "retry");
-  assert.equal(sequence.active, true);
+  assert.equal(sequence.phase, "fallback");
+  assert.equal(sequence.active, false);
+  assert.equal(sequence.completed, true);
+  assert.deepEqual(events.at(-1), ["complete", "startup-timeout"]);
 
-  assert.equal(sequence.retry(), true);
+  const stalled = createHarness();
+  stalled.sequence.start();
+  stalled.video.paused = false;
+  stalled.video.readyState = 2;
+  stalled.video.emit("playing");
+  stalled.video.presentFrame();
+  stalled.video.emit("stalled");
+  assert.equal(stalled.sequence.phase, "buffering");
+  stalled.clock.advance(18000);
+  assert.equal(stalled.sequence.phase, "fallback");
+  assert.deepEqual(stalled.events.at(-1), ["complete", "buffer-timeout"]);
+});
+
+test("normal playback preserves the envelope sequence after a recoverable stall", () => {
+  const { clock, video, sequence } = createHarness();
+  sequence.start();
   video.emit("stalled");
   assert.equal(sequence.phase, "buffering");
-  clock.advance(10000);
-  assert.equal(sequence.completed, false);
   video.paused = false;
   video.readyState = 2;
   video.emit("playing");
@@ -148,33 +163,32 @@ test("slow startup and recoverable stalls expose retry without skipping playback
   assert.equal(clock.jobs.size, 0);
 });
 
-test("rejected playback can be retried; repeated starts and completion stay idempotent", () => {
+test("rejected playback gracefully completes; repeated starts and completion stay idempotent", () => {
   const { clock, video, sequence, events } = createHarness();
   sequence.start();
   assert.equal(sequence.playbackRejected(), true);
-  assert.equal(sequence.phase, "blocked");
+  assert.equal(sequence.phase, "fallback");
   assert.equal(video.pauseCalls, 1);
   assert.equal(video.listenerCount(), 0);
 
-  assert.equal(sequence.start(), true);
   assert.equal(sequence.start(), false);
-  assert.equal(sequence.skip(), true);
+  assert.equal(sequence.skip(), false);
   assert.equal(sequence.skip(), false);
   assert.equal(events.filter(([type]) => type === "complete").length, 1);
   assert.equal(video.listenerCount(), 0);
   assert.equal(clock.jobs.size, 0);
 });
 
-test("permanent media errors stop callbacks and leave skip available", () => {
+test("permanent media errors gracefully finish and clean up", () => {
   const { clock, video, sequence } = createHarness();
   sequence.start();
   video.emit("error");
-  assert.equal(sequence.phase, "error");
+  assert.equal(sequence.phase, "fallback");
   assert.equal(sequence.active, false);
   assert.equal(video.pauseCalls, 1);
   assert.equal(video.listenerCount(), 0);
   assert.equal(clock.jobs.size, 0);
-  assert.equal(sequence.skip(), true);
+  assert.equal(sequence.skip(), false);
 });
 
 test("browsers without video-frame callbacks use a paint-frame fallback", () => {
@@ -209,7 +223,16 @@ test("opening tap starts inline muted video before the independent music request
   assert.doesNotMatch(tapHandler, /currentTime\s*=|\.load\(/);
   assert.match(script, /video\.defaultMuted\s*=\s*true[\s\S]*?video\.muted\s*=\s*true[\s\S]*?video\.playsInline\s*=\s*true/);
   assert.match(html, /playsinline webkit-playsinline muted/);
-  assert.match(html, /assets\/opening-envelope\.mp4/);
+  assert.match(html, /assets\/enevlope%20opening\.mp4/);
+});
+
+test("Layla opening accepts clicks across the cover and hides its prompt on the first video frame", async () => {
+  const [script, styles] = await Promise.all([
+    readFile(new URL("../script.js", import.meta.url), "utf8"),
+    readFile(new URL("../invitations/wedding-designs/layla-zaid/styles.css", import.meta.url), "utf8"),
+  ]);
+  assert.match(script, /introScreen\?\.addEventListener\("click", \(event\) => \{[\s\S]*?if \(!isLaylaInvitation\(\)\) return;[\s\S]*?event\.target\.closest\("#openInvitation, #skipOpening"\)[\s\S]*?handleOpenInvitation\(\)/);
+  assert.match(styles, /envelope-intro\.is-playing \.envelope-intro__caption \{ opacity: 0; \}/);
 });
 
 test("opening tap reveals templates that do not provide an envelope video", async () => {

@@ -40,6 +40,7 @@ const event = {
   venueEn: "Synthetic Garden Hall",
   locationEn: "Synthetic City",
   mapsUrl: "",
+  venueMapEmbedUrl: "https://www.google.com/maps/embed?pb=!1m0",
   status: "active",
   seatingEnabled: true,
   showInvitationQr: false,
@@ -83,6 +84,26 @@ try {
       };
       const token = generateInvitationToken();
       const projection = buildInvitationProjection(eventId, event, guest, tables);
+      await api.setDoc(ref("guests", guestId), guest);
+      await api.setDoc(ref("invitationSecrets", guestId), { token, status: "active", purpose: "guest-invitation", version: 1, expiresAt: null });
+      await api.setDoc(ref("seatingGuests", guestId), {
+        fullName: guest.fullName,
+        side: guest.side,
+        additionalGuests: guest.additionalGuests,
+        rsvpStatus: guest.rsvpStatus,
+      });
+      await api.setDoc(ref("checkinGuests", guestId), {
+        guestId,
+        fullName: guest.fullName,
+        phone: guest.phone,
+        side: guest.side,
+        rsvpStatus: guest.rsvpStatus,
+        tableId: "",
+        tableName: "",
+        seatNumber: "",
+        checkedIn: false,
+        checkedInAt: null,
+      });
       await api.setDoc(ref("invitationTokens", token), {
         guestId,
         status: "active",

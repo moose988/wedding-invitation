@@ -43,15 +43,7 @@ import {
   DEFAULT_FIREBASE_APP_NAME,
   resolveFirebaseApp,
 } from "./firebase-service-scopes.js";
-
-const defaultConfig = {
-  apiKey: "",
-  authDomain: "",
-  projectId: "",
-  storageBucket: "",
-  messagingSenderId: "",
-  appId: "",
-};
+import { getFirebaseConfig, isFirebaseConfigAvailable } from "./firebase-settings.js";
 
 import { createLocalFirestoreDiagnostics } from "./local-firestore-diagnostics.js";
 const serviceCache = createScopedServiceCache();
@@ -78,14 +70,13 @@ function getConfiguredApp(name = DEFAULT_FIREBASE_APP_NAME) {
     throw new Error("Firebase config is missing. Add window.FIREBASE_CONFIG in firebase-config.js.");
   }
 
-  const config = { ...defaultConfig, ...(window.FIREBASE_CONFIG || {}), ...(localEmulators ? { projectId: "demo-wedding-security", apiKey: "demo-key" } : {}) };
+  const config = getFirebaseConfig(localEmulators ? { projectId: "demo-wedding-security", apiKey: "demo-key" } : {});
   const app = resolveFirebaseApp({ getApps, initializeApp }, config, name);
   return { app, config };
 }
 
 export function isFirebaseConfigured() {
-  const config = { ...defaultConfig, ...(window.FIREBASE_CONFIG || {}) };
-  return ["apiKey", "authDomain", "projectId", "appId"].every((key) => Boolean(config[key]));
+  return isFirebaseConfigAvailable();
 }
 
 export function initFirebase() {
@@ -180,16 +171,6 @@ export {
   writeBatch,
   sendEmailVerification,
   reload,
-};
-
-window.FIREBASE_CONFIG = window.FIREBASE_CONFIG || {
-  apiKey: "AIzaSyAHxFrozdw0Pi8fItdrim18uqtqN4EO-7I",
-  authDomain: "weddinginvitaion-b4f36.firebaseapp.com",
-  projectId: "weddinginvitaion-b4f36",
-  storageBucket: "weddinginvitaion-b4f36.firebasestorage.app",
-  messagingSenderId: "868779408613",
-  appId: "1:868779408613:web:96b330cb386ec2fcefa80c",
-  measurementId: "G-GD5D6WJRB0",
 };
 
 // Optional browser-restricted Google Maps Embed API key. Keep empty until a

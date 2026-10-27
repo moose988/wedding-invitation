@@ -1,8 +1,114 @@
 {
   "redirects": [
-    { "source": "/photo-bucket-manage.html", "destination": "/photo-bucket-manage", "permanent": false }
+    {
+      "source": "/all-events.html",
+      "destination": "/all-events",
+      "permanent": false
+    },
+    {
+      "source": "/checkin.html",
+      "destination": "/checkin",
+      "permanent": false
+    },
+    {
+      "source": "/customer-events.html",
+      "destination": "/customer-events",
+      "permanent": false
+    },
+    {
+      "source": "/customer-login.html",
+      "destination": "/customer-login",
+      "permanent": false
+    },
+    {
+      "source": "/dashboard.html",
+      "destination": "/dashboard",
+      "permanent": false
+    },
+    {
+      "source": "/dashboard-login.html",
+      "destination": "/dashboard-login",
+      "permanent": false
+    },
+    {
+      "source": "/gender-reveal.html",
+      "destination": "/gender-reveal",
+      "permanent": false
+    },
+    {
+      "source": "/photo-bucket.html",
+      "destination": "/photo-bucket",
+      "permanent": false
+    },
+    {
+      "source": "/photo-bucket-manage.html",
+      "destination": "/photo-bucket-manage",
+      "permanent": false
+    },
+    {
+      "source": "/photo-bucket-poster.html",
+      "destination": "/photo-bucket-poster",
+      "permanent": false
+    },
+    {
+      "source": "/send.html",
+      "destination": "/send",
+      "permanent": false
+    },
+    {
+      "source": "/side.html",
+      "destination": "/side",
+      "permanent": false
+    }
   ],
   "rewrites": [
-    { "source": "/photo-bucket-manage", "destination": "/photo-bucket-manage.html" }
+    {
+      "source": "/all-events",
+      "destination": "/all-events.html"
+    },
+    {
+      "source": "/checkin",
+      "destination": "/checkin.html"
+    },
+    {
+      "source": "/customer-events",
+      "destination": "/customer-events.html"
+    },
+    {
+      "source": "/customer-login",
+      "destination": "/customer-login.html"
+    },
+    {
+      "source": "/dashboard",
+      "destination": "/dashboard.html"
+    },
+    {
+      "source": "/dashboard-login",
+      "destination": "/dashboard-login.html"
+    },
+    {
+      "source": "/gender-reveal",
+      "destination": "/gender-reveal.html"
+    },
+    {
+      "source": "/photo-bucket",
+      "destination": "/photo-bucket.html"
+    },
+    {
+      "source": "/photo-bucket-manage",
+      "destination": "/photo-bucket-manage.html"
+    },
+    {
+      "source": "/photo-bucket-poster",
+      "destination": "/photo-bucket-poster.html"
+    },
+    {
+      "source": "/send",
+      "destination": "/send.html"
+    },
+    {
+      "source": "/side",
+      "destination": "/side.html"
+    }
   ]
 }

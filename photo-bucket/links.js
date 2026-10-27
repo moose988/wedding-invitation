@@ -12,11 +12,11 @@ export function validId(id) {
   return id;
 }
 export function guestUrl(bucket, base = globalThis.location.href, configured = globalThis.PHOTO_BUCKET_PUBLIC_ORIGIN) {
-  let url = createShareUrl('photo-bucket.html', base);
+  let url = createShareUrl('photo-bucket', base);
   if (configured) {
     const origin = new URL(configured);
     if (origin.protocol !== 'https:' || origin.username || origin.password) throw new Error('The public origin must be an HTTPS URL.');
-    url = new URL('/photo-bucket.html', origin.origin);
+    url = new URL('/photo-bucket', origin.origin);
   }
   url.searchParams.set('bucket', validId(bucket.id));
   // Public display information only. No owner ID, token, guest identity or photo data.

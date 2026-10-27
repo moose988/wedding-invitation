@@ -13,9 +13,9 @@
   // Only public entry points may route to a design. Login/sign-out context
   // never becomes an invitation credential, even if an event ID is retained.
   const publicEntry = pathname === "/" || pathname === "/index.html";
-  const legacyTokenEntry = pathname.endsWith("/dashboard-login.html") && Boolean(fragment.get("guest")) && !params.has("message");
+  const legacyTokenEntry = /\/dashboard-login(\.html)?$/.test(pathname) && Boolean(fragment.get("guest")) && !params.has("message");
   if (!publicEntry && !legacyTokenEntry) return;
-  const isPlannerLogin = pathname.endsWith("/dashboard-login.html");
+  const isPlannerLogin = /\/dashboard-login(\.html)?$/.test(pathname);
   // The login page also receives legacy session-required URLs containing an
   // event ID. Only treat it as an invitation entry when its bearer fragment
   // is present; preserve organizer sign-in flows otherwise.

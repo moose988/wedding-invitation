@@ -17,9 +17,9 @@ The supplied attachment contains the written brief. The six referenced screensho
 - Fixed duplicate table prefixes in a display formatter; stored assignment names are unchanged. Retained seat targets, coordinates, fit bounds, geometry and controls. Initial fitting waits for fonts. The existing Layla design has no My seats button; other themes retain theirs.
 - Reduced the seating viewport to 340px and removed unnecessary empty-state height.
 - Kept full-width RSVP actions, flexible radio choices, a 112px textarea, visible focus/error/loading/disabled/confirmation states and the optional note. Suppressed duplicate RSVP overlay toasts for this design because the form/summary already communicates the result.
-- Kept the audio control fixed at the bottom left and the language control fixed at the upper right. The local live-data link now clears the session's saved emulator flag so a previous emulator login cannot silently route a later local link to demo data. Kept developer warnings visible.
+- Kept the language control fixed at the upper right and the record player at the bottom right. The mobile envelope stage follows the dynamic viewport; its full poster and opening video use contain sizing so their top and bottom are not cropped. The local live-data link clears the session's saved emulator flag so a previous emulator login cannot silently route a later local link to demo data. Kept developer warnings visible.
 
-Background image URLs, positioning, sizes, repeats, attachment, backdrop object-fit/position, decorative assets, media, opening video and duration were not changed. RSVP persistence, authorization, schema, rules, map destinations and calendar generation were not changed.
+Details background URLs, positioning, sizes, repeats, attachment, backdrop object-fit/position, decorative assets, video source and duration were not changed. The opening poster/video display sizing is now contain-fit on mobile, with the same cover artwork behind it to fill any screen-ratio gaps. RSVP persistence, authorization, schema, rules, map destinations and calendar generation were not changed.
 
 ## Verified in Chrome through Playwright
 
@@ -38,6 +38,7 @@ Background image URLs, positioning, sizes, repeats, attachment, backdrop object-
 | RSVP persistence | A real save to the loopback demo Firestore emulator updated canonical guest, public invitation, seating and check-in mirrors. Double-click invoked one save. Reload retained the confirmation. Change response and decline were exercised. |
 | Map states | Loading and error/retry were inspected using browser-only iframe-load suppression and an injected iframe error. Actual Google map tiles/provider controls were not validated. |
 | Uninstrumented sample | Opened the sample without browser source hooks, submitted its sample-only RSVP, switched to Arabic, checked RTL summary direction and verified the 360px page width. The document intentionally retains its existing LTR geometry while Arabic content regions use RTL. |
+| Envelope and audio placement | After the follow-up fix, Chrome rendering at 430×932, 390×844 and 320×568. The opening stage matched the dynamic viewport; poster and decoded 720×1264 video used `object-fit: contain`; record player bounds were at the lower-right with an 18px inset. A physical iPhone Safari run was not performed. |
 | Background protection | Compared computed background/image properties before and after and reviewed the source diff; artwork files and background declarations were unchanged. |
 | Other pages | Before/current screenshots of the authenticated dashboard, gender-reveal invitation, Ali & Salma design and generic invitation at 390 and 1440px. See regression results and captures. The new stylesheet is absent on these pages. This is a visual smoke test, not a complete functional audit of those products. |
 

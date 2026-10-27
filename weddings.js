@@ -4,6 +4,8 @@ import { isPlatformAdmin, redeemCustomerGrants } from "./account-access.js";
 import { EVENT_CATEGORIES, eventUsesGuestSides, getEventCategory, getEventDisplayTitle, isCelebrationEvent, isGenderRevealEvent } from "./event-utils.js";
 import { eventDateTimeParts, localDateTimeToIso } from "./event-date-time.js";
 import { paginateRows } from "./workspace-pagination.js";
+import { ownerAdapter } from "./photo-bucket/adapter.js";
+import { renderLocalBuckets } from "./photo-bucket/workspace.js";
 
 const state = { services: null, user: null, weddings: [], workspaceLoaded: false, canSeeSampleInvitation: false, isAdmin: false, roleResolved: false, filter: "all", currentPage: 1, pageSize: 6, editId: "", deleteId: "", workspaceTimer: null, unsubscribeAuth: null, initialized: false, snapshotGeneration: 0, workspaceRequest: 0 };
 const el = Object.fromEntries(["workspace","loadingState","userEmail","signOutButton","createWeddingButton","sampleInvitationPanel","workspaceControls","sampleInvitationUrl","searchInput","sortSelect","filterRow","workspaceStatus","retryLoadButton","weddingGrid","paginationControls","paginationStatus","emptyState","weddingDialog","weddingForm","formKicker","formTitle","formError","saveWeddingButton","categoryStep","eventFeaturesStep","eventInformationStep","continueEventButton","continueFeaturesButton","backEventButton","deleteDialog","deleteForm","deletePhrase","deleteConfirmation","deleteError"].map((id) => [id, document.getElementById(id)]));
@@ -73,6 +75,7 @@ function init() {
     }
     if (!user) return location.replace(document.body.dataset.accountSurface === "customer" ? "./customer-login.html?message=session-required" : "./dashboard-login.html?message=session-required");
     state.user = user;
+    void renderLocalBuckets(user.uid);
     try {
       state.isAdmin = await isPlatformAdmin(accountApi, state.services.db, user.uid);
       state.roleResolved = true;
@@ -104,6 +107,7 @@ function init() {
     });
   });
   window.addEventListener("pagehide", disposeListeners, { once: true });
+  window.addEventListener("pageshow", event => { if (event.persisted) location.reload(); });
 }
 
 function showFatal(message) { el.loadingState.textContent = message; }
@@ -386,6 +390,8 @@ function openForm(wedding) {
   if (!state.isAdmin) return;
   state.editId = wedding?.id || "";
   el.weddingForm.reset();
+  document.getElementById("photoBucketStep").hidden = true;
+  el.weddingForm.querySelector('[value="photo_bucket"]').closest("label").hidden = Boolean(wedding);
   el.formError.textContent = "";
   el.formKicker.textContent = wedding ? "Event details" : "New event";
   el.formTitle.textContent = wedding ? "Edit event" : "Create an event";
@@ -408,6 +414,11 @@ function openForm(wedding) {
 }
 function updateCategoryFields() {
   const category = getSelectedEventCategory();
+  const photoBucket = category === "photo_bucket";
+  const bucketStep = document.getElementById("photoBucketStep");
+  bucketStep?.querySelectorAll("input").forEach(input => { input.disabled = !photoBucket; input.required = photoBucket; });
+  el.eventInformationStep.querySelectorAll("input,select,textarea").forEach(input => { input.disabled = photoBucket; });
+  if (photoBucket) { el.continueEventButton.disabled = false; return; }
   const wedding = category === EVENT_CATEGORIES.WEDDING_ENGAGEMENT;
   const genderReveal = category === EVENT_CATEGORIES.GENDER_REVEAL;
   el.continueEventButton.disabled = !category;
@@ -442,6 +453,12 @@ function updateCategoryFields() {
 function continueToEventInformation() {
   const category = getSelectedEventCategory();
   if (!category) return;
+  if (category === "photo_bucket") {
+    el.categoryStep.hidden = true; el.eventFeaturesStep.hidden = true; el.eventInformationStep.hidden = true;
+    document.getElementById("photoBucketStep").hidden = false;
+    el.saveWeddingButton.hidden = false; el.backEventButton.hidden = false;
+    return;
+  }
   if (!state.editId && !el.eventFeaturesStep.hidden) {
     el.eventFeaturesStep.hidden = true;
     el.eventInformationStep.hidden = false;
@@ -459,6 +476,10 @@ function continueToEventInformation() {
   el.backEventButton.hidden = false;
 }
 function backEventStep() {
+  if (getSelectedEventCategory() === "photo_bucket") {
+    document.getElementById("photoBucketStep").hidden = true; el.categoryStep.hidden = false;
+    el.backEventButton.hidden = true; el.saveWeddingButton.hidden = true; return;
+  }
   if (!state.editId && !el.eventInformationStep.hidden && getSelectedEventCategory() !== EVENT_CATEGORIES.GENDER_REVEAL) {
     el.eventInformationStep.hidden = true;
     el.eventFeaturesStep.hidden = false;
@@ -472,6 +493,20 @@ function backEventStep() {
   el.saveWeddingButton.hidden = true;
 }
 async function saveWedding(event) {
+  // Photo Buckets MUST return before the legacy Firebase creation path.
+  if (getSelectedEventCategory() === "photo_bucket") {
+    event.preventDefault();
+    if (!state.isAdmin || state.editId) return;
+    el.saveWeddingButton.disabled = true;
+    const status = document.getElementById("photoBucketCreateError"); status.textContent = "";
+    try {
+      const f = el.weddingForm.elements;
+      const bucket = await ownerAdapter(state.user.uid).create({ name: f.bucketName.value, date: f.bucketDate.value, location: f.bucketLocation.value });
+      location.href = `./photo-bucket-manage.html?bucket=${encodeURIComponent(bucket.id)}`;
+    } catch (error) { status.textContent = error.name === "QuotaExceededError" ? "This browser is out of storage. Free some space and try again." : error.message; }
+    finally { el.saveWeddingButton.disabled = false; }
+    return;
+  }
   if (!state.isAdmin) return;
  event.preventDefault(); const f = el.weddingForm.elements; const category = getSelectedEventCategory(); if (!Object.values(EVENT_CATEGORIES).includes(category)) return; const oldEvent = state.weddings.find((item) => item.id === state.editId); if (oldEvent && getEventCategory(oldEvent) !== category && !window.confirm("Changing this event category changes the dashboard experience. Existing guest side values will be preserved. Continue?")) return; const brideName = f.brideName.value.trim(), groomName = f.groomName.value.trim(); const genderReveal = category === EVENT_CATEGORIES.GENDER_REVEAL; const leavingGenderReveal = isGenderRevealEvent(oldEvent) && !genderReveal; const timeZone = genderReveal ? "Asia/Dubai" : (oldEvent?.eventTimeZone || ""); const eventDateISO = localDateTimeToIso(f.eventDate.value, f.eventTime.value, timeZone); const openingVideoDefault = oldEvent && Object.hasOwn(oldEvent, "genderRevealOpeningVideoUrl") ? oldEvent.genderRevealOpeningVideoUrl : "/videos/gender-reveal-opening.mp4"; const data = { eventCategory: category, eventDateISO, ...(genderReveal ? { eventTimeZone: "Asia/Dubai", guestGroupMode: "general", genderRevealArtworkUrl: oldEvent?.genderRevealArtworkUrl || "/images/gender-reveal-cover.png", genderRevealOpeningVideoUrl: openingVideoDefault, genderRevealMusicUrl: oldEvent?.genderRevealMusicUrl || "/music/gender-reveal-party.mp3", genderRevealMessageEn: oldEvent?.genderRevealMessageEn || "A little surprise is on the way…", genderRevealMessageAr: oldEvent?.genderRevealMessageAr || "مفاجأة جميلة بانتظارنا…", eventTitleAr: f.eventTitleAr.value.trim() || "حفل الكشف عن جنس المولود", seatingEnabled: false, showInvitationQr: false } : leavingGenderReveal ? { eventTitleAr: "", genderRevealArtworkUrl: "", genderRevealOpeningVideoUrl: "", genderRevealMusicUrl: "", genderRevealMessageEn: "", genderRevealMessageAr: "" } : {}), venueEn: f.venueEn.value.trim(), location: f.location.value.trim(), mapsUrl: f.mapsUrl.value.trim(), whatsAppCountryCode: genderReveal ? "971" : f.whatsAppCountryCode.value.trim(), invitationLanguage: genderReveal ? (f.invitationLanguage.value === "ar" ? "ar" : "en") : f.invitationLanguage.value, plannerNotes: f.plannerNotes.value.trim(), status: f.status.value, updatedAt: serverTimestamp() }; if (genderReveal) data.eventTitle = f.eventTitle.value.trim() || "Gender Reveal Party"; else if (category === EVENT_CATEGORIES.CELEBRATION) data.eventTitle = f.eventTitle.value.trim(); else Object.assign(data, { brideName, groomName, coupleName: `${brideName} & ${groomName}`, eventTitle: `${brideName} & ${groomName}` }); el.formError.textContent = ""; el.saveWeddingButton.disabled = true;
   try { if (state.editId) { await updateDoc(doc(state.services.db,"weddings",state.editId), data); await setDoc(doc(state.services.db,"users",state.user.uid,"weddingAccess",state.editId), { ...indexData(data), weddingId: state.editId }, { merge:true }); } else { const weddingRef = doc(collection(state.services.db,"weddings")); const batch = writeBatch(state.services.db); batch.set(weddingRef, { ...data, seatingEnabled:f.seatingEnabled.checked, showInvitationQr:f.showInvitationQr.checked, ownerUserId:state.user.uid, createdAt:serverTimestamp() }); batch.set(doc(state.services.db,"weddings",weddingRef.id,"dashboardUsers",state.user.uid), { userId:state.user.uid, email:state.user.email || "", canViewDashboard:true, canEditGuests:true, canEditSeating:true, canCheckIn:true, canManageUsers:true, role:"owner", createdAt:serverTimestamp(), updatedAt:serverTimestamp() }); batch.set(doc(state.services.db,"users",state.user.uid,"weddingAccess",weddingRef.id), { ...indexData(data), weddingId:weddingRef.id, ownerUserId:state.user.uid, createdAt:serverTimestamp(), updatedAt:serverTimestamp() }); await batch.commit(); } el.weddingDialog.close(); void refreshWorkspaceEvents(); } catch (error) { console.error(error); el.formError.textContent = "We could not save this event. Please check your access and try again."; } finally { el.saveWeddingButton.disabled=false; } }

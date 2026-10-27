@@ -71,9 +71,17 @@
             <div class="event-category-grid" role="radiogroup" aria-label="Event category">
               <label class="event-category-card"><input type="radio" name="eventCategory" value="wedding_engagement" required /><span><strong>Wedding / Engagement</strong><small>For weddings, engagements, and couple celebrations.</small></span></label>
               <label class="event-category-card"><input type="radio" name="eventCategory" value="celebration" required /><span><strong>Celebration</strong><small>For birthdays, graduations, anniversaries, and other occasions.</small></span></label>
+              <label class="event-category-card"><input type="radio" name="eventCategory" value="photo_bucket" required /><span><strong>Photo Bucket</strong><small>A beautiful photo collection. Independent of invitations, saved on this device.</small></span></label>
               <label class="event-category-card"><input type="radio" name="eventCategory" value="gender_reveal" required /><span><strong>Gender Reveal Party</strong><small>حفل الكشف عن جنس المولود · Shared invitation and RSVP.</small></span></label>
             </div>
             <button class="primary-button" id="continueEventButton" type="button" disabled>Continue</button>
+          </section>
+          <section id="photoBucketStep" class="form-grid" hidden aria-label="Photo Bucket details">
+            <label class="full">Event name<input name="bucketName" maxlength="100" disabled /></label>
+            <label>Event date<input name="bucketDate" type="date" disabled /></label>
+            <label>Event location<input name="bucketLocation" maxlength="160" disabled /></label>
+            <p class="full">Local demo · Photos and event details stay in this browser.</p>
+            <p class="form-error full" id="photoBucketCreateError" role="alert"></p>
           </section>
           <section class="event-features-step" id="eventFeaturesStep" hidden aria-labelledby="eventFeaturesTitle">
             <h3 id="eventFeaturesTitle">Choose event features</h3>

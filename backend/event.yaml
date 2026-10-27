@@ -1,0 +1,117 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Transform: AWS::Serverless-2016-10-31
+Description: Photo Bucket backend for ONE event. Delete this stack when the event is finished.
+Parameters:
+  EventId:
+    Type: String
+    AllowedPattern: '^[a-z0-9-]{3,30}$'
+    Description: Short id for this event. It becomes the bucket id in guest links.
+  FirebaseProjectId: { Type: String }
+  OwnerUids:
+    Type: String
+    Description: Comma-separated Firebase UIDs allowed to host this event.
+  AllowedOrigin:
+    Type: CommaDelimitedList
+    Description: Website origin(s) allowed to call the API, comma-separated, for example https://my-event.vercel.app,http://localhost:5001
+  BackupBucketName: { Type: String }
+  BackupRegion: { Type: String }
+  GuestTokenSecret: { Type: String, NoEcho: true, MinLength: 32 }
+Resources:
+  Table:
+    Type: AWS::DynamoDB::Table
+    DeletionPolicy: Delete
+    Properties:
+      TableName: !Sub 'pb-${EventId}'
+      BillingMode: PAY_PER_REQUEST
+      AttributeDefinitions: [{ AttributeName: pk, AttributeType: S }, { AttributeName: sk, AttributeType: S }]
+      KeySchema: [{ AttributeName: pk, KeyType: HASH }, { AttributeName: sk, KeyType: RANGE }]
+      PointInTimeRecoverySpecification: { PointInTimeRecoveryEnabled: true }
+      SSESpecification: { SSEEnabled: true }
+  PhotoBucket:
+    Type: AWS::S3::Bucket
+    DeletionPolicy: Delete
+    DependsOn: BackupInvokePermission
+    Properties:
+      BucketName: !Sub 'pb-${EventId}-${AWS::AccountId}-${AWS::Region}'
+      PublicAccessBlockConfiguration: { BlockPublicAcls: true, BlockPublicPolicy: true, IgnorePublicAcls: true, RestrictPublicBuckets: true }
+      BucketEncryption:
+        ServerSideEncryptionConfiguration: [{ ServerSideEncryptionByDefault: { SSEAlgorithm: AES256 } }]
+      VersioningConfiguration: { Status: Enabled }
+      CorsConfiguration:
+        CorsRules: [{ AllowedOrigins: !Ref AllowedOrigin, AllowedMethods: [PUT, GET], AllowedHeaders: ['*'], MaxAge: 3000 }]
+      LifecycleConfiguration:
+        Rules:
+          - { Id: expire-unfinished-uploads, Status: Enabled, Prefix: incoming/, ExpirationInDays: 1 }
+          - { Id: expire-old-versions, Status: Enabled, NoncurrentVersionExpiration: { NoncurrentDays: 30 }, AbortIncompleteMultipartUpload: { DaysAfterInitiation: 1 } }
+      NotificationConfiguration:
+        LambdaConfigurations:
+          - Event: 's3:ObjectCreated:*'
+            Function: !GetAtt BackupFunction.Arn
+            Filter: { S3Key: { Rules: [{ Name: prefix, Value: photos/ }, { Name: suffix, Value: .jpg }] } }
+  BackupInvokePermission:
+    Type: AWS::Lambda::Permission
+    Properties:
+      Action: lambda:InvokeFunction
+      FunctionName: !Ref BackupFunction
+      Principal: s3.amazonaws.com
+      SourceAccount: !Ref 'AWS::AccountId'
+      SourceArn: !Sub 'arn:aws:s3:::pb-${EventId}-${AWS::AccountId}-${AWS::Region}'
+  Api:
+    Type: AWS::Serverless::HttpApi
+    Properties:
+      CorsConfiguration:
+        AllowOrigins: !Ref AllowedOrigin
+        AllowMethods: [GET, POST, PATCH, DELETE, OPTIONS]
+        AllowHeaders: [authorization, content-type]
+        MaxAge: 600
+      DefaultRouteSettings: { ThrottlingBurstLimit: 50, ThrottlingRateLimit: 25 }
+  ApiFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      CodeUri: .
+      Handler: src/index.handler
+      Runtime: nodejs22.x
+      Architectures: [arm64]
+      MemorySize: 1024
+      Timeout: 29
+      Environment:
+        Variables:
+          TABLE_NAME: !Ref Table
+          PHOTO_BUCKET: !Sub 'pb-${EventId}-${AWS::AccountId}-${AWS::Region}'
+          BACKUP_BUCKET: !Ref BackupBucketName
+          BACKUP_REGION: !Ref BackupRegion
+          EVENT_ID: !Ref EventId
+          FIREBASE_PROJECT_ID: !Ref FirebaseProjectId
+          OWNER_UIDS: !Ref OwnerUids
+          GUEST_TOKEN_SECRET: !Ref GuestTokenSecret
+      Policies:
+        - DynamoDBCrudPolicy: { TableName: !Ref Table }
+        - Statement:
+            - { Effect: Allow, Action: [s3:GetObject, s3:PutObject, s3:DeleteObject], Resource: !Sub 'arn:aws:s3:::pb-${EventId}-${AWS::AccountId}-${AWS::Region}/*' }
+            - { Effect: Allow, Action: [s3:DeleteObject], Resource: !Sub 'arn:aws:s3:::${BackupBucketName}/*' }
+      Events:
+        Any: { Type: HttpApi, Properties: { ApiId: !Ref Api, Path: '/{proxy+}', Method: ANY } }
+  BackupFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      CodeUri: .
+      Handler: src/backup.handler
+      Runtime: nodejs22.x
+      Architectures: [arm64]
+      MemorySize: 1536
+      Timeout: 60
+      Environment:
+        Variables:
+          TABLE_NAME: !Ref Table
+          PHOTO_BUCKET: !Sub 'pb-${EventId}-${AWS::AccountId}-${AWS::Region}'
+          BACKUP_BUCKET: !Ref BackupBucketName
+          BACKUP_REGION: !Ref BackupRegion
+      Policies:
+        - DynamoDBCrudPolicy: { TableName: !Ref Table }
+        - Statement:
+            - { Effect: Allow, Action: [s3:GetObject], Resource: !Sub 'arn:aws:s3:::pb-${EventId}-${AWS::AccountId}-${AWS::Region}/*' }
+            - { Effect: Allow, Action: [s3:PutObject, s3:DeleteObject], Resource: !Sub 'arn:aws:s3:::${BackupBucketName}/*' }
+Outputs:
+  ApiUrl: { Value: !Sub 'https://${Api}.execute-api.${AWS::Region}.amazonaws.com' }
+  PhotoBucketName: { Value: !Sub 'pb-${EventId}-${AWS::AccountId}-${AWS::Region}' }
+  TableName: { Value: !Ref Table }

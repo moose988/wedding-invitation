@@ -1,5 +1,6 @@
 import { createOwnerAdapter, online } from './adapters.js';
 import { dateLabel } from './links.js';
+import { autoOpenTarget } from './return-link.js';
 export async function renderLocalBuckets(ownerId, user = { uid: ownerId }) {
   let section = document.getElementById('localPhotoBuckets');
   if (!section) {
@@ -12,6 +13,11 @@ export async function renderLocalBuckets(ownerId, user = { uid: ownerId }) {
     const buckets = await (await createOwnerAdapter(user)).list();
     if (section.dataset.owner !== ownerId) return;
     if (!buckets.length) return;
+    const seenKey = `photo-bucket:auto-open:${ownerId}`;
+    let seen = false;
+    try { seen = Boolean(sessionStorage.getItem(seenKey)); } catch { /* storage blocked: just show the list */ seen = true; }
+    const target = autoOpenTarget({ customer: document.body.dataset.accountSurface === 'customer', buckets, seen });
+    if (target) { try { sessionStorage.setItem(seenKey, '1'); } catch { /* ignore */ } location.replace(target); return; }
     const title = document.createElement('h2'); title.textContent = 'Photo Buckets';
     const note = document.createElement('p'); note.textContent = online ? 'Photos are stored online.' : 'Local demo · Photos stay in this browser.';
     const grid = document.createElement('div'); grid.className = 'wedding-grid';

@@ -1,0 +1,91 @@
+/* Design A — refined polish. Same layout, finer details, a few quiet motions. */
+html.design-a body.layla-zaid-invitation {
+  --da-gold: #c3a878;
+  --da-gold-deep: #9a7a4a;
+  --da-ink: #574638;
+}
+
+/* ── Hero: a fine double hairline frame around the invitation text ── */
+html.design-a body.layla-zaid-invitation #heroSection .hero-paper__content { position: relative; padding: 38px 20px 30px; }
+html.design-a body.layla-zaid-invitation #heroSection .hero-paper__content::before,
+html.design-a body.layla-zaid-invitation #heroSection .hero-paper__content::after {
+  content: ""; position: absolute; pointer-events: none; border: 1px solid #c3a87866; border-radius: 2px;
+  animation: da-frame 1.8s cubic-bezier(.2, .7, .25, 1) 1.1s both;
+}
+html.design-a body.layla-zaid-invitation #heroSection .hero-paper__content::before { inset: 0; }
+html.design-a body.layla-zaid-invitation #heroSection .hero-paper__content::after { inset: 7px; border-color: #c3a87840; animation-delay: 1.35s; }
+html.design-a body.layla-zaid-invitation .section-kicker { letter-spacing: .3em; color: var(--da-gold-deep); }
+html.design-a body.layla-zaid-invitation .hero-event-line {
+  font: 600 .72rem/1.9 "Lora", Georgia, serif; letter-spacing: .14em; text-transform: uppercase; color: #7a6044; text-wrap: balance !important;
+}
+html.design-a body.layla-zaid-invitation .hero-copy__english { font: italic 400 1.18rem/1.55 "Cormorant Garamond", Georgia, serif; color: var(--da-ink); }
+
+/* Primary buttons: deep mocha with a gold edge and an occasional soft sheen. */
+html.design-a body.layla-zaid-invitation .luxury-button--primary {
+  position: relative; overflow: hidden; border: 1px solid var(--da-gold); background: linear-gradient(180deg, #6a5340, #4d3b2b); letter-spacing: .08em;
+}
+html.design-a body.layla-zaid-invitation .luxury-button--primary::after {
+  content: ""; position: absolute; inset: 0 auto 0 -60%; width: 40%; transform: skewX(-20deg); pointer-events: none;
+  background: linear-gradient(90deg, transparent, #ffffff40, transparent); animation: da-sheen 6s ease-in-out 3s infinite;
+}
+
+/* ── Countdown: open numerals between gold hairlines ── */
+html.design-a body.layla-zaid-invitation.invitation-open .site-content .hero-countdown {
+  gap: 0; padding-block: 16px; border-block: 1px solid #c3a87855; max-width: 340px; margin-inline: auto;
+}
+html.design-a body.layla-zaid-invitation.invitation-open .site-content .hero-countdown .countdown-card {
+  flex: 1; padding: 4px 2px; border: 0; background: none; box-shadow: none; border-radius: 0; min-width: 0;
+}
+html.design-a body.layla-zaid-invitation .countdown-card__value {
+  font: 500 clamp(2rem, 9.5vw, 2.7rem)/1 "Cormorant Garamond", Georgia, serif; color: #5b493b; font-variant-numeric: tabular-nums lining-nums;
+}
+html.design-a body.layla-zaid-invitation .countdown-card__label { font-size: .6rem; letter-spacing: .24em; color: var(--da-gold-deep); }
+
+/* ── Details: underline tabs and a hairline-framed card ── */
+html.design-a body.layla-zaid-invitation .detail-tabs { gap: 0; padding: 0; border: 0; border-bottom: 1px solid #c3a87860; border-radius: 0; background: none; box-shadow: none; }
+html.design-a body.layla-zaid-invitation .detail-tab {
+  position: relative; border: 0; outline-offset: -3px; border-radius: 0; background: none; box-shadow: none; color: #8a7358; min-height: 48px;
+  transition: color .3s ease;
+}
+html.design-a body.layla-zaid-invitation .detail-tab::after {
+  content: ""; position: absolute; inset: auto 18% -1px; height: 2px; background: var(--da-gold-deep); transform: scaleX(0); transition: transform .45s cubic-bezier(.2, .7, .25, 1);
+}
+html.design-a body.layla-zaid-invitation .detail-tab[aria-selected="true"] { color: #4d3b2b; background: none; box-shadow: none; }
+html.design-a body.layla-zaid-invitation .detail-tab[aria-selected="true"]::after { transform: scaleX(1); }
+html.design-a body.layla-zaid-invitation .detail-card {
+  margin-top: 14px; border: 0; border-radius: 2px; background: #fffcf5b8; outline: 1px solid #c3a87880; outline-offset: -8px; padding: 30px 22px;
+}
+html.design-a body.layla-zaid-invitation .detail-card__icon { animation: da-float 5s ease-in-out infinite; color: var(--da-gold-deep); }
+
+/* ── Section headings: a gold hairline draws in beneath ── */
+html.design-a body.layla-zaid-invitation .section-heading h2::after {
+  content: ""; display: block; width: 0; height: 1px; margin: 14px auto 0; background: linear-gradient(90deg, transparent, var(--da-gold), transparent); transition: width 1.1s cubic-bezier(.2, .7, .25, 1) .3s;
+}
+html.design-a body.layla-zaid-invitation .section.is-visible .section-heading h2::after { width: 120px; }
+
+/* ── RSVP: ivory choice cards with a gold selection mark ── */
+html.design-a body.layla-zaid-invitation #rsvpSection .rsvp-answer {
+  border: 1px solid #c3a87880; border-radius: 2px; background: #fffcf5; transition: transform .25s ease, box-shadow .25s ease, background .35s ease, border-color .25s ease;
+}
+html.design-a body.layla-zaid-invitation #rsvpSection .rsvp-answer:hover { transform: translateY(-1px); box-shadow: 0 6px 16px #5b493b1a; }
+html.design-a body.layla-zaid-invitation #rsvpSection .rsvp-answer input {
+  box-sizing: border-box; border-width: 1px !important; box-shadow: none !important; -webkit-appearance: none; appearance: none; width: 22px; height: 22px; border: 1px solid var(--da-gold); border-radius: 50%; background: transparent; transition: background .3s ease, border-color .3s ease;
+}
+html.design-a body.layla-zaid-invitation #rsvpSection .rsvp-answer input:checked {
+  border-color: var(--da-gold-deep); background: radial-gradient(circle, var(--da-gold-deep) 0 38%, transparent 42%); animation: da-pop .45s cubic-bezier(.2, .8, .3, 1.3);
+}
+html.design-a body.layla-zaid-invitation #rsvpSection .rsvp-answer:has(input:checked) { background: linear-gradient(180deg, #fffaf0, #f5e9d2); border-color: var(--da-gold-deep); }
+
+@keyframes da-frame { from { opacity: 0; transform: scale(.965); } to { opacity: 1; transform: none; } }
+@keyframes da-sheen { 0%, 60% { left: -60%; } 100% { left: 140%; } }
+@keyframes da-float { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-3px); } }
+@keyframes da-pop { 0% { transform: scale(.7); } 100% { transform: scale(1); } }
+
+@media (prefers-reduced-motion: reduce) {
+  html.design-a body.layla-zaid-invitation #heroSection .hero-paper__content::before,
+  html.design-a body.layla-zaid-invitation #heroSection .hero-paper__content::after,
+  html.design-a body.layla-zaid-invitation .luxury-button--primary::after,
+  html.design-a body.layla-zaid-invitation .detail-card__icon,
+  html.design-a body.layla-zaid-invitation #rsvpSection .rsvp-answer input:checked { animation: none; }
+  html.design-a body.layla-zaid-invitation .section-heading h2::after { transition: none; width: 120px; }
+}

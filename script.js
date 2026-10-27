@@ -2,7 +2,7 @@ import { invitationRefreshIsCurrent, invitationRsvpStorageKey, invitationRsvpVie
 import { buildSatelliteMapEmbedUrl } from "./invitations/shared/map-embed.js";
 import { buildInvitationCalendar } from "./invitations/shared/calendar.js";
 import { renderQrCode } from "./qr.js?v=20261017-qr-module-fix";
-import { createIntroSequence } from "./intro-sequence.js";
+import { createIntroSequence } from "./intro-sequence.js?v=20261028-finish-at-1";
 import {
   buildChairPositions,
   buildSeatAssignmentKeys,
@@ -160,14 +160,14 @@ const laylaCopy = {
     en: "We can’t wait to celebrate with you.",
     ar: "نتطلع للاحتفال معك.",
   },
-  attendanceDeclined: { en: "Your response is recorded as not attending.", ar: "تم تسجيل ردك بعدم الحضور." },
+  attendanceDeclined: { en: "We'll miss you, {name}.", ar: "سنفتقدك، {name}." },
   changeResponse: { en: "Change response", ar: "تغيير الرد" },
   responseSaving: { en: "Saving your response…", ar: "جارٍ حفظ ردك…" },
   responseSaved: { en: "Your response has been saved.", ar: "تم حفظ ردك." },
   responseSaveError: { en: "We could not save your response. Please try again.", ar: "تعذر حفظ ردك. يرجى المحاولة مرة أخرى." },
   retryResponse: { en: "Retry", ar: "إعادة المحاولة" },
   pendingResponse: { en: "Your response is pending. Please choose an option.", ar: "لم يتم تسجيل ردك بعد. يرجى اختيار أحد الخيارات." },
-  attendanceDeclinedThanks: { en: "Thank you for letting us know.", ar: "شكرًا لإبلاغنا." },
+  attendanceDeclinedThanks: { en: "We're sorry you'll miss the celebration — you'll be in our hearts on the day.", ar: "يؤسفنا أنك لن تشاركنا الاحتفال، وستكون في قلوبنا يوم الفرح." },
   declinedLabel: { en: "Response saved", ar: "تم حفظ الرد" },
   qrInstructions: { en: "Present this QR code at the entrance.", ar: "يرجى إبراز رمز QR عند المدخل." },
   madeBy: { en: "Made by", ar: "تصميم" },
@@ -272,6 +272,8 @@ function setupIntroSequence() {
     video: elements.openingVideo,
     startupTimeout: isLaylaInvitation() ? 10000 : undefined,
     bufferTimeout: isLaylaInvitation() ? 10000 : undefined,
+    // The Layla video's motion stops at ~3.2s; the last ~1.8s is a still frame.
+    finishAt: isLaylaInvitation() ? 3.1 : null,
     onState: updateIntroPresentation,
     onFrame: () => {
       elements.introScreen?.classList.add("is-playing");
@@ -626,7 +628,7 @@ function populateInvitation() {
   setText("closingArabic", wedding.closingAr);
   setText("closingEnglish", wedding.closingEn);
   const dateText = state.laylaLanguage === "ar" ? formatArabicDate(wedding.eventDateISO) : formatDate(wedding.eventDateISO);
-  setText("heroEventLine", [dateText, laylaValue(wedding.timeEn, wedding.timeAr), laylaValue(wedding.venueEn || wedding.venueName, wedding.venueAr || wedding.venueNameAr)].filter(Boolean).join(" · "));
+  setText("heroEventLine", [dateText, laylaValue(wedding.timeEn, wedding.timeAr), laylaValue(wedding.venueEn || wedding.venueName, wedding.venueAr || wedding.venueNameAr)].filter(Boolean).map((part, index, parts) => (index < parts.length - 1 ? part.replace(/ /g, "\u00a0") : part)).join(" · "));
   if (elements.weddingAudio?.querySelector("source") && wedding.media.audio) {
     const source = elements.weddingAudio.querySelector("source");
     const nextSource = new URL(wedding.media.audio, document.baseURI).toString();
@@ -1144,7 +1146,7 @@ function renderDemoRsvp(mount, { sample = false } = {}) {
     const languageAttributes = isLaylaInvitation() && state.laylaLanguage === "ar" ? 'lang="ar" dir="rtl"' : "";
     const confirmationHeading = confirmed
       ? laylaText("attendanceConfirmed").replace("{name}", name)
-      : laylaText("attendanceDeclined");
+      : laylaText("attendanceDeclined").replace("{name}", name);
     mount.innerHTML = `
       <div class="rsvp-summary rsvp-summary--${confirmed ? "confirmed" : "declined"}" aria-live="polite" ${sample ? languageAttributes : ""}>
         <span class="rsvp-confirmation-mark" aria-hidden="true">${confirmed ? "✓" : "♡"}</span>

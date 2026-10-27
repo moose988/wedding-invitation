@@ -10,6 +10,7 @@ import {
 
 import * as accountApi from "./firebase-config.js";
 import { isPlatformAdmin, redeemCustomerGrants } from "./account-access.js";
+import { photoBucketReturn } from "./photo-bucket/return-link.js";
 
 const params = new URLSearchParams(window.location.search);
 
@@ -130,6 +131,12 @@ function setSubmitLoading(isLoading) {
 
 function redirectAfterLogin() {
   isRedirecting = true;
+  // Photo Bucket links: after sign-in go straight back to that page instead of the dashboard.
+  const photoBucketPage = photoBucketReturn(params.get("next"), window.location.href);
+  if (photoBucketPage) {
+    window.location.replace(photoBucketPage);
+    return;
+  }
   const weddingId = params.get("wedding")?.trim() || "";
   const requestedSide = params.get("side")?.trim().toLowerCase() || "";
   if (weddingId && params.get("workspace") === "side") {

@@ -1,6 +1,7 @@
 // Reuse the existing named planner-session and its tab-scoped persistence.
 // Importing config does not initialize Firestore/Analytics. Only Auth is started here.
 import { isFirebaseConfigured } from '../firebase-config.js';
+import { loginWithReturn } from './return-link.js';
 import { getApps, initializeApp } from 'https://www.gstatic.com/firebasejs/12.19.0/firebase-app.js';
 import { initializeAuth, browserSessionPersistence, connectAuthEmulator, onAuthStateChanged } from 'https://www.gstatic.com/firebasejs/12.19.0/firebase-auth.js';
 export async function requireOwnerSession(onRevoked) {
@@ -17,7 +18,7 @@ export async function requireOwnerSession(onRevoked) {
   if (emulator) connectAuthEmulator(auth, 'http://127.0.0.1:9099', { disableWarnings: true });
   await auth.authStateReady();
   const user = auth.currentUser;
-  if (!user) { location.replace('./dashboard-login.html?message=session-required'); throw new Error('Sign in with your existing planner account to continue.'); }
+  if (!user) { location.replace(loginWithReturn()); throw new Error('Sign in with your existing planner account to continue.'); }
   onAuthStateChanged(auth, current => {
     if (current?.uid !== user.uid) { onRevoked?.(); location.replace('./dashboard-login.html?message=session-required'); }
   });

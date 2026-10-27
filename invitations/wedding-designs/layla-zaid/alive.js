@@ -47,6 +47,37 @@
   if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", init); else init();
 
 
+
+  // RSVP reply: a few gold sparkles for "yes", a few soft petals drifting down for "no".
+  function rsvpReply() {
+    var summary = document.querySelector("#rsvpMount .rsvp-summary");
+    var mark = summary && summary.querySelector(".rsvp-confirmation-mark");
+    if (!mark) return false;
+    var yes = summary.classList.contains("rsvp-summary--confirmed");
+    var box = mark.getBoundingClientRect(), cx = box.left + box.width / 2, cy = box.top + box.height / 2;
+    for (var i = 0; i < (yes ? 16 : 6); i++) {
+      var n, rot = rnd(-200, 200).toFixed(0) + "deg";
+      if (yes) {
+        var a = (Math.PI * 2 * i) / 16 + rnd(-0.2, 0.2), r = rnd(60, 130);
+        n = el("span", "rsvp-spark", { "--dx": Math.cos(a) * r + "px", "--dy": Math.sin(a) * r + "px", "--rot": rot, "--sz": rnd(7, 14).toFixed(0) + "px" });
+        n.style.animationDelay = rnd(0, 0.25).toFixed(2) + "s";
+      } else {
+        n = el("span", "rsvp-drift", { "--dx": rnd(-70, 70).toFixed(0) + "px", "--rot": rot });
+        n.style.animationDelay = (i * 0.35).toFixed(2) + "s";
+      }
+      n.style.left = cx + "px"; n.style.top = cy + "px";
+      document.body.appendChild(n);
+      setTimeout(function (c) { c.remove(); }, 4200, n);
+    }
+    return true;
+  }
+  document.addEventListener("submit", function (e) {
+    if (!e.target.closest || !e.target.closest("#rsvpMount")) return;
+    var tries = 0, timer = setInterval(function () {
+      if (rsvpReply() || ++tries > 40) clearInterval(timer);
+    }, 100);
+  }, true);
+
   // Tiny gold sparkle where a guest taps a button or choice.
   document.addEventListener("pointerdown", function (e) {
     var t = e.target.closest && e.target.closest(".luxury-button, .rsvp-answer, .detail-tab, .music-toggle");

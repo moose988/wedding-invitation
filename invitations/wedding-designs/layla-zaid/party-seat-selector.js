@@ -30,3 +30,14 @@ export function getPartySeatSelection(personKey, partyMembers = [], tables = [])
 export function retainPartySeatSelection(personKey, partyMembers = []) {
   return partyMembers.some((item) => item.personKey === personKey) ? personKey : "";
 }
+
+// Presentation only: never rewrite the table name stored with an assignment.
+export function formatPartySeatLabel(tableName, seatNumber, language = "en") {
+  const name = String(tableName || "").trim();
+  if (language === "ar") {
+    const table = /^(?:الطاولة|طاولة|طاولتك)(?:\s|$)/u.test(name) ? name : `الطاولة ${name}`;
+    return `${table} · المقعد ${seatNumber}`;
+  }
+  const table = /^(?:table|your table)(?:\s|$)/i.test(name) ? name : `Table ${name}`;
+  return `${table} · Chair ${seatNumber}`;
+}

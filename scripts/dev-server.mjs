@@ -21,18 +21,24 @@ const contentTypes = new Map([
 
 const bannerScript = `(() => {
   if (location.pathname.split('/').pop().startsWith('photo-bucket')) return;
-  const emulator = location.hostname === "localhost" || location.hostname === "127.0.0.1" || location.hostname === "[::1]"
-    ? (new URLSearchParams(location.search).get("emulator") === "1" || sessionStorage.getItem("wedding:localEmulators") === "1")
+  const localHost = location.hostname === "localhost" || location.hostname === "127.0.0.1" || location.hostname === "[::1]";
+  const params = new URLSearchParams(location.search);
+  if (localHost && params.get("live") === "1") {
+    sessionStorage.removeItem("wedding:localEmulators");
+    params.delete("live");
+    history.replaceState(null, "", location.pathname + (params.size ? "?" + params.toString() : "") + location.hash);
+  }
+  const emulator = localHost
+    ? (params.get("emulator") === "1" || sessionStorage.getItem("wedding:localEmulators") === "1")
     : false;
-  if (emulator && new URLSearchParams(location.search).get("emulator") === "1") sessionStorage.setItem("wedding:localEmulators", "1");
+  if (emulator && params.get("emulator") === "1") sessionStorage.setItem("wedding:localEmulators", "1");
   const bar = document.createElement("aside");
   bar.setAttribute("role", "status");
   bar.style.cssText = "position:sticky;top:0;z-index:2147483000;display:flex;justify-content:center;gap:.6rem;align-items:center;padding:.65rem 1rem;text-align:center;font:600 14px/1.4 system-ui,sans-serif;color:#fff;background:" + (emulator ? "#24554a" : "#9b3329");
   const message = document.createElement("span");
   message.textContent = emulator ? "SAFE EMULATOR MODE · Auth and Firestore use local demo data." : "LIVE FIREBASE · Saves on this preview change live event data.";
   const link = document.createElement("a");
-  const params = new URLSearchParams(location.search);
-  if (emulator) params.delete("emulator"); else params.set("emulator", "1");
+  if (emulator) { params.delete("emulator"); params.set("live", "1"); } else params.set("emulator", "1");
   link.href = location.pathname + (params.size ? "?" + params.toString() : "") + location.hash;
   link.textContent = emulator ? "Switch to live data" : "Switch to emulator";
   link.style.cssText = "color:inherit;text-decoration:underline;white-space:nowrap";

@@ -1077,9 +1077,15 @@ function safeMapsLink(value) {
   } catch { return ""; }
 }
 
+// The shared demo invitation always starts without a response and never saves one,
+// so anyone opening it can try the RSVP and see the result.
+function usesSampleRsvp() {
+  return state.sampleMode || state.weddingId === "luxury-wedding-demo";
+}
+
 function renderRsvp() {
   const mount = document.getElementById("rsvpMount");
-  if (state.sampleMode) {
+  if (usesSampleRsvp()) {
     renderDemoRsvp(mount, { sample: true });
     return;
   }
@@ -1160,7 +1166,7 @@ function renderDemoRsvp(mount, { sample = false } = {}) {
   const saved = sample ? state.sampleRsvpResponse : readSavedRsvp();
   if (saved && ["confirmed", "declined"].includes(saved.status) && !state.isRsvpEditing) {
     const confirmed = saved.status === "confirmed";
-    const name = sample ? sampleRsvpGuestName : demoGuest.fullName;
+    const name = sample ? (state.guest?.fullName || sampleRsvpGuestName) : demoGuest.fullName;
     const languageAttributes = isLaylaInvitation() && state.laylaLanguage === "ar" ? 'lang="ar" dir="rtl"' : "";
     const confirmationHeading = confirmed
       ? laylaText("attendanceConfirmed").replace("{name}", name)
@@ -1179,7 +1185,7 @@ function renderDemoRsvp(mount, { sample = false } = {}) {
     return;
   }
 
-  const guestName = sample ? sampleRsvpGuestName : demoGuest.fullName;
+  const guestName = sample ? (state.guest?.fullName || sampleRsvpGuestName) : demoGuest.fullName;
   const languageAttributes = isLaylaInvitation() && state.laylaLanguage === "ar" ? 'lang="ar" dir="rtl"' : "";
   const demoStatusCopy = state.rsvpSaveError || (isLaylaInvitation() ? "" : laylaText("pendingResponse"));
   mount.innerHTML = `
@@ -2003,8 +2009,8 @@ function bindBaseEvents() {
 
     if (event.target.closest("[data-edit-rsvp], [data-change-rsvp]")) {
       if (event.target.closest("[data-change-rsvp]")) {
-        state.rsvpSelection = state.sampleMode ? (state.sampleRsvpResponse?.status || "") : "";
-        if (state.sampleMode) state.rsvpMessage = state.sampleRsvpResponse?.message || "";
+        state.rsvpSelection = usesSampleRsvp() ? (state.sampleRsvpResponse?.status || "") : "";
+        if (usesSampleRsvp()) state.rsvpMessage = state.sampleRsvpResponse?.message || "";
       }
       state.isRsvpEditing = true;
       renderRsvp();
@@ -2178,7 +2184,7 @@ function handleDemoRsvpSubmit(event) {
 
 function handleSampleRsvpSubmit(event) {
   event.preventDefault();
-  if (!state.sampleMode) return;
+  if (!usesSampleRsvp()) return;
   const form = event.currentTarget;
   const status = String(form.elements.status.value || "");
   if (!["confirmed", "declined"].includes(status)) return;

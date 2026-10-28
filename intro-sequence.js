@@ -16,6 +16,7 @@ export function createIntroSequence({
   cancelFrame = globalThis.cancelAnimationFrame?.bind(globalThis),
   startupTimeout = INTRO_STARTUP_TIMEOUT,
   bufferTimeout = INTRO_BUFFER_TIMEOUT,
+  finishAt = null,
 } = {}) {
   let active = false;
   let completed = false;
@@ -157,6 +158,10 @@ export function createIntroSequence({
       canplay: requestFirstFrame,
       waiting: markBuffering,
       stalled: markBuffering,
+      timeupdate: () => {
+        // Some videos end on a long still frame; hand over once the motion is done.
+        if (finishAt !== null && framePresented && video.currentTime >= finishAt) finish("motion-complete");
+      },
       ended: () => finish("ended"),
       error: () => finishWithFallback("media-error"),
     };

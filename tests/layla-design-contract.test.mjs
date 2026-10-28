@@ -10,12 +10,12 @@ const introSequence = await readFile(new URL("../../../intro-sequence.js", root)
 const assetDir = new URL("assets/", root);
 
 test("Layla landing uses the envelope cover and restored envelope opening video", () => {
-  assert.match(html, /src="\.\/invitations\/wedding-designs\/layla-zaid\/assets\/Ivory Wedding Envelope with LZ Seal\.png" alt="Ivory wedding envelope sealed with the Layla and Zaid monogram"/);
-  assert.match(html, /src="\.\/invitations\/wedding-designs\/layla-zaid\/assets\/enevlope%20opening\.mp4\?v=restored-20261027"/);
-  assert.match(html, /poster="\.\/invitations\/wedding-designs\/layla-zaid\/assets\/Ivory Wedding Envelope with LZ Seal\.png"/);
+  assert.match(html, /src="\.\/invitations\/wedding-designs\/layla-zaid\/assets\/Ivory Wedding Envelope with LZ Seal\.jpg" alt="Ivory wedding envelope sealed with the Layla and Zaid monogram"/);
+  assert.match(html, /src="\.\/invitations\/wedding-designs\/layla-zaid\/assets\/enevlope%20opening\.mp4\?v=20261028-fullscreen-4-5s"/);
+  assert.match(html, /poster="\.\/invitations\/wedding-designs\/layla-zaid\/assets\/Ivory Wedding Envelope with LZ Seal\.jpg"/);
   assert.match(html, /data-layla-text="introCaption">A love story awaits/);
   assert.match(html, /data-layla-text="introCaption"/);
-  assert.match(html, /playsinline webkit-playsinline muted preload="none"/);
+  assert.match(html, /playsinline webkit-playsinline muted preload="auto"/);
   assert.match(html, /id="skipOpening"/);
   assert.doesNotMatch(html, /envelope-layer--seal|envelope-layer--card|heroBackdrop/);
   assert.match(css, /url\("\.\/assets\/Sculpted Ivory Paper Wedding Invitation\.png"\)/);

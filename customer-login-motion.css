@@ -1,0 +1,1147 @@
+/*
+ * Customer login motion layer.
+ * Loaded only by customer-login.html; every rule is also scoped to the
+ * customer surface so the shared dashboard-login.css stays untouched.
+ *
+ * Channels (so animations never fight each other):
+ *   transform            base pose + pointer parallax (JS sets --clm-px / --clm-py)
+ *   translate/rotate/scale  entrance keyframes, then ambient loops
+ *   --clm-lift / rotate  tap-to-open state on the invitation
+ * Entrance is pure CSS (runs without JS and always ends fully visible).
+ * Ambient loops only run once JS adds html.clm-live, and pause with
+ * html.clm-art-off (offscreen) or html.clm-tab-hidden.
+ */
+
+@property --clm-lift {
+  syntax: "<length-percentage>";
+  inherits: false;
+  initial-value: 0px;
+}
+
+[data-account-surface="customer"] {
+  --clm-k: 1;
+  --clm-ease-out: cubic-bezier(0.16, 1, 0.3, 1);
+  --clm-ease-spring: cubic-bezier(0.34, 1.56, 0.64, 1);
+  --clm-ease-soft: cubic-bezier(0.45, 0, 0.25, 1);
+  --clm-gold: #c29a5b;
+  --clm-teal: #3c6d7a;
+  --clm-blush: #e3b49d;
+  --clm-sage: #98b39c;
+  --clm-cream: #ead9b6;
+}
+
+/* ---------- Static structure (applies with or without motion) ---------- */
+
+[data-account-surface="customer"] .clm-word {
+  display: inline-block;
+}
+
+[data-account-surface="customer"] .planner-login__art {
+  --clm-px: 0;
+  --clm-py: 0;
+  transform: perspective(1100px) rotateX(calc(var(--clm-py) * -3.5deg)) rotateY(calc(var(--clm-px) * 4.5deg));
+  -webkit-tap-highlight-color: transparent;
+  cursor: pointer;
+}
+
+[data-account-surface="customer"] .planner-login__arch {
+  transform: translate3d(calc(var(--clm-px) * -3px), calc(var(--clm-py) * -2px), 0);
+}
+
+[data-account-surface="customer"] .planner-login__art-glow {
+  transform: translate3d(calc(var(--clm-px) * -6px), calc(var(--clm-py) * -4px), 0);
+}
+
+[data-account-surface="customer"] .planner-login__art-card--back {
+  transform: translate3d(calc(-28px + var(--clm-px) * 3px), calc(13px + var(--clm-py) * 2px), 0) rotate(-12deg);
+}
+
+[data-account-surface="customer"] .planner-login__art-card--middle {
+  transform: translate3d(calc(28px + var(--clm-px) * 5px), calc(10px + var(--clm-py) * 3px), 0) rotate(10deg);
+}
+
+[data-account-surface="customer"] .planner-login__envelope {
+  transform: translate3d(calc(var(--clm-px) * 7px), calc(var(--clm-py) * 5px), 0) rotate(-1.5deg);
+}
+
+[data-account-surface="customer"] .planner-login__envelope-fold {
+  transform-origin: 50% 49.4%;
+  backface-visibility: hidden;
+}
+
+[data-account-surface="customer"] .planner-login__invitation {
+  transform: translate3d(calc(var(--clm-px) * 11px), calc(var(--clm-py) * 8px + var(--clm-lift)), 0) rotate(-1.5deg);
+  transition: --clm-lift 720ms var(--clm-ease-spring), rotate 720ms var(--clm-ease-spring), scale 720ms var(--clm-ease-spring);
+}
+
+[data-account-surface="customer"] .planner-login__invitation::after {
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  background: linear-gradient(105deg, transparent 40%, rgba(255, 246, 225, 0.9) 48%, rgba(233, 204, 150, 0.3) 52%, transparent 60%) 120% 0 / 300% 100% no-repeat;
+  content: "";
+  opacity: 0;
+  pointer-events: none;
+}
+
+[data-account-surface="customer"] .planner-login__wax-seal {
+  padding-left: 0.04em; /* balances the trailing letter-spacing so QD sits centred */
+  font-size: 13.5px;
+  font-style: normal;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  line-height: 1;
+  font-variation-settings: "opsz" 9;
+  transform: translate3d(calc(var(--clm-px) * 14px), calc(var(--clm-py) * 10px), 0);
+  transition: scale 520ms var(--clm-ease-spring), rotate 520ms var(--clm-ease-spring);
+}
+
+[data-account-surface="customer"] .planner-login__wax-seal::before,
+[data-account-surface="customer"] .planner-login__wax-seal::after {
+  position: absolute;
+  inset: -1px;
+  border: 1.5px solid rgba(194, 154, 91, 0.75);
+  border-radius: 50%;
+  content: "";
+  opacity: 0;
+  pointer-events: none;
+}
+
+[data-account-surface="customer"] .planner-login__art-caption span {
+  transform-origin: 0 50%;
+}
+
+/* Tap-to-open state (JS toggles .clm-open on the art). */
+[data-account-surface="customer"] .planner-login__art.clm-open .planner-login__invitation {
+  --clm-lift: -16%;
+  rotate: 2.5deg;
+  scale: 1.04;
+}
+
+[data-account-surface="customer"] .planner-login__art.clm-open .planner-login__wax-seal {
+  rotate: -14deg;
+  scale: 1.14;
+}
+
+/* Sparkles: four-point stars around the arch. Hidden until loops start. */
+[data-account-surface="customer"] .clm-sparkle {
+  position: absolute;
+  z-index: 6;
+  width: 12px;
+  height: 12px;
+  background: var(--clm-gold);
+  clip-path: polygon(50% 0, 61% 39%, 100% 50%, 61% 61%, 50% 100%, 39% 61%, 0 50%, 39% 39%);
+  opacity: 0;
+  pointer-events: none;
+}
+
+[data-account-surface="customer"] .clm-sparkle:nth-of-type(1) { top: 6%; left: 22%; }
+[data-account-surface="customer"] .clm-sparkle:nth-of-type(2) { top: 18%; right: 17%; width: 9px; height: 9px; background: var(--clm-teal); }
+[data-account-surface="customer"] .clm-sparkle:nth-of-type(3) { top: 44%; left: 9%; width: 8px; height: 8px; }
+[data-account-surface="customer"] .clm-sparkle:nth-of-type(4) { top: 2%; left: 62%; width: 7px; height: 7px; background: var(--clm-blush); }
+[data-account-surface="customer"] .clm-sparkle:nth-of-type(5) { top: 52%; right: 6%; width: 10px; height: 10px; }
+[data-account-surface="customer"] .clm-sparkle:nth-of-type(6) { top: 30%; left: 30%; width: 6px; height: 6px; background: var(--clm-sage); }
+
+/* Ambient drifting confetti / petals (JS creates the pieces). */
+[data-account-surface="customer"] .clm-drift {
+  position: absolute;
+  z-index: 0;
+  inset: -6% 0 0;
+  overflow: hidden;
+  pointer-events: none;
+}
+
+[data-account-surface="customer"] .clm-drift__piece {
+  position: absolute;
+  top: 0;
+  left: var(--x, 50%);
+  opacity: 0;
+}
+
+[data-account-surface="customer"] .clm-drift__piece > i,
+[data-account-surface="customer"] .clm-burst__piece {
+  display: block;
+  width: 7px;
+  height: 4px;
+  border-radius: 1px;
+  background: var(--c, var(--clm-gold));
+}
+
+[data-account-surface="customer"] .clm-drift__piece[data-shape="dot"] > i,
+[data-account-surface="customer"] .clm-burst__piece[data-shape="dot"] {
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+}
+
+[data-account-surface="customer"] .clm-drift__piece[data-shape="petal"] > i,
+[data-account-surface="customer"] .clm-burst__piece[data-shape="petal"] {
+  width: 8px;
+  height: 6px;
+  border-radius: 80% 0 80% 0;
+}
+
+/* Tap / success bursts. */
+[data-account-surface="customer"] .clm-burst {
+  position: absolute;
+  z-index: 8;
+  width: 0;
+  height: 0;
+  pointer-events: none;
+}
+
+[data-account-surface="customer"] .clm-burst__piece {
+  position: absolute;
+  top: -3px;
+  left: -3px;
+  opacity: 0;
+}
+
+/* ---------- Form: focus, validation, button ---------- */
+
+[data-account-surface="customer"] .planner-login__card {
+  position: relative;
+}
+
+[data-account-surface="customer"] .planner-login__card::before {
+  position: absolute;
+  top: -1px;
+  right: 14%;
+  left: 14%;
+  height: 1.5px;
+  border-radius: 2px;
+  background: linear-gradient(90deg, transparent, var(--clm-gold) 30%, #f1dcae 50%, var(--clm-gold) 70%, transparent);
+  content: "";
+  opacity: 0;
+  pointer-events: none;
+}
+
+[data-account-surface="customer"] .planner-login__field {
+  position: relative;
+}
+
+[data-account-surface="customer"] .planner-login__field > span:first-child {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  justify-self: start;
+  transition: color 240ms ease, translate 320ms var(--clm-ease-out);
+}
+
+[data-account-surface="customer"] .planner-login__field > span:first-child::after {
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: var(--clm-gold);
+  content: "";
+  opacity: 0;
+  scale: 0;
+  transition: opacity 240ms ease, scale 420ms var(--clm-ease-spring);
+}
+
+[data-account-surface="customer"] .planner-login__field:focus-within > span:first-child {
+  color: var(--clm-teal);
+  translate: 2px -1px;
+}
+
+[data-account-surface="customer"] .planner-login__field:focus-within > span:first-child::after {
+  opacity: 1;
+  scale: 1;
+}
+
+/* Underline that draws from the centre on focus. */
+[data-account-surface="customer"] .planner-login__field::after {
+  position: absolute;
+  right: 14px;
+  bottom: 0;
+  left: 14px;
+  height: 2px;
+  border-radius: 2px;
+  background: linear-gradient(90deg, var(--clm-gold), var(--clm-teal) 50%, var(--clm-gold));
+  content: "";
+  pointer-events: none;
+  scale: 0 1;
+  transition: scale 460ms var(--clm-ease-out);
+}
+
+[data-account-surface="customer"] .planner-login__field:focus-within::after {
+  scale: 1 1;
+}
+
+[data-account-surface="customer"] .planner-login__field input:focus-visible {
+  border-color: var(--clm-teal);
+  box-shadow: 0 0 0 4px rgba(60, 109, 122, 0.13), 0 10px 24px rgba(60, 109, 122, 0.1);
+}
+
+/* Email check mark once the address is valid. */
+[data-account-surface="customer"] .planner-login__field:has(> input[type="email"]) input {
+  padding-right: 44px;
+}
+
+[data-account-surface="customer"] .planner-login__field:has(> input[type="email"])::before {
+  position: absolute;
+  right: 20px;
+  bottom: 20px;
+  width: 6px;
+  height: 11px;
+  border-right: 2px solid var(--clm-teal);
+  border-bottom: 2px solid var(--clm-teal);
+  content: "";
+  opacity: 0;
+  pointer-events: none;
+  rotate: 45deg;
+  scale: 0.2;
+  transition: opacity 200ms ease, scale 460ms var(--clm-ease-spring);
+}
+
+[data-account-surface="customer"] .planner-login__field:has(> input[type="email"]:valid:not(:placeholder-shown))::before {
+  opacity: 1;
+  scale: 1;
+}
+
+[data-account-surface="customer"] .planner-login__submit {
+  position: relative;
+  overflow: hidden;
+  isolation: isolate;
+  transition: background-color 180ms ease, box-shadow 220ms ease, transform 160ms var(--clm-ease-out);
+}
+
+[data-account-surface="customer"] .planner-login__submit::before {
+  position: absolute;
+  z-index: -1;
+  inset: 0;
+  background: linear-gradient(105deg, transparent 30%, rgba(255, 244, 220, 0.34) 48%, rgba(255, 244, 220, 0.1) 56%, transparent 70%);
+  content: "";
+  pointer-events: none;
+  translate: -110% 0;
+}
+
+[data-account-surface="customer"] .planner-login__submit:hover:not(:disabled) {
+  background: #335d69;
+  box-shadow: 0 12px 26px rgba(60, 109, 122, 0.26);
+}
+
+[data-account-surface="customer"] .planner-login__submit:active:not(:disabled) {
+  transform: translateY(1px) scale(0.975);
+}
+
+[data-account-surface="customer"] .planner-login__submit-arrow {
+  transition: translate 320ms var(--clm-ease-spring);
+}
+
+[data-account-surface="customer"] .planner-login__submit:hover:not(:disabled) .planner-login__submit-arrow,
+[data-account-surface="customer"] .planner-login__submit:focus-visible .planner-login__submit-arrow {
+  translate: 4px 0;
+}
+
+[data-account-surface="customer"] .clm-ripple {
+  position: absolute;
+  z-index: -1;
+  width: 24px;
+  height: 24px;
+  margin: -12px 0 0 -12px;
+  border-radius: 50%;
+  background: rgba(255, 248, 232, 0.4);
+  opacity: 0;
+  pointer-events: none;
+}
+
+/* ---------- Motion (only when the visitor allows it) ---------- */
+
+@media (prefers-reduced-motion: no-preference) {
+  /* Backdrop aura behind the whole page. */
+  [data-account-surface="customer"] .planner-login::after {
+    position: absolute;
+    z-index: -1;
+    inset: 6% -8% 14% 38%;
+    border-radius: 50%;
+    background:
+      radial-gradient(circle at 30% 40%, rgba(194, 154, 91, 0.16), transparent 55%),
+      radial-gradient(circle at 70% 65%, rgba(60, 109, 122, 0.12), transparent 58%);
+    content: "";
+    pointer-events: none;
+    animation: clm-fade calc(1600ms * var(--clm-k)) ease calc(100ms * var(--clm-k)) both;
+  }
+
+  /* --- Story copy --- */
+  [data-account-surface="customer"] .planner-login__brand {
+    animation: clm-slide-in calc(800ms * var(--clm-k)) var(--clm-ease-out) calc(80ms * var(--clm-k)) both;
+  }
+
+  [data-account-surface="customer"] .planner-login__brand-mark svg {
+    animation: clm-star-in calc(1200ms * var(--clm-k)) var(--clm-ease-out) calc(120ms * var(--clm-k)) both;
+  }
+
+  [data-account-surface="customer"] .planner-login__eyebrow {
+    animation: clm-rise calc(700ms * var(--clm-k)) var(--clm-ease-out) calc(200ms * var(--clm-k)) both;
+  }
+
+  [data-account-surface="customer"] .clm-word {
+    animation: clm-word calc(980ms * var(--clm-k)) var(--clm-ease-out) both;
+  }
+
+  [data-account-surface="customer"] .clm-word:nth-of-type(1) { animation-delay: calc(280ms * var(--clm-k)); }
+  [data-account-surface="customer"] .clm-word:nth-of-type(2) { animation-delay: calc(370ms * var(--clm-k)); }
+  [data-account-surface="customer"] em .clm-word:nth-of-type(1) { animation-delay: calc(480ms * var(--clm-k)); }
+  [data-account-surface="customer"] em .clm-word:nth-of-type(2) { animation-delay: calc(570ms * var(--clm-k)); }
+
+  [data-account-surface="customer"] .planner-login__intro {
+    animation: clm-rise calc(800ms * var(--clm-k)) var(--clm-ease-out) calc(680ms * var(--clm-k)) both;
+  }
+
+  [data-account-surface="customer"] .planner-login__occasions li {
+    animation: clm-chip calc(720ms * var(--clm-k)) var(--clm-ease-spring) both;
+  }
+
+  [data-account-surface="customer"] .planner-login__occasions li:nth-child(1) { animation-delay: calc(780ms * var(--clm-k)); }
+  [data-account-surface="customer"] .planner-login__occasions li:nth-child(2) { animation-delay: calc(860ms * var(--clm-k)); }
+  [data-account-surface="customer"] .planner-login__occasions li:nth-child(3) { animation-delay: calc(940ms * var(--clm-k)); }
+
+  /* --- Art stage --- */
+  [data-account-surface="customer"] .planner-login__arch-fill {
+    transform-box: fill-box;
+    transform-origin: 50% 100%;
+    animation: clm-arch-grow calc(1000ms * var(--clm-k)) var(--clm-ease-out) calc(220ms * var(--clm-k)) both;
+  }
+
+  [data-account-surface="customer"] .planner-login__arch-line,
+  [data-account-surface="customer"] .planner-login__arch-inner,
+  [data-account-surface="customer"] .planner-login__botanical,
+  [data-account-surface="customer"] .planner-login__balloon-line {
+    stroke-dasharray: 1 1;
+    animation: clm-draw calc(1700ms * var(--clm-k)) var(--clm-ease-soft) calc(340ms * var(--clm-k)) both;
+  }
+
+  [data-account-surface="customer"] .planner-login__arch-inner { animation-duration: calc(1500ms * var(--clm-k)); animation-delay: calc(620ms * var(--clm-k)); }
+  [data-account-surface="customer"] .planner-login__botanical { animation-duration: calc(1500ms * var(--clm-k)); animation-delay: calc(860ms * var(--clm-k)); }
+  [data-account-surface="customer"] .planner-login__balloon-line { animation-duration: calc(900ms * var(--clm-k)); animation-delay: calc(1500ms * var(--clm-k)); }
+
+  [data-account-surface="customer"] .planner-login__botanical-leaf {
+    transform-box: fill-box;
+    transform-origin: 90% 100%;
+    animation: clm-leaf calc(900ms * var(--clm-k)) var(--clm-ease-spring) calc(1500ms * var(--clm-k)) both;
+  }
+
+  [data-account-surface="customer"] .clm-balloon {
+    animation: clm-balloon-rise calc(1600ms * var(--clm-k)) var(--clm-ease-out) calc(1050ms * var(--clm-k)) both;
+  }
+
+  [data-account-surface="customer"] .clm-balloon-sway,
+  [data-account-surface="customer"] .clm-balloon {
+    transform-box: view-box;
+    transform-origin: 439px 144px;
+  }
+
+  [data-account-surface="customer"] .clm-cap,
+  [data-account-surface="customer"] .clm-cap-bob {
+    transform-box: fill-box;
+    transform-origin: 50% 50%;
+  }
+
+  [data-account-surface="customer"] .clm-cap {
+    animation: clm-cap-toss calc(1350ms * var(--clm-k)) var(--clm-ease-soft) calc(1250ms * var(--clm-k)) both;
+  }
+
+  [data-account-surface="customer"] .planner-login__art-glow {
+    animation: clm-fade calc(1400ms * var(--clm-k)) ease calc(500ms * var(--clm-k)) both;
+  }
+
+  [data-account-surface="customer"] .planner-login__art-card--back {
+    animation: clm-fan-back calc(950ms * var(--clm-k)) var(--clm-ease-out) calc(620ms * var(--clm-k)) both;
+  }
+
+  [data-account-surface="customer"] .planner-login__art-card--middle {
+    animation: clm-fan-middle calc(950ms * var(--clm-k)) var(--clm-ease-out) calc(720ms * var(--clm-k)) both;
+  }
+
+  [data-account-surface="customer"] .planner-login__envelope {
+    animation: clm-envelope calc(900ms * var(--clm-k)) var(--clm-ease-spring) calc(860ms * var(--clm-k)) both;
+  }
+
+  [data-account-surface="customer"] .planner-login__envelope-fold {
+    animation: clm-flap calc(1700ms * var(--clm-k)) var(--clm-ease-soft) calc(1300ms * var(--clm-k)) both;
+  }
+
+  [data-account-surface="customer"] .planner-login__invitation {
+    animation: clm-invitation calc(1100ms * var(--clm-k)) var(--clm-ease-out) calc(1500ms * var(--clm-k)) both;
+  }
+
+  [data-account-surface="customer"] .planner-login__invitation-rule {
+    transform-origin: 50% 50%;
+    animation: clm-rule calc(700ms * var(--clm-k)) var(--clm-ease-out) calc(2050ms * var(--clm-k)) both;
+  }
+
+  [data-account-surface="customer"] .planner-login__invitation-flower {
+    animation: clm-bloom calc(900ms * var(--clm-k)) var(--clm-ease-spring) calc(2200ms * var(--clm-k)) both;
+  }
+
+  [data-account-surface="customer"] .planner-login__wax-seal {
+    animation: clm-stamp calc(640ms * var(--clm-k)) cubic-bezier(0.5, 0, 0.6, 1.6) calc(2350ms * var(--clm-k)) both;
+  }
+
+  [data-account-surface="customer"] .planner-login__wax-seal::after {
+    animation: clm-ring calc(900ms * var(--clm-k)) var(--clm-ease-out) calc(2560ms * var(--clm-k)) both;
+  }
+
+  [data-account-surface="customer"] .planner-login__art-caption {
+    animation: clm-fade calc(900ms * var(--clm-k)) ease calc(2500ms * var(--clm-k)) both;
+  }
+
+  [data-account-surface="customer"] .planner-login__art-caption span {
+    animation: clm-line calc(900ms * var(--clm-k)) var(--clm-ease-out) calc(2550ms * var(--clm-k)) both;
+  }
+
+  /* --- Login card --- */
+  [data-account-surface="customer"] .planner-login__card {
+    animation: clm-card calc(900ms * var(--clm-k)) var(--clm-ease-out) calc(120ms * var(--clm-k)) both;
+  }
+
+  [data-account-surface="customer"] .planner-login__card::before {
+    animation: clm-glint calc(1500ms * var(--clm-k)) var(--clm-ease-out) calc(900ms * var(--clm-k)) both;
+  }
+
+  [data-account-surface="customer"] .planner-login__card-heading > *,
+  [data-account-surface="customer"] .planner-login__form > *,
+  [data-account-surface="customer"] .planner-login__card-footer,
+  [data-account-surface="customer"] .planner-login__form-note {
+    animation: clm-rise-sm calc(700ms * var(--clm-k)) var(--clm-ease-out) both;
+  }
+
+  [data-account-surface="customer"] .planner-login__card-heading > :nth-child(1) { animation-delay: calc(260ms * var(--clm-k)); }
+  [data-account-surface="customer"] .planner-login__card-heading > :nth-child(2) { animation-delay: calc(320ms * var(--clm-k)); }
+  [data-account-surface="customer"] .planner-login__card-heading > :nth-child(3) { animation-delay: calc(380ms * var(--clm-k)); }
+  [data-account-surface="customer"] .planner-login__form > :nth-child(1) { animation-delay: calc(440ms * var(--clm-k)); }
+  [data-account-surface="customer"] .planner-login__form > :nth-child(2) { animation-delay: calc(500ms * var(--clm-k)); }
+  [data-account-surface="customer"] .planner-login__form > :nth-child(3) { animation-delay: calc(560ms * var(--clm-k)); }
+  [data-account-surface="customer"] .planner-login__card-footer { animation-delay: calc(640ms * var(--clm-k)); }
+  [data-account-surface="customer"] .planner-login__form-note { animation-delay: calc(720ms * var(--clm-k)); }
+
+  [data-account-surface="customer"] .planner-login__submit::before {
+    animation: clm-sheen calc(1100ms * var(--clm-k)) var(--clm-ease-soft) calc(1700ms * var(--clm-k)) both;
+  }
+
+  [data-account-surface="customer"] .planner-login__submit:hover:not(:disabled)::before {
+    animation: clm-sheen calc(900ms * var(--clm-k)) var(--clm-ease-soft) both;
+  }
+
+  [data-account-surface="customer"] .planner-login__submit[aria-busy="true"]::before {
+    animation: clm-sheen calc(1150ms * var(--clm-k)) var(--clm-ease-soft) infinite;
+  }
+
+  [data-account-surface="customer"] .planner-login__submit[aria-busy="true"] #loginSubmitLabel {
+    animation: clm-breathe-text calc(1150ms * var(--clm-k)) ease-in-out infinite alternate;
+  }
+
+  [data-account-surface="customer"] .clm-ripple {
+    animation: clm-ripple calc(640ms * var(--clm-k)) var(--clm-ease-out) both;
+  }
+
+  [data-account-surface="customer"] .planner-login__field.clm-shake {
+    animation: clm-shake calc(420ms * var(--clm-k)) var(--clm-ease-soft) both;
+  }
+
+  [data-account-surface="customer"] .planner-login__card.clm-card-shake {
+    animation: clm-shake-soft calc(520ms * var(--clm-k)) var(--clm-ease-soft) both;
+  }
+
+  [data-account-surface="customer"] .planner-login__status.clm-status-pop {
+    animation: clm-rise-sm calc(420ms * var(--clm-k)) var(--clm-ease-out) both;
+  }
+
+  [data-account-surface="customer"].clm-success .planner-login__card {
+    animation: clm-success-glow calc(1200ms * var(--clm-k)) var(--clm-ease-out) both;
+  }
+
+  /* --- Bursts (tap the art, successful sign-in) --- */
+  [data-account-surface="customer"] .clm-burst__piece {
+    animation: clm-burst var(--d, calc(900ms * var(--clm-k))) var(--clm-ease-out) both;
+  }
+
+  /* --- After the entrance: drop entrance fills, start ambient loops --- */
+  .clm-live [data-account-surface="customer"] .planner-login__brand,
+  .clm-live [data-account-surface="customer"] .planner-login__eyebrow,
+  .clm-live [data-account-surface="customer"] .clm-word,
+  .clm-live [data-account-surface="customer"] .planner-login__intro,
+  .clm-live [data-account-surface="customer"] .planner-login__occasions li,
+  .clm-live [data-account-surface="customer"] .planner-login__arch-fill,
+  .clm-live [data-account-surface="customer"] .planner-login__arch-line,
+  .clm-live [data-account-surface="customer"] .planner-login__arch-inner,
+  .clm-live [data-account-surface="customer"] .planner-login__botanical,
+  .clm-live [data-account-surface="customer"] .planner-login__balloon-line,
+  .clm-live [data-account-surface="customer"] .planner-login__botanical-leaf,
+  .clm-live [data-account-surface="customer"] .clm-cap,
+  .clm-live [data-account-surface="customer"] .planner-login__envelope,
+  .clm-live [data-account-surface="customer"] .planner-login__envelope-fold,
+  .clm-live [data-account-surface="customer"] .planner-login__invitation-rule,
+  .clm-live [data-account-surface="customer"] .planner-login__invitation-flower,
+  .clm-live [data-account-surface="customer"] .planner-login__wax-seal,
+  .clm-live [data-account-surface="customer"] .planner-login__wax-seal::after,
+  .clm-live [data-account-surface="customer"] .planner-login__art-caption,
+  .clm-live [data-account-surface="customer"] .planner-login__art-caption span,
+  .clm-live [data-account-surface="customer"] .planner-login__card:not(.clm-card-shake),
+  .clm-live [data-account-surface="customer"] .planner-login__card::before,
+  .clm-live [data-account-surface="customer"] .planner-login__card-heading > *,
+  .clm-live [data-account-surface="customer"] .planner-login__form > *:not(.clm-shake),
+  .clm-live [data-account-surface="customer"] .planner-login__card-footer,
+  .clm-live [data-account-surface="customer"] .planner-login__form-note {
+    animation: none;
+  }
+
+  .clm-live [data-account-surface="customer"] .planner-login__submit:not(:hover):not([aria-busy="true"])::before {
+    animation: none;
+  }
+
+  .clm-live [data-account-surface="customer"].clm-success .planner-login__card {
+    animation: clm-success-glow 1200ms var(--clm-ease-out) both;
+  }
+
+  .clm-live [data-account-surface="customer"] .planner-login::after {
+    animation: clm-aura 22s var(--clm-ease-soft) infinite alternate;
+  }
+
+  .clm-live [data-account-surface="customer"] .planner-login__brand-mark svg {
+    animation: clm-spin 48s linear infinite;
+  }
+
+  .clm-live [data-account-surface="customer"] .planner-login__art-glow {
+    animation: clm-glow 6.5s var(--clm-ease-soft) infinite alternate;
+  }
+
+  .clm-live [data-account-surface="customer"] .clm-balloon {
+    animation: clm-balloon-float 5.2s var(--clm-ease-soft) infinite alternate;
+  }
+
+  .clm-live [data-account-surface="customer"] .clm-balloon-sway {
+    animation: clm-sway 6.4s var(--clm-ease-soft) -1.2s infinite alternate;
+  }
+
+  .clm-live [data-account-surface="customer"] .clm-cap-bob {
+    animation: clm-cap-bob 7s var(--clm-ease-soft) infinite alternate;
+  }
+
+  .clm-live [data-account-surface="customer"] .planner-login__art-card--back {
+    animation: clm-card-drift 9s var(--clm-ease-soft) infinite alternate;
+  }
+
+  .clm-live [data-account-surface="customer"] .planner-login__art-card--middle {
+    animation: clm-card-drift 11s var(--clm-ease-soft) -4s infinite alternate-reverse;
+  }
+
+  .clm-live [data-account-surface="customer"] .planner-login__invitation {
+    animation: clm-float 5.6s var(--clm-ease-soft) infinite alternate;
+  }
+
+  .clm-live [data-account-surface="customer"] .planner-login__invitation::after {
+    animation: clm-invitation-sheen 7.5s var(--clm-ease-soft) 600ms infinite;
+  }
+
+  .clm-live [data-account-surface="customer"] .planner-login__wax-seal::before {
+    animation: clm-pulse 3.4s var(--clm-ease-out) infinite;
+  }
+
+  .clm-live [data-account-surface="customer"] .clm-sparkle {
+    animation: clm-twinkle 3.8s var(--clm-ease-soft) infinite;
+  }
+
+  .clm-live [data-account-surface="customer"] .clm-sparkle:nth-of-type(2) { animation-duration: 4.6s; animation-delay: -1.4s; }
+  .clm-live [data-account-surface="customer"] .clm-sparkle:nth-of-type(3) { animation-duration: 5.2s; animation-delay: -2.8s; }
+  .clm-live [data-account-surface="customer"] .clm-sparkle:nth-of-type(4) { animation-duration: 4.2s; animation-delay: -0.6s; }
+  .clm-live [data-account-surface="customer"] .clm-sparkle:nth-of-type(5) { animation-duration: 5.8s; animation-delay: -3.6s; }
+  .clm-live [data-account-surface="customer"] .clm-sparkle:nth-of-type(6) { animation-duration: 4.9s; animation-delay: -2.1s; }
+
+  .clm-live [data-account-surface="customer"] .clm-drift__piece {
+    animation: clm-fall var(--d, 12s) linear var(--delay, 0s) infinite;
+  }
+
+  .clm-live [data-account-surface="customer"] .clm-drift__piece > i {
+    animation: clm-flutter var(--f, 2.6s) var(--clm-ease-soft) infinite alternate;
+  }
+
+  /* Pause every loop when the art is offscreen or the tab is hidden. */
+  .clm-art-off [data-account-surface="customer"] .planner-login__art,
+  .clm-art-off [data-account-surface="customer"] .planner-login__art *,
+  .clm-art-off [data-account-surface="customer"] .planner-login__art *::before,
+  .clm-art-off [data-account-surface="customer"] .planner-login__art *::after,
+  .clm-art-off [data-account-surface="customer"] .planner-login__brand-mark svg,
+  .clm-tab-hidden [data-account-surface="customer"] *,
+  .clm-tab-hidden [data-account-surface="customer"] *::before,
+  .clm-tab-hidden [data-account-surface="customer"] *::after {
+    animation-play-state: paused !important;
+  }
+}
+
+/* Reduced motion: everything static and fully visible, sparkles shown softly. */
+@media (prefers-reduced-motion: reduce) {
+  [data-account-surface="customer"] .clm-sparkle {
+    opacity: 0.55;
+  }
+
+  [data-account-surface="customer"] .clm-drift,
+  [data-account-surface="customer"] .clm-burst,
+  [data-account-surface="customer"] .clm-ripple {
+    display: none;
+  }
+}
+
+/*
+ * Phones: the story collapses into a compact animated header band and the
+ * login card overlaps its lower edge, so email, password and Sign in all sit
+ * in the first viewport. Heights use svh so the iOS keyboard / toolbars never
+ * trap content; nothing is fixed-height.
+ */
+@media (max-width: 700px) {
+  [data-account-surface="customer"] {
+    --clm-k: 0.7;
+  }
+
+  [data-account-surface="customer"] .planner-login {
+    min-height: 0;
+    padding-top: max(12px, env(safe-area-inset-top));
+    padding-bottom: max(20px, env(safe-area-inset-bottom));
+  }
+
+  [data-account-surface="customer"] .planner-login__layout {
+    gap: 0;
+  }
+
+  [data-account-surface="customer"] .planner-login__story {
+    padding: 14px 16px 0;
+    border-radius: 22px;
+  }
+
+  [data-account-surface="customer"] .planner-login__brand {
+    gap: 9px;
+    font-size: 13px;
+  }
+
+  [data-account-surface="customer"] .planner-login__brand-mark {
+    width: 30px;
+    height: 30px;
+  }
+
+  [data-account-surface="customer"] .planner-login__brand-mark svg {
+    width: 17px;
+    height: 17px;
+  }
+
+  [data-account-surface="customer"] .planner-login__story-copy {
+    margin-top: 10px;
+  }
+
+  [data-account-surface="customer"] .planner-login__eyebrow,
+  [data-account-surface="customer"] .planner-login__intro,
+  [data-account-surface="customer"] .planner-login__art-caption {
+    display: none;
+  }
+
+  [data-account-surface="customer"] .planner-login__story h1 {
+    font-size: clamp(1.75rem, 8.2vw, 2.25rem);
+    line-height: 1.02;
+  }
+
+  [data-account-surface="customer"] .planner-login__story h1 em {
+    display: block;
+  }
+
+  /* Occasion chips: one row, only when the phone is tall enough. */
+  [data-account-surface="customer"] .planner-login__occasions {
+    display: none;
+    flex-wrap: nowrap;
+    margin-top: 10px;
+  }
+
+  [data-account-surface="customer"] .planner-login__occasions li {
+    flex: 0 0 auto;
+    padding: 5px 9px;
+  }
+
+  [data-account-surface="customer"] .planner-login__art {
+    width: min(100%, 400px);
+    height: clamp(104px, 24svh, 178px);
+    margin: 4px auto 0;
+  }
+
+  [data-account-surface="customer"] .planner-login__invitation {
+    padding: 8px 6px;
+  }
+
+  [data-account-surface="customer"] .planner-login__invitation-rule {
+    width: 22px;
+    margin-bottom: 6px;
+  }
+
+  [data-account-surface="customer"] .planner-login__invitation-title {
+    margin: 6px 0;
+    font-size: clamp(0.82rem, 4.2vw, 1.05rem);
+  }
+
+  [data-account-surface="customer"] .planner-login__invitation-kicker,
+  [data-account-surface="customer"] .planner-login__invitation-detail {
+    font-size: 5.5px;
+    letter-spacing: 0.12em;
+  }
+
+  [data-account-surface="customer"] .planner-login__invitation-flower {
+    display: none;
+  }
+
+  [data-account-surface="customer"] .planner-login__wax-seal {
+    width: 32px;
+    height: 32px;
+    font-size: 11px;
+  }
+
+  [data-account-surface="customer"] .planner-login__art.clm-open .planner-login__invitation {
+    --clm-lift: -7%;
+  }
+
+  [data-account-surface="customer"] .clm-sparkle:nth-of-type(6),
+  [data-account-surface="customer"] .clm-sparkle:nth-of-type(3) {
+    display: none;
+  }
+
+  /* Login card floats over the bottom edge of the band. */
+  [data-account-surface="customer"] .planner-login__form-side {
+    position: relative;
+    z-index: 2;
+    width: 100%;
+    margin-top: -16px;
+  }
+
+  [data-account-surface="customer"] .planner-login__card {
+    padding: 20px 20px 16px;
+    border-radius: 20px;
+  }
+
+  [data-account-surface="customer"] .planner-login__card-eyebrow {
+    margin-bottom: 6px;
+    font-size: 10px;
+  }
+
+  [data-account-surface="customer"] .planner-login__card h2 {
+    font-size: clamp(1.45rem, 6.6vw, 1.75rem);
+    line-height: 1.08;
+  }
+
+  /* Description stays for screen readers, hidden visually to save height. */
+  [data-account-surface="customer"] .planner-login__card-heading > p:last-child {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    margin: -1px;
+    overflow: hidden;
+    clip: rect(0 0 0 0);
+    white-space: nowrap;
+  }
+
+  [data-account-surface="customer"] .planner-login__form {
+    gap: 12px;
+    margin-top: 14px;
+  }
+
+  [data-account-surface="customer"] .planner-login__field {
+    gap: 6px;
+  }
+
+  [data-account-surface="customer"] .planner-login__field input {
+    min-height: 48px;
+    font-size: 16px;
+  }
+
+  [data-account-surface="customer"] .planner-login__field:has(> input[type="email"])::before {
+    bottom: 18px;
+  }
+
+  [data-account-surface="customer"] .planner-login__submit {
+    min-height: 50px;
+    margin-top: 2px;
+  }
+
+  [data-account-surface="customer"] .planner-login__status {
+    min-height: 0;
+    margin-top: 8px;
+  }
+
+  [data-account-surface="customer"] .planner-login__card-footer {
+    margin-top: 6px;
+    padding-top: 12px;
+  }
+}
+
+@media (max-width: 700px) and (min-height: 740px) {
+  [data-account-surface="customer"] .planner-login__occasions {
+    display: flex;
+  }
+
+  [data-account-surface="customer"] .planner-login__art {
+    height: clamp(150px, 25svh, 220px);
+    margin-top: 8px;
+  }
+}
+
+@media (max-width: 700px) and (max-height: 620px) {
+  [data-account-surface="customer"] .planner-login__story h1 {
+    font-size: 1.6rem;
+  }
+
+  [data-account-surface="customer"] .planner-login__art {
+    height: 96px;
+  }
+}
+
+/* ---------- Keyframes ---------- */
+
+@keyframes clm-fade {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+@keyframes clm-rise {
+  from { opacity: 0; translate: 0 16px; }
+  to { opacity: 1; translate: 0 0; }
+}
+
+@keyframes clm-rise-sm {
+  from { opacity: 0; translate: 0 9px; }
+  to { opacity: 1; translate: 0 0; }
+}
+
+@keyframes clm-slide-in {
+  from { opacity: 0; translate: -14px 0; }
+  to { opacity: 1; translate: 0 0; }
+}
+
+@keyframes clm-star-in {
+  from { opacity: 0; rotate: -120deg; scale: 0.4; }
+  to { opacity: 1; rotate: 0deg; scale: 1; }
+}
+
+@keyframes clm-spin {
+  to { rotate: 360deg; }
+}
+
+@keyframes clm-word {
+  0% {
+    opacity: 0;
+    translate: 0 0.62em;
+    rotate: 3deg;
+    clip-path: inset(0 -0.3em 100% -0.3em);
+  }
+  35% { opacity: 1; }
+  100% {
+    opacity: 1;
+    translate: 0 0;
+    rotate: 0deg;
+    clip-path: inset(-0.5em -0.3em -0.5em -0.3em);
+  }
+}
+
+@keyframes clm-chip {
+  from { opacity: 0; translate: 0 10px; scale: 0.82; }
+  to { opacity: 1; translate: 0 0; scale: 1; }
+}
+
+@keyframes clm-arch-grow {
+  from { opacity: 0; transform: scaleY(0.55); }
+  to { opacity: 1; transform: none; }
+}
+
+@keyframes clm-draw {
+  0% { opacity: 0; stroke-dashoffset: 1; }
+  6% { opacity: 1; }
+  100% { opacity: 1; stroke-dashoffset: 0; }
+}
+
+@keyframes clm-leaf {
+  from { opacity: 0; transform: scale(0.3) rotate(-14deg); }
+  to { opacity: 1; transform: none; }
+}
+
+@keyframes clm-balloon-rise {
+  0% { opacity: 0; transform: translateY(150px) rotate(-6deg); }
+  20% { opacity: 1; }
+  70% { transform: translateY(-8px) rotate(3deg); }
+  100% { opacity: 1; transform: none; }
+}
+
+@keyframes clm-balloon-float {
+  from { transform: translateY(0); }
+  to { transform: translateY(-9px); }
+}
+
+@keyframes clm-sway {
+  from { transform: rotate(-4deg); }
+  to { transform: rotate(4.5deg); }
+}
+
+@keyframes clm-cap-toss {
+  0% { opacity: 0; transform: translateY(26px) rotate(0deg) scale(0.8); }
+  12% { opacity: 1; }
+  48% { transform: translateY(-78px) rotate(-220deg) scale(1.08); }
+  80% { transform: translateY(5px) rotate(-356deg) scale(1); }
+  90% { transform: translateY(-4px) rotate(-362deg); }
+  100% { opacity: 1; transform: translateY(0) rotate(-360deg); }
+}
+
+@keyframes clm-cap-bob {
+  from { transform: rotate(-4deg) translateY(0); }
+  to { transform: rotate(5deg) translateY(-3px); }
+}
+
+@keyframes clm-glow {
+  from { opacity: 1; scale: 1; }
+  to { opacity: 0.68; scale: 1.12; }
+}
+
+@keyframes clm-fan-back {
+  from { opacity: 0; translate: 28px 38px; rotate: 12deg; }
+  to { opacity: 1; translate: 0 0; rotate: 0deg; }
+}
+
+@keyframes clm-fan-middle {
+  from { opacity: 0; translate: -28px 40px; rotate: -10deg; }
+  to { opacity: 1; translate: 0 0; rotate: 0deg; }
+}
+
+@keyframes clm-card-drift {
+  from { rotate: -1.2deg; translate: 0 0; }
+  to { rotate: 1.4deg; translate: 0 -4px; }
+}
+
+@keyframes clm-envelope {
+  from { opacity: 0; translate: 0 56px; scale: 0.94; }
+  to { opacity: 1; translate: 0 0; scale: 1; }
+}
+
+@keyframes clm-flap {
+  0% { transform: perspective(260px) rotateX(0deg); }
+  22%, 62% { transform: perspective(260px) rotateX(-178deg); }
+  100% { transform: perspective(260px) rotateX(0deg); }
+}
+
+@keyframes clm-invitation {
+  0% { opacity: 0; translate: 0 52%; scale: 0.9; rotate: 4deg; }
+  25% { opacity: 1; }
+  62% { translate: 0 -7%; scale: 1.02; rotate: -1.2deg; }
+  100% { opacity: 1; translate: 0 0; scale: 1; rotate: 0deg; }
+}
+
+@keyframes clm-float {
+  from { translate: 0 0; }
+  to { translate: 0 -5px; }
+}
+
+@keyframes clm-invitation-sheen {
+  0%, 58% { opacity: 0; background-position: 120% 0; }
+  62% { opacity: 1; }
+  86% { opacity: 1; }
+  92%, 100% { opacity: 0; background-position: -20% 0; }
+}
+
+@keyframes clm-rule {
+  from { opacity: 0; scale: 0 1; }
+  to { opacity: 1; scale: 1 1; }
+}
+
+@keyframes clm-bloom {
+  from { opacity: 0; rotate: -90deg; scale: 0.2; }
+  to { opacity: 1; rotate: 0deg; scale: 1; }
+}
+
+@keyframes clm-stamp {
+  0% { opacity: 0; scale: 2.3; rotate: -24deg; }
+  55% { opacity: 1; scale: 0.86; rotate: 4deg; }
+  78% { scale: 1.07; rotate: -2deg; }
+  100% { opacity: 1; scale: 1; rotate: 0deg; }
+}
+
+@keyframes clm-ring {
+  0% { opacity: 0.85; scale: 0.9; }
+  100% { opacity: 0; scale: 2.3; }
+}
+
+@keyframes clm-pulse {
+  0% { opacity: 0.6; scale: 1; }
+  70%, 100% { opacity: 0; scale: 1.75; }
+}
+
+@keyframes clm-line {
+  from { scale: 0 1; }
+  to { scale: 1 1; }
+}
+
+@keyframes clm-twinkle {
+  0%, 100% { opacity: 0; scale: 0.2; rotate: 0deg; }
+  45% { opacity: 0.95; scale: 1; rotate: 60deg; }
+  70% { opacity: 0.35; scale: 0.7; rotate: 90deg; }
+}
+
+@keyframes clm-fall {
+  0% { opacity: 0; translate: 0 0; }
+  8% { opacity: 0.9; }
+  85% { opacity: 0.8; }
+  100% { opacity: 0; translate: var(--dx, 20px) var(--fall, 220px); }
+}
+
+@keyframes clm-flutter {
+  from { rotate: calc(var(--r, 40deg) * -1); translate: -5px 0; scale: 1 1; }
+  to { rotate: var(--r, 40deg); translate: 5px 0; scale: 1 0.55; }
+}
+
+@keyframes clm-burst {
+  0% { opacity: 0; translate: 0 0; scale: 0.3; rotate: 0deg; }
+  10% { opacity: 1; scale: 1; }
+  65% { opacity: 1; translate: var(--bx) var(--by); }
+  100% { opacity: 0; translate: var(--bx) calc(var(--by) + 26px); scale: 0.8; rotate: var(--br, 280deg); }
+}
+
+@keyframes clm-aura {
+  from { translate: 0 0; scale: 1; }
+  to { translate: -4% 3%; scale: 1.06; }
+}
+
+@keyframes clm-card {
+  from { opacity: 0; translate: 0 30px; scale: 0.985; }
+  to { opacity: 1; translate: 0 0; scale: 1; }
+}
+
+@keyframes clm-glint {
+  0% { opacity: 0; scale: 0 1; }
+  40% { opacity: 1; scale: 1 1; }
+  100% { opacity: 0.55; scale: 1 1; }
+}
+
+@keyframes clm-sheen {
+  from { translate: -110% 0; }
+  to { translate: 110% 0; }
+}
+
+@keyframes clm-breathe-text {
+  from { opacity: 1; }
+  to { opacity: 0.62; }
+}
+
+@keyframes clm-ripple {
+  from { opacity: 1; scale: 0; }
+  to { opacity: 0; scale: 16; }
+}
+
+@keyframes clm-shake {
+  0%, 100% { translate: 0 0; }
+  20% { translate: -6px 0; }
+  40% { translate: 5px 0; }
+  60% { translate: -3px 0; }
+  80% { translate: 2px 0; }
+}
+
+@keyframes clm-shake-soft {
+  0%, 100% { translate: 0 0; }
+  25% { translate: -5px 0; }
+  50% { translate: 4px 0; }
+  75% { translate: -2px 0; }
+}
+
+@keyframes clm-success-glow {
+  0% { box-shadow: var(--login-shadow), 0 0 0 0 rgba(194, 154, 91, 0.5); }
+  100% { box-shadow: var(--login-shadow), 0 0 0 18px rgba(194, 154, 91, 0); }
+}

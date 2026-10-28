@@ -1300,3 +1300,288 @@ body.layla-zaid-invitation .closing-section:has(.closing-card__arabic:empty):has
 @media (prefers-reduced-motion: reduce) {
   body.layla-zaid-invitation .detail-tab { transition: none; }
 }
+
+/* Mobile touch comfort: larger hit areas without changing how things look. */
+body.layla-zaid-invitation button,
+body.layla-zaid-invitation a { touch-action: manipulation; -webkit-tap-highlight-color: transparent; }
+body.layla-zaid-invitation .layla-language-toggle button { position: relative; }
+body.layla-zaid-invitation .layla-language-toggle button::after { content: ""; position: absolute; inset: -4px -2px; }
+body.layla-zaid-invitation .hero-down { display: grid; place-items: center; width: 44px; height: 44px; margin-top: 4px; line-height: 1; }
+body.layla-zaid-invitation .qd-footer a { display: inline-block; padding-block: 10px; }
+body.layla-zaid-invitation .hero-event-line,
+body.layla-zaid-invitation .detail-card__english,
+body.layla-zaid-invitation .hero-copy__english { text-wrap: balance; }
+body.layla-zaid-invitation .luxury-button:active { transform: scale(.97); }
+
+/* Quiet, wedding-appropriate motion. Everything is slow, plays once, and is off for reduced-motion. */
+@keyframes layla-seal-glow { 0%, 100% { opacity: .0; transform: scale(.94); } 50% { opacity: .85; transform: scale(1.04); } }
+@keyframes layla-rise { from { opacity: 0; transform: translateY(14px); } to { opacity: 1; transform: none; } }
+@keyframes layla-line-grow { from { width: 0; opacity: 0; } to { opacity: 1; } }
+@keyframes layla-names-sheen { from { background-position: 100% 0; } to { background-position: 0 0; } }
+@keyframes layla-settle { from { opacity: 0; transform: scale(1.045); } to { opacity: 1; transform: none; } }
+
+/* Envelope: a soft light breathes over the wax seal to invite the tap. */
+body.layla-zaid-invitation .envelope-intro__stage::after {
+  content: ""; position: absolute; z-index: 1; inset-inline-start: 28%; inset-block-start: 36.5%; width: 44%; aspect-ratio: 1; border-radius: 50%;
+  background: radial-gradient(circle, #fff6dc99 0, #fff6dc44 38%, transparent 68%); mix-blend-mode: soft-light; pointer-events: none;
+  animation: layla-seal-glow 3.2s ease-in-out infinite;
+}
+body.layla-zaid-invitation .envelope-intro.is-opening .envelope-intro__stage::after,
+body.layla-zaid-invitation .envelope-intro.is-playing .envelope-intro__stage::after { animation: none; opacity: 0; }
+
+/* Hero: content arrives in a gentle sequence as the envelope fades away. */
+body.layla-zaid-invitation.invitation-open #heroSection .hero-paper__content > * { animation: layla-rise .95s cubic-bezier(.2, .7, .25, 1) both; }
+body.layla-zaid-invitation.invitation-open #heroSection .hero-paper__content > :nth-child(1) { animation-delay: .25s; }
+body.layla-zaid-invitation.invitation-open #heroSection .hero-paper__content > :nth-child(2) { animation-delay: .45s; }
+body.layla-zaid-invitation.invitation-open #heroSection .hero-paper__content > :nth-child(3) { animation-delay: .75s; }
+body.layla-zaid-invitation.invitation-open #heroSection .hero-paper__content > :nth-child(4),
+body.layla-zaid-invitation.invitation-open #heroSection .hero-paper__content > :nth-child(5) { animation-delay: .95s; }
+body.layla-zaid-invitation.invitation-open #heroSection .hero-paper__content > :nth-child(6) { animation-delay: 1.1s; }
+body.layla-zaid-invitation.invitation-open #heroSection .hero-paper__content > :nth-child(7) { animation-delay: 1.3s; }
+body.layla-zaid-invitation.invitation-open .hero-divider i { animation: layla-line-grow 1s ease-out .9s both; }
+
+/* One slow sheen of light across the English names, then they rest in their normal colour. */
+body.layla-zaid-invitation.invitation-open:not(.layla-arabic) .hero-names__english {
+  padding: .14em .12em .2em; margin-block: -.14em -.2em;
+  background: linear-gradient(105deg, currentColor 42%, #c9a769 50%, currentColor 58%) 100% 0 / 260% 100%; -webkit-background-clip: text; background-clip: text;
+  -webkit-text-fill-color: transparent; animation: layla-names-sheen 2.6s ease-in-out 1.4s both;
+}
+
+/* Venue illustration settles into place as it scrolls into view. */
+body.layla-zaid-invitation .section.is-visible .venue-illustration { animation: layla-settle 1.4s cubic-bezier(.2, .7, .25, 1) both; }
+
+@media (prefers-reduced-motion: reduce) {
+  body.layla-zaid-invitation .envelope-intro__stage::after { animation: none; opacity: 0; }
+  body.layla-zaid-invitation.invitation-open #heroSection .hero-paper__content > *,
+  body.layla-zaid-invitation.invitation-open .hero-divider i,
+  body.layla-zaid-invitation .section.is-visible .venue-illustration { animation: none; }
+  body.layla-zaid-invitation.invitation-open:not(.layla-arabic) .hero-names__english { animation: none; background: none; -webkit-text-fill-color: currentColor; }
+}
+
+/* ── Alive: ambient, gentle, and off for reduced-motion ── */
+@keyframes alive-fall { 0% { transform: translate3d(0, -6vh, 0) rotate(0); opacity: 0; } 10% { opacity: .75; } 90% { opacity: .6; } 100% { transform: translate3d(var(--drift), 108vh, 0) rotate(var(--spin)); opacity: 0; } }
+@keyframes alive-sway { from { margin-left: -18px; } to { margin-left: 18px; } }
+@keyframes alive-twinkle { 0%, 100% { transform: scale(.4) rotate(0); opacity: 0; } 50% { transform: scale(1) rotate(45deg); opacity: .95; } }
+@keyframes alive-spark { from { transform: translate(-50%, -50%) scale(1); opacity: 1; } to { transform: translate(calc(-50% + var(--dx)), calc(-50% + var(--dy))) scale(.2); opacity: 0; } }
+@keyframes alive-light { 0%, 55% { transform: translateX(-130%) skewX(-18deg); opacity: 0; } 70% { opacity: 1; } 100% { transform: translateX(260%) skewX(-18deg); opacity: 0; } }
+@keyframes alive-beat { 0%, 60%, 100% { transform: scale(1); } 72% { transform: scale(1.22); } 84% { transform: scale(1); } 92% { transform: scale(1.12); } }
+@keyframes alive-record { to { transform: rotate(360deg); } }
+@keyframes alive-drift { from { transform: scale(1.02) translateY(0); } to { transform: scale(1.08) translateY(-1.5%); } }
+@keyframes alive-parallax { from { transform: translateY(26px); } to { transform: translateY(-20px); } }
+@keyframes alive-glow-icon { 0%, 100% { filter: drop-shadow(0 0 0 #c3a87800); } 50% { filter: drop-shadow(0 0 6px #c3a878aa); } }
+
+.alive-petals { position: fixed; inset: 0; z-index: 6; overflow: hidden; pointer-events: none; }
+.alive-petal {
+  position: absolute; top: -6vh; left: var(--x); width: var(--s); height: calc(var(--s) * 1.35); opacity: 0; border-radius: 150% 0 150% 0;
+  background: linear-gradient(135deg, #fffdf6, #efdcb0 70%, #d8bd85); box-shadow: 0 0 6px #d8bd8566;
+  animation: alive-fall var(--d) linear var(--delay) infinite, alive-sway calc(var(--d) / 4) ease-in-out var(--delay) infinite alternate;
+}
+.alive-petal:nth-child(3n) { background: linear-gradient(135deg, #fff4ee, #f2d6cc 70%, #dfb3a6); box-shadow: 0 0 6px #dfb3a655; }
+.alive-star {
+  position: absolute; left: var(--l); top: var(--t); width: var(--sz); height: var(--sz); pointer-events: none; opacity: 0;
+  background: linear-gradient(135deg, #fff6d8, #c9a769); clip-path: polygon(50% 0, 60% 40%, 100% 50%, 60% 60%, 50% 100%, 40% 60%, 0 50%, 40% 40%);
+  animation: alive-twinkle 4.2s ease-in-out var(--delay) infinite;
+}
+.alive-spark { position: fixed; z-index: 70; width: 6px; height: 6px; border-radius: 50%; pointer-events: none; background: radial-gradient(circle, #fff6d8, #c9a769); animation: alive-spark .7s ease-out forwards; }
+
+/* A soft band of light passes across the hero every so often. */
+body.layla-zaid-invitation.invitation-open #heroSection .hero-paper { position: relative; overflow: hidden; }
+body.layla-zaid-invitation.invitation-open #heroSection .hero-paper::after {
+  content: ""; position: absolute; inset: 0 auto 0 0; width: 38%; pointer-events: none; mix-blend-mode: soft-light;
+  background: linear-gradient(90deg, transparent, #fffbe8cc, transparent); animation: alive-light 11s ease-in-out 4s infinite;
+}
+body.layla-zaid-invitation.invitation-open .hero-divider { animation: none; }
+body.layla-zaid-invitation.invitation-open .hero-divider > * { transform-origin: center; }
+body.layla-zaid-invitation .closing-flourish { display: inline-block; animation: alive-beat 3.4s ease-in-out infinite; }
+body.layla-zaid-invitation .detail-card__icon, body.layla-zaid-invitation .schedule-item svg { animation: alive-glow-icon 4.5s ease-in-out infinite; }
+body.layla-zaid-invitation .section.is-visible .venue-illustration { animation: alive-drift 24s ease-in-out infinite alternate; }
+body.layla-zaid-invitation .music-toggle[data-state="playing"] .music-toggle__record { animation: alive-record 6s linear infinite; }
+
+@supports (animation-timeline: view()) {
+  body.layla-zaid-invitation .venue-illustration-wrap { animation: alive-parallax linear both; animation-timeline: view(); animation-range: entry 0% exit 100%; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .alive-petals, .alive-star, .alive-spark { display: none; }
+  body.layla-zaid-invitation.invitation-open #heroSection .hero-paper::after,
+  body.layla-zaid-invitation .closing-flourish,
+  body.layla-zaid-invitation .detail-card__icon,
+  body.layla-zaid-invitation .schedule-item svg,
+  body.layla-zaid-invitation .section.is-visible .venue-illustration,
+  body.layla-zaid-invitation .venue-illustration-wrap,
+  body.layla-zaid-invitation .music-toggle[data-state="playing"] .music-toggle__record { animation: none; }
+}
+
+/* ── Flow: the hero dissolves into the page instead of ending on a hard edge ── */
+body.layla-zaid-invitation.invitation-open #siteContent > #heroSection .hero-paper {
+  -webkit-mask-image: linear-gradient(to bottom, #000 0, #000 70%, transparent 100%);
+  mask-image: linear-gradient(to bottom, #000 0, #000 70%, transparent 100%);
+}
+body.layla-zaid-invitation.invitation-open #siteContent > #heroSection { margin-bottom: -10vh; }
+body.layla-zaid-invitation.invitation-open #siteContent > #countdownSection { position: relative; z-index: 1; padding-top: 6vh; }
+/* Sections drift up and clear slowly, so scrolling reads as one continuous page. */
+body.layla-zaid-invitation .section.reveal { transform: translateY(28px); transition: opacity 1.1s cubic-bezier(.2, .7, .25, 1), transform 1.3s cubic-bezier(.2, .7, .25, 1); }
+body.layla-zaid-invitation .section.reveal.is-visible { transform: none; }
+@media (prefers-reduced-motion: reduce) {
+  body.layla-zaid-invitation .section.reveal { transform: none; transition: none; }
+}
+
+/* ── RSVP confirmation: same simple layout, with a light entrance ── */
+@keyframes rsvp-rise { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: none; } }
+@keyframes rsvp-mark-pop { 0% { transform: scale(.6); opacity: 0; } 65% { transform: scale(1.08); opacity: 1; } 100% { transform: scale(1); opacity: 1; } }
+@keyframes rsvp-pulse { 0% { transform: scale(1); opacity: .5; } 100% { transform: scale(1.9); opacity: 0; } }
+@keyframes rsvp-line-grow { from { width: 0; } to { width: 64px; } }
+
+body.layla-zaid-invitation #rsvpSection .rsvp-summary > * { animation: rsvp-rise .7s cubic-bezier(.2, .7, .25, 1) both; }
+body.layla-zaid-invitation #rsvpSection .rsvp-summary > :nth-child(2) { animation-delay: .35s; }
+body.layla-zaid-invitation #rsvpSection .rsvp-summary > :nth-child(3) { animation-delay: .5s; }
+body.layla-zaid-invitation #rsvpSection .rsvp-summary > :nth-child(4) { animation-delay: .65s; }
+body.layla-zaid-invitation #rsvpSection .rsvp-summary > :nth-child(5) { animation-delay: .8s; }
+body.layla-zaid-invitation #rsvpSection .rsvp-summary > :nth-child(6) { animation-delay: .95s; }
+body.layla-zaid-invitation #rsvpSection .rsvp-confirmation-mark { position: relative; animation: rsvp-mark-pop .6s cubic-bezier(.2, .8, .3, 1.2) .05s both; }
+body.layla-zaid-invitation #rsvpSection .rsvp-confirmation-mark::after {
+  content: ""; position: absolute; inset: 0; border-radius: 50%; border: 1px solid #c3a878; pointer-events: none; animation: rsvp-pulse 2s ease-out .7s 2 both;
+}
+body.layla-zaid-invitation #rsvpSection .rsvp-summary h3::after {
+  content: ""; display: block; width: 64px; height: 1px; margin: 14px auto 0; background: linear-gradient(90deg, transparent, #c3a878, transparent); animation: rsvp-line-grow .9s ease-out .9s both;
+}
+body.layla-zaid-invitation #rsvpSection .rsvp-summary p:not(.rsvp-summary__eyebrow):not(.sample-rsvp-note) { text-wrap: balance; }
+body.layla-zaid-invitation #rsvpSection .rsvp-summary__message { font-style: italic; overflow-wrap: anywhere; }
+
+@media (prefers-reduced-motion: reduce) {
+  body.layla-zaid-invitation #rsvpSection .rsvp-summary > *,
+  body.layla-zaid-invitation #rsvpSection .rsvp-confirmation-mark,
+  body.layla-zaid-invitation #rsvpSection .rsvp-confirmation-mark::after,
+  body.layla-zaid-invitation #rsvpSection .rsvp-summary h3::after { animation: none; }
+}
+
+/* ── Hero finishing touches: names, ornament, button and scroll cue ── */
+@keyframes hero-orn-spin { from { transform: rotate(45deg) scale(.4); opacity: 0; } to { transform: rotate(45deg) scale(1); opacity: 1; } }
+@keyframes hero-cue-ring { 0% { transform: scale(1); opacity: .45; } 100% { transform: scale(1.7); opacity: 0; } }
+@keyframes hero-cue-bob { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(3px); } }
+
+body.layla-zaid-invitation.invitation-open #siteContent > #heroSection .hero-names__english { filter: drop-shadow(0 6px 14px #b89a6a40); }
+body.layla-zaid-invitation.invitation-open #siteContent > #heroSection .section-kicker { letter-spacing: .34em; }
+
+/* Ornament: a small gold diamond between two fading lines (replaces the glyph). */
+body.layla-zaid-invitation.invitation-open #siteContent > #heroSection .hero-divider { font-size: 0; gap: 14px; margin: 14px auto 20px; }
+body.layla-zaid-invitation.invitation-open #siteContent > #heroSection .hero-divider i { order: 1; width: clamp(40px, 15vw, 96px); background: linear-gradient(90deg, transparent, #c3a878); }
+body.layla-zaid-invitation.invitation-open #siteContent > #heroSection .hero-divider i:last-child { order: 3; }
+body.layla-zaid-invitation.invitation-open #siteContent > #heroSection .hero-divider::before {
+  content: ""; order: 2; width: 9px; height: 9px; border: 1px solid #b8975f; background: radial-gradient(circle, #c9a769 0 28%, transparent 32%), #fbf5e6; transform: rotate(45deg);
+  box-shadow: -17px 0 0 -3.5px #c9a769, 17px 0 0 -3.5px #c9a769; animation: hero-orn-spin 1.1s cubic-bezier(.2, .8, .3, 1.2) 1s both;
+}
+
+/* Primary hero button: a soft pill with a gold edge. */
+body.layla-zaid-invitation.invitation-open #siteContent > #heroSection .luxury-button--primary {
+  min-height: 48px; padding: 13px 36px; border: 1px solid #c3a878; border-radius: 999px; letter-spacing: .1em;
+  background: linear-gradient(180deg, #6b5441, #4d3b2b); box-shadow: 0 10px 24px #4d3b2b33, inset 0 1px 0 #ffffff26;
+  transition: transform .3s ease, box-shadow .3s ease;
+}
+body.layla-zaid-invitation.invitation-open #siteContent > #heroSection .luxury-button--primary:hover { transform: translateY(-2px); box-shadow: 0 14px 30px #4d3b2b44, inset 0 1px 0 #ffffff26; }
+
+/* Scroll cue: a thin gold circle with a softly bobbing arrow and a ripple. */
+body.layla-zaid-invitation.invitation-open #siteContent > #heroSection .hero-down {
+  position: relative; width: 44px; height: 44px; margin: 18px auto 0; border: 1px solid #c3a87899; border-radius: 50%; color: #8a6a3a; font-size: 1.15rem; background: #fffaf0b3; animation: none;
+}
+body.layla-zaid-invitation.invitation-open #siteContent > #heroSection .hero-down::before { content: "↓"; display: block; animation: hero-cue-bob 2.2s ease-in-out infinite; }
+body.layla-zaid-invitation.invitation-open #siteContent > #heroSection .hero-down { font-size: 0; }
+body.layla-zaid-invitation.invitation-open #siteContent > #heroSection .hero-down::before { font-size: 1.15rem; line-height: 1; }
+body.layla-zaid-invitation.invitation-open #siteContent > #heroSection .hero-down::after {
+  content: ""; position: absolute; inset: -1px; border-radius: 50%; border: 1px solid #c3a878; pointer-events: none; animation: hero-cue-ring 2.8s ease-out infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  body.layla-zaid-invitation.invitation-open #siteContent > #heroSection .hero-divider::before,
+  body.layla-zaid-invitation.invitation-open #siteContent > #heroSection .hero-down::before,
+  body.layla-zaid-invitation.invitation-open #siteContent > #heroSection .hero-down::after { animation: none; }
+}
+
+/* ── RSVP confirmation: yes and no each get their own look and motion ── */
+@property --rsvp-p { syntax: "<number>"; initial-value: 0; inherits: false; }
+@keyframes rsvp-ring-draw { to { --rsvp-p: 100; } }
+@keyframes rsvp-check-write { from { clip-path: inset(0 100% 0 0); } to { clip-path: inset(0 0 0 0); } }
+@keyframes rsvp-heart-beat { 0%, 100% { transform: scale(1); } 50% { transform: scale(1.12); } }
+@keyframes rsvp-shimmer { 0%, 60% { background-position: 120% 0; } 100% { background-position: -20% 0; } }
+@keyframes rsvp-spark-fly { 0% { transform: translate(-50%, -50%) scale(.2); opacity: 0; } 15% { opacity: 1; } 100% { transform: translate(calc(-50% + var(--dx)), calc(-50% + var(--dy))) scale(1) rotate(var(--rot)); opacity: 0; } }
+@keyframes rsvp-petal-drift { 0% { transform: translate(-50%, -50%) rotate(0); opacity: 0; } 15% { opacity: .9; } 100% { transform: translate(calc(-50% + var(--dx)), calc(-50% + 190px)) rotate(var(--rot)); opacity: 0; } }
+
+body.layla-zaid-invitation #rsvpSection .rsvp-confirmation-mark::before {
+  content: ""; position: absolute; inset: -6px; border-radius: 50%; pointer-events: none;
+  background: conic-gradient(var(--rsvp-tone, #c9a769) calc(var(--rsvp-p) * 1%), transparent 0);
+  -webkit-mask: radial-gradient(circle, transparent 62%, #000 64%); mask: radial-gradient(circle, transparent 62%, #000 64%); animation: rsvp-ring-draw 1.1s ease-out .15s forwards;
+}
+body.layla-zaid-invitation #rsvpSection .rsvp-summary--confirmed { --rsvp-tone: #c9a769; }
+body.layla-zaid-invitation #rsvpSection .rsvp-summary--declined { --rsvp-tone: #d3a79d; }
+body.layla-zaid-invitation #rsvpSection .rsvp-summary--confirmed .rsvp-confirmation-mark { color: #8a6a3a; background: radial-gradient(circle at 35% 28%, #fffdf6, #f0dfb8); animation: rsvp-mark-pop .6s cubic-bezier(.2, .8, .3, 1.2) .05s both; }
+body.layla-zaid-invitation #rsvpSection .rsvp-summary--confirmed .rsvp-confirmation-mark { text-shadow: none; }
+body.layla-zaid-invitation #rsvpSection .rsvp-summary--declined .rsvp-confirmation-mark { color: #b0766b; background: radial-gradient(circle at 35% 28%, #fffdf8, #f4dcd4); animation: rsvp-mark-pop .6s cubic-bezier(.2, .8, .3, 1.2) .05s both, rsvp-heart-beat 2.8s ease-in-out 1.2s infinite; }
+body.layla-zaid-invitation #rsvpSection .rsvp-summary--declined .rsvp-confirmation-mark::after { border-color: #d3a79d; }
+body.layla-zaid-invitation #rsvpSection .rsvp-summary--confirmed .rsvp-summary__eyebrow { color: #9a7a4a; }
+body.layla-zaid-invitation #rsvpSection .rsvp-summary--declined .rsvp-summary__eyebrow { color: #a8736a; }
+body.layla-zaid-invitation #rsvpSection .rsvp-summary--declined h3::after { background: linear-gradient(90deg, transparent, #d3a79d, transparent); }
+/* A slow gold shimmer crosses the thank-you heading, once the page has settled. */
+body.layla-zaid-invitation #rsvpSection .rsvp-summary--confirmed h3 {
+  background: linear-gradient(100deg, currentColor 40%, #c9a769 50%, currentColor 60%) 120% 0 / 250% 100%; -webkit-background-clip: text; background-clip: text; -webkit-text-fill-color: transparent;
+  animation: rsvp-rise .7s cubic-bezier(.2, .7, .25, 1) .5s both, rsvp-shimmer 6s ease-in-out 2s infinite;
+}
+.rsvp-spark, .rsvp-drift { position: fixed; z-index: 70; pointer-events: none; }
+.rsvp-spark { width: var(--sz); height: var(--sz); background: linear-gradient(135deg, #fff6d8, #c9a769); clip-path: polygon(50% 0, 60% 40%, 100% 50%, 60% 60%, 50% 100%, 40% 60%, 0 50%, 40% 40%); animation: rsvp-spark-fly 1.5s cubic-bezier(.2, .7, .3, 1) both; }
+.rsvp-drift { width: 9px; height: 12px; border-radius: 150% 0 150% 0; background: linear-gradient(135deg, #fbe9e4, #e2b6ac); box-shadow: 0 0 6px #e2b6ac55; animation: rsvp-petal-drift 3.4s ease-in-out both; }
+
+@media (prefers-reduced-motion: reduce) {
+  body.layla-zaid-invitation #rsvpSection .rsvp-confirmation-mark::before { animation: none; --rsvp-p: 100; }
+  body.layla-zaid-invitation #rsvpSection .rsvp-summary--declined .rsvp-confirmation-mark,
+  body.layla-zaid-invitation #rsvpSection .rsvp-summary--confirmed h3 { animation: none; }
+  body.layla-zaid-invitation #rsvpSection .rsvp-summary--confirmed h3 { background: none; -webkit-text-fill-color: currentColor; }
+  .rsvp-spark, .rsvp-drift { display: none; }
+}
+
+/* ── Scroll cue, redrawn: a small-caps "Scroll" over a gold hairline with a bead gliding down it ── */
+@keyframes hero-cue-bead { 0% { background-position: 50% -8px, 50% 0; } 65%, 100% { background-position: 50% calc(100% + 8px), 50% 0; } }
+@keyframes hero-cue-nudge { 0%, 100% { transform: translateY(0); opacity: .75; } 50% { transform: translateY(2px); opacity: 1; } }
+body.layla-zaid-invitation.invitation-open #siteContent > #heroSection .hero-down {
+  display: flex; flex-direction: column; align-items: center; gap: 6px; box-sizing: border-box;
+  width: 64px; height: auto; min-height: 76px; margin: 12px auto 0; padding: 4px 0 11px;
+  border: 0; border-radius: 14px; background: none; box-shadow: none; font-size: 0; line-height: 1; color: #9a7a4a; text-decoration: none;
+  -webkit-tap-highlight-color: transparent;
+}
+/* Small chevron that closes the line. */
+body.layla-zaid-invitation.invitation-open #siteContent > #heroSection .hero-down {
+  background: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='7' viewBox='0 0 12 7'%3E%3Cpath d='M1 1l5 4.6L11 1' fill='none' stroke='%23b08f5a' stroke-width='1.1' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E") no-repeat 50% calc(100% - 3px) / 12px 7px;
+}
+body.layla-zaid-invitation.invitation-open #siteContent > #heroSection .hero-down::before {
+  content: "Scroll"; display: block; padding-left: .3em; animation: none;
+  font: 600 .8rem/1 "Cormorant Garamond", Georgia, serif; font-variant: small-caps; letter-spacing: .3em; text-transform: lowercase; color: #8a6a3a;
+}
+body.layla-zaid-invitation.invitation-open #siteContent > #heroSection .hero-down::after {
+  content: ""; position: static; inset: auto; display: block; width: 9px; height: 40px; border: 0; border-radius: 0;
+  background: radial-gradient(circle, #c9a769 0 2.4px, #c9a76955 3px, transparent 4px) no-repeat 50% -8px / 9px 9px,
+              linear-gradient(to bottom, #c3a87800, #c3a878 30%, #c3a878 85%, #c3a87866) no-repeat 50% 0 / 1px 100%;
+  animation: hero-cue-bead 2.6s cubic-bezier(.45, 0, .35, 1) 2s infinite;
+}
+body.layla-zaid-invitation.invitation-open #siteContent > #heroSection .hero-down:focus-visible { outline: 1px solid #c3a878; outline-offset: 2px; }
+body.layla-zaid-invitation.invitation-open.layla-arabic #siteContent > #heroSection .hero-down::before { content: "مرّر"; font-family: "Amiri", serif; font-variant: normal; letter-spacing: 0; padding-left: 0; font-size: .82rem; }
+@media (hover: hover) {
+  body.layla-zaid-invitation.invitation-open #siteContent > #heroSection .hero-down:hover::before { color: #6f5532; }
+}
+@media (prefers-reduced-motion: reduce) {
+  body.layla-zaid-invitation.invitation-open #siteContent > #heroSection .hero-down::after { animation: none; background-position: 50% 60%, 50% 0; }
+}
+
+/* ── RSVP result: lighter mark, calmer spacing, quieter sample note ── */
+body.layla-zaid-invitation.invitation-open #rsvpSection .rsvp-summary .rsvp-confirmation-mark {
+  width: 50px; height: 50px; margin: 10px auto 20px; font: 400 1.35rem/1 "Lora", Georgia, serif;
+}
+body.layla-zaid-invitation.invitation-open #rsvpSection .rsvp-summary--confirmed .rsvp-confirmation-mark { border-color: #c9a769; box-shadow: 0 6px 18px #c9a76933; }
+body.layla-zaid-invitation.invitation-open #rsvpSection .rsvp-summary--declined .rsvp-confirmation-mark { border-color: #d3a79d; box-shadow: 0 6px 18px #d3a79d33; font-size: 1.5rem; }
+body.layla-zaid-invitation.invitation-open #rsvpSection .rsvp-summary .rsvp-summary__eyebrow { margin: 0 0 6px; font-size: .74rem; letter-spacing: .26em; }
+body.layla-zaid-invitation.invitation-open #rsvpSection .rsvp-summary h3 { margin: 0; }
+body.layla-zaid-invitation.invitation-open #rsvpSection .rsvp-summary--declined h3 { color: #5b493b; }
+body.layla-zaid-invitation.invitation-open #rsvpSection .rsvp-summary > p:not(.rsvp-summary__eyebrow) { margin: 14px auto 0; max-width: 30ch; }
+body.layla-zaid-invitation.invitation-open #rsvpSection .rsvp-summary .sample-rsvp-note { margin-top: 18px; max-width: 32ch; font-size: .82rem; font-style: italic; line-height: 1.45; opacity: .8; }
+body.layla-zaid-invitation.invitation-open #rsvpSection .rsvp-summary > .luxury-button { margin-top: 22px; }
+body.layla-zaid-invitation.invitation-open #rsvpSection .rsvp-summary--confirmed .rsvp-confirmation-mark { font-size: 1.5rem; }
+/* Reply sparkles/petals: a touch deeper in tone so they read on ivory paper. */
+body.layla-zaid-invitation .rsvp-spark { background: linear-gradient(135deg, #f6e3ad, #b8924f); filter: drop-shadow(0 0 3px #e9cf8fcc); }
+body.layla-zaid-invitation .rsvp-drift { background: linear-gradient(135deg, #f8e2db, #d49c90); box-shadow: 0 1px 4px #c98f8355; }

@@ -14,6 +14,7 @@
     <link rel="stylesheet" href="./dashboard.css" />
     <link rel="stylesheet" href="./dashboard-login.css?v=20261002-celebration-login-2" />
       <link rel="stylesheet" href="./customer-access.css" />
+    <link rel="stylesheet" href="./customer-login-motion.css?v=20261028-login-motion-3" />
   </head>
   <body data-account-surface="customer" class="dashboard-body planner-login-page">
     <main class="planner-login">
@@ -31,7 +32,7 @@
 
           <div class="planner-login__story-copy">
             <p class="planner-login__eyebrow">Your private event workspace</p>
-            <h1 id="celebrationTitle">Your celebration, <em>your people.</em></h1>
+            <h1 id="celebrationTitle"><span class="clm-word">Your</span> <span class="clm-word">celebration,</span> <em><span class="clm-word">your</span> <span class="clm-word">people.</span></em></h1>
             <p class="planner-login__intro">Beautiful invitations. Thoughtful planning. Memorable moments.</p>
             <ul class="planner-login__occasions" aria-label="Events you can plan">
               <li>Weddings</li>
@@ -43,13 +44,21 @@
           <div class="planner-login__art" aria-hidden="true">
             <svg class="planner-login__arch" viewBox="0 0 560 390" preserveAspectRatio="xMidYMid meet" focusable="false">
               <path class="planner-login__arch-fill" d="M93 390V190a187 187 0 0 1 374 0v200H93Z" />
-              <path class="planner-login__arch-line" d="M117 390V190a163 163 0 0 1 326 0v200" />
-              <path class="planner-login__arch-inner" d="M137 390V190a143 143 0 0 1 286 0v200" />
-              <path class="planner-login__botanical" d="M112 300c-20-28-18-55 2-79m-1 34c-18-4-29-15-32-33m36 3c16-8 23-22 21-42m-28 88c-16-7-25-18-26-34m31-31c-3-19 2-34 15-45m-18 98c-8-17-7-32 3-48m-21 65c-12-2-21-9-27-20" />
+              <path class="planner-login__arch-line" pathLength="1" d="M117 390V190a163 163 0 0 1 326 0v200" />
+              <path class="planner-login__arch-inner" pathLength="1" d="M137 390V190a143 143 0 0 1 286 0v200" />
+              <path class="planner-login__botanical" pathLength="1" d="M112 300c-20-28-18-55 2-79m-1 34c-18-4-29-15-32-33m36 3c16-8 23-22 21-42m-28 88c-16-7-25-18-26-34m31-31c-3-19 2-34 15-45m-18 98c-8-17-7-32 3-48m-21 65c-12-2-21-9-27-20" />
               <path class="planner-login__botanical-leaf" d="M82 223c13 1 23 9 31 23-14 2-25-6-31-23Zm36-29c-1 15-9 26-23 34-2-15 6-27 23-34Zm-26 62c13 2 23 10 29 24-14 1-24-7-29-24Zm-7 38c12-1 22 5 31 17-13 4-24-2-31-17Z" />
-              <path class="planner-login__balloon-line" d="M436 100c7 15 8 29 3 44m-3-44 9-3m-9 3-7-7" />
-              <path class="planner-login__balloon" d="M420 69c0-13 8-22 18-22s18 9 18 22-9 25-18 25-18-12-18-25Z" />
-              <path class="planner-login__cap" d="m90 335 22-11 22 11-22 11-22-11Zm8 5v12c9 7 19 7 28 0v-12m8-5v15" />
+              <g class="clm-balloon">
+                <g class="clm-balloon-sway">
+                  <path class="planner-login__balloon-line" pathLength="1" d="M436 100c7 15 8 29 3 44m-3-44 9-3m-9 3-7-7" />
+                  <path class="planner-login__balloon" d="M420 69c0-13 8-22 18-22s18 9 18 22-9 25-18 25-18-12-18-25Z" />
+                </g>
+              </g>
+              <g class="clm-cap">
+                <g class="clm-cap-bob">
+                  <path class="planner-login__cap" d="m90 335 22-11 22 11-22 11-22-11Zm8 5v12c9 7 19 7 28 0v-12m8-5v15" />
+                </g>
+              </g>
             </svg>
             <div class="planner-login__art-glow"></div>
             <div class="planner-login__art-card planner-login__art-card--back"></div>
@@ -67,8 +76,14 @@
                 <circle cx="16" cy="16" r="2.3" />
               </svg>
             </div>
-            <div class="planner-login__wax-seal">q</div>
+            <div class="planner-login__wax-seal">QD</div>
             <div class="planner-login__art-caption"><span></span> Every detail, in its place</div>
+            <span class="clm-sparkle"></span>
+            <span class="clm-sparkle"></span>
+            <span class="clm-sparkle"></span>
+            <span class="clm-sparkle"></span>
+            <span class="clm-sparkle"></span>
+            <span class="clm-sparkle"></span>
           </div>
         </section>
 
@@ -149,5 +164,6 @@
     </main>
 
     <script type="module" src="./dashboard-login.js?v=20261017-customer-access-1"></script>
+    <script defer src="./customer-login-motion.js?v=20261028-login-motion-3"></script>
   </body>
 </html>

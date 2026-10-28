@@ -20,29 +20,6 @@
         <div><h1>All Events</h1></div>
         <button class="primary-button" id="createWeddingButton" type="button">Create event</button>
       </section>
-      <section class="sample-invitation" id="sampleInvitationPanel" aria-labelledby="sampleInvitationTitle" hidden>
-        <div class="sample-invitation__intro">
-          <span class="sample-invitation__seal" aria-hidden="true">✦</span>
-          <div class="sample-invitation__heading">
-            <h2 id="sampleInvitationTitle">Layla &amp; Zaid sample invitation</h2>
-          </div>
-        </div>
-        <div class="sample-invitation__link-wrap">
-          <label class="sr-only" for="sampleInvitationUrl">Sample invitation URL</label>
-          <input id="sampleInvitationUrl" class="sample-invitation__url" type="url" readonly />
-        </div>
-        <div class="sample-invitation__actions">
-          <button class="sample-invitation__button sample-invitation__button--preview" data-action="preview-sample" type="button">
-            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M2.5 12s3.4-6 9.5-6 9.5 6 9.5 6-3.4 6-9.5 6-9.5-6-9.5-6Z"/><circle cx="12" cy="12" r="2.8"/></svg>
-            <span>Preview invitation</span>
-          </button>
-          <button class="sample-invitation__button sample-invitation__button--copy" data-action="copy-sample" type="button">
-            <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="8" y="8" width="12" height="13" rx="2"/><path d="M16 8V5a2 2 0 0 0-2-2H6a2 2 0 0 0-2 2v11a2 2 0 0 0 2 2h2"/></svg>
-            <span>Copy sample link</span>
-          </button>
-        </div>
-        <p class="sample-invitation__feedback" data-sample-feedback role="status" aria-live="polite"></p>
-      </section>
       <section class="workspace-controls" id="workspaceControls" aria-label="Event controls">
         <label class="search-field"><span class="sr-only">Search events</span><input id="searchInput" type="search" placeholder="Search event, people, venue, or location" /></label>
         <label class="sort-field">Sort <select id="sortSelect"><option value="event">Event date</option><option value="updated">Recently updated</option><option value="created">Recently created</option></select></label>
@@ -59,6 +36,30 @@
         <button class="secondary-button" type="button" data-page-direction="next">Next</button>
       </nav>
       <section class="empty-state" id="emptyState" hidden><h2>Your event workspace is ready.</h2><p>Create your first event to start managing guests, invitations, seating, and check-in.</p><button class="primary-button" type="button" data-create-wedding>Create your first event</button></section>
+      <section class="sample-invitation" id="sampleInvitationPanel" aria-labelledby="sampleInvitationTitle" hidden>
+        <div class="sample-invitation__intro">
+          <span class="sample-invitation__seal" aria-hidden="true">✦</span>
+          <div class="sample-invitation__heading">
+            <h2 id="sampleInvitationTitle">Layla &amp; Zaid sample invitation</h2>
+          </div>
+        </div>
+        <div class="sample-invitation__link-wrap">
+          <label class="sr-only" for="sampleInvitationUrl">Sample invitation URL</label>
+          <input id="sampleInvitationUrl" class="sample-invitation__url" type="url" />
+        </div>
+        <div class="sample-invitation__actions">
+          <button class="sample-invitation__button sample-invitation__button--copy" data-action="save-sample" type="button">Save link</button>
+          <button class="sample-invitation__button sample-invitation__button--preview" data-action="preview-sample" type="button">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M2.5 12s3.4-6 9.5-6 9.5 6 9.5 6-3.4 6-9.5 6-9.5-6-9.5-6Z"/><circle cx="12" cy="12" r="2.8"/></svg>
+            <span>Preview invitation</span>
+          </button>
+          <button class="sample-invitation__button sample-invitation__button--copy" data-action="copy-sample" type="button">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="8" y="8" width="12" height="13" rx="2"/><path d="M16 8V5a2 2 0 0 0-2-2H6a2 2 0 0 0-2 2v11a2 2 0 0 0 2 2h2"/></svg>
+            <span>Copy sample link</span>
+          </button>
+        </div>
+        <p class="sample-invitation__feedback" data-sample-feedback role="status" aria-live="polite"></p>
+      </section>
     </main>
     <section class="workspace-loading" id="loadingState" aria-live="polite">Loading workspace…</section>
 
@@ -96,6 +97,15 @@
             </label>
             <button class="primary-button" id="continueFeaturesButton" type="button">Continue</button>
           </section>
+          <section class="event-template-step" id="eventTemplateStep" hidden aria-labelledby="eventTemplateTitle">
+            <h3 id="eventTemplateTitle">Choose an invitation design</h3>
+            <p class="event-features-step__intro">Your event details will be added to the design automatically.</p>
+            <div class="event-template-grid" role="radiogroup" aria-label="Invitation design">
+              <label class="event-template-card" data-template-category="wedding_engagement"><input type="radio" name="invitationTemplate" value="layla-zaid" checked /><span><img src="./invitations/wedding-designs/layla-zaid/assets/layla-zaid-sculpted-floral-cover.webp" alt="" /><strong>Floral Wedding</strong><small>Opening video, floral details, RSVP and seating.</small></span></label>
+              <label class="event-template-card" data-template-category="gender_reveal" hidden><input type="radio" name="invitationTemplate" value="gender-reveal-classic" disabled /><span><img src="./images/gender-reveal-cover.png" alt="" /><strong>Little Surprise</strong><small>The existing gender reveal design, with its opening video and shared RSVP.</small></span></label>
+            </div>
+            <button class="primary-button" id="continueTemplateButton" type="button">Continue</button>
+          </section>
           <div class="form-grid event-information-step" id="eventInformationStep" hidden>
           <label class="event-identity wedding-identity">Bride name<input name="brideName" autocomplete="given-name" /></label><label class="event-identity wedding-identity">Groom name<input name="groomName" autocomplete="given-name" /></label>
           <label class="event-identity celebration-identity full">Event name<input name="eventTitle" placeholder="Ahmed’s Graduation" /></label>
@@ -103,7 +113,7 @@
           <label class="full event-venue-field">Venue<input name="venueEn" required /></label>
           <label>Location<input name="location" /></label><label>Maps URL<input name="mapsUrl" type="url" placeholder="https://…" /></label>
           <label class="sender-control">WhatsApp country code<input name="whatsAppCountryCode" inputmode="numeric" placeholder="971" /></label><label>Invitation language<select name="invitationLanguage"><option value="en">English</option><option value="ar">Arabic</option><option value="both">English & Arabic</option></select></label>
-          <label>Status<select name="status"><option value="draft">Draft</option><option value="upcoming">Upcoming</option><option value="active">Active</option><option value="completed">Completed</option></select></label>
+          <label>Status<select name="status" aria-describedby="eventStatusHelp"><option value="draft">Draft</option><option value="upcoming">Upcoming</option><option value="active">Active</option><option value="completed">Completed</option></select><small id="eventStatusHelp">New events start active. You can change the status whenever you need.</small></label>
           <label class="full">Planner notes<textarea name="plannerNotes" rows="3"></textarea></label>
           <label class="full gender-reveal-ar-title" hidden>Arabic event name<input name="eventTitleAr" maxlength="160" value="حفل الكشف عن جنس المولود" /></label>
           <p class="form-error full" id="formError" role="alert"></p>
@@ -112,7 +122,7 @@
         <footer><button class="secondary-button" id="backEventButton" type="button" hidden>Back</button><button class="secondary-button" type="button" data-close="weddingDialog">Cancel</button><button class="primary-button" id="saveWeddingButton" type="submit" hidden>Create event</button></footer>
       </form>
     </dialog>
-    <dialog class="workspace-dialog" id="deleteDialog"><form class="workspace-modal workspace-modal--small" id="deleteForm"><header><div><p class="workspace-kicker">Permanent action</p><h2>Delete event?</h2></div><button class="icon-close" type="button" data-close="deleteDialog" aria-label="Close">×</button></header><div class="workspace-modal__body"><p>This permanently removes the event and all of its guests, invitations, seating, and check-in data. Type <strong id="deletePhrase"></strong> to continue.</p><label>Confirmation<input id="deleteConfirmation" autocomplete="off" /></label><p class="form-error" id="deleteError" role="alert"></p></div><footer><button class="secondary-button" type="button" data-close="deleteDialog">Cancel</button><button class="danger-button" type="submit">Delete permanently</button></footer></form></dialog>
+    <dialog class="workspace-dialog" id="deleteDialog"><form class="workspace-modal workspace-modal--small" id="deleteForm"><header><div><p class="workspace-kicker">Permanent action</p><h2>Delete event?</h2></div><button class="icon-close" type="button" data-close="deleteDialog" aria-label="Close">×</button></header><div class="workspace-modal__body"><p>This permanently removes <strong id="deleteEventName"></strong> and all of its guests, invitations, seating, and check-in data. Type <strong id="deletePhrase"></strong> to continue.</p><label>Confirmation<input id="deleteConfirmation" autocomplete="off" /></label><p class="form-error" id="deleteError" role="alert"></p></div><footer><button class="secondary-button" type="button" data-close="deleteDialog">Cancel</button><button class="danger-button" type="submit">Delete permanently</button></footer></form></dialog>
     <script type="module" src="./weddings.js?v=20261018-customer-event-controls-1"></script>
   </body>
 </html>

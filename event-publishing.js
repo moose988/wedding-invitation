@@ -14,6 +14,7 @@ export function publicEventData(event) {
   const genderReveal = event.eventCategory === "gender_reveal";
   const defaults = { eventCategory: "wedding_engagement", eventStatus: "draft", invitationLanguage: "en", showInvitationQr: true, seatingEnabled: true, schedule: [], eventTitleAr: "", eventTimeZone: "", genderRevealArtworkUrl: "", genderRevealOpeningVideoUrl: "", genderRevealMusicUrl: "", genderRevealMessageEn: "", genderRevealMessageAr: "" };
   const data = Object.fromEntries(publicEventFields.map((key) => [key, event[key] ?? defaults[key] ?? ""]));
+  if (event.invitationTemplate) data.invitationTemplate = event.invitationTemplate;
   data.eventStatus = event.status || "draft";
   if (genderReveal) {
     data.showInvitationQr = false;

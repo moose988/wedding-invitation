@@ -5911,3 +5911,23 @@ body.is-overview-view .overview-page { width: 100%; max-width: var(--da3wa-conte
 @media (prefers-reduced-motion: reduce) {
   .da3wa-refresh-button.is-refreshing svg { animation: none; }
 }
+
+/* Customer access: clear, compact account management within Event Settings. */
+#customerAccessPanel { display: flex; flex-direction: column; align-items: stretch; gap: 14px; }
+#customerAccessPanel > h2 { margin: 0; color: #263b34; font: 700 1.2rem/1.35 Manrope, system-ui, sans-serif; }
+#customerAccessPanel > p:not([data-customer-status]) { margin: 0; max-width: 70ch; color: #68746d; line-height: 1.55; }
+#customerAccessPanel > ul { display: grid; gap: 8px; padding: 0; margin: 2px 0; list-style: none; }
+#customerAccessPanel > ul:empty { display: none; }
+#customerAccessPanel > ul li { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center; gap: 10px; padding: 12px 14px; border: 1px solid #e6e5db; border-radius: 10px; background: #f8f8f3; color: #526159; overflow-wrap: anywhere; }
+#customerAccessPanel > ul li .text-button { margin-left: auto; color: #875246; font-size: .8rem; }
+#customerAccessPanel > [data-add-customer] { align-self: flex-start; min-height: 42px; padding-inline: 18px; }
+#customerAccessPanel .seating-account-form:not([hidden]) { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); align-items: end; gap: 16px; padding: 20px; border: 1px solid #dce7df; border-radius: 14px; background: #f7faf7; }
+#customerAccessPanel .seating-account-form[hidden], #customerAccessPanel .seating-account-form [hidden] { display: none !important; }
+#customerAccessPanel .seating-account-form label { display: grid; gap: 7px; min-width: 0; color: #43564d; font-size: .81rem; font-weight: 700; }
+#customerAccessPanel .seating-account-form input, #customerAccessPanel .seating-account-form select { width: 100%; min-width: 0; min-height: 44px; padding: 10px 12px; border: 1px solid #d2ddd5; border-radius: 9px; background: #fff; color: #263b34; font: 400 .9rem/1.35 Manrope, system-ui, sans-serif; }
+#customerAccessPanel .seating-account-form input:focus-visible, #customerAccessPanel .seating-account-form select:focus-visible { outline: 2px solid #477e6b; outline-offset: 2px; }
+#customerAccessPanel .seating-account-form [data-onboarding-note] { grid-column: 1 / -1; margin: 0; color: #52665a; font-size: .85rem; line-height: 1.5; }
+#customerAccessPanel .seating-account-form [type="submit"] { grid-column: 1 / -1; justify-self: start; min-height: 44px; }
+#customerAccessPanel > [data-customer-status] { margin: 0; color: #52665a; font-size: .85rem; }
+#customerAccessPanel > [data-customer-status]:empty { display: none; }
+@media (max-width: 800px) { #customerAccessPanel .seating-account-form:not([hidden]) { grid-template-columns: 1fr; padding: 16px; } #customerAccessPanel .seating-account-form [type="submit"] { width: 100%; } }

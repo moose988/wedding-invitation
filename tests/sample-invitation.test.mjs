@@ -6,8 +6,7 @@ const read = (file) => readFile(new URL(`../${file}`, import.meta.url), "utf8");
 
 test("Layla & Zaid sample panel lives once at workspace level with distinct preview and copy actions", async () => {
   const [workspace, html, styles] = await Promise.all([read("weddings.js"), read("all-events.html"), read("weddings.css")]);
-  const panel = html.slice(html.indexOf('id="sampleInvitationPanel"'), html.indexOf('<section class="workspace-controls"'));
-  assert.ok(panel.length > 0, "sample panel appears before workspace controls");
+  assert.ok(html.indexOf('id="sampleInvitationPanel"') > html.indexOf('id="weddingGrid"'), "sample panel follows the event list");
   assert.equal((html.match(/id="sampleInvitationPanel"/g) || []).length, 1);
   assert.doesNotMatch(workspace, /sampleInvitationControls|sampleArea/);
   assert.match(workspace, /index\.html\?wedding=luxury-wedding-demo&sample=1/);
@@ -26,7 +25,7 @@ test("Layla & Zaid sample panel lives once at workspace level with distinct prev
   assert.doesNotMatch(workspace, /girl@gmail\.com|isRestrictedAccount/);
   assert.match(styles, /\.workspace-controls\[hidden\], \.filter-row\[hidden\]\s*\{\s*display:none !important;\s*\}/);
   assert.match(workspace, /handleSamplePanelAction[\s\S]*?window\.open\(sampleInvitationUrl\(\)/);
-  assert.match(workspace, /Copy guest link/);
+  assert.match(workspace, /Copy shared link/);
   assert.match(workspace, /Copy failed\. Select and copy the URL above\./);
   assert.match(workspace, /el\.sampleInvitationPanel\.querySelector\("\[data-sample-feedback\]"\)/);
   assert.match(styles, /\.sample-invitation__url/);
@@ -35,21 +34,11 @@ test("Layla & Zaid sample panel lives once at workspace level with distinct prev
   assert.match(styles, /@media\(max-width:640px\)\s*\{[^}]*sample-invitation/s);
 });
 
-test("mobile event workspace places the sample, search, status filters, then create action", async () => {
-  const styles = await read("weddings.css");
-  const mobileOrder = styles.slice(styles.lastIndexOf("@media(max-width:640px){\n  .weddings-shell"));
-  const selectors = [
-    ".workspace-header { order:0; }",
-    ".workspace-hero > div { order:1;",
-    ".sample-invitation { order:2;",
-    ".workspace-controls { order:3;",
-    ".filter-row { order:4;",
-    "#createWeddingButton { order:5;",
-  ];
-  const positions = selectors.map((selector) => mobileOrder.indexOf(selector));
-  assert.ok(positions.every((position) => position >= 0), "all mobile workspace sections have explicit positions");
-  assert.deepEqual(positions, [...positions].sort((a, b) => a - b));
-  assert.match(mobileOrder, /\.workspace-hero \{ display:contents; \}/);
+test("workspace keeps event controls and cards before supporting sections on mobile and desktop", async () => {
+  const [html, workspace] = await Promise.all([read("all-events.html"), read("photo-bucket/workspace.js")]);
+  assert.ok(html.indexOf('id="workspaceControls"') < html.indexOf('id="weddingGrid"'));
+  assert.ok(html.indexOf('id="weddingGrid"') < html.indexOf('id="sampleInvitationPanel"'));
+  assert.match(workspace, /getElementById\('sampleInvitationPanel'\)\.before\(section\)/);
 });
 
 test("sample route reads current public event only and never resolves a guest token or private seating", async () => {
@@ -76,11 +65,11 @@ test("sample RSVP uses fictional in-memory state and never writes to Firebase or
   assert.match(script, /id="\$\{sample \? "sampleRsvpForm" : "rsvpForm"\}"/);
   assert.match(script, /form\?\.addEventListener\("submit", sample \? handleSampleRsvpSubmit : handleDemoRsvpSubmit\)/);
   const sampleSubmit = script.slice(script.indexOf("function handleSampleRsvpSubmit("), script.indexOf("async function handleFirebaseRsvpSubmit("));
-  assert.match(sampleSubmit, /if \(!state\.sampleMode\) return/);
+  assert.match(sampleSubmit, /if \(!usesSampleRsvp\(\)\) return/);
   assert.match(sampleSubmit, /state\.sampleRsvpResponse = \{ status, message \}/);
   assert.doesNotMatch(sampleSubmit, /localStorage|saveInvitationRsvp|commitInvitationRsvpPatch|updateDoc|writeBatch|httpsCallable/);
   assert.match(script, /sampleRsvpNote: \{ en: "Sample invitation — try the RSVP experience\. No real response will be sent\./);
-  assert.match(script, /state\.sampleMode \? \(state\.sampleRsvpResponse\?\.status \|\| ""\)/);
+  assert.match(script, /usesSampleRsvp\(\) \? \(state\.sampleRsvpResponse\?\.status \|\| ""\)/);
   assert.match(script, /if \(state\.sampleMode\) return;\s*const form = event\.currentTarget;/);
   assert.match(script, /function handleDemoRsvpSubmit\(event\) \{\s*event\.preventDefault\(\);\s*if \(state\.sampleMode\) return;/);
   assert.match(script, /state\.sampleMode \|\| state\.mode !== "firebase" \|\| state\.isRsvpSaving/);

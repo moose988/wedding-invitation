@@ -11,3 +11,11 @@ export function paginateRows(rows, requestedPage = 1, pageSize = 6) {
     start,
   };
 }
+
+// Keep drafts last while preserving the chosen ordering within each group.
+export function sortEventsDraftsLast(rows, sortKey, timestampValue) {
+  return [...rows].sort((a, b) => {
+    const draftDifference = Number(a.status === "draft") - Number(b.status === "draft");
+    return draftDifference || timestampValue(b[sortKey]) - timestampValue(a[sortKey]);
+  });
+}

@@ -695,7 +695,10 @@ service cloud.firestore {
           "seatingEnabled": event.get("seatingEnabled", true),
           "schedule": data.schedule, "updatedAt": request.time
         };
-      return data.diff(expected).affectedKeys().hasOnly(["scheduleCount"]) && scheduleMatches;
+      return data.diff(expected).affectedKeys().hasOnly(["scheduleCount", "invitationTemplate"])
+        && (!data.keys().hasAny(["invitationTemplate"]) || (data.invitationTemplate == event.get("invitationTemplate", "") && data.invitationTemplate in ["layla-zaid"]))
+        && (event.get("invitationTemplate", "") == "" || data.get("invitationTemplate", "") == event.invitationTemplate)
+        && scheduleMatches;
     }
 
     function canonicalCustomerInvitationData(weddingId, token, data) {

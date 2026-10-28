@@ -1,4 +1,6 @@
 import { createServer } from "node:http";
+import { Readable } from "node:stream";
+import { API_URL as photoBucketApiUrl } from "../photo-bucket/config.js";
 import { spawn } from "node:child_process";
 import { access, readFile } from "node:fs/promises";
 import { constants } from "node:fs";
@@ -56,7 +58,39 @@ function send(res, status, body, type = "text/plain; charset=utf-8") {
   res.end(body);
 }
 
+// Local-only proxy for the online Photo Bucket API and its signed S3 URLs.
+// It avoids changing production CORS and never forwards browser cookies.
+async function proxyPhotoBucket(req, res, requestUrl) {
+  const origin = req.headers.origin;
+  if ((origin && origin !== `http://${host}:${port}`) || req.headers["sec-fetch-site"] === "cross-site") return send(res, 403, "Forbidden");
+  let target;
+  if (requestUrl.pathname.startsWith("/__photo_bucket_api/")) {
+    if (!["GET", "POST", "PATCH", "DELETE"].includes(req.method)) return send(res, 405, "Method Not Allowed");
+    if (!photoBucketApiUrl) return send(res, 503, "Photo Bucket API is not configured");
+    const apiOrigin = new URL(photoBucketApiUrl);
+    target = new URL(requestUrl.pathname.slice("/__photo_bucket_api".length) + requestUrl.search, apiOrigin);
+    if (target.origin !== apiOrigin.origin) return send(res, 403, "Invalid API host");
+  } else {
+    if (!["GET", "PUT"].includes(req.method)) return send(res, 405, "Method Not Allowed");
+    try { target = new URL(requestUrl.searchParams.get("url")); } catch { return send(res, 400, "Invalid storage URL"); }
+    if (target.protocol !== "https:" || !/^pb-[a-z0-9.-]+\.s3[.-][a-z0-9-]+\.amazonaws\.com$/i.test(target.hostname) || target.username || target.password || target.port) return send(res, 403, "Invalid storage host");
+  }
+  const headers = {};
+  for (const name of ["authorization", "content-type", "x-amz-checksum-sha256", "x-amz-server-side-encryption"]) if (req.headers[name]) headers[name] = req.headers[name];
+  try {
+    const options = { method: req.method, headers, redirect: "error" };
+    if (["POST", "PATCH", "PUT"].includes(req.method)) { options.body = Readable.toWeb(req); options.duplex = "half"; }
+    const upstream = await fetch(target, options);
+    const responseHeaders = { "Cache-Control": "no-store" };
+    for (const name of ["content-type", "etag"]) if (upstream.headers.has(name)) responseHeaders[name] = upstream.headers.get(name);
+    res.writeHead(upstream.status, responseHeaders);
+    if (upstream.body) Readable.fromWeb(upstream.body).pipe(res); else res.end();
+  } catch { if (!res.headersSent) send(res, 502, "Photo Bucket service unavailable"); else res.destroy(); }
+}
+
 const server = createServer(async (req, res) => {
+  const requestUrl = new URL(req.url, `http://${host}:${port}`);
+  if (requestUrl.pathname.startsWith("/__photo_bucket_api/") || requestUrl.pathname === "/__photo_bucket_storage") return proxyPhotoBucket(req, res, requestUrl);
   if (req.method !== "GET" && req.method !== "HEAD") return send(res, 405, "Method Not Allowed");
   const pathname = new URL(req.url, `http://${host}:${port}`).pathname;
   if (pathname === "/dev-banner.js") return send(res, 200, bannerScript, "text/javascript; charset=utf-8");

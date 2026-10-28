@@ -4690,3 +4690,8 @@ body.intro-active .hero-blossom { animation-play-state: paused; }
 .seat-plan-chair.is-occupied { background:var(--chair-color) !important; color:var(--chair-ink,#fffdf8) !important; border-color:color-mix(in srgb,var(--chair-color) 62%,#26352f); box-shadow:0 0 0 2px color-mix(in srgb,var(--chair-color) 24%,transparent),0 6px 14px rgba(127,104,67,.16); }
 .seat-plan-chair.is-occupied::before { background:var(--chair-color); border-color:color-mix(in srgb,var(--chair-color) 78%,#26352f); }
 .seat-plan-chair.is-yours { outline:2px solid #fff8e8; outline-offset:2px; box-shadow:0 0 0 5px rgba(215,181,109,.72),0 0 0 8px rgba(78,93,85,.14),0 10px 20px rgba(70,51,18,.26); }
+
+/* Never show another party member's map when the selected seat is pending. */
+.seating-content-outline[hidden], .seating-map-shell[hidden], .guest-seat-selection-status[hidden] { display: none !important; }
+.guest-seat-selection-status { margin: 12px 0; padding: 12px 16px; border: 1px solid #cbbba0; border-radius: 10px; color: #514333; background: #fffaf0; }
+.guest-seat-party-member.is-selected { outline: 2px solid #76542f; outline-offset: 2px; }

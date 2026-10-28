@@ -3,12 +3,13 @@ import * as accountApi from "./firebase-config.js";
 import { isPlatformAdmin, redeemCustomerGrants } from "./account-access.js";
 import { EVENT_CATEGORIES, eventUsesGuestSides, getEventCategory, getEventDisplayTitle, isCelebrationEvent, isGenderRevealEvent } from "./event-utils.js";
 import { eventDateTimeParts, localDateTimeToIso } from "./event-date-time.js";
-import { paginateRows } from "./workspace-pagination.js";
+import { paginateRows, sortEventsDraftsLast } from "./workspace-pagination.js";
+import { ensureGenderRevealPublished } from "./gender-reveal-publication.js";
 import { createOwnerAdapter } from "./photo-bucket/adapters.js";
 import { renderLocalBuckets } from "./photo-bucket/workspace.js";
 
 const state = { services: null, user: null, weddings: [], workspaceLoaded: false, canSeeSampleInvitation: false, isAdmin: false, roleResolved: false, filter: "all", currentPage: 1, pageSize: 6, editId: "", deleteId: "", workspaceTimer: null, unsubscribeAuth: null, initialized: false, snapshotGeneration: 0, workspaceRequest: 0 };
-const el = Object.fromEntries(["workspace","loadingState","userEmail","signOutButton","createWeddingButton","sampleInvitationPanel","workspaceControls","sampleInvitationUrl","searchInput","sortSelect","filterRow","workspaceStatus","retryLoadButton","weddingGrid","paginationControls","paginationStatus","emptyState","weddingDialog","weddingForm","formKicker","formTitle","formError","saveWeddingButton","categoryStep","eventFeaturesStep","eventInformationStep","continueEventButton","continueFeaturesButton","backEventButton","deleteDialog","deleteForm","deletePhrase","deleteConfirmation","deleteError"].map((id) => [id, document.getElementById(id)]));
+const el = Object.fromEntries(["workspace","loadingState","userEmail","signOutButton","createWeddingButton","sampleInvitationPanel","workspaceControls","sampleInvitationUrl","searchInput","sortSelect","filterRow","workspaceStatus","retryLoadButton","weddingGrid","paginationControls","paginationStatus","emptyState","weddingDialog","weddingForm","formKicker","formTitle","formError","saveWeddingButton","categoryStep","eventFeaturesStep","eventTemplateStep","eventInformationStep","continueEventButton","continueFeaturesButton","continueTemplateButton","backEventButton","deleteDialog","deleteForm","deletePhrase","deleteConfirmation","deleteError"].map((id) => [id, document.getElementById(id)]));
 
 init();
 function init() {
@@ -49,6 +50,7 @@ function init() {
   el.weddingForm.querySelectorAll('[name="eventCategory"]').forEach((input) => input.addEventListener("change", updateCategoryFields));
   el.continueEventButton.addEventListener("click", continueToEventInformation);
   el.continueFeaturesButton.addEventListener("click", continueToEventInformation);
+  el.continueTemplateButton.addEventListener("click", continueToEventInformation);
   el.backEventButton.addEventListener("click", backEventStep);
   el.weddingGrid.addEventListener("click", handleCardAction);
   document.addEventListener("click", (event) => { if (!event.target.closest(".menu-wrap")) closeActionMenus(); });
@@ -75,6 +77,8 @@ function init() {
     }
     if (!user) return location.replace(document.body.dataset.accountSurface === "customer" ? "./customer-login.html?message=session-required" : "./dashboard-login.html?message=session-required");
     state.user = user;
+    el.sampleInvitationUrl.value = sampleInvitationUrl();
+    updateSamplePanelLabel();
     void renderLocalBuckets(user.uid, user);
     try {
       state.isAdmin = await isPlatformAdmin(accountApi, state.services.db, user.uid);
@@ -241,10 +245,11 @@ async function enrichStats() {
       return;
     }
     try {
-      const guests = await getDocs(collection(state.services.db, "weddings", wedding.id, "guests"));
+      const isSharedRsvp = isGenderRevealEvent(wedding);
+      const guests = await getDocs(collection(state.services.db, "weddings", wedding.id, isSharedRsvp ? "genderRevealResponses" : "guests"));
       const rows = guests.docs.map((row) => row.data());
       wedding.stats = { total: rows.length, confirmed: rows.filter((g) => g.rsvpStatus === "confirmed").length, pending: rows.filter((g) => !["confirmed", "declined"].includes(g.rsvpStatus)).length, declined: rows.filter((g) => g.rsvpStatus === "declined").length, checkedIn: rows.filter((g) => g.checkedIn).length };
-    } catch (_) { wedding.stats = wedding.stats || { total: 0, confirmed: 0, pending: 0, declined: 0, checkedIn: 0 }; }
+    } catch (_) { wedding.stats = null; }
   }));
 }
 
@@ -263,7 +268,7 @@ function render() {
     return matchesFilter && `${w.eventTitle || ""} ${w.coupleName || ""} ${w.brideName || ""} ${w.groomName || ""} ${w.venueEn || ""} ${w.location || ""}`.toLowerCase().includes(term);
   });
   const sortKey = el.sortSelect.value === "event" ? "eventDateISO" : el.sortSelect.value === "updated" ? "updatedAt" : "createdAt";
-  rows.sort((a,b) => timestampValue(b[sortKey]) - timestampValue(a[sortKey]));
+  rows = sortEventsDraftsLast(rows, sortKey, timestampValue);
   const page = paginateRows(rows, state.currentPage, state.pageSize);
   state.currentPage = page.page;
   el.workspaceStatus.textContent = rows.length > state.pageSize
@@ -280,31 +285,63 @@ function render() {
 function isOldEvent(wedding) {
   if (wedding.status === "completed") return true;
   const eventTime = timestampValue(wedding.eventDateISO);
-  return Number.isFinite(eventTime) && eventTime < Date.now();
+  return Number.isFinite(eventTime) && eventTime > 0 && eventTime < Date.now();
 }
 
 function card(w) {
-  const stats = w.stats || {}; const active = ["active", "completed"].includes(w.status); const isOwner = w.isOwner === true && w.seatingOnly !== true;
+  const isOwner = w.isOwner === true && w.seatingOnly !== true;
   const eventId = escape(w.id);
-  const eventStatus = ["draft", "active", "completed", "archived"].includes(w.status) ? w.status : "draft";
+  const eventStatus = ["draft", "upcoming", "active", "completed", "archived"].includes(w.status) ? w.status : "draft";
   const ownerActions = isOwner ? `<button data-action="edit" data-id="${eventId}" type="button">Edit details</button><button data-action="duplicate" data-id="${eventId}" type="button">Duplicate setup</button><button data-action="archive" data-id="${eventId}" type="button">${w.status === "archived" ? "Restore event" : "Archive event"}</button><button class="menu-delete" data-action="delete" data-id="${eventId}" type="button">Delete event</button>` : `<p class="action-menu__notice">Only the event owner can manage this event.</p>`;
   const title = getEventDisplayTitle(w);
-  const category = isGenderRevealEvent(w) ? "Gender Reveal Party · حفل الكشف عن جنس المولود" : isCelebrationEvent(w) ? "Celebration" : "Wedding / Engagement";
+  const category = isGenderRevealEvent(w) ? "حفل الكشف عن جنس المولود" : isCelebrationEvent(w) ? "Celebration" : "Wedding / Engagement";
   const cardMenu = isOwner ? `<div class="menu-wrap"><button class="card-menu-toggle" data-action="menu" data-id="${eventId}" type="button" aria-label="More actions for ${escape(title)}" aria-expanded="false" aria-controls="menu-${eventId}">⋯</button><div class="action-menu" id="menu-${eventId}" hidden>${ownerActions}</div></div>` : "";
-  const statsMarkup = isGenderRevealEvent(w)
-    ? `<span class="stat">Shared RSVP · no guest list</span>`
-    : w.seatingOnly === true
+  const categoryStyle = isGenderRevealEvent(w) ? "gender-reveal" : isCelebrationEvent(w) ? "celebration" : "wedding";
+  const total = w.stats?.total;
+  const statsMarkup = w.seatingOnly === true
     ? `<span class="stat">Seating access · ${escape(w.allowedSide || "restricted")}</span>`
-    : `<span class="stat"><strong>${stats.total || 0}</strong> guests</span><span class="stat"><strong>${stats.confirmed || 0}</strong> confirmed</span><span class="stat"><strong>${stats.pending || 0}</strong> pending</span><span class="stat"><strong>${stats.declined || 0}</strong> declined</span>${active ? `<span class="stat"><strong>${stats.checkedIn || 0}/${stats.total || 0}</strong> checked in</span>` : ""}`;
+    : Number.isInteger(total)
+      ? `<span class="event-total"><strong>${total}</strong> ${isGenderRevealEvent(w) ? (total === 1 ? "response" : "responses") : (total === 1 ? "guest" : "guests")}</span>`
+      : `<span class="event-total event-total--unavailable">${isGenderRevealEvent(w) ? "Response" : "Guest"} count unavailable</span>`;
   const openLabel = w.seatingOnly === true ? "Open seating" : "Open dashboard";
   const canCopyGuestLink = state.isAdmin && w.seatingOnly !== true &&
     (!Array.isArray(w.allowedViews) || w.allowedViews.includes("share"));
-  const copyAction = canCopyGuestLink ? `<button data-action="${isGenderRevealEvent(w) ? "copy-shared" : "copy"}" data-id="${eventId}" type="button" title="${isGenderRevealEvent(w) ? "Copy shared event invitation link" : "Copy guest invitation link template"}">${isGenderRevealEvent(w) ? "Copy shared link" : "Copy guest link"}</button>` : "";
-  return `<article class="wedding-card"><div class="card-head"><div><p class="workspace-kicker">${escape(w.venueEn || "Venue not set")}</p><h2>${escape(title)}</h2><span class="category-badge">${category}</span></div><div class="card-head__actions"><span class="status-badge status-badge--${eventStatus}">${escape(eventStatus)}</span>${cardMenu}</div></div><div class="card-meta">${formatEvent(w)}${w.location ? ` · ${escape(w.location)}` : ""}</div><div class="card-stats">${statsMarkup}</div><div class="card-footer"><span>Updated ${formatRelative(w.updatedAt || w.createdAt)}</span></div><div class="card-actions"><button class="open-button" data-action="open" data-id="${eventId}" type="button">${openLabel}</button>${copyAction}</div></article>`;
+  const copyAction = canCopyGuestLink && isGenderRevealEvent(w) ? `<button data-action="copy-shared" data-id="${eventId}" type="button" title="Copy shared event invitation link">Copy shared link</button>` : "";
+  return `<article class="wedding-card"><div class="card-head"><div><h2>${escape(title)}</h2><span class="category-badge category-badge--${categoryStyle}"${isGenderRevealEvent(w) ? ' lang="ar" dir="rtl"' : ""}>${category}</span></div><div class="card-head__actions"><span class="status-badge status-badge--${eventStatus}">${escape(eventStatus)}</span>${cardMenu}</div></div><div class="card-meta"><div class="card-detail card-detail--date"><span class="card-detail__label"><svg class="card-detail__icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg>Date &amp; time</span><span>${escape(formatEvent(w))}</span></div>${w.location ? `<div class="card-detail card-detail--location"><span class="card-detail__label"><svg class="card-detail__icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 10c0 5-8 11-8 11S4 15 4 10a8 8 0 1 1 16 0Z"/><circle cx="12" cy="10" r="2.5"/></svg>Location</span><span>${escape(w.location)}</span></div>` : ""}</div><div class="card-footer">${statsMarkup ? `<div class="card-stats">${statsMarkup}</div>` : ""}<span class="card-updated">Updated ${formatRelative(w.updatedAt || w.createdAt)}</span></div><div class="card-actions"><button class="open-button" data-action="open" data-id="${eventId}" type="button">${openLabel}</button>${copyAction}</div></article>`;
 }
 
+function sampleInvitationStorageKey() { return `wedding:sample-link:${state.user?.uid || ""}`; }
+function validSampleGuestUrl(value) {
+  try {
+    const url = new URL(value, window.location.href);
+    const fragment = new URLSearchParams(url.hash.slice(1));
+    if (url.origin !== window.location.origin || url.pathname !== "/index.html" || url.searchParams.get("wedding") !== "luxury-wedding-demo" || !/^[A-Za-z0-9_-]{43}$/.test(fragment.get("guest") || "") || !/^[A-Za-z0-9_-]{1,128}$/.test(fragment.get("recipient") || "")) return "";
+    url.searchParams.delete("sample");
+    return url.href;
+  } catch { return ""; }
+}
 function sampleInvitationUrl() {
+  try {
+    const saved = state.user?.uid && validSampleGuestUrl(localStorage.getItem(sampleInvitationStorageKey()) || "");
+    if (saved) return saved;
+  } catch { /* Storage may be unavailable. */ }
   return new URL("./index.html?wedding=luxury-wedding-demo&sample=1", window.location.href).href;
+}
+function updateSamplePanelLabel() {
+  const live = Boolean(validSampleGuestUrl(sampleInvitationUrl()));
+  document.getElementById("sampleInvitationTitle").textContent = live ? "Layla & Zaid guest invitation (live)" : "Layla & Zaid sample invitation";
+}
+function saveSampleGuestLink() {
+  const feedback = el.sampleInvitationPanel.querySelector("[data-sample-feedback]");
+  const url = validSampleGuestUrl(el.sampleInvitationUrl.value.trim());
+  if (!url || !state.user?.uid) { feedback.textContent = "Enter a valid personal invitation link for Layla & Zaid on this site."; feedback.dataset.state = "error"; return; }
+  try {
+    localStorage.setItem(sampleInvitationStorageKey(), url);
+    el.sampleInvitationUrl.value = url;
+    updateSamplePanelLabel();
+    feedback.textContent = "Personal invitation saved in this browser. Changes made in it affect the real guest.";
+    feedback.dataset.state = "success";
+  } catch { feedback.textContent = "Could not save the link in this browser."; feedback.dataset.state = "error"; }
 }
 
 async function handleCardAction(event) {
@@ -319,7 +356,13 @@ async function handleCardAction(event) {
     location.href = `./dashboard.html?wedding=${encodeURIComponent(wedding.id)}`;
   }
   if (button.dataset.action === "copy") { await navigator.clipboard.writeText(new URL(`index.html?wedding=${encodeURIComponent(wedding.id)}#guest={guestToken}`, location.href)); flash("Guest invitation base link copied."); }
-  if (button.dataset.action === "copy-shared") { await navigator.clipboard.writeText(new URL(`gender-reveal.html?wedding=${encodeURIComponent(wedding.id)}`, location.href)); flash("Shared event invitation link copied."); }
+  if (button.dataset.action === "copy-shared") {
+    try {
+      await ensureGenderRevealPublished(accountApi, state.services.db, wedding.id);
+      await navigator.clipboard.writeText(new URL(`gender-reveal.html?wedding=${encodeURIComponent(wedding.id)}`, location.href));
+      flash("Shared event invitation link copied.");
+    } catch (error) { console.error("Could not prepare gender reveal invitation", error); flash("Could not prepare the invitation. Please check your access and try again."); }
+  }
   if (button.dataset.action === "edit") {
     const current = await loadFullWedding(wedding.id);
     if (current) openForm(current);
@@ -346,6 +389,7 @@ async function loadFullWedding(weddingId) {
 async function handleSamplePanelAction(event) {
   const button = event.target.closest("[data-action]");
   if (!button) return;
+  if (button.dataset.action === "save-sample") { saveSampleGuestLink(); return; }
   if (button.dataset.action === "preview-sample") {
     window.open(sampleInvitationUrl(), "_blank", "noopener,noreferrer");
     return;
@@ -398,10 +442,12 @@ function openForm(wedding) {
   el.saveWeddingButton.textContent = wedding ? "Save changes" : "Create event";
   el.categoryStep.hidden = false;
   el.eventFeaturesStep.hidden = true;
+  el.eventTemplateStep.hidden = true;
   el.eventInformationStep.hidden = true;
   el.backEventButton.hidden = true;
   el.saveWeddingButton.hidden = true;
   const f = el.weddingForm.elements;
+  if (!wedding) f.status.value = "active";
   if (wedding) {
     el.weddingForm.querySelectorAll('[name="eventCategory"]').forEach((input) => { input.checked = input.value === getEventCategory(wedding); });
     ["brideName", "groomName", "eventTitle", "eventTitleAr", "venueEn", "location", "mapsUrl", "whatsAppCountryCode", "invitationLanguage", "status", "plannerNotes"].forEach((key) => { if (f[key]) f[key].value = wedding[key] || ""; });
@@ -421,6 +467,13 @@ function updateCategoryFields() {
   if (photoBucket) { el.continueEventButton.disabled = false; return; }
   const wedding = category === EVENT_CATEGORIES.WEDDING_ENGAGEMENT;
   const genderReveal = category === EVENT_CATEGORIES.GENDER_REVEAL;
+  el.eventTemplateStep.querySelectorAll("[data-template-category]").forEach((card) => {
+    const matches = card.dataset.templateCategory === category;
+    card.hidden = !matches;
+    const input = card.querySelector('input[name="invitationTemplate"]');
+    input.disabled = !matches;
+    if (matches) input.checked = true;
+  });
   el.continueEventButton.disabled = !category;
   el.weddingForm.querySelectorAll(".wedding-identity").forEach((label) => {
     label.hidden = !wedding;
@@ -461,15 +514,27 @@ function continueToEventInformation() {
   }
   if (!state.editId && !el.eventFeaturesStep.hidden) {
     el.eventFeaturesStep.hidden = true;
+    if (category === EVENT_CATEGORIES.WEDDING_ENGAGEMENT) {
+      el.eventTemplateStep.hidden = false;
+    } else {
+      el.eventInformationStep.hidden = false;
+      el.saveWeddingButton.hidden = false;
+    }
+    return;
+  }
+  if (!state.editId && !el.eventTemplateStep.hidden) {
+    el.eventTemplateStep.hidden = true;
     el.eventInformationStep.hidden = false;
     el.saveWeddingButton.hidden = false;
     return;
   }
   el.categoryStep.hidden = true;
-  if (state.editId || category === EVENT_CATEGORIES.GENDER_REVEAL) {
+  if (state.editId) {
     el.eventInformationStep.hidden = false;
     el.saveWeddingButton.hidden = false;
     el.eventFeaturesStep.hidden = true;
+  } else if (category === EVENT_CATEGORIES.GENDER_REVEAL) {
+    el.eventTemplateStep.hidden = false;
   } else {
     el.eventFeaturesStep.hidden = false;
   }
@@ -480,9 +545,16 @@ function backEventStep() {
     document.getElementById("photoBucketStep").hidden = true; el.categoryStep.hidden = false;
     el.backEventButton.hidden = true; el.saveWeddingButton.hidden = true; return;
   }
-  if (!state.editId && !el.eventInformationStep.hidden && getSelectedEventCategory() !== EVENT_CATEGORIES.GENDER_REVEAL) {
+  if (!state.editId && !el.eventTemplateStep.hidden) {
+    el.eventTemplateStep.hidden = true;
+    if (getSelectedEventCategory() === EVENT_CATEGORIES.GENDER_REVEAL) { el.categoryStep.hidden = false; el.backEventButton.hidden = true; }
+    else el.eventFeaturesStep.hidden = false;
+    return;
+  }
+  if (!state.editId && !el.eventInformationStep.hidden) {
     el.eventInformationStep.hidden = true;
-    el.eventFeaturesStep.hidden = false;
+    if ([EVENT_CATEGORIES.WEDDING_ENGAGEMENT, EVENT_CATEGORIES.GENDER_REVEAL].includes(getSelectedEventCategory())) el.eventTemplateStep.hidden = false;
+    else el.eventFeaturesStep.hidden = false;
     el.saveWeddingButton.hidden = true;
     return;
   }
@@ -508,8 +580,8 @@ async function saveWedding(event) {
     return;
   }
   if (!state.isAdmin) return;
- event.preventDefault(); const f = el.weddingForm.elements; const category = getSelectedEventCategory(); if (!Object.values(EVENT_CATEGORIES).includes(category)) return; const oldEvent = state.weddings.find((item) => item.id === state.editId); if (oldEvent && getEventCategory(oldEvent) !== category && !window.confirm("Changing this event category changes the dashboard experience. Existing guest side values will be preserved. Continue?")) return; const brideName = f.brideName.value.trim(), groomName = f.groomName.value.trim(); const genderReveal = category === EVENT_CATEGORIES.GENDER_REVEAL; const leavingGenderReveal = isGenderRevealEvent(oldEvent) && !genderReveal; const timeZone = genderReveal ? "Asia/Dubai" : (oldEvent?.eventTimeZone || ""); const eventDateISO = localDateTimeToIso(f.eventDate.value, f.eventTime.value, timeZone); const openingVideoDefault = oldEvent && Object.hasOwn(oldEvent, "genderRevealOpeningVideoUrl") ? oldEvent.genderRevealOpeningVideoUrl : "/videos/gender-reveal-opening.mp4"; const data = { eventCategory: category, eventDateISO, ...(genderReveal ? { eventTimeZone: "Asia/Dubai", guestGroupMode: "general", genderRevealArtworkUrl: oldEvent?.genderRevealArtworkUrl || "/images/gender-reveal-cover.png", genderRevealOpeningVideoUrl: openingVideoDefault, genderRevealMusicUrl: oldEvent?.genderRevealMusicUrl || "/music/gender-reveal-party.mp3", genderRevealMessageEn: oldEvent?.genderRevealMessageEn || "A little surprise is on the way…", genderRevealMessageAr: oldEvent?.genderRevealMessageAr || "مفاجأة جميلة بانتظارنا…", eventTitleAr: f.eventTitleAr.value.trim() || "حفل الكشف عن جنس المولود", seatingEnabled: false, showInvitationQr: false } : leavingGenderReveal ? { eventTitleAr: "", genderRevealArtworkUrl: "", genderRevealOpeningVideoUrl: "", genderRevealMusicUrl: "", genderRevealMessageEn: "", genderRevealMessageAr: "" } : {}), venueEn: f.venueEn.value.trim(), location: f.location.value.trim(), mapsUrl: f.mapsUrl.value.trim(), whatsAppCountryCode: genderReveal ? "971" : f.whatsAppCountryCode.value.trim(), invitationLanguage: genderReveal ? (f.invitationLanguage.value === "ar" ? "ar" : "en") : f.invitationLanguage.value, plannerNotes: f.plannerNotes.value.trim(), status: f.status.value, updatedAt: serverTimestamp() }; if (genderReveal) data.eventTitle = f.eventTitle.value.trim() || "Gender Reveal Party"; else if (category === EVENT_CATEGORIES.CELEBRATION) data.eventTitle = f.eventTitle.value.trim(); else Object.assign(data, { brideName, groomName, coupleName: `${brideName} & ${groomName}`, eventTitle: `${brideName} & ${groomName}` }); el.formError.textContent = ""; el.saveWeddingButton.disabled = true;
-  try { if (state.editId) { await updateDoc(doc(state.services.db,"weddings",state.editId), data); await setDoc(doc(state.services.db,"users",state.user.uid,"weddingAccess",state.editId), { ...indexData(data), weddingId: state.editId }, { merge:true }); } else { const weddingRef = doc(collection(state.services.db,"weddings")); const batch = writeBatch(state.services.db); batch.set(weddingRef, { ...data, seatingEnabled:f.seatingEnabled.checked, showInvitationQr:f.showInvitationQr.checked, ownerUserId:state.user.uid, createdAt:serverTimestamp() }); batch.set(doc(state.services.db,"weddings",weddingRef.id,"dashboardUsers",state.user.uid), { userId:state.user.uid, email:state.user.email || "", canViewDashboard:true, canEditGuests:true, canEditSeating:true, canCheckIn:true, canManageUsers:true, role:"owner", createdAt:serverTimestamp(), updatedAt:serverTimestamp() }); batch.set(doc(state.services.db,"users",state.user.uid,"weddingAccess",weddingRef.id), { ...indexData(data), weddingId:weddingRef.id, ownerUserId:state.user.uid, createdAt:serverTimestamp(), updatedAt:serverTimestamp() }); await batch.commit(); } el.weddingDialog.close(); void refreshWorkspaceEvents(); } catch (error) { console.error(error); el.formError.textContent = "We could not save this event. Please check your access and try again."; } finally { el.saveWeddingButton.disabled=false; } }
+ event.preventDefault(); const f = el.weddingForm.elements; const category = getSelectedEventCategory(); if (!Object.values(EVENT_CATEGORIES).includes(category)) return; const oldEvent = state.weddings.find((item) => item.id === state.editId); if (oldEvent && getEventCategory(oldEvent) !== category && !window.confirm("Changing this event category changes the dashboard experience. Existing guest side values will be preserved. Continue?")) return; const brideName = f.brideName.value.trim(), groomName = f.groomName.value.trim(); const genderReveal = category === EVENT_CATEGORIES.GENDER_REVEAL; const leavingGenderReveal = isGenderRevealEvent(oldEvent) && !genderReveal; const timeZone = genderReveal ? "Asia/Dubai" : (oldEvent?.eventTimeZone || (!oldEvent ? Intl.DateTimeFormat().resolvedOptions().timeZone : "") || ""); const eventDateISO = localDateTimeToIso(f.eventDate.value, f.eventTime.value, timeZone); const openingVideoDefault = oldEvent && Object.hasOwn(oldEvent, "genderRevealOpeningVideoUrl") ? oldEvent.genderRevealOpeningVideoUrl : "/videos/gender-reveal-opening.mp4"; const data = { eventCategory: category, eventDateISO, ...(!oldEvent && timeZone ? { eventTimeZone: timeZone } : {}), ...(genderReveal ? { eventTimeZone: "Asia/Dubai", guestGroupMode: "general", genderRevealArtworkUrl: oldEvent?.genderRevealArtworkUrl || "/images/gender-reveal-cover.png", genderRevealOpeningVideoUrl: openingVideoDefault, genderRevealMusicUrl: oldEvent?.genderRevealMusicUrl || "/music/gender-reveal-party.mp3", genderRevealMessageEn: oldEvent?.genderRevealMessageEn || "A little surprise is on the way…", genderRevealMessageAr: oldEvent?.genderRevealMessageAr || "مفاجأة جميلة بانتظارنا…", eventTitleAr: f.eventTitleAr.value.trim() || "حفل الكشف عن جنس المولود", seatingEnabled: false, showInvitationQr: false } : leavingGenderReveal ? { eventTitleAr: "", genderRevealArtworkUrl: "", genderRevealOpeningVideoUrl: "", genderRevealMusicUrl: "", genderRevealMessageEn: "", genderRevealMessageAr: "" } : {}), venueEn: f.venueEn.value.trim(), location: f.location.value.trim(), mapsUrl: f.mapsUrl.value.trim(), whatsAppCountryCode: genderReveal ? "971" : f.whatsAppCountryCode.value.trim(), invitationLanguage: genderReveal ? (f.invitationLanguage.value === "ar" ? "ar" : "en") : f.invitationLanguage.value, plannerNotes: f.plannerNotes.value.trim(), status: f.status.value, updatedAt: serverTimestamp() }; if (genderReveal) data.eventTitle = f.eventTitle.value.trim() || "Gender Reveal Party"; else if (category === EVENT_CATEGORIES.CELEBRATION) data.eventTitle = f.eventTitle.value.trim(); else Object.assign(data, { brideName, groomName, coupleName: `${brideName} & ${groomName}`, eventTitle: `${brideName} & ${groomName}` }); el.formError.textContent = ""; el.saveWeddingButton.disabled = true;
+  try { if (state.editId) { await updateDoc(doc(state.services.db,"weddings",state.editId), data); if (genderReveal) await ensureGenderRevealPublished(accountApi, state.services.db, state.editId); await setDoc(doc(state.services.db,"users",state.user.uid,"weddingAccess",state.editId), { ...indexData(data), weddingId: state.editId }, { merge:true }); } else { const weddingRef = doc(collection(state.services.db,"weddings")); const batch = writeBatch(state.services.db); batch.set(weddingRef, { ...data, seatingSchemaVersion: 2, ...(category === EVENT_CATEGORIES.WEDDING_ENGAGEMENT ? { invitationTemplate: f.invitationTemplate.value } : genderReveal ? { genderRevealTemplate: f.invitationTemplate.value } : {}), seatingEnabled:f.seatingEnabled.checked, showInvitationQr:f.showInvitationQr.checked, ownerUserId:state.user.uid, createdAt:serverTimestamp() }); batch.set(doc(state.services.db,"weddings",weddingRef.id,"dashboardUsers",state.user.uid), { userId:state.user.uid, email:state.user.email || "", canViewDashboard:true, canEditGuests:true, canEditSeating:true, canCheckIn:true, canManageUsers:true, role:"owner", createdAt:serverTimestamp(), updatedAt:serverTimestamp() }); batch.set(doc(state.services.db,"users",state.user.uid,"weddingAccess",weddingRef.id), { ...indexData(data), weddingId:weddingRef.id, ownerUserId:state.user.uid, createdAt:serverTimestamp(), updatedAt:serverTimestamp() }); await batch.commit(); if (genderReveal) { try { await ensureGenderRevealPublished(accountApi, state.services.db, weddingRef.id); } catch (error) { console.error("Gender reveal invitation could not be prepared", error); flash("Event created, but its invitation needs to be prepared. Use Copy shared link to retry."); } } } el.weddingDialog.close(); void refreshWorkspaceEvents(); } catch (error) { console.error(error); el.formError.textContent = "We could not save this event. Please check your access and try again."; } finally { el.saveWeddingButton.disabled=false; } }
 function indexData(data) { return Object.fromEntries(Object.entries({ eventCategory:data.eventCategory, eventTitle:data.eventTitle, coupleName:data.coupleName, brideName:data.brideName, groomName:data.groomName, eventDateISO:data.eventDateISO, venueEn:data.venueEn, location:data.location, status:data.status, updatedAt:data.updatedAt }).filter(([, value]) => value !== undefined)); }
 async function setArchived(wedding) {
   if (!state.isAdmin) return; const status = wedding.status === "archived" ? "draft" : "archived"; try { await updateDoc(doc(state.services.db,"weddings",wedding.id), { status, updatedAt:serverTimestamp() }); await setDoc(doc(state.services.db,"users",state.user.uid,"weddingAccess",wedding.id), { status, updatedAt:serverTimestamp() }, {merge:true}); void refreshWorkspaceEvents(); } catch (_) {
@@ -517,7 +589,7 @@ async function setArchived(wedding) {
 async function duplicate(wedding) {
  if (!state.isAdmin) return; const { id, stats, legacy, isOwner, seatingOnly, allowedSide, createdAt, updatedAt, completedAt, statusBeforeCompletion, ...source } = wedding; const title = `${getEventDisplayTitle(wedding)} (Copy)`; const copy = { ...source, seatingEnabled:wedding.seatingEnabled !== false, eventTitle:title, status:"draft", ownerUserId:state.user.uid, createdAt:serverTimestamp(), updatedAt:serverTimestamp() }; if (eventUsesGuestSides(wedding)) copy.coupleName = title; if (isGenderRevealEvent(wedding)) { delete copy.coupleName; delete copy.brideName; delete copy.groomName; delete copy.brideNameAr; delete copy.groomNameAr; copy.seatingEnabled = false; copy.showInvitationQr = false; } try { const ref = doc(collection(state.services.db,"weddings")); const batch = writeBatch(state.services.db); batch.set(ref, copy); batch.set(doc(state.services.db,"weddings",ref.id,"dashboardUsers",state.user.uid), { userId:state.user.uid, email:state.user.email || "", canViewDashboard:true, canEditGuests:true, canEditSeating:true, canCheckIn:true, canManageUsers:true, role:"owner", createdAt:serverTimestamp(), updatedAt:serverTimestamp() }); batch.set(doc(state.services.db,"users",state.user.uid,"weddingAccess",ref.id), { ...indexData(copy), weddingId:ref.id, ownerUserId:state.user.uid, createdAt:serverTimestamp(), updatedAt:serverTimestamp() }); await batch.commit(); flash("Event setup duplicated as a draft."); void refreshWorkspaceEvents(); } catch (e) {
  console.error(e); flash("We could not duplicate this event."); } }
-function openDelete(wedding) { state.deleteId=wedding.id; el.deletePhrase.textContent=`DELETE ${wedding.id}`; el.deleteConfirmation.value=""; el.deleteError.textContent=""; el.deleteDialog.showModal(); }
+function openDelete(wedding) { state.deleteId=wedding.id; document.getElementById("deleteEventName").textContent=getEventDisplayTitle(wedding); el.deletePhrase.textContent=`DELETE ${wedding.id}`; el.deleteConfirmation.value=""; el.deleteError.textContent=""; el.deleteDialog.showModal(); }
 async function deleteEventCollection(weddingId, collectionId) {
   const source = collection(state.services.db, "weddings", weddingId, collectionId);
   while (true) {

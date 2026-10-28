@@ -4,11 +4,15 @@ import { API_URL } from './config.js';
 import { guestAdapter as localGuest } from './adapter.js';
 import { details, validId } from './links.js';
 
+const localPreview = ['localhost', '127.0.0.1', '[::1]'].includes(location.hostname);
+const apiBase = localPreview ? '/__photo_bucket_api' : API_URL;
+function storageUrl(url) { return localPreview ? `/__photo_bucket_storage?url=${encodeURIComponent(url)}` : url; }
+
 const retryable = error => Object.assign(error, { retryable: true });
 async function call(method, path, { token, body, query } = {}) {
   let response;
   try {
-    response = await fetch(API_URL + path + (query ? '?' + new URLSearchParams(query) : ''), {
+    response = await fetch(apiBase + path + (query ? '?' + new URLSearchParams(query) : ''), {
       method, headers: { ...(token ? { authorization: `Bearer ${token}` } : {}), ...(body ? { 'content-type': 'application/json' } : {}) }, body: body ? JSON.stringify(body) : undefined,
     });
   } catch { throw retryable(new Error('Network problem. Check your connection and try again.')); }
@@ -22,14 +26,14 @@ async function call(method, path, { token, body, query } = {}) {
 }
 async function put(target, blob) {
   let response;
-  try { response = await fetch(target.url, { method: 'PUT', headers: target.headers, body: blob }); }
+  try { response = await fetch(storageUrl(target.url), { method: 'PUT', headers: target.headers, body: blob }); }
   catch { throw retryable(new Error('Network problem while uploading. Check your connection and try again.')); }
   if (!response.ok) throw response.status >= 500 ? retryable(new Error('Upload service is busy. Retrying…')) : new Error('The upload was rejected. Please choose the photo again.');
 }
 async function blobFor(token, bucketId, photoId, kind) {
   const { url } = await call('GET', `/b/${validId(bucketId)}/photos/${photoId}/url`, { token, query: { kind } });
   let response;
-  try { response = await fetch(url); } catch { throw retryable(new Error('Network problem while loading a photo.')); }
+  try { response = await fetch(storageUrl(url)); } catch { throw retryable(new Error('Network problem while loading a photo.')); }
   if (!response.ok) throw new Error('This photo could not be loaded.');
   return response.blob();
 }

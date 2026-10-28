@@ -21,7 +21,11 @@
   // is present; preserve organizer sign-in flows otherwise.
   if (isPlannerLogin && !fragment.get("guest")) return;
   const route = weddingId ? routes[weddingId] : null;
-  if (!route) return;
+  if (!route) {
+    // Resolve the event-selected design before revealing the generic invitation.
+    if (publicEntry && weddingId && fragment.get("guest")) document.documentElement.style.visibility = "hidden";
+    return;
+  }
 
   const destination = new URL(route, window.location.href);
   destination.search = window.location.search;

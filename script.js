@@ -299,6 +299,7 @@ function completeIntroSequence() {
 }
 
 function markInvitationReady() {
+  document.documentElement.style.visibility = "";
   state.invitationReady = true;
   if (state.introFinished) revealInvitation();
 }
@@ -419,7 +420,8 @@ async function boot() {
       const invitationApi = await withTimeout(getInvitationDataApi(), 12000, "The invitation service is taking longer than expected. Please try again.");
       if (invitationApi.isFirebaseConfigured()) {
         state.mode = "firebase";
-        await loadFirebaseInvitation(weddingId, guestToken, invitationApi);
+        const redirected = await loadFirebaseInvitation(weddingId, guestToken, invitationApi);
+        if (redirected) return;
         state.unsubGuest = invitationApi.subscribeToInvitation(
           { weddingId, guestToken, guestId },
           (context) => applyInvitationContext(context),
@@ -454,6 +456,7 @@ async function boot() {
 }
 
 function renderInvitationAccessError(message) {
+  document.documentElement.style.visibility = "";
   disposeIntroSequence();
   document.body.classList.remove("intro-active");
   const isArabic = isLaylaInvitation() && state.laylaLanguage === "ar";
@@ -493,7 +496,15 @@ async function loadFirebaseInvitation(weddingId, guestToken, invitationApi, requ
     "Guest details are taking longer than expected. Please try again.",
   );
   if (!invitationRefreshIsCurrent(requestVersion, state.invitationRefreshVersion)) return;
+  if (context.wedding.invitationTemplate === "layla-zaid" && !isLaylaInvitation()) {
+    const target = new URL("./invitations/wedding-designs/layla-zaid/index.html", window.location.href);
+    target.search = window.location.search;
+    target.hash = window.location.hash;
+    window.location.replace(target.href);
+    return true;
+  }
   applyInvitationContext(context);
+  return false;
 }
 
 function applyInvitationContext(context) {
@@ -627,7 +638,7 @@ function populateInvitation() {
   setText("closingArabic", wedding.closingAr);
   setText("closingEnglish", wedding.closingEn);
   const dateText = state.laylaLanguage === "ar" ? formatArabicDate(wedding.eventDateISO) : formatDate(wedding.eventDateISO);
-  const heroDetails = [dateText, laylaValue(wedding.timeEn, wedding.timeAr), laylaValue(wedding.venueEn || wedding.venueName, wedding.venueAr || wedding.venueNameAr)].filter(Boolean);
+  const heroDetails = [dateText, laylaValue(wedding.timeEn || eventTimeFromDate(wedding), wedding.timeAr || eventTimeFromDate(wedding, "ar")), laylaValue(wedding.venueEn || wedding.venueName, wedding.venueAr || wedding.venueNameAr)].filter(Boolean);
   const eventLine = document.getElementById("heroEventLine");
   if (isLaylaInvitation() && eventLine) {
     eventLine.replaceChildren(...heroDetails.map((text) => {
@@ -808,7 +819,7 @@ function renderDetails() {
     {
       icon: icons.date,
       title: isLaylaInvitation() ? laylaText("dateTime") : "Date & Time",
-      en: laylaValue(`${formatDate(wedding.eventDateISO)}${wedding.timeEn ? ` · ${wedding.timeEn}` : ""}`, `${formatArabicDate(wedding.eventDateISO)}${wedding.timeAr ? ` · ${wedding.timeAr}` : ""}`),
+      en: laylaValue(`${formatDate(wedding.eventDateISO)}${wedding.timeEn || eventTimeFromDate(wedding) ? ` · ${wedding.timeEn || eventTimeFromDate(wedding)}` : ""}`, `${formatArabicDate(wedding.eventDateISO)}${wedding.timeAr || eventTimeFromDate(wedding, "ar") ? ` · ${wedding.timeAr || eventTimeFromDate(wedding, "ar")}` : ""}`),
     },
     {
       icon: icons.venue,
@@ -1249,11 +1260,14 @@ function renderSeatSection() {
       <p class="layla-party-seat-status" id="laylaPartySeatStatus" role="status" aria-live="polite"${state.seatingSelectedPersonKey ? "" : " hidden"}>${escapeHtml(getPartySeatStatus(selection.member, selectedTarget))}</p>
     `;
     bindLaylaPartySeatSelector();
+    setInvitationMapVisibility(!selection.member || Boolean(selectedTarget));
     renderSeatingMap(state.tables, assignments, selectedTarget);
     return;
   }
 
   const partyMembers = getInvitationPartyMembers(state.guest, assignments);
+  state.seatingSelectedPersonKey = retainPartySeatSelection(state.seatingSelectedPersonKey, partyMembers);
+  const selection = getPartySeatSelection(state.seatingSelectedPersonKey, partyMembers, state.tables);
 
   document.getElementById("seatDetailsMount").innerHTML = `
       <div class="seat-details-grid">
@@ -1261,11 +1275,13 @@ function renderSeatSection() {
         <article class="seat-detail-card"><span>Party size</span><strong>${escapeHtml(String(getPartySize(state.guest)))}</strong></article>
       </div>
       <div class="guest-seat-list guest-seat-list--party" aria-label="Your party seating assignments">
-        ${partyMembers.map(renderInvitationPartyMember).join("")}
+        ${partyMembers.map((member) => renderInvitationPartyMember(member, state.seatingSelectedPersonKey)).join("")}
       </div>
+      <p class="guest-seat-selection-status" id="guestSeatSelectionStatus" role="status" aria-live="polite"${selection.member && !selection.target ? "" : " hidden"}>${escapeHtml(selection.member?.label || "This guest")} has not been assigned a seat yet.</p>
     `;
 
-  renderSeatingMap(state.tables, assignments);
+  setInvitationMapVisibility(!selection.member || Boolean(selection.target));
+  renderSeatingMap(state.tables, assignments, selection.target);
   bindInvitationPartySummary();
 }
 
@@ -1342,6 +1358,7 @@ function selectLaylaPartyMember(personKey) {
     status.textContent = getPartySeatStatus(selection.member, target);
   }
   state.seatPlanFocusedAssignments = target ? [selection.member.assignment] : [];
+  setInvitationMapVisibility(Boolean(target));
   if (target) {
     focusInvitationChair(target);
   } else {
@@ -1356,12 +1373,19 @@ function selectLaylaPartyMember(personKey) {
   }
 }
 
-function renderInvitationPartyMember(member) {
-  const assignment = member.assignment;
+function setInvitationMapVisibility(visible) {
+  const map = document.getElementById("seatingMap");
+  const container = map?.closest(".seating-content-outline") || map?.closest(".seating-map-shell");
+  if (container) container.hidden = !visible;
+}
+
+function renderInvitationPartyMember(member, selectedPersonKey) {
+  const target = member.assignment ? resolvePartySeatTarget(member.assignment, state.tables) : null;
+  const selected = member.personKey === selectedPersonKey;
   return `
-    <button class="guest-seat-party-member ${assignment ? "is-assigned" : "is-unassigned"}" type="button" data-party-member-index="${member.index}" ${assignment ? "" : "disabled"} aria-label="${escapeAttribute(assignment ? `${member.label}, ${assignment.tableName || "Table"}, chair ${assignment.seatNumber}. Focus on map.` : `${member.label}, seat not assigned yet.`)}">
+    <button class="guest-seat-party-member ${target ? "is-assigned" : "is-unassigned"} ${selected ? "is-selected" : ""}" type="button" data-party-member-index="${member.index}" aria-pressed="${selected}" aria-label="${escapeAttribute(target ? `${member.label}, ${member.assignment.tableName || "Table"}, chair ${target.seatNumber}. Focus on map.` : `${member.label}, seat not assigned yet.`)}">
       <strong>${escapeHtml(member.label)}</strong>
-      <span>${assignment ? `${escapeHtml(assignment.tableName || "Table")} · Chair ${escapeHtml(String(assignment.seatNumber))}` : "Seat not assigned yet"}</span>
+      <span>${target ? `${escapeHtml(member.assignment.tableName || "Table")} · Chair ${escapeHtml(target.seatNumber)}` : "Seat not assigned yet"}</span>
     </button>
   `;
 }
@@ -1370,8 +1394,22 @@ function bindInvitationPartySummary() {
   document.querySelectorAll("[data-party-member-index]").forEach((button) => {
     button.addEventListener("click", () => {
       const index = Number(button.dataset.partyMemberIndex);
-      const member = getInvitationPartyMembers(state.guest, getInvitationSeatAssignments(state.guest))[index];
-      if (member?.assignment) centerInvitationSeats([member.assignment]);
+      const members = getInvitationPartyMembers(state.guest, getInvitationSeatAssignments(state.guest));
+      const member = members[index];
+      if (!member) return;
+      const selection = getPartySeatSelection(member.personKey, members, state.tables);
+      state.seatingSelectedPersonKey = member.personKey;
+      state.seatPlanSelectedTarget = selection.target ? { ...selection.target, personKey: member.personKey } : null;
+      document.querySelectorAll("[data-party-member-index]").forEach((item) => {
+        const selected = Number(item.dataset.partyMemberIndex) === index;
+        item.classList.toggle("is-selected", selected);
+        item.setAttribute("aria-pressed", String(selected));
+      });
+      const status = document.getElementById("guestSeatSelectionStatus");
+      if (status) { status.hidden = Boolean(selection.target); status.textContent = `${member.label} has not been assigned a seat yet.`; }
+      setInvitationMapVisibility(Boolean(selection.target));
+      if (selection.target) focusInvitationChair({ ...selection.target, personKey: member.personKey });
+      else { state.seatPlanViewMode = "manual"; state.seatPlanFocusedAssignments = []; }
     });
   });
 }
@@ -1759,7 +1797,7 @@ function focusInvitationChair(target) {
 
 function fitInvitationSeatingPlan(reset = true) {
   const viewport = document.getElementById("seatPlanViewport");
-  if (!viewport || (!reset && state.seatPlanHasFitted)) return;
+  if (!viewport || viewport.closest("[hidden]") || (!reset && state.seatPlanHasFitted)) return;
   const canvasWidth = 1100;
   const canvasHeight = 900;
   if (reset) {
@@ -2412,8 +2450,15 @@ function buildAbsoluteUrl(path) {
   return new URL(path, document.baseURI).toString();
 }
 
+function eventTimeFromDate(wedding, locale = "en") {
+  const date = new Date(wedding.eventDateISO);
+  if (!wedding.eventDateISO || Number.isNaN(date.getTime())) return "";
+  try { return new Intl.DateTimeFormat(locale, { hour: "numeric", minute: "2-digit", ...(wedding.eventTimeZone ? { timeZone: wedding.eventTimeZone } : {}) }).format(date); } catch { return ""; }
+}
+
 function formatDate(dateISO) {
   return new Intl.DateTimeFormat("en-GB", {
+    ...(state.wedding.eventTimeZone ? { timeZone: state.wedding.eventTimeZone } : {}),
     weekday: "long",
     day: "numeric",
     month: "long",
@@ -2423,6 +2468,7 @@ function formatDate(dateISO) {
 
 function formatArabicDate(dateISO) {
   return new Intl.DateTimeFormat("ar-AE", {
+    ...(state.wedding.eventTimeZone ? { timeZone: state.wedding.eventTimeZone } : {}),
     weekday: "long",
     day: "numeric",
     month: "long",

@@ -30,6 +30,7 @@ import { createDashboardPersistence } from "./dashboard-persistence.js?v=2026102
 import { commitGuestEdit, guestFormPatch, saveFailureMessage } from "./guest-edit.js?v=20261018-guest-invitation-regressions-2";
 import { projectionEqual } from "./event-publishing.js?v=20261018-guest-invitation-regressions-2";
 import { mountCustomerAccess } from "./customer-access-ui.js";
+import { ensureGenderRevealPublished } from "./gender-reveal-publication.js";
 import { createShareUrl } from "./share-link.js";
 import { exportGuests, exportGenderRevealResponses } from "./export.js";
 import { buildInvitationProjection, generateInvitationToken, isValidInvitationToken } from "./invitations/shared/invitation-token.js?v=20261018-guest-invitation-regressions-2";
@@ -5351,7 +5352,7 @@ async function handleAction(action, dataset, event = null) {
       return;
     case "open-invitation-preview": {
       const guest = state.guests[0];
-      const previewWindow = window.open("about:blank", "_blank");
+      const previewWindow = window.open("./preparing-link.html", "_blank");
       if (previewWindow) previewWindow.opener = null;
       let token = guest?.guestToken;
       if (guest && state.mode === "live") {
@@ -5373,7 +5374,12 @@ async function handleAction(action, dataset, event = null) {
       );
       return;
     case "copy-gender-reveal-link":
-      if (isGenderRevealEvent(state.wedding)) await copyText(new URL(`gender-reveal.html?wedding=${encodeURIComponent(state.weddingId)}`, window.location.href).toString());
+      if (isGenderRevealEvent(state.wedding)) {
+        try {
+          await ensureGenderRevealPublished(accountApi, state.services.db, state.weddingId);
+          await copyText(new URL(`gender-reveal.html?wedding=${encodeURIComponent(state.weddingId)}`, window.location.href).toString());
+        } catch (error) { console.error("Could not prepare gender reveal invitation", error); showToast("Could not prepare the invitation. Please ask the event owner to check access and try again.", "error"); }
+      }
       return;
     case "copy-dashboard":
       await copyText(
@@ -5507,7 +5513,7 @@ async function handleAction(action, dataset, event = null) {
         showToast("This guest does not have a valid phone number yet.", "error");
         return;
       }
-      const reminderWindow = window.open("about:blank", "_blank");
+      const reminderWindow = window.open("./preparing-link.html", "_blank");
       if (reminderWindow) reminderWindow.opener = null;
       try {
         showToast("Preparing a secure reminder link…", "info");
@@ -9661,7 +9667,7 @@ async function buildSenderLink(side = "all") {
 }
 
 async function openSenderLink(side = "all") {
-  const senderWindow = window.open("about:blank", "_blank");
+  const senderWindow = window.open("./preparing-link.html", "_blank");
   if (senderWindow) senderWindow.opener = null;
   try {
     const senderLink = await buildSenderLink(side);

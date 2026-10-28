@@ -4,10 +4,18 @@ export async function renderLocalBuckets(ownerId, user = { uid: ownerId }) {
   let section = document.getElementById('localPhotoBuckets');
   if (!section) {
     section = document.createElement('section'); section.id = 'localPhotoBuckets'; section.className = 'local-photo-buckets';
-    document.querySelector('.workspace-hero').after(section);
+    document.getElementById('sampleInvitationPanel').before(section);
   }
   section.replaceChildren();
   section.dataset.owner = ownerId;
+  const customerView = document.body.dataset.accountSurface === 'customer';
+  if (customerView) {
+    const prompt = document.createElement('article');
+    prompt.className = 'photo-bucket-discovery';
+    prompt.innerHTML = `<div class="photo-bucket-discovery__image"><img src="./photo-bucket/assets/customer-photo-bucket.webp" alt="" loading="lazy" /></div>
+      <div class="photo-bucket-discovery__content"><p class="photo-bucket-discovery__eyebrow">MORE WAYS TO CELEBRATE</p><h2>Collect the moments that matter.</h2><p>Bring the photos from your celebration together in one shared place.</p><span class="photo-bucket-discovery__link" role="link" aria-disabled="true">Discover Photo Bucket <span aria-hidden="true">↗</span></span><span class="photo-bucket-discovery__note">More information coming soon</span></div>`;
+    section.append(prompt);
+  }
   try {
     const buckets = await (await createOwnerAdapter(user)).list();
     if (section.dataset.owner !== ownerId) return;
@@ -24,5 +32,13 @@ export async function renderLocalBuckets(ownerId, user = { uid: ownerId }) {
       card.append(label, heading, meta, link); grid.append(card);
     }
     section.append(title, note, grid);
-  } catch { section.textContent = 'Local Photo Buckets could not load. Allow browser storage and refresh.'; }
+  } catch (error) {
+    if (customerView && [401, 403].includes(error.status)) return;
+    console.error('Photo Buckets could not load:', error);
+    const message = document.createElement('p');
+    message.setAttribute('role', 'status');
+    if (customerView) message.className = 'customer-bucket-status';
+    message.textContent = customerView && /paused until the event/i.test(error.message || '') ? 'Photo collection access is currently paused.' : online ? 'Photo Buckets could not load. Check your connection and refresh.' : 'Local Photo Buckets could not load. Allow browser storage and refresh.';
+    section.append(message);
+  }
 }

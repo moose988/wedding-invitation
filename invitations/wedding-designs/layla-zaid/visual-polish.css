@@ -244,3 +244,57 @@ body.layla-zaid-invitation.invitation-open #seatingSection .seating-content-outl
   body.layla-zaid-invitation.invitation-open .site-content .section-frame { padding-inline: 8px; }
   body.layla-zaid-invitation #rsvpSection .section-frame { padding-inline: 8px; }
 }
+
+/* The sample invitation is rendered in a narrow iframe on desktop as well as
+   on phones. Size the hero from that iframe's own viewport, not the host page. */
+@media (max-width: 600px) {
+  body.layla-zaid-invitation { min-width: 0; }
+
+  body.layla-zaid-invitation #heroSection {
+    width: 100%;
+    margin-inline: 0;
+    overflow-x: clip;
+  }
+
+  body.layla-zaid-invitation #heroSection .hero-paper,
+  body.layla-zaid-invitation #heroSection .hero-paper__content {
+    min-width: 0;
+    max-width: 100%;
+    box-sizing: border-box;
+  }
+
+  body.layla-zaid-invitation #heroSection .hero-paper {
+    padding-inline: max(12px, env(safe-area-inset-left)) max(12px, env(safe-area-inset-right));
+  }
+
+  body.layla-zaid-invitation #heroSection .hero-paper__content,
+  body.layla-zaid-invitation .hero-names,
+  body.layla-zaid-invitation .hero-copy {
+    width: 100%;
+    min-width: 0;
+  }
+
+  body.layla-zaid-invitation .hero-names__english {
+    max-width: 100%;
+    font-size: clamp(2.25rem, 10vw, 3rem);
+    line-height: 1.12;
+  }
+
+  body.layla-zaid-invitation .hero-names__arabic {
+    max-width: 100%;
+    font-size: clamp(2rem, 9vw, 2.75rem);
+    line-height: 1.25;
+  }
+
+  body.layla-zaid-invitation .hero-copy__english,
+  body.layla-zaid-invitation .hero-copy__arabic,
+  body.layla-zaid-invitation .hero-event-line {
+    max-width: 100%;
+    overflow-wrap: anywhere;
+    font-size: clamp(.95rem, 4vw, 1.05rem);
+    line-height: 1.45;
+    letter-spacing: 0;
+  }
+
+  body.layla-zaid-invitation .hero-event-line { margin-block: 14px 18px; }
+}

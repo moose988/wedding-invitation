@@ -1,0 +1,20 @@
+/* Administrator sign-in has its own workspace identity; customer sign-in keeps its celebration artwork. */
+.admin-login-page { background:#f4f4ed; }
+.admin-login-page .planner-login { padding:32px; }
+.admin-login-page .planner-login::before { display:none; }
+.admin-login-page .planner-login__layout { grid-template-columns:minmax(0,1.15fr) minmax(360px,440px); width:min(100%,1260px); gap:clamp(42px,7vw,100px); }
+.admin-login-page .planner-login__story { position:relative; min-height:520px; display:flex; flex-direction:column; overflow:hidden; padding:clamp(30px,4.2vw,58px); border-radius:26px; background:linear-gradient(145deg,#173f36,#10362f); color:#f7f5ed; }
+.admin-login-page .planner-login__story::after { position:absolute; right:-140px; top:-200px; width:440px; height:440px; border:1px solid rgba(212,226,207,.12); border-radius:50%; box-shadow:0 0 0 55px rgba(212,226,207,.025),0 0 0 115px rgba(212,226,207,.025); content:""; pointer-events:none; }
+.admin-login-page .planner-login__brand { position:relative; z-index:1; color:#fffdf6; font-size:16px; }
+.admin-login-page .planner-login__brand-mark { border-color:rgba(216,231,210,.35); background:rgba(255,255,255,.06); color:#d1e6d6; }
+.admin-login-page .planner-login__story-copy { position:relative; z-index:1; margin-top:auto; margin-bottom:auto; }
+.admin-login-page .planner-login__eyebrow { display:flex; align-items:center; gap:9px; color:#b3cbb8; }
+.admin-login__eyebrow-dot { width:7px; height:7px; border-radius:50%; background:#a5c5a5; }
+.admin-login-page .planner-login__story h1 { color:#fffdf6; font-size:clamp(3rem,4.7vw,4.5rem); }
+.admin-login-page .planner-login__story h1 em { color:#c3d6bd; }
+.admin-login-page .planner-login__intro { max-width:420px; color:#c3d1c8; }
+.admin-login-page .planner-login__card { border-color:#e2e5da; background:#fffefa; box-shadow:0 24px 65px rgba(28,58,43,.09); }
+.admin-login-page .planner-login__card-eyebrow { color:#6c8a74; }
+.admin-login-page .planner-login__form-note a { color:#44675a; }
+@media(max-width:900px) { .admin-login-page .planner-login { padding:20px; } .admin-login-page .planner-login__layout { grid-template-columns:1fr; gap:22px; max-width:560px; } .admin-login-page .planner-login__story { min-height:0; padding:28px; border-radius:20px; } .admin-login-page .planner-login__story-copy { margin-top:38px; } .admin-login-page .planner-login__story h1 { font-size:clamp(2.6rem,8vw,3.7rem); }  }
+@media(max-width:480px) { .admin-login-page .planner-login { padding:14px; } .admin-login-page .planner-login__story { padding:22px; } .admin-login-page .planner-login__story-copy { margin-top:30px; } .admin-login-page .planner-login__story h1 { font-size:2.55rem; } .admin-login-page .planner-login__intro { font-size:13px; }  }

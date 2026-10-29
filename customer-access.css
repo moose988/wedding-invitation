@@ -2,3 +2,8 @@ body[data-account-surface="customer"] { --customer-accent: #3c6d7a; }
 body[data-account-surface="customer"] .planner-login__story { background: #e3eef0; }
 body[data-account-surface="customer"] .planner-login__submit { background: #3c6d7a; }
 body[data-account-surface="customer"] .workspace-kicker { color: #3c6d7a; }
+
+.customer-login__recovery { margin: 12px 0 0; color: #a9443d; font: 600 13px/1.6 Manrope, system-ui, sans-serif; }
+.customer-login__recovery a { color: #a9443d; font-weight: 800; text-decoration: underline; text-underline-offset: 3px; }
+.customer-login__recovery[hidden] { display: none !important; }
+.customer-login__recovery a:focus-visible { outline: 3px solid rgba(169,68,61,.35); outline-offset: 3px; border-radius: 2px; }

@@ -13,6 +13,9 @@ import {
   writeBatch,
 } from "./firebase-config.js";
 import { getEventDisplayTitle } from "./event-utils.js";
+import { bindPasswordVisibility } from "./password-visibility.js?v=1";
+
+bindPasswordVisibility(document);
 
 const params = new URLSearchParams(window.location.search);
 const credential = new URLSearchParams(String(window.location.hash || "").replace(/^#/, ""));

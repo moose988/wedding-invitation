@@ -29,7 +29,7 @@ import { persistCanonicalSeatDiff as persistCanonicalSeatDiffWithApi } from "./s
 import { createDashboardPersistence } from "./dashboard-persistence.js?v=20261028-invitation-sync-retry-1";
 import { commitGuestEdit, guestFormPatch, saveFailureMessage } from "./guest-edit.js?v=20261018-guest-invitation-regressions-2";
 import { projectionEqual } from "./event-publishing.js?v=20261018-guest-invitation-regressions-2";
-import { mountCustomerAccess } from "./customer-access-ui.js";
+import { mountCustomerAccess } from "./customer-access-ui.js?v=20261029-password-visibility";
 import { ensureGenderRevealPublished } from "./gender-reveal-publication.js";
 import { createShareUrl } from "./share-link.js";
 import { exportGuests, exportGenderRevealResponses } from "./export.js";

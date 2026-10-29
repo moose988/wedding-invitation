@@ -1,5 +1,6 @@
 import * as api from "./firebase-config.js";
 import { assignCustomer, removeCustomer, issueCustomerGrant } from "./account-access.js";
+import { bindPasswordVisibility, hidePasswords } from "./password-visibility.js?v=1";
 
 // A successful Auth creation is retained in memory for a Firestore retry. No
 // password is kept here or persisted anywhere.
@@ -24,10 +25,11 @@ export async function mountCustomerAccess(container, { db, weddingId, wedding })
       <form class="seating-account-form" data-customer-form hidden>
         <label>Customer account<select name="account"><option value="new">Create a new account</option><option value="pending">Invite an existing account by email</option>${directory.docs.map((row) => `<option value="${escape(row.id)}">${escape(row.data().email)}</option>`).join("")}</select></label>
         <label data-email-label>Email<input name="email" type="email" autocomplete="off" maxlength="254" required /></label>
-        <label data-password-label>Initial password<input name="password" type="password" autocomplete="new-password" minlength="6" required /></label>
+        <div class="password-visibility-field" data-password-label><label for="eventCustomerPassword">Initial password</label><div class="password-visibility"><input id="eventCustomerPassword" name="password" type="password" autocomplete="new-password" minlength="6" required /><button type="button" class="password-visibility__toggle" data-visibility-toggle="initial password" aria-label="Show initial password" aria-pressed="false">Show</button></div></div>
         <p data-onboarding-note hidden>The existing account must verify its email, then sign in at Customer Access. Linking completes automatically; no UID is needed.</p>
         <button class="da3wa-button da3wa-button--primary" type="submit">Save customer access</button>
       </form><p role="status" data-customer-status></p>`;
+    bindPasswordVisibility(container);
     const form = container.querySelector("form");
     const status = container.querySelector("[data-customer-status]");
     container.querySelector("[data-add-customer]").onclick = () => { form.hidden = false; form.elements.account.focus(); };
@@ -38,7 +40,7 @@ export async function mountCustomerAccess(container, { db, weddingId, wedding })
       form.elements.email.required = needEmail;
       container.querySelector("[data-password-label]").hidden = kind !== "new";
       form.elements.password.required = kind === "new";
-      if (kind !== "new") form.elements.password.value = "";
+      if (kind !== "new") { form.elements.password.value = ""; hidePasswords(form); }
       container.querySelector("[data-onboarding-note]").hidden = kind !== "pending";
     };
     form.onsubmit = async (event) => {

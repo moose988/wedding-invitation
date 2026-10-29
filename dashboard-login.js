@@ -11,6 +11,7 @@ import {
 import * as accountApi from "./firebase-config.js";
 import { isPlatformAdmin, redeemCustomerGrants } from "./account-access.js";
 import { photoBucketReturn, soleBucketTarget } from "./photo-bucket/return-link.js";
+import { passwordRecoveryUrl, shouldShowRecovery } from "./login-recovery.js?v=2";
 
 const params = new URLSearchParams(window.location.search);
 
@@ -33,11 +34,19 @@ const elements = {
 let services = null;
 let servicesReady = Promise.resolve(false);
 let isRedirecting = false;
+let credentialFailures = 0;
 
 init();
 
 function init() {
   elements.passwordToggle?.addEventListener("click", togglePasswordVisibility);
+  const recoveryLink = document.querySelector("[data-customer-recovery-link]");
+  const emailInput = document.getElementById("loginEmail");
+  if (recoveryLink && emailInput) {
+    const updateRecoveryLink = () => { recoveryLink.href = passwordRecoveryUrl(emailInput.value); };
+    emailInput.addEventListener("input", updateRecoveryLink);
+    updateRecoveryLink();
+  }
   elements.loginForm?.addEventListener("submit", handleLogin);
 
   if (!isFirebaseConfigured()) {
@@ -103,6 +112,12 @@ async function handleLogin(event) {
   } catch (error) {
     console.error(error);
     elements.authStatus.textContent = "Sign-in failed. Please check your email and password.";
+    const recovery = document.getElementById("customerPasswordRecovery");
+    if (recovery) {
+      const result = shouldShowRecovery(credentialFailures, error?.code);
+      credentialFailures = result.failures;
+      if (result.visible) recovery.hidden = false;
+    }
   } finally {
     if (!isRedirecting) {
       setSubmitLoading(false);

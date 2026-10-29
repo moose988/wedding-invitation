@@ -16,5 +16,11 @@
   },
   "overrides": {
     "@grpc/grpc-js": "1.13.7"
+  },
+  "dependencies": {
+    "firebase-admin": "^13.6.0"
+  },
+  "engines": {
+    "node": "22.x"
   }
 }

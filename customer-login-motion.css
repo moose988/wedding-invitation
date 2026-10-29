@@ -396,6 +396,8 @@
   [data-account-surface="customer"] .planner-login__occasions li:nth-child(1) { animation-delay: calc(780ms * var(--clm-k)); }
   [data-account-surface="customer"] .planner-login__occasions li:nth-child(2) { animation-delay: calc(860ms * var(--clm-k)); }
   [data-account-surface="customer"] .planner-login__occasions li:nth-child(3) { animation-delay: calc(940ms * var(--clm-k)); }
+  [data-account-surface="customer"] .planner-login__occasions li:nth-child(4) { animation-delay: calc(1020ms * var(--clm-k)); }
+  [data-account-surface="customer"] .planner-login__occasions li:nth-child(5) { animation-delay: calc(1100ms * var(--clm-k)); }
 
   /* --- Art stage --- */
   [data-account-surface="customer"] .planner-login__arch-fill {
@@ -743,10 +745,10 @@
     display: block;
   }
 
-  /* Occasion chips: one row, only when the phone is tall enough. */
+  /* Occasion chips wrap naturally on smaller screens. */
   [data-account-surface="customer"] .planner-login__occasions {
-    display: none;
-    flex-wrap: nowrap;
+    display: flex;
+    flex-wrap: wrap;
     margin-top: 10px;
   }
 

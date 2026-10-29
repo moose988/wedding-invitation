@@ -4,7 +4,7 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <meta name="theme-color" content="#f4efe5" />
-    <title>Customer Access - qdsystems Planner Login</title>
+    <title>Customer Sign-in · QD Events</title>
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link
@@ -13,29 +13,29 @@
     />
     <link rel="stylesheet" href="./dashboard.css" />
     <link rel="stylesheet" href="./dashboard-login.css?v=20261002-celebration-login-2" />
-      <link rel="stylesheet" href="./customer-access.css" />
-    <link rel="stylesheet" href="./customer-login-motion.css?v=20261028-login-motion-3" />
+      <link rel="stylesheet" href="./customer-access.css?v=20261029-recovery-1" />
+    <link rel="stylesheet" href="./customer-login-motion.css?v=20261029-occasions-1" />
   </head>
   <body data-account-surface="customer" class="dashboard-body planner-login-page">
     <main class="planner-login">
       <div class="planner-login__layout">
         <section class="planner-login__story" aria-labelledby="celebrationTitle">
-          <a class="planner-login__brand" href="./" aria-label="qdsystems home">
+          <a class="planner-login__brand" href="./" aria-label="QD Events home">
             <span class="planner-login__brand-mark" aria-hidden="true">
               <svg viewBox="0 0 40 40" focusable="false">
                 <path d="M20 3.5 23.9 15l11.8-3.4-7.1 10 8.4 8.8-12.1-1.7L20 40l-4.9-11.3L3 30.4l8.4-8.8-7.1-10L16.1 15 20 3.5Z" />
                 <circle cx="20" cy="21" r="4.1" />
               </svg>
             </span>
-            <span>qdsystems</span>
+            <span>QD Events</span>
           </a>
 
           <div class="planner-login__story-copy">
-            <p class="planner-login__eyebrow">Your private event workspace</p>
             <h1 id="celebrationTitle"><span class="clm-word">Your</span> <span class="clm-word">celebration,</span> <em><span class="clm-word">your</span> <span class="clm-word">people.</span></em></h1>
-            <p class="planner-login__intro">Beautiful invitations. Thoughtful planning. Memorable moments.</p>
             <ul class="planner-login__occasions" aria-label="Events you can plan">
               <li>Weddings</li>
+              <li>Engagement</li>
+              <li>Gender Reveal</li>
               <li>Birthdays</li>
               <li>Celebrations</li>
             </ul>
@@ -150,20 +150,14 @@
             </form>
 
             <p class="planner-login__status" id="authStatus" role="status" aria-live="polite" aria-atomic="true"></p>
-            <div class="planner-login__card-footer">
-              <svg class="planner-login__footer-mark" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
-                <path d="M12 2.5c2.3 3.6 4.1 5.4 9.5 9.5-5.4 4.1-7.2 5.9-9.5 9.5-2.3-3.6-4.1-5.4-9.5-9.5 5.4-4.1 7.2-5.9 9.5-9.5Z" />
-                <circle cx="12" cy="12" r="1.6" />
-              </svg>
-              <span>Your next celebration, beautifully organized.</span>
-            </div>
+            <p class="customer-login__recovery" id="customerPasswordRecovery" role="status" hidden>Forgot your password? <a data-customer-recovery-link href="https://wa.me/971504611123?text=I%27m%20having%20issue%20with%20this%20account.%20Can%20you%20please%20reset%20my%20password%3F" target="_blank" rel="noopener noreferrer">Contact us on WhatsApp</a> (your email will be included).</p>
           </div>
           <p class="planner-login__form-note"><a href="./dashboard-login.html">Administrator sign-in</a></p>
         </section>
       </div>
     </main>
 
-    <script type="module" src="./dashboard-login.js?v=20261017-customer-access-1"></script>
+    <script type="module" src="./dashboard-login.js?v=20261029-customer-recovery-2"></script>
     <script defer src="./customer-login-motion.js?v=20261028-login-motion-3"></script>
   </body>
 </html>

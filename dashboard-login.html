@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <meta name="theme-color" content="#f4efe5" />
     <script src="./invitation-early-route.js?v=20261017-prepaint-route-1"></script>
-    <title>qdsystems Planner Login</title>
+    <title>Administrator Sign-in · QD Events</title>
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link
@@ -14,70 +14,35 @@
     />
     <link rel="stylesheet" href="./dashboard.css" />
     <link rel="stylesheet" href="./dashboard-login.css?v=20261002-celebration-login-2" />
+    <link rel="stylesheet" href="./admin-login.css?v=20261029-2" />
   </head>
-  <body class="dashboard-body planner-login-page">
+  <body class="dashboard-body planner-login-page admin-login-page">
     <main class="planner-login">
       <div class="planner-login__layout">
         <section class="planner-login__story" aria-labelledby="celebrationTitle">
-          <a class="planner-login__brand" href="./" aria-label="qdsystems home">
+          <a class="planner-login__brand" href="./" aria-label="QD Events home">
             <span class="planner-login__brand-mark" aria-hidden="true">
               <svg viewBox="0 0 40 40" focusable="false">
                 <path d="M20 3.5 23.9 15l11.8-3.4-7.1 10 8.4 8.8-12.1-1.7L20 40l-4.9-11.3L3 30.4l8.4-8.8-7.1-10L16.1 15 20 3.5Z" />
                 <circle cx="20" cy="21" r="4.1" />
               </svg>
             </span>
-            <span>qdsystems</span>
+            <span>QD Events</span>
           </a>
 
           <div class="planner-login__story-copy">
-            <p class="planner-login__eyebrow">One space for every occasion</p>
-            <h1 id="celebrationTitle">Every celebration <em>starts here.</em></h1>
-            <p class="planner-login__intro">Beautiful invitations. Thoughtful planning. Memorable moments.</p>
-            <ul class="planner-login__occasions" aria-label="Events you can plan">
-              <li>Weddings</li>
-              <li>Birthdays</li>
-              <li>Celebrations</li>
-            </ul>
+            <p class="planner-login__eyebrow"><span class="admin-login__eyebrow-dot" aria-hidden="true"></span> QD Events workspace</p>
+            <h1 id="celebrationTitle">Your events.<br /><em>One clear view.</em></h1>
           </div>
 
-          <div class="planner-login__art" aria-hidden="true">
-            <svg class="planner-login__arch" viewBox="0 0 560 390" preserveAspectRatio="xMidYMid meet" focusable="false">
-              <path class="planner-login__arch-fill" d="M93 390V190a187 187 0 0 1 374 0v200H93Z" />
-              <path class="planner-login__arch-line" d="M117 390V190a163 163 0 0 1 326 0v200" />
-              <path class="planner-login__arch-inner" d="M137 390V190a143 143 0 0 1 286 0v200" />
-              <path class="planner-login__botanical" d="M112 300c-20-28-18-55 2-79m-1 34c-18-4-29-15-32-33m36 3c16-8 23-22 21-42m-28 88c-16-7-25-18-26-34m31-31c-3-19 2-34 15-45m-18 98c-8-17-7-32 3-48m-21 65c-12-2-21-9-27-20" />
-              <path class="planner-login__botanical-leaf" d="M82 223c13 1 23 9 31 23-14 2-25-6-31-23Zm36-29c-1 15-9 26-23 34-2-15 6-27 23-34Zm-26 62c13 2 23 10 29 24-14 1-24-7-29-24Zm-7 38c12-1 22 5 31 17-13 4-24-2-31-17Z" />
-              <path class="planner-login__balloon-line" d="M436 100c7 15 8 29 3 44m-3-44 9-3m-9 3-7-7" />
-              <path class="planner-login__balloon" d="M420 69c0-13 8-22 18-22s18 9 18 22-9 25-18 25-18-12-18-25Z" />
-              <path class="planner-login__cap" d="m90 335 22-11 22 11-22 11-22-11Zm8 5v12c9 7 19 7 28 0v-12m8-5v15" />
-            </svg>
-            <div class="planner-login__art-glow"></div>
-            <div class="planner-login__art-card planner-login__art-card--back"></div>
-            <div class="planner-login__art-card planner-login__art-card--middle"></div>
-            <div class="planner-login__envelope">
-              <span class="planner-login__envelope-fold"></span>
-            </div>
-            <div class="planner-login__invitation">
-              <span class="planner-login__invitation-rule"></span>
-              <span class="planner-login__invitation-kicker">A moment to remember</span>
-              <span class="planner-login__invitation-title">Made for<br />your story</span>
-              <span class="planner-login__invitation-detail">INVITATIONS · PLANNING · JOY</span>
-              <svg class="planner-login__invitation-flower" viewBox="0 0 32 32" focusable="false">
-                <path d="M16 4c3 5 7 9 12 12-5 3-9 7-12 12C13 23 9 19 4 16 9 13 13 9 16 4Z" />
-                <circle cx="16" cy="16" r="2.3" />
-              </svg>
-            </div>
-            <div class="planner-login__wax-seal">q</div>
-            <div class="planner-login__art-caption"><span></span> Every detail, in its place</div>
-          </div>
         </section>
 
         <section class="planner-login__form-side" aria-labelledby="loginTitle">
           <div class="planner-login__card">
             <div class="planner-login__card-heading">
-              <p class="planner-login__card-eyebrow" id="loginEyebrow">Planner Access</p>
-              <h2 id="loginTitle">Welcome back</h2>
-              <p id="loginDescription">Sign in to manage your invitations and events.</p>
+              <p class="planner-login__card-eyebrow" id="loginEyebrow">Administrator access</p>
+              <h2 id="loginTitle">Welcome back.</h2>
+              <p id="loginDescription">Sign in to manage your events and customer accounts.</p>
             </div>
 
             <form class="planner-login__form" id="loginForm">
@@ -140,7 +105,7 @@
                 <path d="M12 2.5c2.3 3.6 4.1 5.4 9.5 9.5-5.4 4.1-7.2 5.9-9.5 9.5-2.3-3.6-4.1-5.4-9.5-9.5 5.4-4.1 7.2-5.9 9.5-9.5Z" />
                 <circle cx="12" cy="12" r="1.6" />
               </svg>
-              <span>Your next celebration, beautifully organized.</span>
+              <span>Your event workspace, all in one place.</span>
             </div>
           </div>
           <p class="planner-login__form-note"><a href="./customer-login.html">Customer sign-in</a></p>

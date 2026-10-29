@@ -11,6 +11,7 @@
       rel="stylesheet"
     />
     <link rel="stylesheet" href="./styles.css" />
+    <link rel="stylesheet" href="./password-visibility.css?v=1" />
   </head>
   <body class="dashboard-body">
     <main class="dashboard-shell checkin-shell">
@@ -23,10 +24,10 @@
             <span>Email</span>
             <input name="email" type="email" autocomplete="email" />
           </label>
-          <label>
-            <span>Password</span>
-            <input name="password" type="password" autocomplete="current-password" />
-          </label>
+          <div class="password-visibility-field">
+            <label for="checkinPassword">Password</label>
+            <div class="password-visibility"><input id="checkinPassword" name="password" type="password" autocomplete="current-password" /><button type="button" class="password-visibility__toggle" data-visibility-toggle="password" aria-label="Show password" aria-pressed="false">Show</button></div>
+          </div>
           <button class="luxury-button luxury-button--primary" type="submit"><span>Sign In</span></button>
         </form>
         <p class="dashboard-auth-status" id="checkinAuthStatus"></p>
@@ -53,6 +54,6 @@
     </main>
 
     <div class="toast-rail" id="toastRail" aria-live="polite" aria-atomic="true"></div>
-    <script type="module" src="./checkin.js?v=20261016-tab-session-isolation-1"></script>
+    <script type="module" src="./checkin.js?v=20261029-password-visibility"></script>
   </body>
 </html>

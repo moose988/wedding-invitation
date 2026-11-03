@@ -127,6 +127,7 @@ function fakeSite({ broken = false } = {}) {
     if (broken && pathname === '/api/_lib/demo-accounts.js') return new Response('code', { status: 200 });
     if (pathname.startsWith('/api/_lib/')) return new Response('Not Found', { status: 404 });
     if (pathname.startsWith('/api/')) return broken && pathname === '/api/demo-cleanup' ? new Response('Not found', { status: 404 }) : json(pathname === '/api/demo-cleanup' ? 401 : 405, { error: 'x' });
+    if (/^\/(dashboard|styles|script)\.(js|css)$/.test(pathname)) return new Response('x', { status: 200, headers: { 'content-encoding': broken && pathname === '/dashboard.js' ? '' : 'br' } });
     if (pathname === '/' || pathname === '/dashboard' || pathname === '/send') {
       return new Response('<html>', { status: 200, headers: { 'cache-control': broken && pathname === '/send' ? 'public, max-age=60' : 'no-store, max-age=0', 'content-security-policy': csp } });
     }

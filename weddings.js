@@ -9,8 +9,6 @@ import { ensureGenderRevealPublished } from "./gender-reveal-publication.js";
 import { createOwnerAdapter, online as bucketsOnline } from "./photo-bucket/adapters.js";
 import { renderLocalBuckets } from "./photo-bucket/workspace.js";
 import { skeleton } from "./skeleton.js";
-import { convertAndUploadSong, saveMusicFields } from "./music-settings.js";
-import { removeEventFiles } from "./music-api.js";
 import { runFromEvent, showToast } from "./action-feedback.js";
 import { bucketItem, eventItem, itemCardHtml, noticesHtml, sortCustomerItems } from "./customer-list.js";
 import { dateLabel } from "./photo-bucket/links.js";
@@ -681,6 +679,8 @@ async function saveWedding(event) {
 // After an event is created with "Custom song": convert, upload and save, reporting progress in the status line.
 async function uploadCreateSong(file, eventId) {
   try {
+    // Admin-only: loaded on demand so customers never download the encoder.
+    const { convertAndUploadSong, saveMusicFields } = await import("./music-settings.js");
     const result = await convertAndUploadSong({ file, eventId, user: state.user, onStatus: (s) => flash(`Song: ${s.message}`) });
     await saveMusicFields(state.services.db, eventId, { musicMode: "custom", musicVersion: 1, musicName: result.name });
     flash("Event created and the custom song is saved.");
@@ -736,7 +736,7 @@ async function deleteWedding(event) {
     const memberIds = new Set([state.user.uid, eventSnapshot.data().ownerUserId, eventSnapshot.data().demoAccountUid, ...membersSnapshot.docs.map((item) => item.id)].filter(Boolean));
 
     // The event's stored song files live on the bucket service. Remove them now; a failure never blocks the Firestore cleanup, but it is reported at the end.
-    const storedFiles = await removeEventFiles(state.user, weddingId).then(() => null, (error) => error);
+    const storedFiles = await import("./music-api.js").then(({ removeEventFiles }) => removeEventFiles(state.user, weddingId)).then(() => null, (error) => error);
     // This first write makes every invitation and sender capability unusable
     // before any subcollection cleanup begins. The owner can resume if a batch
     // later fails or the browser closes.

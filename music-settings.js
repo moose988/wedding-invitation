@@ -5,7 +5,7 @@ import * as firebase from "./firebase-config.js";
 import { skeleton } from "./skeleton.js";
 import { runAction } from "./action-feedback.js";
 import { esc } from "./admin-api.js";
-import { projectionEqual, publicEventData } from "./event-publishing.js";
+import { projectionEqual, publicEventData } from "./event-publishing.js?v=20261018-guest-invitation-regressions-2";
 import { MUSIC_LIMITS, checkAudioFile, checkDuration, decodeAudio, encodeMp3, songNameFrom } from "./music-encoder.js";
 import { previewSongUrl, removeSongFile, uploadAndCommitSong } from "./music-api.js";
 

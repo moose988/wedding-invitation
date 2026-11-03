@@ -26,7 +26,6 @@ import {
 import * as accountApi from "./firebase-config.js";
 import { recordCustomerAudit } from "./customer-audit.js";
 import { skeleton } from "./skeleton.js";
-import { mountMusicSettings } from "./music-settings.js";
 import { runFromEvent } from "./action-feedback.js";
 import { bindScheduleEditor, scheduleEditorMarkup } from "./schedule-editor.js";
 import { isPlatformAdmin } from "./account-access.js";
@@ -37,7 +36,7 @@ import { projectionEqual } from "./event-publishing.js?v=20261018-guest-invitati
 import { mountCustomerAccess } from "./customer-access-ui.js?v=20261029-password-visibility";
 import { ensureGenderRevealPublished } from "./gender-reveal-publication.js";
 import { createShareUrl } from "./share-link.js";
-import { exportGuests, exportGenderRevealResponses } from "./export.js";
+// export.js loads on demand when someone exports.
 import { buildInvitationProjection, generateInvitationToken, isValidInvitationToken } from "./invitations/shared/invitation-token.js?v=20261018-guest-invitation-regressions-2";
 import { createInvitationTokenService } from "./invitations/shared/invitation-token-service.js?v=20261018-guest-invitation-regressions-2";
 import { projectSeatAssignments, migrateLegacySeating, seatAssignmentRef, seatedPersonRef, seatOccupancyRef } from "./seating-firestore.js";
@@ -55,7 +54,7 @@ import {
   normalizeTableShape,
   resolveTableName,
   summarizePartySeating,
-} from "./seating-utils.js?v=20261012-seating-refresh-2";
+} from "./seating-utils.js?v=20261018-invitation-seat-map";
 
 const params = new URLSearchParams(window.location.search);
 const legacySeatingEditorRoute = params.get("seatingEditor") === "1";
@@ -4096,7 +4095,7 @@ function renderEventSettingsPage() {
     </section>
   `;
   const musicPanel = document.getElementById("musicPanel");
-  if (musicPanel && state.isAdmin === true) mountMusicSettings({ host: musicPanel, db: state.services.db, user: state.currentUser, wedding: state.wedding, eventId: state.weddingId, onChange: (m) => { state.wedding = { ...state.wedding, musicMode: m.mode, musicVersion: m.version, musicName: m.name }; } });
+  if (musicPanel && state.isAdmin === true) import("./music-settings.js").then(({ mountMusicSettings }) => mountMusicSettings({ host: musicPanel, db: state.services.db, user: state.currentUser, wedding: state.wedding, eventId: state.weddingId, onChange: (m) => { state.wedding = { ...state.wedding, musicMode: m.mode, musicVersion: m.version, musicName: m.name }; } })).catch(() => { musicPanel.textContent = "Music settings could not load. Check your connection and refresh."; });
   if (isWeddingOwner()) {
     const placeholder = document.getElementById("customerAccessPanel");
     if (previousCustomerPanel) placeholder.replaceWith(previousCustomerPanel);
@@ -8795,6 +8794,7 @@ async function handleExport(type) {
     }
   }
 
+  const { exportGuests } = await import("./export.js");
   const format = await exportGuests(
     filtered.map((guest) => ({
       ...guest,
@@ -8813,6 +8813,7 @@ async function handleExportGenderRevealResponses() {
   try {
     const snapshot = await getDocs(collection(state.services.db, "weddings", state.weddingId, "genderRevealResponses"));
     const responses = snapshot.docs.map((row) => row.data());
+    const { exportGenderRevealResponses } = await import("./export.js");
     const format = await exportGenderRevealResponses(responses, `gender-reveal-responses-${state.weddingId}`);
     showToast(`Gender Reveal response export completed as ${format.toUpperCase()}.`, "success");
   } catch (error) {

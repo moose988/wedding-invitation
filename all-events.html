@@ -10,7 +10,37 @@
     <link rel="stylesheet" href="./styles.css" />
     <link rel="stylesheet" href="./weddings.css?v=20261017-customer-access-2" />
     <link rel="stylesheet" href="./customers.css" />
-  <link rel="stylesheet" href="./skeleton.css?v=1"></head>
+  <link rel="stylesheet" href="./skeleton.css?v=1">
+    <!-- modulepreload:start -->
+    <link rel="modulepreload" href="./firebase-config.js" />
+    <link rel="modulepreload" href="./firebase-service-scopes.js" />
+    <link rel="modulepreload" href="./firebase-settings.js" />
+    <link rel="modulepreload" href="./local-firestore-diagnostics.js" />
+    <link rel="modulepreload" href="./account-access.js" />
+    <link rel="modulepreload" href="./event-utils.js" />
+    <link rel="modulepreload" href="./event-date-time.js" />
+    <link rel="modulepreload" href="./workspace-pagination.js" />
+    <link rel="modulepreload" href="./admin-events.js" />
+    <link rel="modulepreload" href="./gender-reveal-publication.js" />
+    <link rel="modulepreload" href="./event-publishing.js?v=20261018-guest-invitation-regressions-2" />
+    <link rel="modulepreload" href="./invitations/shared/invitation-token.js?v=20261018-guest-invitation-regressions-2" />
+    <link rel="modulepreload" href="./guest-edit.js?v=20261018-guest-invitation-regressions-2" />
+    <link rel="modulepreload" href="./photo-bucket/adapters.js" />
+    <link rel="modulepreload" href="./photo-bucket/config.js" />
+    <link rel="modulepreload" href="./photo-bucket/adapter.js" />
+    <link rel="modulepreload" href="./photo-bucket/links.js" />
+    <link rel="modulepreload" href="./share-link.js" />
+    <link rel="modulepreload" href="./photo-bucket/limits.js" />
+    <link rel="modulepreload" href="./photo-bucket/transport.js" />
+    <link rel="modulepreload" href="./photo-bucket/images.js" />
+    <link rel="modulepreload" href="./photo-bucket/workspace.js" />
+    <link rel="modulepreload" href="./skeleton.js" />
+    <link rel="modulepreload" href="./action-feedback.js" />
+    <link rel="modulepreload" href="./customer-list.js" />
+    <link rel="modulepreload" href="./admin-api.js" />
+    <link rel="modulepreload" href="./photo-bucket/sizes.js" />
+    <!-- modulepreload:end -->
+  </head>
   <body class="weddings-body">
     <main class="weddings-shell" id="workspace" hidden>
       <header class="workspace-header">
@@ -137,5 +167,5 @@
     </dialog>
     <dialog class="workspace-dialog" id="deleteDialog"><form class="workspace-modal workspace-modal--small" id="deleteForm"><header><div><p class="workspace-kicker">Permanent action</p><h2>Delete event?</h2></div><button class="icon-close" type="button" data-close="deleteDialog" aria-label="Close">×</button></header><div class="workspace-modal__body"><p>This permanently removes <strong id="deleteEventName"></strong> and all of its guests, invitations, seating, and check-in data. Type <strong id="deletePhrase"></strong> to continue.</p><label>Confirmation<input id="deleteConfirmation" autocomplete="off" /></label><p class="form-error" id="deleteError" role="alert"></p></div><footer><button class="secondary-button" type="button" data-close="deleteDialog">Cancel</button><button class="danger-button" type="submit">Delete permanently</button></footer></form></dialog>
     <script type="module" src="./weddings.js?v=20261018-customer-event-controls-1"></script>
-  <script type="module" src="./action-feedback.js?v=1"></script></body>
+  <script type="module" src="./action-feedback.js"></script></body>
 </html>

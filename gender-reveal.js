@@ -3,7 +3,7 @@ import {
   serverTimestamp, signInAnonymously,
 } from "./firebase-config.js";
 import { createGenderRevealSubmissionService } from "./gender-reveal-submission.js";
-import { createIntroSequence } from "./intro-sequence.js";
+import { createIntroSequence } from "./intro-sequence.js?v=20261028-finish-at-1";
 import {
   genderRevealLocalValidation, genderRevealResultSummary, genderRevealSubmissionErrorKey,
   safeGenderRevealMediaUrl,

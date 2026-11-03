@@ -74,7 +74,7 @@ test("song routes follow the contract: uploads, PUT, commit, delete, public get,
   const api = await read("music-api.js"), w = await read("weddings.js");
   for (const part of [/\/song\/uploads/, /\/song\/commit/, /`\$\{eventPath\(eventId\)\}\/song`/, /DELETE", eventPath\(eventId\)/, /upload\.url, grant\.upload\.headers/, /15 \* 1024 \* 1024/]) assert.match(api, part);
   assert.doesNotMatch(api + await read("invitation-music.js"), /\/e\/\$\{|\/music\/upload|\/music`/);
-  assert.match(w, /removeEventFiles\(state\.user, weddingId\)\.then\(\(\) => null, \(error\) => error\)/); assert.match(w, /stored files were NOT removed/);
+  assert.match(w, /removeEventFiles\(state\.user, weddingId\)\)\.then\(\(\) => null, \(error\) => error\)/); assert.match(w, /stored files were NOT removed/);
   const calls = []; const user = { getIdToken: async () => "t" };
   const { requestSongUpload, commitSong, removeSongFile, removeEventFiles } = await import("../music-api.js");
   const fakeFetch = async (url, init) => { calls.push([init.method, url]); return { status: 204, ok: true }; };

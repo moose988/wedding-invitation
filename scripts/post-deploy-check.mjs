@@ -96,6 +96,15 @@ export async function runPostDeployChecks({ site, token, fetchImpl = fetch, verc
     } catch (error) { record(`page: ${route}`, false, `Request failed (${error?.name}).`); }
   }
 
+  // 3b. The largest scripts and styles reach phones compressed (about 5x smaller on slow connections).
+  for (const asset of ['/dashboard.js', '/dashboard.css', '/styles.css', '/script.js']) {
+    try {
+      const response = await get(asset, { 'accept-encoding': 'br, gzip' });
+      const encoding = response.headers.get('content-encoding') || '';
+      record(`compressed: ${asset}`, response.status === 200 && /\b(br|gzip)\b/.test(encoding), `HTTP ${response.status}, Content-Encoding "${encoding || 'none'}"`);
+    } catch (error) { record(`compressed: ${asset}`, false, `Request failed (${error?.name}).`); }
+  }
+
   // 4. Server code and internal files are not publicly served.
   for (const file of paths) {
     try {

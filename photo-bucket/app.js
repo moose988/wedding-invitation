@@ -14,7 +14,7 @@ import { download, makeZip, photoFilename, splitZipParts, zipPartName } from './
 import { createThumbQueue } from './thumb-queue.js';
 const app = document.getElementById('app'), mode = document.body.dataset.mode;
 const owner = mode !== 'guest';
-let nextCursor = null, firstPageIds = new Set(), extraPages = false, thumbQueue, tileObserver, adapter, bucket, queue, photos = [], filter = '', queueStates = new Map(), galleryUrls = [], viewerUrl, editor, refreshing = false, pendingRefresh = false, disposed = false, sortOrder = 'newest', viewerId = '';
+let totalPhotos = null, nextCursor = null, firstPageIds = new Set(), extraPages = false, thumbQueue, tileObserver, adapter, bucket, queue, photos = [], filter = '', queueStates = new Map(), galleryUrls = [], viewerUrl, editor, refreshing = false, pendingRefresh = false, disposed = false, sortOrder = 'newest', viewerId = '';
 try { if (localStorage.getItem('photo-bucket:sort') === 'oldest') sortOrder = 'oldest'; } catch { /* storage blocked: default order */ }
 const jobUrls = new Map();
 const $ = selector => document.querySelector(selector);
@@ -109,8 +109,9 @@ async function refreshGallery(quiet = false) {
     let next;
     if (adapter.photosPage) {
       // Online: one page of 100. A background refresh re-reads only that first page and keeps any pages the viewer loaded.
-      const page = await adapter.photosPage(bucket.id);
+      const page = await adapter.photosPage(bucket.id, undefined, sortOrder);
       if (disposed) return;
+      if (Number.isInteger(page.total)) totalPhotos = page.total;
       const ids = new Set(page.items.map(p => p.id));
       next = (extraPages ? [...photos.filter(p => !firstPageIds.has(p.id)), ...page.items] : page.items).sort(byTime);
       firstPageIds = ids; if (!extraPages) nextCursor = page.nextCursor;
@@ -159,7 +160,7 @@ function paintLoadMore() {
 async function loadMorePhotos() {
   const button = $('#loadMorePhotos'); if (!button || !nextCursor) return; button.disabled = true; button.textContent = 'Loading…';
   try {
-    const page = await adapter.photosPage(bucket.id, nextCursor);
+    const page = await adapter.photosPage(bucket.id, nextCursor, sortOrder);
     const known = new Set(photos.map(p => p.id));
     photos = [...photos, ...page.items.filter(p => !known.has(p.id))].sort(byTime); nextCursor = page.nextCursor; extraPages = true;
     gallerySignature = ''; drawGallery();
@@ -172,7 +173,9 @@ function drawGallery() {
   const focused = document.activeElement?.closest('[data-photo]');
   const focusId = focused?.dataset.photo, focusAction = focused?.dataset.action;
   revokeGallery(); const visible = visiblePhotos();
-  $('#photoCount').textContent = `${visible.length} ${visible.length === 1 ? 'photo' : 'photos'}`;
+  // The server's total, not the loaded page size; filtered or offline views count what is shown.
+  const count = !filter && Number.isInteger(totalPhotos) ? Math.max(totalPhotos, visible.length) : visible.length;
+  $('#photoCount').textContent = count > visible.length ? `Showing ${visible.length} of ${count.toLocaleString()} photos` : `${count} ${count === 1 ? 'photo' : 'photos'}`;
   $('#galleryState').hidden = Boolean(visible.length);
   $('#galleryState').innerHTML = filter ? '<strong>No photos from this contributor</strong>Choose Everyone to see the collection.' : `<strong>${owner ? 'The best moments are still to come' : 'Your story starts here'}</strong>${owner ? (online ? 'Share the guest link to start collecting photos.' : 'Share the guest link or add demo samples below.') : 'Take a photo or choose a favourite from your gallery.'}`;
   $('#gallery').innerHTML = visible.map(photo => `<article class="pb-tile"><button class="pb-image-button" type="button" data-photo="${h(photo.id)}" data-action="view" aria-label="Open photo by ${h(photo.name || 'Anonymous guest')}"><img ${photo.thumbnail ? `src="${thumb(photo.thumbnail)}"` : `data-thumb="${h(photo.id)}" class="pb-thumb-pending"`} alt="Event memory shared by ${h(photo.name || 'Anonymous guest')}" loading="lazy" width="240" height="300"></button><div class="pb-tile-body"><p>${h(owner ? (photo.name || '') : (online ? 'Saved online' : 'Saved on this device'))}${photo.source === 'fixture' ? ' · Demo sample' : ''}</p><small class="pb-tile-time">${h(timeLabel(photo.createdAt))}</small><div class="pb-tile-actions"><button type="button" data-photo="${h(photo.id)}" data-action="${owner ? 'download' : 'edit'}">${owner ? 'Download' : 'Edit photo'}</button><button type="button" class="pb-danger" data-photo="${h(photo.id)}" data-action="delete" aria-label="Delete photo by ${h(photo.name || 'Anonymous guest')}">Delete</button></div></div></article>`).join('');
@@ -338,7 +341,11 @@ function bindOwner() {
   listen('#sortSelect', 'change', async () => {
     sortOrder = $('#sortSelect').value === 'oldest' ? 'oldest' : 'newest';
     try { localStorage.setItem('photo-bucket:sort', sortOrder); } catch { /* ignore */ }
-    photos = [...photos].sort(byTime); gallerySignature = photos.map(p => `${p.id}:${p.revision}`).join('|'); drawGallery();
+    if (adapter.photosPage) {
+      // Paged online: the server sorts the whole collection, so start again from its first page in the new order.
+      photos = []; nextCursor = null; extraPages = false; firstPageIds = new Set(); gallerySignature = '';
+      $('#gallery').innerHTML = skeleton.tiles(6); await refreshGallery();
+    } else { photos = [...photos].sort(byTime); gallerySignature = photos.map(p => `${p.id}:${p.revision}`).join('|'); drawGallery(); }
   });
   listen('#pauseButton', 'click', async () => { bucket = await adapter.setPaused(bucket.id, !bucket.paused); syncDetails(); message(bucket.paused ? (online ? 'New uploads are paused.' : 'New local uploads are paused.') : (online ? 'New uploads can resume.' : 'New local uploads can resume.')); });
   listen('#copyLink', 'click', async () => {

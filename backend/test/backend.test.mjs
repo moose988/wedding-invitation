@@ -1006,7 +1006,7 @@ test('template protects data: Retain, PITR, versioning, private buckets, TTL, in
   assert.match(deploy, /update-table .*--deletion-protection-enabled/); assert.match(deploy, /ROLLBACK_COMPLETE/);
   assert.ok(deploy.indexOf('--deletion-protection-enabled') > deploy.lastIndexOf('cloudformation deploy'), 'protection after the deploy');
   assert.equal(t.Table.Properties.PointInTimeRecoverySpecification.PointInTimeRecoveryEnabled, true);
-  assert.deepEqual(t.Table.Properties.GlobalSecondaryIndexes.map(g => g.IndexName), ['GSI1', 'GSI2', 'GSI3']);
+  assert.deepEqual(t.Table.Properties.GlobalSecondaryIndexes.map(g => g.IndexName), ['GSI1', 'GSI2', 'GSI3', 'GSI4']);
   assert.equal(t.Table.Properties.TimeToLiveSpecification.AttributeName, 'ttl');
   assert.equal(t.PhotoBucket.Properties.VersioningConfiguration.Status, 'Enabled');
   assert.equal(t.PhotoBucket.Properties.PublicAccessBlockConfiguration.BlockPublicPolicy, true);
@@ -1093,4 +1093,31 @@ test('no trace of the old fixed-event shape remains in the code', () => {
     const text = readFileSync(new URL(`../src/${file}`, import.meta.url), 'utf8');
     assert.ok(!/EVENT_ID|OWNER_UIDS|usableBytes|backupBytes: 9|env\.EVENT/.test(text), file);
   }
+});
+
+test('the owner gallery pages newest first across the whole bucket, shows the real total, and new uploads lead page one', async () => {
+  let t = 1_700_000_000_000; const h = harness({ clock: () => t }); const { id, a } = await ready(h);
+  const image = await jpeg(), thumb = await jpeg(60, 40), made = [];
+  // Random photo ids, so id order and upload order disagree, as with real job ids.
+  for (let n = 0; n < 25; n++) {
+    const pid = `p${createHash('sha1').update(String(n)).digest('hex').slice(0, 12)}`; t += 1000;
+    const g = await h.upload(a.token, id, pid, image, thumb);
+    assert.equal((await h.call('POST', `/b/${id}/photos/${pid}/commit`, { token: a.token, body: { uploadId: g.body.uploadId } })).status, 200);
+    made.push(pid);
+  }
+  const first = await h.call('GET', `/b/${id}/photos`, { token: 'customer-token', query: { limit: '10' } });
+  assert.equal(first.status, 200); assert.equal(first.body.total, 25);
+  assert.deepEqual(first.body.items.map(p => p.id), made.slice(-10).reverse(), 'page one holds the ten newest, newest first');
+  const all = []; let cursor;
+  do { const r = await h.call('GET', `/b/${id}/photos`, { token: 'customer-token', query: { limit: '10', ...(cursor ? { cursor } : {}) } }); all.push(...r.body.items.map(p => p.id)); cursor = r.body.nextCursor; assert.equal(r.body.total === undefined, Boolean(all.length > 10), 'total only on page one'); } while (cursor);
+  assert.deepEqual(all, [...made].reverse(), 'every photo once, in upload order');
+  const oldest = await h.call('GET', `/b/${id}/photos`, { token: 'customer-token', query: { limit: '5', order: 'oldest' } });
+  assert.deepEqual(oldest.body.items.map(p => p.id), made.slice(0, 5));
+  t += 1000; const g = await h.upload(a.token, id, 'newest-one', image, thumb);
+  await h.call('POST', `/b/${id}/photos/newest-one/commit`, { token: a.token, body: { uploadId: g.body.uploadId } });
+  const again = await h.call('GET', `/b/${id}/photos`, { token: 'customer-token', query: { limit: '10' } });
+  assert.equal(again.body.items[0].id, 'newest-one'); assert.equal(again.body.total, 26);
+  assert.equal((await h.call('GET', `/b/${id}/photos`, { token: 'customer-token', query: { order: 'random' } })).status, 400);
+  const mine = await h.call('GET', `/b/${id}/photos`, { token: a.token, query: { limit: '3' } });
+  assert.equal(mine.body.items[0].id, 'newest-one', 'guests also see their newest first'); assert.equal(mine.body.total, undefined, 'guests get no bucket total');
 });

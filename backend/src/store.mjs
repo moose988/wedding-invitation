@@ -21,7 +21,7 @@ const metaKey = id => ({ pk: pk(id), sk: 'META' });
 const shardKey = (id, n) => ({ pk: pk(id), sk: `COUNTER#${String(n).padStart(2, '0')}` });
 const photoKey = (id, pid) => ({ pk: pk(id), sk: `PHOTO#${pid}` });
 const stamp13 = t => String(t).padStart(13, '0');
-const HIDDEN = new Set(['pk', 'sk', 'gsi1pk', 'gsi1sk', 'gsi2pk', 'gsi2sk', 'gsi3pk', 'gsi3sk', 'ttl']);
+const HIDDEN = new Set(['pk', 'sk', 'gsi1pk', 'gsi1sk', 'gsi2pk', 'gsi2sk', 'gsi3pk', 'gsi3sk', 'gsi4pk', 'gsi4sk', 'ttl']);
 const strip = item => { if (!item) return item; const out = {}; for (const [k, v] of Object.entries(item)) if (!HIDDEN.has(k)) out[k] = v instanceof Set ? [...v] : v; return out; };
 // Every attribute is aliased as #name, so reserved words can never break an expression.
 const names = (...parts) => { const used = [...new Set(parts.filter(Boolean).join(' ').match(/#\w+/g) || [])]; return used.length ? Object.fromEntries(used.map(t => [t, t.slice(1)])) : undefined; };
@@ -46,7 +46,7 @@ export function classify(error) {
 const failedKeys = (bucketId, photo) => ({ gsi3pk: 'FAILED', gsi3sk: `${bucketId}#${stamp13(photo.createdAt)}#${photo.id}` });
 const unbackedKeys = (bucketId, photo) => (photo.backupState === 'done' ? {} : { gsi2pk: `BACKUP#${bucketId}`, gsi2sk: `${photo.backupState || 'pending'}#${stamp13(photo.createdAt)}#${photo.id}`, ...(photo.backupState === 'failed' ? failedKeys(bucketId, photo) : {}) });
 export function photoItem(bucketId, photo) {
-  return { ...photoKey(bucketId, photo.id), ...photo, gsi1pk: `${pk(bucketId)}#C#${photo.contributorId}`, gsi1sk: `${stamp13(photo.createdAt)}#${photo.id}`, ...unbackedKeys(bucketId, photo) };
+  return { ...photoKey(bucketId, photo.id), ...photo, gsi1pk: `${pk(bucketId)}#C#${photo.contributorId}`, gsi1sk: `${stamp13(photo.createdAt)}#${photo.id}`, gsi4pk: `${pk(bucketId)}#P`, gsi4sk: `${stamp13(photo.createdAt)}#${photo.id}`, ...unbackedKeys(bucketId, photo) };
 }
 // All items of a new bucket. The opening balance is split evenly between shards.
 export function bucketItems(meta, { usedBytes = 0, photoCount = 0, backupBytes = 0 } = {}) {
@@ -218,11 +218,13 @@ export function createStore({ client, table, random = Math.random, sleep = ms =>
       return { ids: page.items.map(i => i.pk.slice(7)), nextCursor: page.nextCursor };
     },
     async getPhoto(id, pid) { const { Item } = await send(new GetCommand({ TableName: table, Key: photoKey(id, pid), ConsistentRead: true })); return strip(Item); },
-    // By contributor through GSI1, or the whole bucket from the table. Nothing is read and then filtered in memory.
-    async listPhotos(id, { contributorId, limit, cursor }) {
+    // Upload time order, newest first unless oldest is asked for: by contributor through GSI1, the whole bucket through
+    // GSI4. Nothing is read and then filtered in memory. GSIs are eventually consistent, so a new photo can take a moment.
+    async listPhotos(id, { contributorId, limit, cursor, order = 'newest' }) {
+      const forward = order === 'oldest';
       const page = contributorId
-        ? await query({ index: 'GSI1', keyExpr: '#gsi1pk = :p', values: { ':p': `${pk(id)}#C#${contributorId}` }, limit, cursor, fixed: { gsi1pk: `${pk(id)}#C#${contributorId}`, pk: pk(id) }, allowed: ['gsi1sk', 'sk'], check: k => k.sk.startsWith('PHOTO#') })
-        : await query({ keyExpr: '#pk = :p AND begins_with(#sk, :s)', values: { ':p': pk(id), ':s': 'PHOTO#' }, limit, cursor, fixed: { pk: pk(id) }, allowed: ['sk'], check: k => k.sk.startsWith('PHOTO#'), consistent: true });
+        ? await query({ index: 'GSI1', keyExpr: '#gsi1pk = :p', values: { ':p': `${pk(id)}#C#${contributorId}` }, limit, cursor, forward, fixed: { gsi1pk: `${pk(id)}#C#${contributorId}`, pk: pk(id) }, allowed: ['gsi1sk', 'sk'], check: k => k.sk.startsWith('PHOTO#') })
+        : await query({ index: 'GSI4', keyExpr: '#gsi4pk = :p', values: { ':p': `${pk(id)}#P` }, limit, cursor, forward, fixed: { gsi4pk: `${pk(id)}#P`, pk: pk(id) }, allowed: ['gsi4sk', 'sk'], check: k => k.sk.startsWith('PHOTO#') });
       return { items: page.items.map(strip), nextCursor: page.nextCursor };
     },
     async commitPhoto({ bucketId: id, shards, photo, previous, stamp }) {

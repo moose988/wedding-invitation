@@ -50,6 +50,8 @@ Resources:
         - { AttributeName: gsi2sk, AttributeType: S }
         - { AttributeName: gsi3pk, AttributeType: S }
         - { AttributeName: gsi3sk, AttributeType: S }
+        - { AttributeName: gsi4pk, AttributeType: S }
+        - { AttributeName: gsi4sk, AttributeType: S }
       KeySchema: [{ AttributeName: pk, KeyType: HASH }, { AttributeName: sk, KeyType: RANGE }]
       GlobalSecondaryIndexes:
         # Buckets by owner uid, all buckets for admins, photos by contributor.
@@ -64,6 +66,10 @@ Resources:
         - IndexName: GSI3
           KeySchema: [{ AttributeName: gsi3pk, KeyType: HASH }, { AttributeName: gsi3sk, KeyType: RANGE }]
           Projection: { ProjectionType: KEYS_ONLY }
+        # Every live photo of a bucket in upload time order, for the gallery's newest or oldest first pages.
+        - IndexName: GSI4
+          KeySchema: [{ AttributeName: gsi4pk, KeyType: HASH }, { AttributeName: gsi4sk, KeyType: RANGE }]
+          Projection: { ProjectionType: ALL }
       TimeToLiveSpecification: { AttributeName: ttl, Enabled: true }
       PointInTimeRecoverySpecification: { PointInTimeRecoveryEnabled: true }
       SSESpecification: { SSEEnabled: true }

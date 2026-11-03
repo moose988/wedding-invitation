@@ -95,7 +95,7 @@ async function thumbnailFor(token, bucketId, photo) {
   return blob;
 }
 const PAGE_SIZE = 100;
-const pageOf = (api, bucketId, cursor) => api('GET', `/b/${validId(bucketId)}/photos`, { query: { limit: PAGE_SIZE, ...(cursor ? { cursor } : {}) } }).then(r => Array.isArray(r) ? { items: r, nextCursor: null } : { items: r.items || [], nextCursor: r.nextCursor || null });
+const pageOf = (api, bucketId, cursor, order = 'newest') => api('GET', `/b/${validId(bucketId)}/photos`, { query: { limit: PAGE_SIZE, order: order === 'oldest' ? 'oldest' : 'newest', ...(cursor ? { cursor } : {}) } }).then(r => Array.isArray(r) ? { items: r, nextCursor: null } : { items: r.items || [], nextCursor: r.nextCursor || null, ...(Number.isInteger(r.total) ? { total: r.total } : {}) });
 const allOf = (api, bucketId, contributor) => allPages(cursor => api('GET', `/b/${validId(bucketId)}/photos`, { query: { limit: 200, ...(contributor ? { contributor } : {}), ...cursor } }));
 const publicBucket = info => ({ id: info.id, ...details(info), paused: Boolean(info.paused), showUploaderNames: info.showUploaderNames === true });
 
@@ -127,7 +127,7 @@ export function ownerAdapterApi(user) {
     setFrozen: (bucketId, frozen) => api('POST', `/b/${validId(bucketId)}/freeze`, { body: { frozen: Boolean(frozen) } }),
     setPaused: (bucketId, paused) => api('POST', `/b/${validId(bucketId)}/pause`, { body: { paused: Boolean(paused) } }),
     // One page of 100 (no thumbnails). Thumbnails come from thumbnail(), through the page's queue.
-    photosPage: (bucketId, cursor) => pageOf(api, bucketId, cursor),
+    photosPage: (bucketId, cursor, order) => pageOf(api, bucketId, cursor, order),
     allPhotos: (bucketId, contributor) => allOf(api, bucketId, contributor),
     async thumbnail(bucketId, photo) { return thumbnailFor(await token(), bucketId, photo); },
     async image(bucketId, photoId) { return blobFor(await token(), bucketId, photoId, 'image'); },
@@ -168,7 +168,7 @@ export async function guestAdapterApi(publicDetails) {
     ...queue,
     async open(info) { const canonical = publicBucket(await patientCall('GET', `/b/${bucketId}/public`)); await queue.open(canonical); return canonical; },
     status: async id => publicBucket(await call('GET', `/b/${validId(id)}/public`)),
-    photosPage: (id, cursor) => pageOf(api, id, cursor),
+    photosPage: (id, cursor, order) => pageOf(api, id, cursor, order),
     allPhotos: (id, contributor) => allOf(api, id, contributor),
     thumbnail: (id, photo) => thumbnailFor(session.token, validId(id), photo),
     image: (id, photoId) => blobFor(session.token, id, photoId, 'image'),

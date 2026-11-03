@@ -71,7 +71,7 @@ const sortOn = field => (a, b) => (a[field] < b[field] ? -1 : a[field] > b[field
 function checkItem(item) {
   for (const [k, v] of Object.entries(item)) {
     if (v instanceof Set && !v.size) throw validation(`empty set ${k}`);
-    if (['gsi1pk', 'gsi1sk', 'gsi2pk', 'gsi2sk', 'gsi3pk', 'gsi3sk', 'pk', 'sk'].includes(k) && (typeof v !== 'string' || !v)) throw validation(`bad key ${k}`);
+    if (['gsi1pk', 'gsi1sk', 'gsi2pk', 'gsi2sk', 'gsi3pk', 'gsi3sk', 'gsi4pk', 'gsi4sk', 'pk', 'sk'].includes(k) && (typeof v !== 'string' || !v)) throw validation(`bad key ${k}`);
   }
 }
 
@@ -138,8 +138,8 @@ export class FakeDynamo {
     const ctx = context(input), matches = parseCondition(input.KeyConditionExpression, ctx);
     for (const token of tokenize(input.ProjectionExpression || '')) if (token.startsWith('#')) name(token, ctx);
     closeContext(ctx);
-    const field = input.IndexName === 'GSI1' ? 'gsi1sk' : input.IndexName === 'GSI2' ? 'gsi2sk' : input.IndexName === 'GSI3' ? 'gsi3sk' : 'sk';
-    const hash = input.IndexName === 'GSI1' ? 'gsi1pk' : input.IndexName === 'GSI2' ? 'gsi2pk' : input.IndexName === 'GSI3' ? 'gsi3pk' : 'pk';
+    const field = input.IndexName ? `gsi${input.IndexName.slice(3)}sk` : 'sk';
+    const hash = input.IndexName ? `gsi${input.IndexName.slice(3)}pk` : 'pk';
     let rows = [...this.items.values()].filter(i => i[hash] !== undefined && i[field] !== undefined && matches(i)).sort(sortOn(field));
     if (input.ScanIndexForward === false) rows.reverse();
     if (input.ExclusiveStartKey) {

@@ -19,7 +19,7 @@ test("one shared skeleton style: shapes for cards, rows, tiles and text, with re
 test("every list and gallery shows a skeleton while loading", async () => {
   const need = { "weddings.js": /skeleton\.cards/, "admin-workspace.js": /skeleton\.cards[\s\S]*skeleton\.rows[\s\S]*Loading activity/, "clients.js": /skeleton\.rows[\s\S]*skeleton\.lines/, "customers.js": /skeleton\.rows/, "customer-link.js": /skeleton\.lines/, "dashboard.js": /skeleton\.cards\(3, "Loading the overview/, "photo-bucket/app.js": /skeleton\.tiles/, "client-notes.js": /skeleton\.rows/ };
   for (const [file, pattern] of Object.entries(need)) assert.match(await read(file), pattern, file);
-  assert.equal((await read("photo-bucket/app.js")).match(/skeleton\.tiles\(6\)/g).length, 2, "owner and guest gallery");
+  assert.ok((await read("photo-bucket/app.js")).match(/skeleton\.tiles\(6\)/g).length >= 2, "owner and guest gallery, plus the reload after a sort change");
 });
 
 test("D7: joining a bucket waits out Retry-After and shows a busy state, never a dead page", async () => {

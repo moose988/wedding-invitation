@@ -273,8 +273,11 @@ export function createHandler({ store, files, purgePhotoFiles, verifyOwner, secr
       if (query.contributor !== undefined && !validId(query.contributor)) throw new HttpError(400, 'Invalid contributor.', 'INVALID_CONTRIBUTOR');
       if (query.contributor !== undefined && a.role === 'owner' && !a.isAdmin && !namesShown(meta)) throw new HttpError(403, 'Uploader names are hidden for this event.', 'NAMES_HIDDEN');
       // A guest is always scoped to their own id from the signed token. Whatever they pass as contributor is ignored.
-      const { items, nextCursor } = await store.listPhotos(bid, { contributorId: a.role === 'guest' ? a.contributorId : query.contributor, ...page });
-      return reply(200, { items: items.map(photoFor(a, meta)), nextCursor });
+      if (query.order !== undefined && !['newest', 'oldest'].includes(query.order)) throw new HttpError(400, 'order must be newest or oldest.', 'INVALID_ORDER');
+      const { items, nextCursor } = await store.listPhotos(bid, { contributorId: a.role === 'guest' ? a.contributorId : query.contributor, ...page, order: query.order || 'newest' });
+      // Owners get the bucket's real total on the first page, so the gallery never shows the page size as the count.
+      const total = a.role === 'owner' && !page.cursor && query.contributor === undefined ? (await store.readCounters(bid)).photoCount : undefined;
+      return reply(200, { items: items.map(photoFor(a, meta)), nextCursor, ...(total === undefined ? {} : { total }) });
     }
     if (method === 'POST' && rest === '/uploads') {
       guestOnly(a); const pid = photoId(body.photoId);

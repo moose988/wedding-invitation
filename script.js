@@ -653,7 +653,8 @@ function populateInvitation() {
   } else {
     setText("heroEventLine", heroDetails.join(" · "));
   }
-  if (wedding.id && wedding.id !== "luxury-wedding-demo" || wedding.musicMode === "off") void configureMusic(wedding);
+  // Any explicit setting wins, including on the Layla & Zaid event; only the built-in sample keeps its own media audio.
+  if (wedding.musicMode === "custom" || wedding.musicMode === "off" || (wedding.id && wedding.id !== "luxury-wedding-demo")) void configureMusic(wedding);
   else if (elements.weddingAudio?.querySelector("source") && wedding.media.audio) {
     const source = elements.weddingAudio.querySelector("source");
     const nextSource = new URL(wedding.media.audio, document.baseURI).toString();

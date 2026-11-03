@@ -45,3 +45,13 @@ test("the invitation listens for source errors (capture) and refreshes the link 
   assert.match(script, /function scheduleSongRefresh/);
   assert.match(script, /state\.musicKey === key/, "unchanged settings do not reload the song");
 });
+
+test("explicit music settings apply to every event, including the Layla & Zaid event id", async () => {
+  const script = await readFile(new URL("../script.js", import.meta.url), "utf8");
+  assert.match(script, /wedding\.musicMode === "custom" \|\| wedding\.musicMode === "off" \|\| \(wedding\.id && wedding\.id !== "luxury-wedding-demo"\)/);
+});
+
+test("the local preview accepts only loopback http song links", async () => {
+  const music = await readFile(new URL("../invitation-music.js", import.meta.url), "utf8");
+  assert.match(music, /localPreview\(\) && \/\^http:\\\/\\\/\(127\\\.0\\\.0\\\.1\|localhost\)/);
+});

@@ -26,7 +26,9 @@ export async function resolveMusic(wedding, { fetchImpl = globalThis.fetch, base
     const response = await fetchImpl(`${base}${publicMusicPath(wedding.id, version)}`, { headers: { accept: "application/json" } });
     if (!response.ok) throw new Error(String(response.status));
     const { url } = await response.json();
-    if (typeof url !== "string" || !/^https:\/\/|^\//.test(url)) throw new Error("bad url");
+    // https only, except the local emulator backend's own loopback links while previewing on this machine.
+    const loopbackLink = localPreview() && /^http:\/\/(127\.0\.0\.1|localhost)(:\d+)?\//.test(url);
+    if (typeof url !== "string" || !(/^https:\/\/|^\//.test(url) || loopbackLink)) throw new Error("bad url");
     return { mode, src: localPreview() ? `/__photo_bucket_storage?url=${encodeURIComponent(url)}` : url, type: "audio/mpeg", fallback: false, resolvedAt: Date.now() };
   } catch { return { mode: "default", ...DEFAULT_SONG, fallback: true }; /* custom song unavailable: the default plays instead */ }
 }

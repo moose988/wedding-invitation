@@ -1426,7 +1426,7 @@ function updateEventSettingsDraftState(settingsField) {
 }
 
 function showEditorAccessError() {
-  elements.dashboardApp.hidden = false;
+  revealDashboard();
   elements.dashboardSidebar.hidden = true;
   elements.pageEyebrow.textContent = "Seating access";
   elements.pageTitle.textContent = "Access unavailable";
@@ -1439,7 +1439,7 @@ function showEditorAccessError() {
 
 function showDashboardBootstrapError(error) {
   const permissionDenied = error?.code === "permission-denied";
-  elements.dashboardApp.hidden = false;
+  revealDashboard();
   elements.pageEyebrow.textContent = "Dashboard";
   elements.pageTitle.textContent = permissionDenied
     ? "Event access unavailable"
@@ -2307,7 +2307,14 @@ async function syncPublicStats({ force = false } = {}) {
 }
 
 function showDashboard() {
+  revealDashboard();
+}
+
+// The static loading placeholder in dashboard.html stays until the app or an error message is shown.
+function revealDashboard() {
   elements.dashboardApp.hidden = false;
+  const loading = document.getElementById("dashboardLoading");
+  if (loading) { loading.hidden = true; loading.removeAttribute("aria-busy"); }
 }
 
 let persistenceRecord = null;

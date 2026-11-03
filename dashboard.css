@@ -5954,3 +5954,13 @@ body.is-overview-view .overview-page { width: 100%; max-width: var(--da3wa-conte
 .music-progress progress { width: 100%; height: 14px; }
 .music-file { display: inline-flex; align-items: center; min-height: 44px; padding: 0 16px; cursor: pointer; }
 .music-file:focus-within { outline: 3px solid rgba(31, 90, 77, .45); outline-offset: 2px; }
+
+/* Placeholder shown from the first paint until the dashboard is ready. */
+.dash-loading { display: grid; gap: 16px; width: min(1100px, 100%); margin: 0 auto; padding: 24px max(16px, env(safe-area-inset-left, 0px)) 40px; }
+.dash-loading__head { display: grid; gap: 10px; max-width: 520px; }
+.dash-loading__cards { display: grid; gap: 14px; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); }
+.dash-loading__text { margin: 4px 0 0; color: var(--da3wa-text, #2f312d); font-weight: 600; }
+.dash-loading__slow { margin: 0; color: var(--da3wa-text, #2f312d); opacity: 0; visibility: hidden; animation: dash-loading-slow 0s linear 10s forwards; }
+.dash-loading__slow .da3wa-button { margin-left: 8px; min-height: 44px; }
+@keyframes dash-loading-slow { to { opacity: 1; visibility: visible; } }
+.dash-loading[hidden], .da3wa-shell:has(> #dashboardApp:not([hidden])) > .dash-loading { display: none; }

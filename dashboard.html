@@ -11,12 +11,24 @@
       rel="stylesheet"
     />
     <link rel="stylesheet" href="./styles.css?v=20261012-seating-refresh-2" />
-    <link rel="stylesheet" href="./dashboard.css?v=20261028-invitation-sync-retry-1" />
+    <link rel="stylesheet" href="./dashboard.css?v=20261104-loading-1" />
     <link rel="stylesheet" href="./gender-reveal-dashboard.css?v=part2-2" />
     <link rel="stylesheet" href="./password-visibility.css?v=1" />
   <link rel="stylesheet" href="./skeleton.css?v=1"></head>
   <body class="dashboard-body">
     <main class="da3wa-shell">
+      <section class="dash-loading" id="dashboardLoading" aria-busy="true" aria-labelledby="dashboardLoadingText">
+        <div class="dash-loading__head"><span class="sk-line sk-line--short"></span><span class="sk-line sk-line--title"></span><span class="sk-line sk-line--mid"></span></div>
+        <div class="dash-loading__cards">
+          <div class="sk-card"><span class="sk-line sk-line--short"></span><span class="sk-line sk-line--title"></span><span class="sk-line"></span></div>
+          <div class="sk-card"><span class="sk-line sk-line--short"></span><span class="sk-line sk-line--title"></span><span class="sk-line"></span></div>
+          <div class="sk-card"><span class="sk-line sk-line--short"></span><span class="sk-line sk-line--title"></span><span class="sk-line"></span></div>
+        </div>
+        <div class="sk-row"><span class="sk sk-row__avatar"></span><span class="sk-row__text"><span class="sk-line sk-line--mid"></span><span class="sk-line sk-line--short"></span></span></div>
+        <div class="sk-row"><span class="sk sk-row__avatar"></span><span class="sk-row__text"><span class="sk-line sk-line--mid"></span><span class="sk-line sk-line--short"></span></span></div>
+        <p class="dash-loading__text" id="dashboardLoadingText" role="status">Loading your event…</p>
+        <p class="dash-loading__slow">This is taking longer than usual. A weak connection can slow it down. <a class="da3wa-button da3wa-button--secondary" href="">Try again</a></p>
+      </section>
       <section class="da3wa-app" id="dashboardApp" hidden>
         <aside class="da3wa-sidebar" id="dashboardSidebar">
           <button class="da3wa-button da3wa-button--secondary da3wa-sidebar-desktop-toggle" type="button" id="desktopSidebarToggleButton" aria-controls="dashboardSidebar" aria-expanded="true">Collapse navigation</button>

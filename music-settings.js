@@ -96,7 +96,11 @@ export function mountMusicSettings({ host, db, user, wedding, eventId, onChange 
     }
     if (event.target.closest("[data-music-discard]") && state.pending) { URL.revokeObjectURL(state.pending.url); state.pending = null; paint(); return; }
     const play = event.target.closest("[data-music-play]");
-    if (play) { await runAction(play, async () => { state.preview = await previewSongUrl(eventId); paint(); }, { what: "Loading the saved song", busyLabel: "Loading…" }); return; }
+    if (play) {
+      await runAction(play, async () => { state.preview = await previewSongUrl(eventId); paint(); }, { what: "Loading the saved song", busyLabel: "Loading…" });
+      host.querySelector("audio[autoplay]")?.addEventListener("error", () => error("The saved song could not be played here. Check your connection and try again; if it keeps failing, upload the song again."), { once: true });
+      return;
+    }
     const remove = event.target.closest("[data-music-remove]");
     if (remove) {
       if (!window.confirm("Remove the custom song? The invitation will play the default song.")) return;

@@ -29,7 +29,7 @@ test("the invitation obeys musicMode: off plays nothing, default keeps the song,
   assert.equal(musicModeOf({}), "default"); assert.equal(musicModeOf({ musicMode: "weird" }), "default");
   assert.deepEqual(await resolveMusic({ id: "e", musicMode: "off" }), { mode: "off", src: "", type: "", fallback: false });
   assert.equal((await resolveMusic({ id: "e", musicMode: "default" })).src, DEFAULT_SONG.src); assert.equal(DEFAULT_SONG.src, "./music/wedding.m4a");
-  const ok = await resolveMusic({ id: "e1", musicMode: "custom" }, { base: "/api", fetchImpl: async url => { assert.match(url, /\/api\/events\/e1\/song$/); return { ok: true, json: async () => ({ url: "https://s3.example/song.mp3?sig=1" }) }; } });
+  const ok = await resolveMusic({ id: "e1", musicMode: "custom" }, { base: "/api", fetchImpl: async url => { assert.match(url, /\/api\/events\/e1\/song\?v=0$/); return { ok: true, json: async () => ({ url: "https://s3.example/song.mp3?sig=1" }) }; } });
   assert.equal(ok.src, "https://s3.example/song.mp3?sig=1"); assert.equal(ok.type, "audio/mpeg"); assert.equal(ok.fallback, false);
   for (const bad of [async () => ({ ok: false, status: 500 }), async () => { throw new Error("net"); }, async () => ({ ok: true, json: async () => ({ url: "javascript:alert(1)" }) })]) {
     const r = await resolveMusic({ id: "e1", musicMode: "custom" }, { base: "/api", fetchImpl: bad }); assert.equal(r.src, DEFAULT_SONG.src); assert.equal(r.fallback, true);

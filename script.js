@@ -1,5 +1,5 @@
 import { runFromEvent } from "./action-feedback.js";
-import { DEFAULT_SONG, musicModeOf, resolveMusic } from "./invitation-music.js";
+import { DEFAULT_SONG, SONG_URL_MAX_AGE_MS, musicKey, musicModeOf, resolveMusic } from "./invitation-music.js";
 import { invitationRefreshIsCurrent, invitationRsvpStorageKey, invitationRsvpView } from "./invitations/shared/rsvp-state.js";
 import { buildSatelliteMapEmbedUrl } from "./invitations/shared/map-embed.js";
 import { buildInvitationCalendar } from "./invitations/shared/calendar.js";
@@ -2163,9 +2163,16 @@ function revealInvitation() {
 
 // Applies the event's music setting: off plays nothing and hides the button; default keeps the shipped song;
 // custom loads the uploaded song and falls back to the default only if it cannot be loaded.
-async function configureMusic(wedding) {
+async function configureMusic(wedding, { refresh = false } = {}) {
   const audio = elements.weddingAudio; if (!audio) return;
+  // Live updates and the language toggle call this often: keep the current song unless its settings changed or its
+  // signed link is about to expire, so playback is never interrupted for nothing.
+  const key = musicKey(wedding);
+  if (!refresh && state.musicKey === key && (musicModeOf(wedding) !== "custom" || Date.now() - (state.musicResolvedAt || 0) < SONG_URL_MAX_AGE_MS)) return;
+  state.musicKey = key; state.musicWedding = wedding;
   const plan = await resolveMusic(wedding);
+  if (state.musicKey !== key) return; // settings changed again while this lookup was running
+  state.musicResolvedAt = plan.resolvedAt || 0;
   state.musicOff = plan.mode === "off";
   if (state.musicOff) {
     audio.pause(); audio.removeAttribute("src"); audio.querySelector("source")?.remove(); audio.load();
@@ -2176,10 +2183,26 @@ async function configureMusic(wedding) {
   if (!source) { source = document.createElement("source"); audio.append(source); }
   const set = (src, type) => { const next = new URL(src, document.baseURI).toString(); if (source.src !== next) { source.src = next; source.type = type; audio.load(); } };
   set(plan.src, plan.type);
+  state.musicAvailable = true; delete source.dataset.fellBack;
   if (plan.mode === "custom") {
+    // A failed <source> fires "error" on the source element itself, not on <audio>, so listen there.
     // If the uploaded file fails to play, use the default song once.
-    audio.addEventListener("error", () => { if (source.dataset.fellBack) return; source.dataset.fellBack = "1"; state.musicAvailable = true; set(DEFAULT_SONG.src, DEFAULT_SONG.type); }, { once: true });
+    source.addEventListener("error", () => { if (source.dataset.fellBack) return; source.dataset.fellBack = "1"; state.musicAvailable = true; set(DEFAULT_SONG.src, DEFAULT_SONG.type); }, { once: true });
+    scheduleSongRefresh();
   }
+}
+
+// Signed links expire after 15 minutes. While the song is not playing, fetch a fresh link every 10 minutes so the
+// first tap on play (and every loop after it) uses a valid one. A playing song keeps the file it already loaded.
+let songRefreshTimer = 0;
+function scheduleSongRefresh() {
+  clearTimeout(songRefreshTimer);
+  songRefreshTimer = setTimeout(() => {
+    const audio = elements.weddingAudio;
+    if (!state.musicWedding || musicModeOf(state.musicWedding) !== "custom") return;
+    if (audio && !audio.paused) { scheduleSongRefresh(); return; }
+    void configureMusic(state.musicWedding, { refresh: true });
+  }, SONG_URL_MAX_AGE_MS);
 }
 
 async function playWeddingMusicFromGesture() {
@@ -2359,10 +2382,13 @@ function setupAudioState() {
   document.addEventListener("visibilitychange", () => {
     document.body.classList.toggle("page-hidden", document.hidden);
   });
-  elements.weddingAudio?.addEventListener("error", () => {
+  // Capture: a failing <source> child does not bubble its "error" to <audio>, but capture listeners still see it.
+  elements.weddingAudio?.addEventListener("error", (event) => {
+    const source = event.target?.tagName === "SOURCE" ? event.target : null;
+    if (source && musicModeOf(state.musicWedding) === "custom" && !source.dataset.fellBack) return; // custom falls back first
     state.musicAvailable = false;
     setMusicToggleState("unavailable", "Off", isLaylaInvitation() ? laylaText("musicUnavailable") : "Event music unavailable");
-  });
+  }, true);
 
   elements.weddingAudio?.addEventListener("pause", () => {
     if (state.musicAvailable && document.body.classList.contains("invitation-open")) {

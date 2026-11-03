@@ -7,7 +7,10 @@ export const DEFAULT_SONG = { src: "./music/wedding.m4a", type: "audio/mp4" };
 export const musicModeOf = wedding => MUSIC_MODES.includes(wedding?.musicMode) ? wedding.musicMode : "default";
 
 // Public route (no sign-in): GET {api}/events/:eventId/song returns { url, ... } for the custom song.
-export const publicMusicPath = eventId => `/events/${encodeURIComponent(eventId)}/song`;
+export const publicMusicPath = (eventId, version) => `/events/${encodeURIComponent(eventId)}/song${Number.isInteger(version) ? `?v=${version}` : ""}`;
+// Signed song links last 15 minutes; refresh well before that.
+export const SONG_URL_MAX_AGE_MS = 10 * 60 * 1000;
+export const musicKey = wedding => `${wedding?.id || ""}:${musicModeOf(wedding)}:${Number.isInteger(wedding?.musicVersion) ? wedding.musicVersion : 0}`;
 const localPreview = () => typeof location !== "undefined" && ["localhost", "127.0.0.1", "[::1]"].includes(location.hostname);
 const apiBase = () => (typeof location !== "undefined" && ["localhost", "127.0.0.1", "[::1]"].includes(location.hostname)) ? "/__photo_bucket_api" : API_URL;
 
@@ -18,10 +21,12 @@ export async function resolveMusic(wedding, { fetchImpl = globalThis.fetch, base
   if (mode === "off") return { mode, src: "", type: "", fallback: false };
   if (mode === "default" || !wedding?.id || !base) return { mode: "default", ...DEFAULT_SONG, fallback: mode === "custom" };
   try {
-    const response = await fetchImpl(`${base}${publicMusicPath(wedding.id)}`, { headers: { accept: "application/json" } });
+    const version = Number.isInteger(wedding.musicVersion) ? wedding.musicVersion : 0;
+    // ?v= changes on every replace, so a cached answer never points at a purged file.
+    const response = await fetchImpl(`${base}${publicMusicPath(wedding.id, version)}`, { headers: { accept: "application/json" } });
     if (!response.ok) throw new Error(String(response.status));
     const { url } = await response.json();
     if (typeof url !== "string" || !/^https:\/\/|^\//.test(url)) throw new Error("bad url");
-    return { mode, src: localPreview() ? `/__photo_bucket_storage?url=${encodeURIComponent(url)}` : url, type: "audio/mpeg", fallback: false };
+    return { mode, src: localPreview() ? `/__photo_bucket_storage?url=${encodeURIComponent(url)}` : url, type: "audio/mpeg", fallback: false, resolvedAt: Date.now() };
   } catch { return { mode: "default", ...DEFAULT_SONG, fallback: true }; /* custom song unavailable: the default plays instead */ }
 }

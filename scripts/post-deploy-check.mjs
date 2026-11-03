@@ -14,8 +14,8 @@ const FUNCTIONS = ['admin-health', 'admin-demos', 'admin-customer-access', 'cust
 const PRIVATE_DIRS = ['server', 'api/_lib', 'backend', 'docs', '.orchestrate'];
 
 // connect-src matching as browsers do for host sources: exact scheme+host, or *.suffix.
-export function cspAllowsHost(csp, origin) {
-  const directive = String(csp || '').split(';').map((part) => part.trim().split(/\s+/)).find(([name]) => name === 'connect-src');
+export function cspAllowsHost(csp, origin, name = 'connect-src') {
+  const directive = String(csp || '').split(';').map((part) => part.trim().split(/\s+/)).find(([key]) => key === name);
   if (!directive) return false;
   const target = new URL(origin);
   return directive.slice(1).some((source) => {
@@ -110,6 +110,9 @@ export async function runPostDeployChecks({ site, token, fetchImpl = fetch, verc
   for (const url of bucketUrls) {
     const host = new URL(url).host;
     record(`CSP connect-src allows ${host}`, Boolean(csp) && cspAllowsHost(csp, url), csp ? 'Checked on /.' : 'No Content-Security-Policy header on /.');
+    // Custom event songs play straight from S3 in the API's region, so media-src must allow that bucket host.
+    const region = host.match(/\.execute-api\.([a-z0-9-]+)\.amazonaws\.com$/)?.[1];
+    if (region) record(`CSP media-src allows S3 in ${region}`, Boolean(csp) && cspAllowsHost(csp, `https://pbs-shared.s3.${region}.amazonaws.com`, 'media-src'), csp ? 'Needed for custom event songs.' : 'No Content-Security-Policy header on /.');
   }
   return { ok: results.every((row) => row.pass), results };
 }

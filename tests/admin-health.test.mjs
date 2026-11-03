@@ -114,7 +114,7 @@ test('CSP connect-src matching', () => {
 
 function fakeSite({ broken = false } = {}) {
   const calls = [];
-  const csp = `default-src 'self'; connect-src 'self' ${broken ? 'https://other.example' : 'https://*.execute-api.eu-north-1.amazonaws.com'}`;
+  const csp = `default-src 'self'; connect-src 'self' ${broken ? 'https://other.example' : 'https://*.execute-api.eu-north-1.amazonaws.com'}; media-src 'self' ${broken ? '' : 'https://*.s3.eu-north-1.amazonaws.com'}`;
   const fetchImpl = async (url, init = {}) => {
     const { pathname } = new URL(url);
     calls.push({ pathname, method: init.method || 'GET', auth: init.headers?.authorization });

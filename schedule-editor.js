@@ -17,7 +17,9 @@ const FIELDS = [
 export function scheduleRowsFromJson(text) {
   try {
     const list = JSON.parse(String(text || "[]"));
-    return Array.isArray(list) ? list.filter((item) => item && typeof item === "object" && !Array.isArray(item)).slice(0, SCHEDULE_MAX_ITEMS) : [];
+    // Older schedules stored the English time as "timeEn"; show it in the Time field so saving never loses it.
+    return Array.isArray(list) ? list.filter((item) => item && typeof item === "object" && !Array.isArray(item)).slice(0, SCHEDULE_MAX_ITEMS)
+      .map((item) => (item.time == null || item.time === "") && item.timeEn ? { ...item, time: item.timeEn } : item) : [];
   } catch { return []; }
 }
 

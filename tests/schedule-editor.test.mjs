@@ -38,3 +38,11 @@ test("dashboard keeps the JSON validation and saves the parsed list", async () =
   assert.match(d, /bindScheduleEditor\(eventSettingsForm\)/);
   assert.doesNotMatch(d, /Invitation schedule \(JSON/);
 });
+
+test("older schedules that used timeEn keep their time after the form saves them", async () => {
+  const { scheduleRowsFromJson, scheduleJsonFromRows } = await import("../schedule-editor.js");
+  const rows = scheduleRowsFromJson(JSON.stringify([{ timeEn: "8:00 PM", titleEn: "Zaffa" }, { time: "9:00 PM", timeEn: "ignored", titleEn: "Dinner" }]));
+  assert.equal(rows[0].time, "8:00 PM"); assert.equal(rows[1].time, "9:00 PM");
+  const saved = JSON.parse(scheduleJsonFromRows(rows));
+  assert.deepEqual(saved.map((item) => item.time), ["8:00 PM", "9:00 PM"]);
+});

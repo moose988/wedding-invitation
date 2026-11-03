@@ -67,6 +67,8 @@ function fakeBucketApi() {
       const uid = parsed.searchParams.get('uid');
       return reply(200, { items: [...buckets.values()].filter((row) => row.owners.includes(uid)), nextCursor: null });
     }
+    const eventFiles = parsed.pathname.match(/^\/events\/([^/]+)$/);
+    if (eventFiles && init.method === 'DELETE') { state.deletedEventFiles = [...(state.deletedEventFiles || []), decodeURIComponent(eventFiles[1])]; return reply(200, { removed: true }); }
     const match = parsed.pathname.match(/^\/b\/([^/]+)(\/owners(?:\/([^/]+))?)?$/);
     const bucket = match && buckets.get(match[1]);
     if (!bucket) return reply(404, { code: 'BUCKET_NOT_FOUND', error: 'Not found.' });
@@ -657,4 +659,20 @@ test('handlers refuse wrong methods and report missing configuration without an 
       assert.equal(out.body.code, 'INVALID_JSON');
     }
   } finally { if (saved !== undefined) process.env.FIREBASE_SERVICE_ACCOUNT_JSON = saved; }
+});
+
+test('cleanup removes the custom song files of a demo event first, and waits when the service is down', options, async () => {
+  const seeded = await seedExpiredDemo();
+  await db.doc(`weddings/${seeded.eventId}`).update({ musicMode: 'custom', musicVersion: 1, musicName: 'demo song' });
+  const down = fakeBucketApi(); down.down = true;
+  const waiting = await cleanupExpiredDemos({ auth, db, bucketClient: down.client });
+  assert.ok(waiting.events.deferred.includes(seeded.eventId), 'kept for the next run, so its files are not orphaned');
+  assert.equal(await exists(`weddings/${seeded.eventId}`), true);
+  const without = await cleanupExpiredDemos({ auth, db, bucketClient: null });
+  assert.ok(without.events.deferred.includes(seeded.eventId), 'no service configured: also deferred');
+  const api = fakeBucketApi();
+  const done = await cleanupExpiredDemos({ auth, db, bucketClient: api.client });
+  assert.ok(done.events.deleted.includes(seeded.eventId));
+  assert.deepEqual(api.deletedEventFiles, [seeded.eventId]);
+  assert.equal(await exists(`weddings/${seeded.eventId}`), false);
 });

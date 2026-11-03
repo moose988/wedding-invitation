@@ -46,6 +46,8 @@ export function createBucketClient({ baseUrl, getToken, fetchImpl = fetch, timeo
     addOwner: (id, uid) => call('POST', `/b/${segment(id)}/owners`, { uid }),
     removeOwner: (id, uid) => call('DELETE', `/b/${segment(id)}/owners/${segment(uid)}`),
     deleteBucket: (id) => call('DELETE', `/b/${segment(id)}?confirm=${segment(id)}`),
+    // Removes every stored file of an event (its song, all versions). Safe to repeat: no files is a 404.
+    deleteEventFiles: (eventId) => call('DELETE', `/events/${segment(eventId)}`).catch((error) => { if (error.status === 404) return null; throw error; }),
     async listOwned(uid) {
       const items = [];
       let cursor = null;

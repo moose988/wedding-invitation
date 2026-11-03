@@ -1121,3 +1121,12 @@ test('the owner gallery pages newest first across the whole bucket, shows the re
   const mine = await h.call('GET', `/b/${id}/photos`, { token: a.token, query: { limit: '3' } });
   assert.equal(mine.body.items[0].id, 'newest-one', 'guests also see their newest first'); assert.equal(mine.body.total, undefined, 'guests get no bucket total');
 });
+
+test('only admins can move a bucket date, so customers cannot clear the overdue flag', async () => {
+  const h = harness(); const { body } = await h.createBucket({ date: '2026-01-10' }); const id = body.id;
+  const moved = await h.call('PATCH', `/b/${id}`, { token: 'customer-token', body: { date: '2030-01-01' } });
+  assert.equal(moved.status, 403); assert.equal(moved.body.code, 'ADMIN_ONLY');
+  assert.equal((await h.call('PATCH', `/b/${id}`, { token: 'customer-token', body: { name: 'Renamed by couple', date: '2026-01-10' } })).status, 200, 'other details and an unchanged date are fine');
+  assert.equal((await h.call('PATCH', `/b/${id}`, { token: 'admin-token', body: { date: '2026-02-01' } })).status, 200);
+  assert.equal((await h.call('GET', `/b/${id}`, { token: 'admin-token' })).body.date, '2026-02-01');
+});

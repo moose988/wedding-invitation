@@ -221,6 +221,8 @@ export function createHandler({ store, files, purgePhotoFiles, verifyOwner, secr
         if (typeof body.showUploaderNames !== 'boolean') throw new HttpError(400, 'showUploaderNames must be true or false.', 'INVALID_REQUEST');
         extra.showUploaderNames = body.showUploaderNames;
       }
+      // The event date drives the "past 48 hours" overdue flag, so only admins may move it after creation.
+      if (body.date !== undefined && body.date !== meta.date && !a.isAdmin) throw new HttpError(403, 'Only an admin can change the event date. Contact QD Systems if it needs to change.', 'ADMIN_ONLY');
       return reply(200, await view(a, await store.updateMeta(bid, { ...cleanDetails({ ...meta, ...body }), ...extra, updatedAt: now() })));
     }
     if (method === 'DELETE' && rest === '') {

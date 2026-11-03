@@ -150,11 +150,19 @@ async function deleteRefs(db, refs) {
 // must prove it is an expired demo from a fresh read, both before anything is removed
 // and again in the transaction that removes the event itself.
 // The event document goes last, so a run that dies midway is found again by the next.
-async function deleteExpiredDemoEvent(db, ref, nowMs) {
+async function deleteExpiredDemoEvent(db, ref, nowMs, bucketClient = null) {
   const snapshot = await ref.get();
   if (!snapshot.exists || !isExpiredDemo(snapshot.data(), nowMs)) return false;
   const eventId = ref.id;
   const event = snapshot.data();
+  // A demo with a custom song has files in the photo bucket service. Remove them first; if that cannot be done
+  // (service unset or failing), leave the demo for the next run rather than orphan the files. Access is already
+  // closed by the rules at expiry, so waiting is safe.
+  const hasSong = event.musicMode === 'custom' || (Number.isInteger(event.musicVersion) && event.musicVersion > 0);
+  if (hasSong) {
+    if (!bucketClient) return 'deferred';
+    try { await bucketClient.deleteEventFiles(eventId); } catch { return 'deferred'; }
+  }
   const members = ref.collection('dashboardUsers');
   const memberDocs = (await members.get()).docs;
   const userIds = new Set([...memberDocs.map((row) => row.id), ...[event.ownerUserId, event.demoAccountUid].filter((id) => typeof id === 'string' && id)]);
@@ -267,14 +275,16 @@ export async function cleanupExpiredDemos({ auth, db, bucketClient = null, now =
   const passTimer = (share) => { const end = clock() + budgetMs * share; return () => clock() < end; };
   const result = {
     ok: true, done: true,
-    events: { deleted: [], skipped: [], failed: [] },
+    events: { deleted: [], skipped: [], deferred: [], failed: [] },
     accounts: { deleted: [], retained: [], deferred: [], failed: [] },
   };
   const eventsInBudget = passTimer(0.7);
   for await (const row of expiredDocs(db.collection('weddings').where('demoExpiresAt', '<=', cutoff).orderBy('demoExpiresAt'))) {
     if (!eventsInBudget()) { result.done = false; break; }
     try {
-      if (await deleteExpiredDemoEvent(db, row.ref, nowMs)) result.events.deleted.push(row.id);
+      const outcome = await deleteExpiredDemoEvent(db, row.ref, nowMs, bucketClient);
+      if (outcome === 'deferred') result.events.deferred.push(row.id);
+      else if (outcome) result.events.deleted.push(row.id);
       else result.events.skipped.push(row.id);
     } catch (error) {
       result.events.failed.push({ id: row.id, code: String(error?.code || error?.name) });

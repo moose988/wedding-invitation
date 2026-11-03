@@ -15,6 +15,11 @@ export const MUSIC_COPY = Object.freeze({
   custom: "A song the customer provides. It is converted to MP3 here before upload.",
 });
 const jobs = new Map(); // eventId -> in-flight job state, so a re-render never loses progress
+// The dashboard re-renders settings on every live update (an RSVP arriving, for example), which mounts a new panel.
+// A converted song and the panel to update live here, per event, so a conversion finishing after a re-render lands
+// in the panel on screen instead of the one that was replaced.
+const pendings = new Map(); // eventId -> converted song awaiting "Upload and use this song"
+const panels = new Map(); // eventId -> { paint, error } of the panel currently mounted
 
 // Converts and uploads a song. onStatus({ phase, value, message }) drives the progress bar. Resolves { name, blob }.
 export async function convertAndUploadSong({ file, eventId, user, onStatus = () => {}, confirmBlob = null }) {
@@ -46,7 +51,8 @@ export async function saveMusicFields(db, eventId, { musicMode, musicVersion, mu
 
 export function mountMusicSettings({ host, db, user, wedding, eventId, onChange = () => {} }) {
   if (!host) return;
-  const state = { mode: ["off", "default", "custom"].includes(wedding.musicMode) ? wedding.musicMode : "default", version: Number.isInteger(wedding.musicVersion) ? wedding.musicVersion : 0, name: wedding.musicName || "", preview: null, pending: null };
+  const state = { mode: ["off", "default", "custom"].includes(wedding.musicMode) ? wedding.musicMode : "default", version: Number.isInteger(wedding.musicVersion) ? wedding.musicVersion : 0, name: wedding.musicName || "", preview: null };
+  Object.defineProperty(state, "pending", { get: () => pendings.get(eventId) || null, set: value => { if (value) pendings.set(eventId, value); else pendings.delete(eventId); } });
   const job = () => jobs.get(eventId);
   const paint = () => {
     const j = job();
@@ -62,7 +68,9 @@ export function mountMusicSettings({ host, db, user, wedding, eventId, onChange 
           ${state.name ? `<button class="secondary-button" type="button" data-music-play>Play current song</button><button class="secondary-button danger-text" type="button" data-music-remove>Remove song</button>` : ""}</div>
         <p class="admin-note">Audio file up to 50 MB and ${MUSIC_LIMITS.maxSeconds / 60} minutes. The customer confirms they hold the rights to any music they provide.</p></div>` : ""}`;
   };
-  const error = text => { host.querySelector("[data-music-error]").textContent = text; };
+  const error = text => { const node = host.querySelector("[data-music-error]"); if (node) node.textContent = text; };
+  panels.set(eventId, { paint, error });
+  const live = () => (panels.get(eventId)?.paint ? panels.get(eventId) : { paint, error });
 
   host.addEventListener("change", async event => {
     const radio = event.target.closest('input[name="musicMode"]');
@@ -75,11 +83,11 @@ export function mountMusicSettings({ host, db, user, wedding, eventId, onChange 
     const input = event.target.closest("[data-music-file]"); if (!input?.files?.[0]) return;
     const file = input.files[0]; input.value = "";
     error(""); jobs.set(eventId, { message: "Starting…", value: 0 }); paint();
-    const update = s => { jobs.set(eventId, { message: s.message, value: s.value }); if (host.isConnected) paint(); };
+    const update = s => { jobs.set(eventId, { message: s.message, value: s.value }); live().paint(); };
     try {
-      const result = await convertAndUploadSong({ file, eventId, user, onStatus: update, confirmBlob: async blob => { state.pending = { url: URL.createObjectURL(blob), blob, file }; jobs.delete(eventId); paint(); return false; } });
+      const result = await convertAndUploadSong({ file, eventId, user, onStatus: update, confirmBlob: async blob => { state.pending = { url: URL.createObjectURL(blob), blob, file }; jobs.delete(eventId); live().paint(); return false; } });
       void result;
-    } catch (failure) { jobs.delete(eventId); paint(); error(failure.message); }
+    } catch (failure) { jobs.delete(eventId); live().paint(); live().error(failure.message); }
   });
   host.addEventListener("click", async event => {
     const upload = event.target.closest("[data-music-upload]");

@@ -19,7 +19,9 @@ export async function runAdminHealth(auth, fetchImpl = globalThis.fetch) {
   } catch (error) {
     result = { failures: [], runError: error.message || explainFailure({ what: "The server health check" }) };
   }
-  write(result);
+  // Remember only a clean result. A failure, or a check that could not run, is asked again on the next page,
+  // so a fix on the server shows up without signing out.
+  if (!result.runError && !result.failures.length) write(result);
   return result;
 }
 

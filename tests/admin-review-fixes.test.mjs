@@ -59,7 +59,7 @@ test("the admin event loader pages until empty, keeps ids stable and says when i
 
 test("pages show errors instead of empty lists and use the shared loader", async () => {
   const [w, c, l, cu, a, d] = await Promise.all(["weddings.js", "clients.js", "customer-link.js", "customers.js", "admin-workspace.js", "dashboard.js"].map(read));
-  for (const src of [w, c, l, cu]) assert.match(src, /loadAllAdminEvents/);
+  for (const src of [w, c, l, cu]) assert.match(src, /loadAllAdminEvents|loadAdminEventsShared/);
   assert.match(c, /event list could not load/); assert.match(a, /could not be listed/);
   assert.doesNotMatch(a, /\.catch\(\(\) => \[\]\)/);
   assert.match(w, /getCountFromServer/); assert.doesNotMatch(w, /guests\.docs\.map\(\(row\) => row\.data\(\)\)/);
@@ -80,4 +80,16 @@ test("online galleries page, load thumbnails lazily and leave no demo text behin
   assert.match(adapter, /deleted: bucketId/); assert.doesNotMatch(adapter, /trash/);
   assert.doesNotMatch(html, /Local demo · Photos/);
   assert.match(app, /online \? 'Share the guest link to start collecting photos\.'/);
+});
+
+test("admin tools: retry covers pending backups, server fix hints are shown, failed health is not cached", async () => {
+  const ws = await readFile(new URL("../admin-workspace.js", import.meta.url), "utf8");
+  assert.match(ws, /\?\.failed \|\| 0\) \+ \(buckets\.backups\.get\(b\.id\)\?\.pending \|\| 0\) > 0/);
+  const api = await import("../admin-api.js");
+  const failures = api.failedChecks({ ok: false, checks: [{ id: "cron_secret", status: "fail", detail: "too short", fix: "Set CRON_SECRET to 32+ characters." }] });
+  assert.match(failures[0].message, /How to fix: Set CRON_SECRET/);
+  const fake = async () => new Response(JSON.stringify({ error: "Not configured.", code: "NOT_CONFIGURED", fix: "Set PHOTO_BUCKET_API_URL." }), { status: 503 });
+  await assert.rejects(api.adminPost({ currentUser: { getIdToken: async () => "t" } }, "/api/x", {}, fake, { what: "Linking" }), (e) => /How to fix: Set PHOTO_BUCKET_API_URL/.test(e.message));
+  const health = await readFile(new URL("../admin-health.js", import.meta.url), "utf8");
+  assert.match(health, /if \(!result\.runError && !result\.failures\.length\) write\(result\);/);
 });

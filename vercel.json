@@ -1,11 +1,26 @@
 {
   "crons": [
-    { "path": "/api/demo-cleanup", "schedule": "0 3 * * *" }
+    {
+      "path": "/api/demo-cleanup",
+      "schedule": "0 3 * * *"
+    }
   ],
   "functions": {
-    "api/demo-cleanup.js": { "maxDuration": 60 }
+    "api/demo-cleanup.js": {
+      "maxDuration": 60
+    }
   },
   "redirects": [
+    {
+      "source": "/package.json",
+      "destination": "/",
+      "permanent": false
+    },
+    {
+      "source": "/package-lock.json",
+      "destination": "/",
+      "permanent": false
+    },
     {
       "source": "/all-events.html",
       "destination": "/all-events",

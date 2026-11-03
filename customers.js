@@ -5,7 +5,7 @@ import { adminPost } from "./admin-api.js";
 import { skeleton } from "./skeleton.js";
 import { runFromEvent } from "./action-feedback.js";
 import { mountAdminHealth } from "./admin-health.js";
-import { loadAllAdminEvents } from "./admin-events.js";
+import { loadAdminEventsShared } from "./admin-events.js";
 import { mountCustomerLink } from "./customer-link.js";
 import { bindPasswordVisibility, hidePasswords } from "./password-visibility.js?v=1";
 bindPasswordVisibility(document);
@@ -52,7 +52,7 @@ async function load(more = false) {
 }
 async function loadEventList() {
   try {
-    const { rows, truncated } = await loadAllAdminEvents(api, state.services.db);
+    const { rows, truncated } = await loadAdminEventsShared(api, state.services.db);
     state.events = rows.filter(e => e.deleting !== true).map(e => ({ id: e.id, ...e })).sort((a, b) => getEventDisplayTitle(a).localeCompare(getEventDisplayTitle(b)));
     state.eventsLoaded = true; state.eventsTruncated = truncated;
   } catch (error) { state.eventsError = errorText(error); }

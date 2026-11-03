@@ -120,7 +120,12 @@ function init() {
     el.workspace.hidden = false;
     if (new URLSearchParams(location.search).get("message") === "access-denied") el.workspaceStatus.textContent = "That event is not assigned to your account. Choose one of your events below.";
     state.unsubscribeAccess?.();
-    state.unsubscribeAccess = accountApi.onSnapshot(collection(state.services.db, "users", user.uid, "weddingAccess"), () => watchWorkspace(), (error) => {
+    state.unsubscribeAccess = accountApi.onSnapshot(collection(state.services.db, "users", user.uid, "weddingAccess"), (snapshot) => {
+      // Admins load every event once (up to 2000 reads). After that, re-read only the events whose cards changed,
+      // instead of the whole collection on every edit.
+      if (state.adminEventsLoaded && state.isAdmin && !customerSurface && !snapshot.metadata?.hasPendingWrites) { void refreshChangedAdminEvents(snapshot.docChanges()); return; }
+      watchWorkspace();
+    }, (error) => {
       state.weddings = []; state.workspaceLoaded = false; render();
       el.workspaceStatus.textContent = `Event access could not refresh (${error.code || "unavailable"}).`;
     });
@@ -252,13 +257,29 @@ async function loadAdminEvents(generation, request) {
     },
   });
   if (!current()) return;
-  state.adminTruncated = truncated; state.adminHasMore = false;
+  state.adminTruncated = truncated; state.adminHasMore = false; state.adminEventsLoaded = true;
   state.weddings = mergeById(state.weddings, replaceRowsById(present(rows)), ["stats", "statsRequested"]);
   state.workspaceLoaded = true; state.canSeeSampleInvitation = true;
   el.createWeddingButton.hidden = false; el.sampleInvitationPanel.hidden = false;
   syncEventControls(); el.retryLoadButton.hidden = true;
   render();
 }
+// One read per changed event, merged into the loaded list. Removed cards drop the row only if the event itself is gone.
+async function refreshChangedAdminEvents(changes) {
+  const ids = [...new Set(changes.map((change) => change.doc.id))];
+  if (!ids.length) return;
+  const fresh = await Promise.all(ids.map((id) => getDoc(doc(state.services.db, "weddings", id)).then((snap) => ({ id, snap }), () => ({ id, snap: null }))));
+  const byId = new Map(state.weddings.map((row) => [row.id, row]));
+  for (const { id, snap } of fresh) {
+    if (!snap) continue; // could not read: keep what is shown
+    if (!snap.exists()) { byId.delete(id); continue; }
+    const before = byId.get(id) || {};
+    byId.set(id, { ...snap.data(), id, isOwner: true, cleanupPending: snap.data().deleting === true, ...(before.stats !== undefined ? { stats: before.stats, statsRequested: before.statsRequested } : {}) });
+  }
+  state.weddings = [...byId.values()];
+  render();
+}
+
 // Statistics cost one read per event, so admins load them for the visible page only.
 async function enrichVisibleStats(items) {
   const pending = items.filter((w) => w.stats === undefined && !w.statsRequested && !w.cleanupPending);

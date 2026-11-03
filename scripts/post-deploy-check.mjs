@@ -96,6 +96,12 @@ export async function runPostDeployChecks({ site, token, fetchImpl = fetch, verc
     } catch (error) { record(`page: ${route}`, false, `Request failed (${error?.name}).`); }
   }
 
+  // 3a. Package manifests are deployed for the functions' install but never served.
+  for (const file of ['package.json', 'package-lock.json']) {
+    try { const response = await get(`/${file}`); record(`not served: /${file}`, response.status !== 200, `HTTP ${response.status}`); }
+    catch (error) { record(`not served: /${file}`, false, `Request failed (${error?.name}).`); }
+  }
+
   // 3b. The largest scripts and styles reach phones compressed (about 5x smaller on slow connections).
   for (const asset of ['/dashboard.js', '/dashboard.css', '/styles.css', '/script.js']) {
     try {

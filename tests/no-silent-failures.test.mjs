@@ -64,7 +64,10 @@ test("admin health: failed checks (either shape) and a failed check call both pr
   let calls = 0;
   const down = await runAdminHealth(auth, async () => { calls++; return { ok: false, status: 404, json: async () => { throw new Error("x"); } }; });
   assert.match(down.runError, /Server setup is incomplete/); await runAdminHealth(auth, async () => { calls++; throw new Error("no"); });
-  assert.equal(calls, 1, "asked once per session");
+  assert.equal(calls, 2, "a failed check is asked again on the next page, so a server fix shows up");
+  const healthy = async () => { calls++; return new Response(JSON.stringify({ ok: true, checks: [] }), { status: 200 }); };
+  await runAdminHealth(auth, healthy); await runAdminHealth(auth, healthy);
+  assert.equal(calls, 3, "a clean result is remembered for the session");
   assert.match(bannerHtml({ failures: [{ name: "<b>cron</b>", message: "bad" }], runError: "" }), /&lt;b&gt;cron/);
   assert.match(bannerHtml(down), /data-banner-dismiss/);
 });

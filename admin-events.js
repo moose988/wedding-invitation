@@ -22,6 +22,19 @@ export async function loadAllAdminEvents(api, db, { pageSize = ADMIN_EVENT_PAGE,
   return { rows, truncated };
 }
 
+// Pages that show events in more than one panel (Customers has a list and a link panel) share one load per page
+// view instead of reading every event twice. A later call within 60 seconds reuses it; a failed load is not kept.
+const SHARED_TTL_MS = 60_000;
+const shared = new WeakMap(); // db -> { at, promise }
+export function loadAdminEventsShared(api, db, { now = Date.now } = {}) {
+  const hit = shared.get(db);
+  if (hit && now() - hit.at < SHARED_TTL_MS) return hit.promise;
+  const promise = loadAllAdminEvents(api, db).catch((error) => { shared.delete(db); throw error; });
+  shared.set(db, { at: now(), promise });
+  return promise;
+}
+export function forgetSharedAdminEvents(db) { shared.delete(db); }
+
 // Replace a list with a fresh load without losing rows that are still loading: rows
 // keep any fields the caller computed (such as stats) when their id is unchanged.
 export function mergeById(previous, fresh, keep = []) {

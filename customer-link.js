@@ -3,7 +3,7 @@
 import * as api from "./firebase-config.js";
 import { getEventDisplayTitle } from "./event-utils.js";
 import { createOwnerAdapter } from "./photo-bucket/adapters.js";
-import { loadAllAdminEvents, truncationNote } from "./admin-events.js";
+import { loadAdminEventsShared, truncationNote } from "./admin-events.js";
 import { skeleton } from "./skeleton.js";
 import { adminPost, describeTargetResult, esc, targetRetryable } from "./admin-api.js";
 
@@ -43,7 +43,7 @@ const labelFor = (kind, id) => selected.get(`${kind}:${id}`)?.label || id;
 
 async function loadEvents() {
   try {
-    const { rows, truncated } = await loadAllAdminEvents(api, services.db);
+    const { rows, truncated } = await loadAdminEventsShared(api, services.db);
     events = rows.filter(d => d.deleting !== true).map(d => ({ id: d.id, title: getEventDisplayTitle(d), demo: d.isDemo === true }));
     eventTruncated = truncated;
     for (const e of events) if (selected.has(`event:${e.id}`)) selected.get(`event:${e.id}`).label = e.title;

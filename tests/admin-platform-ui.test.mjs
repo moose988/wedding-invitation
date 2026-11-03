@@ -125,3 +125,19 @@ test("customer audit is wired into customer write paths only", async () => {
   assert.match(d, /recordCustomerAudit\(\{ api: accountApi/);
   for (const f of ["customer-projections.js", "guest-edit.js", "seating-transactions.js", "dashboard-persistence.js", "script.js", "gender-reveal-submission.js"]) assert.doesNotMatch(await read(f), /recordCustomerAudit|auditCustomerAction/, f);
 });
+
+test("the Customers page loads every event once, shared by its list and link panel", async () => {
+  const { loadAdminEventsShared } = await import("../admin-events.js");
+  let reads = 0; const db = {};
+  const api = { collection: () => "c", startAfter: () => "s", limit: () => "l", query: () => "q", getDocs: async () => { reads += 1; return { docs: [{ id: "e1", data: () => ({}) }] }; } };
+  let t = 0; const now = () => t;
+  const [a, b] = await Promise.all([loadAdminEventsShared(api, db, { now }), loadAdminEventsShared(api, db, { now })]);
+  assert.equal(reads, 1); assert.equal(a, b);
+  t = 61_000; await loadAdminEventsShared(api, db, { now }); assert.equal(reads, 2, "refreshes after a minute");
+});
+
+test("admins re-read only changed events after the first load", async () => {
+  const w = await readFile(new URL("../weddings.js", import.meta.url), "utf8");
+  assert.match(w, /state\.adminEventsLoaded && state\.isAdmin[\s\S]{0,120}refreshChangedAdminEvents\(snapshot\.docChanges\(\)\)/);
+  assert.match(w, /async function refreshChangedAdminEvents\(changes\)/);
+});

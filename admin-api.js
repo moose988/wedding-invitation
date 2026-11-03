@@ -40,7 +40,9 @@ export async function adminPost(auth, path, body, fetchImpl = globalThis.fetch, 
   if (!response.ok || data === null) {
     // A page or empty body instead of JSON means the function is not there (a static host answers every path).
     const status = response.ok ? 404 : response.status;
-    throw Object.assign(new Error(explainFailure({ status, code: data?.code || "", message: data?.error || "", what })), { code: data?.code || "", status, data });
+    const explained = explainFailure({ status, code: data?.code || "", message: data?.error || "", what });
+    const fix = typeof data?.fix === "string" && data.fix.trim() ? ` How to fix: ${data.fix.trim()}` : "";
+    throw Object.assign(new Error(explained + fix), { code: data?.code || "", status, data });
   }
   return data;
 }
@@ -49,7 +51,7 @@ export async function adminPost(auth, path, body, fetchImpl = globalThis.fetch, 
 export function failedChecks(report) {
   const raw = report?.checks;
   const list = Array.isArray(raw) ? raw : raw && typeof raw === "object" ? Object.entries(raw).map(([name, value]) => ({ name, ...(typeof value === "object" ? value : { ok: value === true || value === "ok" }) })) : [];
-  const failures = list.filter(c => c.ok === false || c.status === "fail" || c.status === "failed").map(c => ({ name: String(c.name || c.id || "check"), message: String(c.message || c.error || c.detail || "") }));
+  const failures = list.filter(c => c.ok === false || c.status === "fail" || c.status === "failed").map(c => ({ name: String(c.name || c.id || "check"), message: [c.message || c.error || c.detail || "", c.fix ? `How to fix: ${c.fix}` : ""].filter(Boolean).join(" ") }));
   if (!failures.length && report?.ok === false) failures.push({ name: "server", message: String(report.error || "The server reports a problem.") });
   return failures;
 }

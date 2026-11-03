@@ -1,4 +1,10 @@
 {
+  "crons": [
+    { "path": "/api/demo-cleanup", "schedule": "0 3 * * *" }
+  ],
+  "functions": {
+    "api/demo-cleanup.js": { "maxDuration": 60 }
+  },
   "redirects": [
     {
       "source": "/all-events.html",
@@ -18,6 +24,11 @@
     {
       "source": "/customer-login.html",
       "destination": "/customer-login",
+      "permanent": false
+    },
+    {
+      "source": "/clients.html",
+      "destination": "/clients",
       "permanent": false
     },
     {
@@ -77,6 +88,10 @@
     {
       "source": "/customer-login",
       "destination": "/customer-login.html"
+    },
+    {
+      "source": "/clients",
+      "destination": "/clients.html"
     },
     {
       "source": "/dashboard",
@@ -166,6 +181,15 @@
     },
     {
       "source": "/customer-events",
+      "headers": [
+        {
+          "key": "Cache-Control",
+          "value": "no-store, max-age=0"
+        }
+      ]
+    },
+    {
+      "source": "/clients",
       "headers": [
         {
           "key": "Cache-Control",

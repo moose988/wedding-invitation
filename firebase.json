@@ -22,6 +22,11 @@
       "**/*.test.mjs",
       "**/*.spec.mjs",
       "**/.*",
+      "**/.*/**",
+      "api/**",
+      "server/**",
+      "backend/**",
+      "*.md",
       "**/node_modules/**"
     ],
     "headers": [

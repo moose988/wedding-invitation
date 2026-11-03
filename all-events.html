@@ -10,14 +10,16 @@
     <link rel="stylesheet" href="./styles.css" />
     <link rel="stylesheet" href="./weddings.css?v=20261017-customer-access-2" />
     <link rel="stylesheet" href="./customers.css" />
-  </head>
+  <link rel="stylesheet" href="./skeleton.css?v=1"></head>
   <body class="weddings-body">
     <main class="weddings-shell" id="workspace" hidden>
       <header class="workspace-header">
         <a class="workspace-brand" href="./all-events.html" aria-label="qdsystems, All Events">qdsystems</a>
         <div class="workspace-account"><span id="userEmail"></span><button class="text-button" id="signOutButton" type="button">Sign out</button></div>
       </header>
-      <nav class="workspace-tabs" aria-label="Workspace"><a class="is-active" aria-current="page" href="./all-events.html">All Events</a><a href="./customers.html">Customers</a></nav>
+      <nav class="workspace-tabs" aria-label="Workspace" id="workspaceTabs"><a class="is-active" aria-current="page" href="./all-events.html" data-section="events">Events</a><a href="./all-events.html#buckets" data-section="buckets">Photo Buckets</a><a href="./all-events.html#demos" data-section="demos">Demos</a><a href="./clients.html" data-admin-only>Clients</a><a href="./customers.html">Customers</a></nav>
+      <section class="admin-panel" id="adminBuckets" aria-labelledby="adminBucketsTitle" hidden></section>
+      <section class="admin-panel" id="adminDemos" aria-labelledby="adminDemosTitle" hidden></section>
       <section class="workspace-hero">
         <div><h1>All Events</h1></div>
         <button class="primary-button" id="createWeddingButton" type="button">Create event</button>
@@ -37,7 +39,7 @@
         <span id="paginationStatus" aria-live="polite"></span>
         <button class="secondary-button" type="button" data-page-direction="next">Next</button>
       </nav>
-      <section class="empty-state" id="emptyState" hidden><h2>Your event workspace is ready.</h2><p>Create your first event to start managing guests, invitations, seating, and check-in.</p><button class="primary-button" type="button" data-create-wedding>Create your first event</button></section>
+            <section class="empty-state" id="emptyState" hidden><h2>Your event workspace is ready.</h2><p>Create your first event to start managing guests, invitations, seating, and check-in.</p><button class="primary-button" type="button" data-create-wedding>Create your first event</button></section>
       <section class="sample-invitation" id="sampleInvitationPanel" aria-labelledby="sampleInvitationTitle" hidden>
         <div class="sample-invitation__intro">
           <span class="sample-invitation__seal" aria-hidden="true">✦</span>
@@ -83,7 +85,9 @@
             <label class="full">Event name<input name="bucketName" maxlength="100" disabled /></label>
             <label>Event date<input name="bucketDate" type="date" disabled /></label>
             <label>Event location<input name="bucketLocation" maxlength="160" disabled /></label>
-            <p class="full">Local demo · Photos and event details stay in this browser.</p>
+            <label class="full" id="photoBucketSizeField">Storage size<select name="bucketGb" id="photoBucketGb" aria-describedby="photoBucketGbHint" disabled><option value="15" selected>15 GB</option><option value="20">20 GB</option><option value="25">25 GB</option><option value="30">30 GB</option><option value="35">35 GB</option><option value="40">40 GB</option><option value="45">45 GB</option><option value="50">50 GB</option></select></label><small class="full" id="photoBucketGbHint" aria-live="polite">About 4,000 photos</small>
+            <label class="full pb-create-switch"><input type="checkbox" name="bucketShowNames" checked /> Show who uploaded each photo <small>Guests are asked for an optional name. You can change this later.</small></label>
+            <p class="full" id="photoBucketModeNote">Photos are stored online.</p>
             <p class="form-error full" id="photoBucketCreateError" role="alert"></p>
           </section>
           <section class="event-features-step" id="eventFeaturesStep" hidden aria-labelledby="eventFeaturesTitle">
@@ -116,6 +120,13 @@
           <label>Location<input name="location" /></label><label>Maps URL<input name="mapsUrl" type="url" placeholder="https://…" /></label>
           <label class="sender-control">WhatsApp country code<input name="whatsAppCountryCode" inputmode="numeric" placeholder="971" /></label><label>Invitation language<select name="invitationLanguage"><option value="en">English</option><option value="ar">Arabic</option><option value="both">English & Arabic</option></select></label>
           <label>Status<select name="status" aria-describedby="eventStatusHelp"><option value="draft">Draft</option><option value="upcoming">Upcoming</option><option value="active">Active</option><option value="completed">Completed</option></select><small id="eventStatusHelp">New events start active. You can change the status whenever you need.</small></label>
+          <fieldset class="full music-create" id="musicCreate"><legend>Invitation music</legend>
+            <label class="music-create__option"><input type="radio" name="musicModeCreate" value="default" checked /> Default song</label>
+            <label class="music-create__option"><input type="radio" name="musicModeCreate" value="off" /> Off (no music)</label>
+            <label class="music-create__option"><input type="radio" name="musicModeCreate" value="custom" /> Custom song</label>
+            <label class="music-create__file" id="musicCreateFile" hidden>Audio file (up to 50 MB, 10 minutes)<input type="file" name="musicFileCreate" accept="audio/*" /></label>
+            <small>A custom song is converted to MP3 and uploaded right after the event is created. You can change this later in Event settings.</small>
+          </fieldset>
           <label class="full">Planner notes<textarea name="plannerNotes" rows="3"></textarea></label>
           <label class="full gender-reveal-ar-title" hidden>Arabic event name<input name="eventTitleAr" maxlength="160" value="حفل الكشف عن جنس المولود" /></label>
           <p class="form-error full" id="formError" role="alert"></p>
@@ -126,5 +137,5 @@
     </dialog>
     <dialog class="workspace-dialog" id="deleteDialog"><form class="workspace-modal workspace-modal--small" id="deleteForm"><header><div><p class="workspace-kicker">Permanent action</p><h2>Delete event?</h2></div><button class="icon-close" type="button" data-close="deleteDialog" aria-label="Close">×</button></header><div class="workspace-modal__body"><p>This permanently removes <strong id="deleteEventName"></strong> and all of its guests, invitations, seating, and check-in data. Type <strong id="deletePhrase"></strong> to continue.</p><label>Confirmation<input id="deleteConfirmation" autocomplete="off" /></label><p class="form-error" id="deleteError" role="alert"></p></div><footer><button class="secondary-button" type="button" data-close="deleteDialog">Cancel</button><button class="danger-button" type="submit">Delete permanently</button></footer></form></dialog>
     <script type="module" src="./weddings.js?v=20261018-customer-event-controls-1"></script>
-  </body>
+  <script type="module" src="./action-feedback.js?v=1"></script></body>
 </html>

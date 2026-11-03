@@ -11,3 +11,5 @@ functions/.secret.local
 
 /.local-evidence/
 /.playwright-mcp/
+.orchestrate/
+/.local-buckets/

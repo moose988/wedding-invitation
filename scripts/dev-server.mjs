@@ -5,7 +5,8 @@ import { spawn } from "node:child_process";
 import { access, readFile } from "node:fs/promises";
 import { constants } from "node:fs";
 import path from "node:path";
-import { fileURLToPath } from "node:url";
+import { fileURLToPath, pathToFileURL } from "node:url";
+import { OBJECT_ROUTE, bucketApiTarget, createEmulatorBucketBackend, isLoopback } from "./local-bucket-backend.mjs";
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const emulatorMode = process.argv.includes("--emulator");
@@ -17,7 +18,7 @@ const contentTypes = new Map([
   [".mjs", "text/javascript; charset=utf-8"], [".svg", "image/svg+xml"],
   [".png", "image/png"], [".jpg", "image/jpeg"], [".jpeg", "image/jpeg"],
   [".webp", "image/webp"], [".gif", "image/gif"], [".mp3", "audio/mpeg"],
-  [".wav", "audio/wav"], [".mp4", "video/mp4"], [".webm", "video/webm"],
+  [".wav", "audio/wav"], [".mp4", "video/mp4"], [".m4a", "audio/mp4"], [".webm", "video/webm"],
   [".ico", "image/x-icon"],
 ]);
 
@@ -61,6 +62,7 @@ function send(res, status, body, type = "text/plain; charset=utf-8") {
 // Local-only proxy for the online Photo Bucket API and its signed S3 URLs.
 // It avoids changing production CORS and never forwards browser cookies.
 async function proxyPhotoBucket(req, res, requestUrl) {
+  if (emulatorMode) return send(res, 500, "Refusing to proxy to a real Photo Bucket API in emulator mode"); // never reached; second guard
   const origin = req.headers.origin;
   if ((origin && origin !== `http://${host}:${port}`) || req.headers["sec-fetch-site"] === "cross-site") return send(res, 403, "Forbidden");
   let target;
@@ -88,9 +90,37 @@ async function proxyPhotoBucket(req, res, requestUrl) {
   } catch { if (!res.headersSent) send(res, 502, "Photo Bucket service unavailable"); else res.destroy(); }
 }
 
+// Emulator mode only: run the admin functions in api/ against the local emulators,
+// so demo creation and customer linking can be tried without Vercel.
+async function localApi(req, res, name) {
+  const file = path.join(root, "api", `${name}.js`);
+  try { await access(file, constants.R_OK); } catch { return send(res, 404, "Not Found"); }
+  const chunks = []; let size = 0;
+  for await (const chunk of req) { size += chunk.length; if (size > 65536) return send(res, 413, "Payload Too Large"); chunks.push(chunk); }
+  const text = Buffer.concat(chunks).toString("utf8");
+  let body = {}, invalid = false;
+  if (text) { try { body = JSON.parse(text); } catch { invalid = true; } }
+  Object.defineProperty(req, "body", { get() { if (invalid) throw new SyntaxError("Invalid JSON"); return body; } });
+  const shim = Object.assign(res, {
+    status(code) { res.statusCode = code; return shim; },
+    json(value) { if (!res.headersSent) res.setHeader("Content-Type", "application/json; charset=utf-8"); res.end(JSON.stringify(value)); return shim; },
+  });
+  try { await (await import(pathToFileURL(file).href)).default(req, shim); }
+  catch (error) { console.error(`Local api/${name} failed:`, error?.code || error?.name); if (!res.headersSent) send(res, 500, "Internal Server Error"); }
+}
+
 const server = createServer(async (req, res) => {
   const requestUrl = new URL(req.url, `http://${host}:${port}`);
-  if (requestUrl.pathname.startsWith("/__photo_bucket_api/") || requestUrl.pathname === "/__photo_bucket_storage") return proxyPhotoBucket(req, res, requestUrl);
+  const apiMatch = emulatorMode && requestUrl.pathname.match(/^\/api\/([a-z][a-z-]*)$/);
+  if (apiMatch) return localApi(req, res, apiMatch[1]);
+  if (requestUrl.pathname.startsWith("/__photo_bucket_api/") || requestUrl.pathname === "/__photo_bucket_storage" || requestUrl.pathname === OBJECT_ROUTE) {
+    if (bucketApiTarget({ emulatorMode, liveApiUrl: photoBucketApiUrl }).kind === "live") return requestUrl.pathname === OBJECT_ROUTE ? send(res, 404, "Not Found") : proxyPhotoBucket(req, res, requestUrl);
+    // Emulator mode: the in-process local backend, for loopback same-origin callers only. Never the live API.
+    const origin = req.headers.origin;
+    if (!isLoopback(req.socket.remoteAddress) || (origin && origin !== `http://${host}:${port}`) || req.headers["sec-fetch-site"] === "cross-site") return send(res, 403, "Forbidden");
+    try { return await (await localBuckets()).handle(req, res, requestUrl); }
+    catch (error) { console.error("Local Photo Bucket backend failed:", error?.message); if (!res.headersSent) return send(res, 500, "Local Photo Bucket backend failed"); res.destroy(); return; }
+  }
   if (req.method !== "GET" && req.method !== "HEAD") return send(res, 405, "Method Not Allowed");
   const pathname = new URL(req.url, `http://${host}:${port}`).pathname;
   if (pathname === "/dev-banner.js") return send(res, 200, bannerScript, "text/javascript; charset=utf-8");
@@ -116,8 +146,16 @@ const server = createServer(async (req, res) => {
   }
 });
 
-let emulator;
+let emulator, localBucketBackend;
+// Created on first use, after the emulator env vars below are set.
+const localBuckets = () => (localBucketBackend ||= createEmulatorBucketBackend({ root, origin: `http://${host}:${port}` }).catch((error) => { localBucketBackend = null; throw error; }));
 if (emulatorMode) {
+  // api/ admin functions call buckets here too: the local backend, never a real stack, whatever the shell had set.
+  process.env.PHOTO_BUCKET_API_URL = `http://${host}:${port}/__photo_bucket_api`;
+  process.env.FIRESTORE_EMULATOR_HOST = "127.0.0.1:8080";
+  process.env.FIREBASE_AUTH_EMULATOR_HOST = "127.0.0.1:9099";
+  delete process.env.FIREBASE_SERVICE_ACCOUNT_JSON;
+  process.env.QD_LOCAL_ADMIN_EMULATOR = "1";
   console.log("Starting Firebase Auth and Firestore emulators for demo-wedding-security...");
   emulator = spawn("firebase emulators:start --only auth,firestore --project demo-wedding-security", {
     cwd: root, shell: true, stdio: "inherit", windowsHide: true,
@@ -132,7 +170,7 @@ if (emulatorMode) {
 server.listen(port, host, () => {
   console.log(`Wedding invitation preview: http://${host}:${port}/`);
   console.log(`Live Firebase routes:       http://${host}:${port}/customer-login.html`);
-  if (emulatorMode) console.log(`Safe emulator routes:       http://${host}:${port}/customer-login.html?emulator=1`);
+  if (emulatorMode) console.log(`Safe emulator routes:       http://${host}:${port}/customer-login.html?emulator=1\nPhoto buckets:              local backend, data in .local-buckets/ (never the live API)`);
   else console.log(`Safe emulator mode:         npm run dev:emulator`);
 });
 

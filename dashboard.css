@@ -5931,3 +5931,26 @@ body.is-overview-view .overview-page { width: 100%; max-width: var(--da3wa-conte
 #customerAccessPanel > [data-customer-status] { margin: 0; color: #52665a; font-size: .85rem; }
 #customerAccessPanel > [data-customer-status]:empty { display: none; }
 @media (max-width: 800px) { #customerAccessPanel .seating-account-form:not([hidden]) { grid-template-columns: 1fr; padding: 16px; } #customerAccessPanel .seating-account-form [type="submit"] { width: 100%; } }
+
+.chair-invitation-link { display: grid; gap: 8px; margin-top: 14px; }
+.chair-invitation-link p { margin: 0; overflow-wrap: anywhere; }
+.chair-invitation-link .da3wa-button { justify-self: start; }
+.schedule-editor { padding: 0; border: 0; margin: 0; }
+.schedule-editor legend { padding: 0; margin-bottom: 6px; color: var(--da3wa-text-soft); font-size: 13px; font-weight: 700; }
+.schedule-row { display: grid; gap: 10px; margin: 0 0 12px; padding: 14px; border: 1px solid var(--da3wa-line, #e6dfd2); border-radius: 14px; background: rgba(255, 255, 255, .7); }
+.schedule-row__head { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+.schedule-row__grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
+.schedule-row__field { display: grid; gap: 4px; min-width: 0; font-size: 12px; font-weight: 700; }
+.schedule-row__field.is-wide { grid-column: span 1; }
+.schedule-row__field input, .schedule-row__field textarea { width: 100%; min-width: 0; box-sizing: border-box; }
+@media (max-width: 640px) { .schedule-row__grid { grid-template-columns: minmax(0, 1fr); } }
+.music-modes { display: grid; gap: 10px; margin: 0 0 12px; padding: 0; border: 0; }
+.music-mode { display: flex; align-items: flex-start; gap: 12px; padding: 14px; border: 1px solid var(--da3wa-line, #e6dfd2); border-radius: 14px; background: #fff; cursor: pointer; }
+.music-mode:has(input:checked) { border-color: #1f5a4d; background: #f1f7f3; }
+.music-mode input { margin-top: 3px; width: 20px; height: 20px; flex: none; }
+.music-mode span { display: grid; gap: 3px; } .music-mode small { color: #68736d; font-weight: 500; }
+.music-custom { display: grid; gap: 12px; }
+.music-custom audio { width: 100%; }
+.music-progress progress { width: 100%; height: 14px; }
+.music-file { display: inline-flex; align-items: center; min-height: 44px; padding: 0 16px; cursor: pointer; }
+.music-file:focus-within { outline: 3px solid rgba(31, 90, 77, .45); outline-offset: 2px; }

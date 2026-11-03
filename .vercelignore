@@ -7,12 +7,16 @@ functions
 tests
 scripts
 *.log
-README.md
-SECURITY.md
-RELEASE.md
-ACCESS-WORKFLOW.md
 firestore.rules
 firestore.indexes.json
 firebase.json
 package-lock.json
 backend
+docs
+# Every Markdown file, including README, SECURITY, RELEASE and ACCESS-WORKFLOW.
+*.md
+.orchestrate
+.omc
+.claude
+# Licence notices stay deployed.
+!vendor/THIRD-PARTY-NOTICES.md

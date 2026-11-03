@@ -46,3 +46,25 @@ body[data-account-surface="customer"] #weddingGrid > .wedding-card, body[data-ac
   body[data-account-surface="customer"] #weddingGrid > .wedding-card, body[data-account-surface="customer"] .photo-bucket-discovery { animation: none; transition: none; }
   body[data-account-surface="customer"] .photo-bucket-discovery__image img { transition: none; }
 }
+
+/* One list of events and photo buckets, designed for a phone first. */
+body[data-account-surface="customer"] .weddings-shell { width: min(960px, calc(100% - 32px)); overflow-x: clip; }
+body[data-account-surface="customer"] #weddingGrid { display: grid; grid-template-columns: minmax(0, 1fr); gap: 14px; }
+.customer-item { display: grid; gap: 12px; min-width: 0; padding: 18px; border: 1px solid var(--line); border-radius: 18px; background: rgba(255, 255, 255, .95); box-shadow: 0 6px 18px rgba(52, 46, 34, .05); }
+.customer-item__top { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 6px 12px; }
+.customer-item__type { padding: 4px 10px; border-radius: 999px; background: #eef6ef; color: #265d4d; font-size: 12px; font-weight: 800; letter-spacing: .02em; }
+.customer-item--bucket .customer-item__type { background: #fff4dd; color: #795727; }
+.customer-item__date { color: #4f5f56; font-size: 14px; font-weight: 600; }
+.customer-item__name { margin: 0; font: 700 1.25rem/1.3 Manrope, system-ui, sans-serif; overflow-wrap: anywhere; }
+.customer-item__action { display: flex; align-items: center; justify-content: center; width: 100%; min-height: 48px; text-decoration: none; text-align: center; }
+.customer-notice { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 10px 14px; padding: 14px 16px; border: 1px solid #e9c9a4; border-radius: 14px; background: #fff6e8; color: #5c4210; }
+.customer-notice p { margin: 0; flex: 1 1 200px; }
+.customer-notice button { min-height: 44px; }
+@media (min-width: 720px) { body[data-account-surface="customer"] #weddingGrid { grid-template-columns: repeat(2, minmax(0, 1fr)); } .customer-notice { grid-column: 1 / -1; } .customer-item__action { width: auto; justify-self: start; min-width: 180px; } }
+@media (max-width: 480px) {
+  body[data-account-surface="customer"] .workspace-header { flex-wrap: wrap; gap: 8px; }
+  body[data-account-surface="customer"] .workspace-account { flex-wrap: wrap; min-width: 0; }
+  body[data-account-surface="customer"] #userEmail { max-width: 52vw; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  body[data-account-surface="customer"] .text-button { min-height: 44px; padding: 0 10px; }
+  body[data-account-surface="customer"] .workspace-hero h1 { font-size: 2rem; }
+}

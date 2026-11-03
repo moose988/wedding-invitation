@@ -1,12 +1,20 @@
-import { collection, deleteDoc, doc, getDoc, getDocs, initFirebase, isFirebaseConfigured, limit, onAuthStateChanged, query, serverTimestamp, setDoc, signOut, updateDoc, writeBatch } from "./firebase-config.js";
+import { collection, deleteDoc, doc, getCountFromServer, getDoc, getDocs, initFirebase, isFirebaseConfigured, limit, onAuthStateChanged, query, serverTimestamp, setDoc, signOut, startAfter, updateDoc, writeBatch } from "./firebase-config.js";
 import * as accountApi from "./firebase-config.js";
 import { isPlatformAdmin, redeemCustomerGrants } from "./account-access.js";
 import { EVENT_CATEGORIES, eventUsesGuestSides, getEventCategory, getEventDisplayTitle, isCelebrationEvent, isGenderRevealEvent } from "./event-utils.js";
 import { eventDateTimeParts, localDateTimeToIso } from "./event-date-time.js";
 import { paginateRows, sortEventsDraftsLast } from "./workspace-pagination.js";
+import { loadAllAdminEvents, mergeById, truncationNote } from "./admin-events.js";
 import { ensureGenderRevealPublished } from "./gender-reveal-publication.js";
-import { createOwnerAdapter } from "./photo-bucket/adapters.js";
+import { createOwnerAdapter, online as bucketsOnline } from "./photo-bucket/adapters.js";
 import { renderLocalBuckets } from "./photo-bucket/workspace.js";
+import { skeleton } from "./skeleton.js";
+import { convertAndUploadSong, saveMusicFields } from "./music-settings.js";
+import { removeEventFiles } from "./music-api.js";
+import { runFromEvent, showToast } from "./action-feedback.js";
+import { bucketItem, eventItem, itemCardHtml, noticesHtml, sortCustomerItems } from "./customer-list.js";
+import { dateLabel } from "./photo-bucket/links.js";
+import { BUCKET_SIZES_GB, DEFAULT_BUCKET_GB, estimateLabel } from "./photo-bucket/sizes.js";
 
 const state = { services: null, user: null, weddings: [], workspaceLoaded: false, canSeeSampleInvitation: false, isAdmin: false, roleResolved: false, filter: "all", currentPage: 1, pageSize: 6, editId: "", deleteId: "", workspaceTimer: null, unsubscribeAuth: null, initialized: false, snapshotGeneration: 0, workspaceRequest: 0 };
 const el = Object.fromEntries(["workspace","loadingState","userEmail","signOutButton","createWeddingButton","sampleInvitationPanel","workspaceControls","sampleInvitationUrl","searchInput","sortSelect","filterRow","workspaceStatus","retryLoadButton","weddingGrid","paginationControls","paginationStatus","emptyState","weddingDialog","weddingForm","formKicker","formTitle","formError","saveWeddingButton","categoryStep","eventFeaturesStep","eventTemplateStep","eventInformationStep","continueEventButton","continueFeaturesButton","continueTemplateButton","backEventButton","deleteDialog","deleteForm","deletePhrase","deleteConfirmation","deleteError"].map((id) => [id, document.getElementById(id)]));
@@ -52,7 +60,12 @@ function init() {
   el.continueFeaturesButton.addEventListener("click", continueToEventInformation);
   el.continueTemplateButton.addEventListener("click", continueToEventInformation);
   el.backEventButton.addEventListener("click", backEventStep);
-  el.weddingGrid.addEventListener("click", handleCardAction);
+  document.querySelectorAll('[name="musicModeCreate"]').forEach((radio) => radio.addEventListener("change", () => { document.getElementById("musicCreateFile").hidden = el.weddingForm.elements.musicModeCreate.value !== "custom"; }));
+  el.weddingGrid.addEventListener("click", (event) => {
+    const retry = event.target.closest("[data-retry]");
+    if (retry) { if (retry.dataset.retry === "buckets") { state.bucketsState = "loading"; render(); void loadCustomerBuckets(); } else { state.eventsError = ""; watchWorkspace(); } return; }
+    return handleCardAction(event);
+  });
   document.addEventListener("click", (event) => { if (!event.target.closest(".menu-wrap")) closeActionMenus(); });
   document.addEventListener("keydown", (event) => { if (event.key === "Escape") closeActionMenus(); });
   state.unsubscribeAuth?.();
@@ -79,7 +92,7 @@ function init() {
     state.user = user;
     el.sampleInvitationUrl.value = sampleInvitationUrl();
     updateSamplePanelLabel();
-    void renderLocalBuckets(user.uid, user);
+    if (document.body.dataset.accountSurface === "customer") void loadCustomerBuckets(); else void renderLocalBuckets(user.uid, user);
     try {
       state.isAdmin = await isPlatformAdmin(accountApi, state.services.db, user.uid);
       state.roleResolved = true;
@@ -101,6 +114,10 @@ function init() {
       } catch (error) { status.textContent = `Verification could not complete (${error.code || "unavailable"}).`; }
     });
     el.userEmail.textContent = user.email || "Planner";
+    if (state.isAdmin && !customerSurface && !state.adminMounted) {
+      state.adminMounted = true;
+      import("./admin-workspace.js").then((module) => module.mountAdminWorkspace({ state, accountApi, user, flash, openCreate: () => el.createWeddingButton.click(), reload: () => watchWorkspace() })).catch((error) => { console.error("Admin sections could not load", error); flash("Admin sections could not load. Refresh to try again."); });
+    }
     el.loadingState.hidden = true;
     el.workspace.hidden = false;
     if (new URLSearchParams(location.search).get("message") === "access-denied") el.workspaceStatus.textContent = "That event is not assigned to your account. Choose one of your events below.";
@@ -147,6 +164,7 @@ async function refreshWorkspaceEvents(generation = state.snapshotGeneration) {
   state.canSeeSampleInvitation = false;
   el.sampleInvitationPanel.hidden = true;
   try {
+    if (state.isAdmin && document.body.dataset.accountSurface !== "customer") { await loadAdminEvents(generation, request); return; }
     // The index is only a discovery hint. Every event is re-read from its
     // membership document first; full dashboard accounts then read the
     // canonical event, whose Firestore rules enforce the same boundary.
@@ -164,7 +182,7 @@ async function refreshWorkspaceEvents(generation = state.snapshotGeneration) {
           if (eventSummary.ownerUserId !== state.user.uid) return null;
           const ownerEvent = await getDoc(doc(state.services.db, "weddings", entry.id));
           if (!ownerEvent.exists() || ownerEvent.data().ownerUserId !== state.user.uid) {
-            await deleteDoc(doc(state.services.db, "users", state.user.uid, "weddingAccess", entry.id)).catch(() => {});
+            await deleteDoc(doc(state.services.db, "users", state.user.uid, "weddingAccess", entry.id)).catch(() => { /* stale private index hint: removing it is best effort */ });
             return null;
           }
           return { ...ownerEvent.data(), id: ownerEvent.id, isOwner: true, cleanupPending: ownerEvent.data().deleting === true };
@@ -195,6 +213,7 @@ async function refreshWorkspaceEvents(generation = state.snapshotGeneration) {
       }
     }));
     if (generation !== state.snapshotGeneration || request !== state.workspaceRequest || !state.user) return;
+    state.eventsError = "";
     state.weddings = replaceRowsById(indexed.filter(Boolean));
     state.workspaceLoaded = true;
     const onlySeating = state.weddings.length > 0 && state.weddings.every((wedding) => wedding.seatingOnly === true);
@@ -216,7 +235,40 @@ async function refreshWorkspaceEvents(generation = state.snapshotGeneration) {
     el.paginationControls.hidden = true;
     el.workspaceStatus.textContent = `Couldn’t load events (${error?.code || "network error"}). Check your connection and try again.`;
     el.retryLoadButton.hidden = false;
+    if (document.body.dataset.accountSurface === "customer") { state.eventsError = "Your events could not load. Check your connection and try again."; render(); }
   }
+}
+
+// Platform admins see every event, not only the cards in their own index. One shared
+// loader reads them all in the background (100 per read, stable order), so search and
+// filters find any event. A refresh keeps the current rows on screen until the new
+// list is complete, so a snapshot update never collapses the list to its first page.
+async function loadAdminEvents(generation, request) {
+  const current = () => generation === state.snapshotGeneration && request === state.workspaceRequest && state.user;
+  const present = (rows) => rows.map((row) => ({ ...row, isOwner: true, cleanupPending: row.deleting === true }));
+  const { rows, truncated } = await loadAllAdminEvents({ collection, query, getDocs, limit, startAfter }, state.services.db, {
+    onPage: (partial) => {
+      if (!current() || state.workspaceLoaded) return;
+      state.weddings = present(partial); state.workspaceLoaded = true; state.canSeeSampleInvitation = true;
+      el.createWeddingButton.hidden = false; el.sampleInvitationPanel.hidden = false; syncEventControls(); render();
+    },
+  });
+  if (!current()) return;
+  state.adminTruncated = truncated; state.adminHasMore = false;
+  state.weddings = mergeById(state.weddings, replaceRowsById(present(rows)), ["stats", "statsRequested"]);
+  state.workspaceLoaded = true; state.canSeeSampleInvitation = true;
+  el.createWeddingButton.hidden = false; el.sampleInvitationPanel.hidden = false;
+  syncEventControls(); el.retryLoadButton.hidden = true;
+  render();
+}
+// Statistics cost one read per event, so admins load them for the visible page only.
+async function enrichVisibleStats(items) {
+  const pending = items.filter((w) => w.stats === undefined && !w.statsRequested && !w.cleanupPending);
+  if (!pending.length) return;
+  pending.forEach((w) => { w.statsRequested = true; });
+  const generation = state.snapshotGeneration;
+  await enrichStats(pending);
+  if (generation === state.snapshotGeneration) render();
 }
 
 function replaceRowsById(rows) {
@@ -238,24 +290,53 @@ function disposeListeners() {
   state.unsubscribeAuth = null;
 }
 
-async function enrichStats() {
-  await Promise.all(state.weddings.map(async (wedding) => {
+async function enrichStats(list = state.weddings) {
+  await Promise.all(list.map(async (wedding) => {
     if (wedding.seatingOnly === true) {
       wedding.stats = null;
       return;
     }
     try {
+      // A server-side count: one billed read per 1,000 guests instead of one per guest.
       const isSharedRsvp = isGenderRevealEvent(wedding);
-      const guests = await getDocs(collection(state.services.db, "weddings", wedding.id, isSharedRsvp ? "genderRevealResponses" : "guests"));
-      const rows = guests.docs.map((row) => row.data());
-      wedding.stats = { total: rows.length, confirmed: rows.filter((g) => g.rsvpStatus === "confirmed").length, pending: rows.filter((g) => !["confirmed", "declined"].includes(g.rsvpStatus)).length, declined: rows.filter((g) => g.rsvpStatus === "declined").length, checkedIn: rows.filter((g) => g.checkedIn).length };
+      const counted = await getCountFromServer(collection(state.services.db, "weddings", wedding.id, isSharedRsvp ? "genderRevealResponses" : "guests"));
+      wedding.stats = { total: counted.data().count };
     } catch (_) { wedding.stats = null; }
   }));
+}
+
+// Customer surface: events and photo buckets share one list. Each part loads and fails on its own.
+async function loadCustomerBuckets() {
+  const uid = state.user?.uid; state.bucketsState = "loading"; state.customerBuckets = []; state.bucketsError = "";
+  try {
+    const rows = await (await createOwnerAdapter(state.user)).list();
+    if (state.user?.uid !== uid) return;
+    state.customerBuckets = rows.filter((b) => b.status !== "deleting"); state.bucketsState = "ready";
+  } catch (error) {
+    if (state.user?.uid !== uid) return;
+    // 401/403 mean the account has no bucket access, which is not a failure to report.
+    if ([401, 403].includes(error?.status)) { state.bucketsState = "ready"; state.customerBuckets = []; }
+    else { state.bucketsState = "error"; state.bucketsError = "Your photo buckets could not load."; console.error("Photo Buckets could not load:", error?.status || "unavailable"); }
+  }
+  render();
+}
+function renderCustomerList() {
+  const events = state.weddings.map((w) => eventItem(w, { name: getEventDisplayTitle(w), dateText: w.seatingOnly === true ? "" : formatEvent(w), ms: timestampValue(w.eventDateISO) || 0 }));
+  const buckets = (state.customerBuckets || []).map((b) => bucketItem(b, b.date ? dateLabel(b.date) : ""));
+  const items = sortCustomerItems([...events, ...buckets]);
+  const eventsLoading = !state.workspaceLoaded && !state.eventsError, bucketsLoading = (state.bucketsState || "loading") === "loading";
+  const problems = [...(state.eventsError ? [{ text: state.eventsError, retry: "events" }] : []), ...(state.bucketsState === "error" ? [{ text: state.bucketsError, retry: "buckets" }] : [])];
+  el.weddingGrid.innerHTML = noticesHtml(problems) + items.map(itemCardHtml).join("") + (eventsLoading || bucketsLoading ? skeleton.cards(items.length ? 1 : 2, "Loading your items…") : "");
+  const waiting = eventsLoading || bucketsLoading;
+  el.workspaceStatus.textContent = items.length ? `${items.length} item${items.length === 1 ? "" : "s"}${waiting ? ". Still loading more…" : ""}` : waiting ? "Loading your items…" : "";
+  el.emptyState.hidden = Boolean(waiting || items.length || problems.length);
+  el.retryLoadButton.hidden = true; el.paginationControls.hidden = true; el.sampleInvitationPanel.hidden = true;
 }
 
 function render() {
   closeActionMenus();
   const customerView = isCustomerView();
+  if (customerView) { renderCustomerList(); return; }
   const term = customerView ? "" : el.searchInput.value.trim().toLowerCase();
   let rows = state.weddings.filter((w) => {
     if (customerView) return true;
@@ -275,7 +356,9 @@ function render() {
     ? `Showing ${page.start + 1}–${Math.min(page.start + state.pageSize, rows.length)} of ${rows.length} events`
     : state.weddings.length ? `${rows.length} event${rows.length === 1 ? "" : "s"} shown` : "";
   el.emptyState.hidden = Boolean(!state.workspaceLoaded || state.weddings.length || term || state.filter !== "all" || el.retryLoadButton.hidden === false);
-  el.weddingGrid.innerHTML = page.items.map(card).join("");
+  el.weddingGrid.innerHTML = !state.workspaceLoaded && !state.weddings.length && el.retryLoadButton.hidden ? skeleton.cards(6, "Loading events…") : page.items.map(card).join("");
+  if (state.isAdmin && state.adminTruncated) el.workspaceStatus.textContent += `${el.workspaceStatus.textContent ? " · " : ""}${truncationNote(state.weddings.length)}`;
+  if (state.isAdmin && !customerView) void enrichVisibleStats(page.items);
   el.paginationControls.hidden = page.pageCount <= 1;
   el.paginationStatus.textContent = `Page ${state.currentPage} of ${page.pageCount}`;
   el.paginationControls.querySelector('[data-page-direction="previous"]').disabled = state.currentPage <= 1;
@@ -292,7 +375,7 @@ function card(w) {
   const isOwner = w.isOwner === true && w.seatingOnly !== true;
   const eventId = escape(w.id);
   const eventStatus = ["draft", "upcoming", "active", "completed", "archived"].includes(w.status) ? w.status : "draft";
-  const ownerActions = isOwner ? `<button data-action="edit" data-id="${eventId}" type="button">Edit details</button><button data-action="duplicate" data-id="${eventId}" type="button">Duplicate setup</button><button data-action="archive" data-id="${eventId}" type="button">${w.status === "archived" ? "Restore event" : "Archive event"}</button><button class="menu-delete" data-action="delete" data-id="${eventId}" type="button">Delete event</button>` : `<p class="action-menu__notice">Only the event owner can manage this event.</p>`;
+  const ownerActions = isOwner ? `<button data-action="edit" data-id="${eventId}" type="button">Edit details</button><button data-action="duplicate" data-id="${eventId}" type="button">Duplicate setup</button><button data-action="archive" data-id="${eventId}" type="button">${w.status === "archived" ? "Restore event" : "Archive event"}</button>${state.isAdmin ? `<button data-action="customers" data-id="${eventId}" type="button">Manage customers</button><button data-action="audit" data-id="${eventId}" type="button">Customer activity log</button>` : ""}<button class="menu-delete" data-action="delete" data-id="${eventId}" type="button">Delete event</button>` : `<p class="action-menu__notice">Only the event owner can manage this event.</p>`;
   const title = getEventDisplayTitle(w);
   const category = isGenderRevealEvent(w) ? "حفل الكشف عن جنس المولود" : isCelebrationEvent(w) ? "Celebration" : "Wedding / Engagement";
   const cardMenu = isOwner ? `<div class="menu-wrap"><button class="card-menu-toggle" data-action="menu" data-id="${eventId}" type="button" aria-label="More actions for ${escape(title)}" aria-expanded="false" aria-controls="menu-${eventId}">⋯</button><div class="action-menu" id="menu-${eventId}" hidden>${ownerActions}</div></div>` : "";
@@ -307,7 +390,7 @@ function card(w) {
   const canCopyGuestLink = state.isAdmin && w.seatingOnly !== true &&
     (!Array.isArray(w.allowedViews) || w.allowedViews.includes("share"));
   const copyAction = canCopyGuestLink && isGenderRevealEvent(w) ? `<button data-action="copy-shared" data-id="${eventId}" type="button" title="Copy shared event invitation link">Copy shared link</button>` : "";
-  return `<article class="wedding-card"><div class="card-head"><div><h2>${escape(title)}</h2><span class="category-badge category-badge--${categoryStyle}"${isGenderRevealEvent(w) ? ' lang="ar" dir="rtl"' : ""}>${category}</span></div><div class="card-head__actions"><span class="status-badge status-badge--${eventStatus}">${escape(eventStatus)}</span>${cardMenu}</div></div><div class="card-meta"><div class="card-detail card-detail--date"><span class="card-detail__label"><svg class="card-detail__icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg>Date &amp; time</span><span>${escape(formatEvent(w))}</span></div>${w.location ? `<div class="card-detail card-detail--location"><span class="card-detail__label"><svg class="card-detail__icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 10c0 5-8 11-8 11S4 15 4 10a8 8 0 1 1 16 0Z"/><circle cx="12" cy="10" r="2.5"/></svg>Location</span><span>${escape(w.location)}</span></div>` : ""}</div><div class="card-footer">${statsMarkup ? `<div class="card-stats">${statsMarkup}</div>` : ""}<span class="card-updated">Updated ${formatRelative(w.updatedAt || w.createdAt)}</span></div><div class="card-actions"><button class="open-button" data-action="open" data-id="${eventId}" type="button">${openLabel}</button>${copyAction}</div></article>`;
+  return `<article class="wedding-card"><div class="card-head"><div><h2>${escape(title)}</h2><span class="category-badge category-badge--${categoryStyle}"${isGenderRevealEvent(w) ? ' lang="ar" dir="rtl"' : ""}>${category}</span></div><div class="card-head__actions">${w.isDemo === true ? `<span class="status-badge status-badge--demo" title="Demo events are deleted automatically when they expire">Demo</span>` : ""}${w.cleanupPending ? `<span class="status-badge status-badge--deleting">Deleting</span>` : ""}<span class="status-badge status-badge--${eventStatus}">${escape(eventStatus)}</span>${cardMenu}</div></div><div class="card-meta"><div class="card-detail card-detail--date"><span class="card-detail__label"><svg class="card-detail__icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg>Date &amp; time</span><span>${escape(formatEvent(w))}</span></div>${w.location ? `<div class="card-detail card-detail--location"><span class="card-detail__label"><svg class="card-detail__icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 10c0 5-8 11-8 11S4 15 4 10a8 8 0 1 1 16 0Z"/><circle cx="12" cy="10" r="2.5"/></svg>Location</span><span>${escape(w.location)}</span></div>` : ""}</div><div class="card-footer">${statsMarkup ? `<div class="card-stats">${statsMarkup}</div>` : ""}<span class="card-updated">Updated ${formatRelative(w.updatedAt || w.createdAt)}</span></div>${state.isAdmin && w.seatingOnly !== true && !w.cleanupPending ? `<div class="card-admin-links"><button class="secondary-button" data-action="audit" data-id="${eventId}" type="button">Customer activity log</button><button class="secondary-button" data-action="customers" data-id="${eventId}" type="button">Manage customers</button></div>` : ""}<div class="card-actions"><button class="open-button" data-action="open" data-id="${eventId}" type="button">${openLabel}</button>${copyAction}</div></article>`;
 }
 
 function sampleInvitationStorageKey() { return `wedding:sample-link:${state.user?.uid || ""}`; }
@@ -345,6 +428,10 @@ function saveSampleGuestLink() {
 }
 
 async function handleCardAction(event) {
+  const result = await runFromEvent(event, () => handleCardActionUnsafe(event), { what: "That action", onError: (error, message) => { console.error("Event action failed", error?.code || error?.message); flash(`${message} Try again.`); showToast(message, "error"); } });
+  return result;
+}
+async function handleCardActionUnsafe(event) {
   const button = event.target.closest("[data-action]"); if (!button) return; const wedding = state.weddings.find((w) => w.id === button.dataset.id); if (!wedding) return;
   if (button.dataset.action === "menu") { const menu = document.getElementById(`menu-${wedding.id}`); const shouldOpen = menu.hidden; closeActionMenus(menu); menu.hidden = !shouldOpen; button.setAttribute("aria-expanded", String(shouldOpen)); return; }
   if (button.dataset.action === "open") {
@@ -373,12 +460,15 @@ async function handleCardAction(event) {
     if (current) await duplicate(current);
   }
   if (button.dataset.action === "delete") openDelete(wedding);
+  if (button.dataset.action === "customers") location.href = `./customers.html?event=${encodeURIComponent(wedding.id)}`;
+  if (button.dataset.action === "audit") { try { (await import("./admin-workspace.js")).openEventAudit(wedding, { db: state.services.db, title: getEventDisplayTitle(wedding) }); } catch (error) { console.error(error); flash("The activity log could not open."); } }
 }
 
 async function loadFullWedding(weddingId) {
   try {
     const snapshot = await getDoc(doc(state.services.db, "weddings", weddingId));
-    return snapshot.exists() ? { ...snapshot.data(), id: snapshot.id } : null;
+    if (!snapshot.exists()) { state.weddings = state.weddings.filter((item) => item.id !== weddingId); render(); flash("That event no longer exists. The list has been refreshed."); return null; }
+    return { ...snapshot.data(), id: snapshot.id };
   } catch (error) {
     console.error("Event details could not be loaded.", error?.code || "unavailable");
     flash("You no longer have access to this event.");
@@ -462,7 +552,7 @@ function updateCategoryFields() {
   const category = getSelectedEventCategory();
   const photoBucket = category === "photo_bucket";
   const bucketStep = document.getElementById("photoBucketStep");
-  bucketStep?.querySelectorAll("input").forEach(input => { input.disabled = !photoBucket; input.required = photoBucket; });
+  bucketStep?.querySelectorAll("input,select").forEach(input => { input.disabled = !photoBucket; input.required = photoBucket; });
   el.eventInformationStep.querySelectorAll("input,select,textarea").forEach(input => { input.disabled = photoBucket; });
   if (photoBucket) { el.continueEventButton.disabled = false; return; }
   const wedding = category === EVENT_CATEGORIES.WEDDING_ENGAGEMENT;
@@ -564,6 +654,12 @@ function backEventStep() {
   el.backEventButton.hidden = true;
   el.saveWeddingButton.hidden = true;
 }
+// Photo Bucket size: admin-only form, so the select is only ever submitted by an admin. Falls back to the default for any other value.
+function paintBucketModeNote() { const note = document.getElementById("photoBucketModeNote"); if (note) note.textContent = bucketsOnline ? "Photos are stored online and shared by a guest link and QR code." : "Local demo. Photos and event details stay in this browser."; }
+paintBucketModeNote();
+function bucketGb() { const gb = Number(document.getElementById("photoBucketGb")?.value); return BUCKET_SIZES_GB.includes(gb) ? gb : DEFAULT_BUCKET_GB; }
+function updateBucketSizeHint() { const hint = document.getElementById("photoBucketGbHint"); if (hint) hint.textContent = estimateLabel(bucketGb()); }
+document.getElementById("photoBucketGb")?.addEventListener("change", updateBucketSizeHint);
 async function saveWedding(event) {
   // Photo Buckets MUST return before the legacy Firebase creation path.
   if (getSelectedEventCategory() === "photo_bucket") {
@@ -573,7 +669,7 @@ async function saveWedding(event) {
     const status = document.getElementById("photoBucketCreateError"); status.textContent = "";
     try {
       const f = el.weddingForm.elements;
-      const bucket = await (await createOwnerAdapter(state.user)).create({ name: f.bucketName.value, date: f.bucketDate.value, location: f.bucketLocation.value });
+      const bucket = await (await createOwnerAdapter(state.user)).create({ name: f.bucketName.value, date: f.bucketDate.value, location: f.bucketLocation.value, gb: bucketGb(), showUploaderNames: f.bucketShowNames.checked });
       location.href = `./photo-bucket-manage.html?bucket=${encodeURIComponent(bucket.id)}`;
     } catch (error) { status.textContent = error.name === "QuotaExceededError" ? "This browser is out of storage. Free some space and try again." : error.message; }
     finally { el.saveWeddingButton.disabled = false; }
@@ -581,14 +677,22 @@ async function saveWedding(event) {
   }
   if (!state.isAdmin) return;
  event.preventDefault(); const f = el.weddingForm.elements; const category = getSelectedEventCategory(); if (!Object.values(EVENT_CATEGORIES).includes(category)) return; const oldEvent = state.weddings.find((item) => item.id === state.editId); if (oldEvent && getEventCategory(oldEvent) !== category && !window.confirm("Changing this event category changes the dashboard experience. Existing guest side values will be preserved. Continue?")) return; const brideName = f.brideName.value.trim(), groomName = f.groomName.value.trim(); const genderReveal = category === EVENT_CATEGORIES.GENDER_REVEAL; const leavingGenderReveal = isGenderRevealEvent(oldEvent) && !genderReveal; const timeZone = genderReveal ? "Asia/Dubai" : (oldEvent?.eventTimeZone || (!oldEvent ? Intl.DateTimeFormat().resolvedOptions().timeZone : "") || ""); const eventDateISO = localDateTimeToIso(f.eventDate.value, f.eventTime.value, timeZone); const openingVideoDefault = oldEvent && Object.hasOwn(oldEvent, "genderRevealOpeningVideoUrl") ? oldEvent.genderRevealOpeningVideoUrl : "/videos/gender-reveal-opening.mp4"; const data = { eventCategory: category, eventDateISO, ...(!oldEvent && timeZone ? { eventTimeZone: timeZone } : {}), ...(genderReveal ? { eventTimeZone: "Asia/Dubai", guestGroupMode: "general", genderRevealArtworkUrl: oldEvent?.genderRevealArtworkUrl || "/images/gender-reveal-cover.png", genderRevealOpeningVideoUrl: openingVideoDefault, genderRevealMusicUrl: oldEvent?.genderRevealMusicUrl || "/music/gender-reveal-party.mp3", genderRevealMessageEn: oldEvent?.genderRevealMessageEn || "A little surprise is on the way…", genderRevealMessageAr: oldEvent?.genderRevealMessageAr || "مفاجأة جميلة بانتظارنا…", eventTitleAr: f.eventTitleAr.value.trim() || "حفل الكشف عن جنس المولود", seatingEnabled: false, showInvitationQr: false } : leavingGenderReveal ? { eventTitleAr: "", genderRevealArtworkUrl: "", genderRevealOpeningVideoUrl: "", genderRevealMusicUrl: "", genderRevealMessageEn: "", genderRevealMessageAr: "" } : {}), venueEn: f.venueEn.value.trim(), location: f.location.value.trim(), mapsUrl: f.mapsUrl.value.trim(), whatsAppCountryCode: genderReveal ? "971" : f.whatsAppCountryCode.value.trim(), invitationLanguage: genderReveal ? (f.invitationLanguage.value === "ar" ? "ar" : "en") : f.invitationLanguage.value, plannerNotes: f.plannerNotes.value.trim(), status: f.status.value, updatedAt: serverTimestamp() }; if (genderReveal) data.eventTitle = f.eventTitle.value.trim() || "Gender Reveal Party"; else if (category === EVENT_CATEGORIES.CELEBRATION) data.eventTitle = f.eventTitle.value.trim(); else Object.assign(data, { brideName, groomName, coupleName: `${brideName} & ${groomName}`, eventTitle: `${brideName} & ${groomName}` }); el.formError.textContent = ""; el.saveWeddingButton.disabled = true;
-  try { if (state.editId) { await updateDoc(doc(state.services.db,"weddings",state.editId), data); if (genderReveal) await ensureGenderRevealPublished(accountApi, state.services.db, state.editId); await setDoc(doc(state.services.db,"users",state.user.uid,"weddingAccess",state.editId), { ...indexData(data), weddingId: state.editId }, { merge:true }); } else { const weddingRef = doc(collection(state.services.db,"weddings")); const batch = writeBatch(state.services.db); batch.set(weddingRef, { ...data, seatingSchemaVersion: 2, ...(category === EVENT_CATEGORIES.WEDDING_ENGAGEMENT ? { invitationTemplate: f.invitationTemplate.value } : genderReveal ? { genderRevealTemplate: f.invitationTemplate.value } : {}), seatingEnabled:f.seatingEnabled.checked, showInvitationQr:f.showInvitationQr.checked, ownerUserId:state.user.uid, createdAt:serverTimestamp() }); batch.set(doc(state.services.db,"weddings",weddingRef.id,"dashboardUsers",state.user.uid), { userId:state.user.uid, email:state.user.email || "", canViewDashboard:true, canEditGuests:true, canEditSeating:true, canCheckIn:true, canManageUsers:true, role:"owner", createdAt:serverTimestamp(), updatedAt:serverTimestamp() }); batch.set(doc(state.services.db,"users",state.user.uid,"weddingAccess",weddingRef.id), { ...indexData(data), weddingId:weddingRef.id, ownerUserId:state.user.uid, createdAt:serverTimestamp(), updatedAt:serverTimestamp() }); await batch.commit(); if (genderReveal) { try { await ensureGenderRevealPublished(accountApi, state.services.db, weddingRef.id); } catch (error) { console.error("Gender reveal invitation could not be prepared", error); flash("Event created, but its invitation needs to be prepared. Use Copy shared link to retry."); } } } el.weddingDialog.close(); void refreshWorkspaceEvents(); } catch (error) { console.error(error); el.formError.textContent = "We could not save this event. Please check your access and try again."; } finally { el.saveWeddingButton.disabled=false; } }
+  try { if (state.editId) { await updateDoc(doc(state.services.db,"weddings",state.editId), data); if (genderReveal) await ensureGenderRevealPublished(accountApi, state.services.db, state.editId); await setDoc(doc(state.services.db,"users",state.user.uid,"weddingAccess",state.editId), { ...indexData(data), weddingId: state.editId }, { merge:true }); } else { const weddingRef = doc(collection(state.services.db,"weddings")); const batch = writeBatch(state.services.db); batch.set(weddingRef, { ...data, seatingSchemaVersion: 2, ...(category === EVENT_CATEGORIES.WEDDING_ENGAGEMENT ? { invitationTemplate: f.invitationTemplate.value } : genderReveal ? { genderRevealTemplate: f.invitationTemplate.value } : {}), seatingEnabled:f.seatingEnabled.checked, showInvitationQr:f.showInvitationQr.checked, ...(f.musicModeCreate?.value === "off" ? { musicMode: "off", musicVersion: 0, musicName: "" } : {}), ownerUserId:state.user.uid, createdAt:serverTimestamp() }); batch.set(doc(state.services.db,"weddings",weddingRef.id,"dashboardUsers",state.user.uid), { userId:state.user.uid, email:state.user.email || "", canViewDashboard:true, canEditGuests:true, canEditSeating:true, canCheckIn:true, canManageUsers:true, role:"owner", createdAt:serverTimestamp(), updatedAt:serverTimestamp() }); batch.set(doc(state.services.db,"users",state.user.uid,"weddingAccess",weddingRef.id), { ...indexData(data), weddingId:weddingRef.id, ownerUserId:state.user.uid, createdAt:serverTimestamp(), updatedAt:serverTimestamp() }); await batch.commit(); if (!genderReveal && f.musicModeCreate?.value === "custom" && f.musicFileCreate?.files?.[0]) void uploadCreateSong(f.musicFileCreate.files[0], weddingRef.id); if (genderReveal) { try { await ensureGenderRevealPublished(accountApi, state.services.db, weddingRef.id); } catch (error) { console.error("Gender reveal invitation could not be prepared", error); flash("Event created, but its invitation needs to be prepared. Use Copy shared link to retry."); } } } el.weddingDialog.close(); void refreshWorkspaceEvents(); } catch (error) { console.error(error); el.formError.textContent = "We could not save this event. Please check your access and try again."; } finally { el.saveWeddingButton.disabled=false; } }
+// After an event is created with "Custom song": convert, upload and save, reporting progress in the status line.
+async function uploadCreateSong(file, eventId) {
+  try {
+    const result = await convertAndUploadSong({ file, eventId, user: state.user, onStatus: (s) => flash(`Song: ${s.message}`) });
+    await saveMusicFields(state.services.db, eventId, { musicMode: "custom", musicVersion: 1, musicName: result.name });
+    flash("Event created and the custom song is saved.");
+  } catch (error) { flash(`Event created, but the song was not saved: ${error.message} Open Event settings to try again.`); showToast(error.message, "error"); }
+}
 function indexData(data) { return Object.fromEntries(Object.entries({ eventCategory:data.eventCategory, eventTitle:data.eventTitle, coupleName:data.coupleName, brideName:data.brideName, groomName:data.groomName, eventDateISO:data.eventDateISO, venueEn:data.venueEn, location:data.location, status:data.status, updatedAt:data.updatedAt }).filter(([, value]) => value !== undefined)); }
 async function setArchived(wedding) {
-  if (!state.isAdmin) return; const status = wedding.status === "archived" ? "draft" : "archived"; try { await updateDoc(doc(state.services.db,"weddings",wedding.id), { status, updatedAt:serverTimestamp() }); await setDoc(doc(state.services.db,"users",state.user.uid,"weddingAccess",wedding.id), { status, updatedAt:serverTimestamp() }, {merge:true}); void refreshWorkspaceEvents(); } catch (_) {
- flash("We could not update this event. Please try again."); } }
+  if (!state.isAdmin) return; const status = wedding.status === "archived" ? "draft" : "archived"; flash("Updating the event…"); try { await updateDoc(doc(state.services.db,"weddings",wedding.id), { status, updatedAt:serverTimestamp() }); await setDoc(doc(state.services.db,"users",state.user.uid,"weddingAccess",wedding.id), { status, updatedAt:serverTimestamp() }, {merge:true}); void refreshWorkspaceEvents(); } catch (_) {
+ flash("The event was not updated. Check your connection and your access, then try again."); } }
 async function duplicate(wedding) {
- if (!state.isAdmin) return; const { id, stats, legacy, isOwner, seatingOnly, allowedSide, createdAt, updatedAt, completedAt, statusBeforeCompletion, ...source } = wedding; const title = `${getEventDisplayTitle(wedding)} (Copy)`; const copy = { ...source, seatingEnabled:wedding.seatingEnabled !== false, eventTitle:title, status:"draft", ownerUserId:state.user.uid, createdAt:serverTimestamp(), updatedAt:serverTimestamp() }; if (eventUsesGuestSides(wedding)) copy.coupleName = title; if (isGenderRevealEvent(wedding)) { delete copy.coupleName; delete copy.brideName; delete copy.groomName; delete copy.brideNameAr; delete copy.groomNameAr; copy.seatingEnabled = false; copy.showInvitationQr = false; } try { const ref = doc(collection(state.services.db,"weddings")); const batch = writeBatch(state.services.db); batch.set(ref, copy); batch.set(doc(state.services.db,"weddings",ref.id,"dashboardUsers",state.user.uid), { userId:state.user.uid, email:state.user.email || "", canViewDashboard:true, canEditGuests:true, canEditSeating:true, canCheckIn:true, canManageUsers:true, role:"owner", createdAt:serverTimestamp(), updatedAt:serverTimestamp() }); batch.set(doc(state.services.db,"users",state.user.uid,"weddingAccess",ref.id), { ...indexData(copy), weddingId:ref.id, ownerUserId:state.user.uid, createdAt:serverTimestamp(), updatedAt:serverTimestamp() }); await batch.commit(); flash("Event setup duplicated as a draft."); void refreshWorkspaceEvents(); } catch (e) {
- console.error(e); flash("We could not duplicate this event."); } }
+ if (!state.isAdmin) return; const { id, stats, statsRequested, legacy, isOwner, seatingOnly, allowedSide, createdAt, updatedAt, completedAt, statusBeforeCompletion, isDemo, demoExpiresAt, demoAccountUid, deleting, cleanupPending, canManageUsers, allowedViews, ...source } = wedding; const title = `${getEventDisplayTitle(wedding)} (Copy)`; const copy = { ...source, seatingEnabled:wedding.seatingEnabled !== false, eventTitle:title, status:"draft", ownerUserId:state.user.uid, createdAt:serverTimestamp(), updatedAt:serverTimestamp() }; if (eventUsesGuestSides(wedding)) copy.coupleName = title; if (isGenderRevealEvent(wedding)) { delete copy.coupleName; delete copy.brideName; delete copy.groomName; delete copy.brideNameAr; delete copy.groomNameAr; copy.seatingEnabled = false; copy.showInvitationQr = false; } flash("Duplicating the event…"); try { const ref = doc(collection(state.services.db,"weddings")); const batch = writeBatch(state.services.db); batch.set(ref, copy); batch.set(doc(state.services.db,"weddings",ref.id,"dashboardUsers",state.user.uid), { userId:state.user.uid, email:state.user.email || "", canViewDashboard:true, canEditGuests:true, canEditSeating:true, canCheckIn:true, canManageUsers:true, role:"owner", createdAt:serverTimestamp(), updatedAt:serverTimestamp() }); batch.set(doc(state.services.db,"users",state.user.uid,"weddingAccess",ref.id), { ...indexData(copy), weddingId:ref.id, ownerUserId:state.user.uid, createdAt:serverTimestamp(), updatedAt:serverTimestamp() }); await batch.commit(); flash("Event setup duplicated as a draft."); void refreshWorkspaceEvents(); } catch (e) {
+ console.error(e); flash("The event was not duplicated. Check your connection and your access, then try again."); } }
 function openDelete(wedding) { state.deleteId=wedding.id; document.getElementById("deleteEventName").textContent=getEventDisplayTitle(wedding); el.deletePhrase.textContent=`DELETE ${wedding.id}`; el.deleteConfirmation.value=""; el.deleteError.textContent=""; el.deleteDialog.showModal(); }
 async function deleteEventCollection(weddingId, collectionId) {
   const source = collection(state.services.db, "weddings", weddingId, collectionId);
@@ -625,12 +729,14 @@ async function deleteWedding(event) {
       flash("The event was already removed. Its workspace index is now cleared.");
       return;
     }
-    if (eventSnapshot.data().ownerUserId !== state.user?.uid) {
-      throw new Error("Only the event owner can delete this event.");
+    if (eventSnapshot.data().ownerUserId !== state.user?.uid && !state.isAdmin) {
+      throw new Error("Only the event owner or a platform admin can delete this event.");
     }
     const membersSnapshot = await getDocs(collection(state.services.db, "weddings", weddingId, "dashboardUsers"));
-    const memberIds = new Set([state.user.uid, ...membersSnapshot.docs.map((item) => item.id)]);
+    const memberIds = new Set([state.user.uid, eventSnapshot.data().ownerUserId, eventSnapshot.data().demoAccountUid, ...membersSnapshot.docs.map((item) => item.id)].filter(Boolean));
 
+    // The event's stored song files live on the bucket service. Remove them now; a failure never blocks the Firestore cleanup, but it is reported at the end.
+    const storedFiles = await removeEventFiles(state.user, weddingId).then(() => null, (error) => error);
     // This first write makes every invitation and sender capability unusable
     // before any subcollection cleanup begins. The owner can resume if a batch
     // later fails or the browser closes.
@@ -650,7 +756,7 @@ async function deleteWedding(event) {
       "invitationTokens", "publicGuests", "publicSummary", "publicStats",
       "genderRevealResponses", "genderRevealPhoneKeys", "genderRevealState", "genderRevealResults",
       "publicEvent", "publicScene", "publicLayouts", "publicVenue", "publicSchedule",
-      "seatingMigrations", "eventMaintenance", "senderCapabilities",
+      "seatingMigrations", "eventMaintenance", "senderCapabilities", "customerAudit", "genderRevealSessionKeys",
     ];
     for (const collectionId of childCollections) {
       await deleteEventCollection(weddingId, collectionId);
@@ -674,7 +780,8 @@ async function deleteWedding(event) {
     el.deleteDialog.close();
     state.weddings = state.weddings.filter((item) => item.id !== weddingId);
     render();
-    flash("Event and its known data were deleted.");
+    flash(storedFiles ? `Event and its data were deleted, but its stored files were NOT removed: ${storedFiles.message} Ask an admin to retry.` : "Event and its known data were deleted.");
+    if (storedFiles) showToast(storedFiles.message, "error");
   } catch (error) {
     console.error("Event cleanup stopped; the owner can retry to resume it.", error);
     el.deleteError.textContent = `${error?.message || "Event cleanup could not finish."} The event has been marked unavailable and you can retry this cleanup.`;

@@ -3,14 +3,14 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>My Events · qdsystems</title>
+    <title>My Events and Photos · qdsystems</title>
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,500;9..144,600&family=Manrope:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
     <link rel="stylesheet" href="./styles.css" />
     <link rel="stylesheet" href="./weddings.css?v=20261017-customer-access-2" />
-    <link rel="stylesheet" href="./customer-events-design.css?v=1" />
-  </head>
+    <link rel="stylesheet" href="./customer-events-design.css?v=2" />
+  <link rel="stylesheet" href="./skeleton.css?v=1"></head>
   <body data-account-surface="customer" class="weddings-body">
     <main class="weddings-shell" id="workspace" hidden>
       <header class="workspace-header">
@@ -18,7 +18,7 @@
         <div class="workspace-account"><span id="userEmail"></span><button class="text-button" id="signOutButton" type="button">Sign out</button></div>
       </header>
       <section class="workspace-hero">
-        <div><p class="customer-hero__eyebrow">YOUR CELEBRATIONS</p><h1>My Events</h1><p class="customer-hero__intro">Every detail, all in one place.</p></div>
+        <div><p class="customer-hero__eyebrow">YOUR CELEBRATIONS</p><h1>My Events and Photos</h1><p class="customer-hero__intro">Every detail, all in one place.</p></div>
         <button class="primary-button" id="createWeddingButton" hidden type="button">Create event</button>
       </section>
       <section class="workspace-controls" id="workspaceControls" aria-label="Event controls" hidden>
@@ -28,7 +28,7 @@
       <nav class="filter-row" aria-label="Filter events" id="filterRow" hidden>
         <button class="filter-button is-active" data-filter="all" type="button">All</button><button class="filter-button" data-filter="draft" type="button">Draft</button><button class="filter-button" data-filter="upcoming" type="button">Upcoming</button><button class="filter-button" data-filter="active" type="button">Active</button><button class="filter-button" data-filter="old" type="button">Old Events</button><button class="filter-button" data-filter="completed" type="button">Completed</button><button class="filter-button" data-filter="archived" type="button">Archived</button>
       </nav>
-      <p class="workspace-status" id="workspaceStatus" role="status">Loading your events…</p>
+      <p class="workspace-status" id="workspaceStatus" role="status">Loading your items…</p>
       <button class="secondary-button" id="retryLoadButton" type="button" hidden>Retry loading events</button>
       <section class="wedding-grid" id="weddingGrid" aria-live="polite"></section>
       <nav class="pagination-controls" id="paginationControls" aria-label="Event pages" hidden>
@@ -82,7 +82,7 @@
             <label class="full">Event name<input name="bucketName" maxlength="100" disabled /></label>
             <label>Event date<input name="bucketDate" type="date" disabled /></label>
             <label>Event location<input name="bucketLocation" maxlength="160" disabled /></label>
-            <p class="full">Local demo · Photos and event details stay in this browser.</p>
+            <p class="full" id="photoBucketModeNote">Photos are stored online.</p>
             <p class="form-error full" id="photoBucketCreateError" role="alert"></p>
           </section>
           <section class="event-features-step" id="eventFeaturesStep" hidden aria-labelledby="eventFeaturesTitle">
@@ -125,5 +125,5 @@
     </dialog>
     <dialog class="workspace-dialog" id="deleteDialog"><form class="workspace-modal workspace-modal--small" id="deleteForm"><header><div><p class="workspace-kicker">Permanent action</p><h2>Delete event?</h2></div><button class="icon-close" type="button" data-close="deleteDialog" aria-label="Close">×</button></header><div class="workspace-modal__body"><p>This permanently removes <strong id="deleteEventName"></strong> and all of its guests, invitations, seating, and check-in data. Type <strong id="deletePhrase"></strong> to continue.</p><label>Confirmation<input id="deleteConfirmation" autocomplete="off" /></label><p class="form-error" id="deleteError" role="alert"></p></div><footer><button class="secondary-button" type="button" data-close="deleteDialog">Cancel</button><button class="danger-button" type="submit">Delete permanently</button></footer></form></dialog>
     <script type="module" src="./weddings.js?v=20261018-customer-event-controls-1"></script>
-  </body>
+  <script type="module" src="./action-feedback.js?v=1"></script></body>
 </html>

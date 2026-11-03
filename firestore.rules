@@ -12,18 +12,45 @@ service cloud.firestore {
         && get(/databases/$(database)/documents/platformAdmins/$(request.auth.uid)).data.enabled == true;
     }
 
+    // A platform administrator who also holds a customer membership keeps full
+    // administrator rights. Customers are read last so ordinary organizers pay
+    // no extra document read.
     function isCustomer(weddingId) {
-      return isSignedIn() && exists(dashboardUserPath(weddingId)) && dashboardUser(weddingId).data.get("role", "") == "customer";
+      return isSignedIn() && exists(dashboardUserPath(weddingId)) && dashboardUser(weddingId).data.get("role", "") == "customer"
+        && !isPlatformAdmin();
+    }
+
+    // Demo expiry. Ordinary events stop at the first comparison, so they pay no
+    // extra document read. A missing or malformed expiry fails closed. Every
+    // non-administrator grant on an event passes through this check, usually
+    // through eventAvailable.
+    function demoOpen(event) {
+      return event.get("isDemo", false) != true
+        || request.time <= event.get("demoExpiresAt", timestamp.value(0))
+        || isPlatformAdmin();
+    }
+
+    function eventDemoOpen(weddingId) {
+      let path = /databases/$(database)/documents/weddings/$(weddingId);
+      return !exists(path) || demoOpen(get(path).data);
     }
 
     function eventAvailable(weddingId) {
       return exists(/databases/$(database)/documents/weddings/$(weddingId))
-        && get(/databases/$(database)/documents/weddings/$(weddingId)).data.get("deleting", false) != true;
+        && get(/databases/$(database)/documents/weddings/$(weddingId)).data.get("deleting", false) != true
+        && demoOpen(get(/databases/$(database)/documents/weddings/$(weddingId)).data);
     }
 
     function isEventOwner(weddingId) {
       return isSignedIn() && exists(/databases/$(database)/documents/weddings/$(weddingId))
-        && (isPlatformAdmin() || get(/databases/$(database)/documents/weddings/$(weddingId)).data.ownerUserId == request.auth.uid);
+        && (isPlatformAdmin() || (get(/databases/$(database)/documents/weddings/$(weddingId)).data.ownerUserId == request.auth.uid
+          && demoOpen(get(/databases/$(database)/documents/weddings/$(weddingId)).data)));
+    }
+
+    // The recorded owner of the event document being updated. Administrator
+    // access is granted separately by the callers.
+    function isRecordedOwner() {
+      return request.auth.uid == resource.data.ownerUserId && demoOpen(resource.data);
     }
 
     function dashboardUserPath(weddingId) {
@@ -49,7 +76,8 @@ service cloud.firestore {
     }
 
     function canEditSeating(weddingId) {
-      return isDashboardMember(weddingId) && dashboardUser(weddingId).data.get("canEditSeating", false) == true;
+      return (isPlatformAdmin() && eventAvailable(weddingId))
+        || (isDashboardMember(weddingId) && dashboardUser(weddingId).data.get("canEditSeating", false) == true);
     }
 
     // Restricted accounts get full layout controls only through an explicit
@@ -87,7 +115,7 @@ service cloud.firestore {
       let allowedSide = sideOnly ? member.get("allowedSide", "") : "all";
       let category = event.get("eventCategory", "wedding_engagement");
       return isSignedIn() && exists(memberPath) && exists(eventPath)
-        && event.get("deleting", false) != true
+        && event.get("deleting", false) != true && demoOpen(event)
         && member.get("canEditSeating", false) == true
         && event.get("seatingSchemaVersion", 0) == 2
         && event.get("seatingEnabled", true) == true
@@ -96,13 +124,17 @@ service cloud.firestore {
     }
 
     function canReadSeating(weddingId) {
+      return (isPlatformAdmin() && eventAvailable(weddingId)) || memberCanReadSeating(weddingId);
+    }
+
+    function memberCanReadSeating(weddingId) {
       let memberPath = dashboardUserPath(weddingId);
       let eventPath = /databases/$(database)/documents/weddings/$(weddingId);
       let member = get(memberPath).data;
       let event = get(eventPath).data;
       let sideOnly = member.get("seatingOnly", false);
       return isSignedIn() && exists(memberPath) && exists(eventPath)
-        && event.get("deleting", false) != true
+        && event.get("deleting", false) != true && demoOpen(event)
         && ((member.get("canViewDashboard", false) == true && !sideOnly)
           || (sideOnly && event.get("seatingEnabled", true) != false
             && (member.get("canViewDashboard", false) == true || member.get("canEditSeating", false) == true)));
@@ -150,7 +182,7 @@ service cloud.firestore {
       let sideOnly = member.get("seatingOnly", false);
       let allowedSide = sideOnly ? member.get("allowedSide", "") : "all";
       return isSignedIn() && exists(memberPath) && exists(eventPath)
-        && event.get("deleting", false) != true
+        && event.get("deleting", false) != true && demoOpen(event)
         && (member.get("canViewDashboard", false) == true || member.get("canEditSeating", false) == true)
         && (!sideOnly || event.get("seatingEnabled", true) != false)
         && (allowedSide == "all" || (allowedSide in ["bride", "groom", "family"] && side == allowedSide));
@@ -165,7 +197,7 @@ service cloud.firestore {
       let allowedSide = sideOnly ? member.get("allowedSide", "") : "all";
       let category = event.get("eventCategory", "wedding_engagement");
       return isSignedIn() && exists(memberPath) && exists(eventPath)
-        && event.get("deleting", false) != true
+        && event.get("deleting", false) != true && demoOpen(event)
         && member.get("canEditSeating", false) == true
         && event.get("seatingSchemaVersion", 0) == 2
         && event.get("seatingEnabled", true) == true
@@ -182,7 +214,7 @@ service cloud.firestore {
       let eventPath = /databases/$(database)/documents/weddings/$(weddingId);
       return isSignedIn() && exists(eventPath)
         && get(eventPath).data.get("deleting", false) == true
-        && (get(eventPath).data.get("ownerUserId", "") == request.auth.uid || isPlatformAdmin());
+        && ((get(eventPath).data.get("ownerUserId", "") == request.auth.uid && demoOpen(get(eventPath).data)) || isPlatformAdmin());
     }
 
     function validDashboardMembership(data, userId) {
@@ -231,7 +263,8 @@ service cloud.firestore {
         && data.email == request.auth.token.email.lower()
         && exists(grant) && get(grant).data.email == data.email
         && get(grant).data.weddingId == weddingId && get(grant).data.role == "customer"
-        && !existsAfter(grant) && validDashboardMembership(data, userId) && validCustomerProfile(data);
+        && !existsAfter(grant) && validDashboardMembership(data, userId) && validCustomerProfile(data)
+        && eventDemoOpen(weddingId);
     }
 
     function isCustomerEventDetailsUpdate(weddingId) {
@@ -262,6 +295,7 @@ service cloud.firestore {
       return isSignedIn()
         && !isCustomer(weddingId)
         && (request.auth.uid == resource.data.ownerUserId || canManageUsers(weddingId) || canEditEventDetails(weddingId))
+        && demoOpen(resource.data)
         && get(/databases/$(database)/documents/weddings/$(weddingId)).data.get("eventCategory", "wedding_engagement") != "gender_reveal"
         && request.resource.data.diff(resource.data).affectedKeys()
           .hasOnly(["showInvitationQr", "updatedAt"])
@@ -273,6 +307,7 @@ service cloud.firestore {
       return isSignedIn()
         && !isCustomer(weddingId)
         && (request.auth.uid == resource.data.ownerUserId || canManageUsers(weddingId) || canEditEventDetails(weddingId))
+        && demoOpen(resource.data)
         && get(/databases/$(database)/documents/weddings/$(weddingId)).data.get("eventCategory", "wedding_engagement") != "gender_reveal"
         && request.resource.data.diff(resource.data).affectedKeys()
           .hasOnly(["seatingEnabled", "updatedAt"])
@@ -341,7 +376,7 @@ service cloud.firestore {
       let statusUnchanged = !changes.hasAny(["status"]);
       let normalStatusChange = resource.data.get("status", "") != "completed"
         && request.resource.data.get("status", "") in ["draft", "upcoming", "active", "archived"];
-      return !isCustomer(weddingId) && (isPlatformAdmin() || request.auth.uid == resource.data.ownerUserId || canEditEventDetails(weddingId))
+      return !isCustomer(weddingId) && (isPlatformAdmin() || isRecordedOwner() || canEditEventDetails(weddingId))
         && changes.hasOnly([
           "eventCategory", "eventTitle", "eventTitleAr", "coupleName", "brideName", "groomName",
           "eventDateISO", "timeEn", "timeAr", "venueEn", "location", "locationEn",
@@ -354,7 +389,8 @@ service cloud.firestore {
     }
 
     function isFullDashboardAccount(weddingId) {
-      return canViewDashboard(weddingId) && !isSeatingOnlyDashboardAccount(weddingId);
+      return (isPlatformAdmin() && eventAvailable(weddingId))
+        || (canViewDashboard(weddingId) && !isSeatingOnlyDashboardAccount(weddingId));
     }
 
     function isAnonymousFirebaseSession() {
@@ -519,15 +555,15 @@ service cloud.firestore {
         && changes.hasOnly(["status", "updatedAt"]);
       let archiving = nextStatus in ["archived", "draft"]
         && changes.hasOnly(["status", "updatedAt"]);
-      return !isCustomer(weddingId) && (isPlatformAdmin() || request.auth.uid == resource.data.ownerUserId || canEditEventDetails(weddingId))
+      return !isCustomer(weddingId) && (isPlatformAdmin() || isRecordedOwner() || canEditEventDetails(weddingId))
         && changes.hasOnly(["status", "completedAt", "statusBeforeCompletion", "updatedAt"])
         && request.resource.data.updatedAt == request.time
         && (completing || reopening || ordinaryStatusChange || archiving);
     }
 
     function isOwnerHallLayoutUpdate(weddingId) {
-      return isDashboardMember(weddingId)
-        && request.auth.uid == resource.data.ownerUserId
+      return ((isDashboardMember(weddingId) && request.auth.uid == resource.data.ownerUserId)
+          || (isPlatformAdmin() && eventAvailable(weddingId)))
         && request.resource.data.diff(resource.data).affectedKeys().hasOnly(["hallObjects", "updatedAt"]);
     }
 
@@ -561,7 +597,7 @@ service cloud.firestore {
       let memberPath = dashboardUserPath(weddingId);
       let guestPath = /databases/$(database)/documents/weddings/$(weddingId)/guests/$(guestId);
       return isSignedIn() && exists(eventPath)
-        && get(eventPath).data.get("deleting", false) != true
+        && get(eventPath).data.get("deleting", false) != true && demoOpen(get(eventPath).data)
         && ((exists(memberPath)
           && get(memberPath).data.get("canEditGuests", false) == true
           && (get(memberPath).data.get("seatingOnly", false) != true
@@ -695,10 +731,23 @@ service cloud.firestore {
           "seatingEnabled": event.get("seatingEnabled", true),
           "schedule": data.schedule, "updatedAt": request.time
         };
-      return data.diff(expected).affectedKeys().hasOnly(["scheduleCount", "invitationTemplate"])
+      return data.diff(expected).affectedKeys().hasOnly(["scheduleCount", "invitationTemplate", "musicMode", "musicVersion"])
+        && canonicalSharedMusic(event, data)
         && (!data.keys().hasAny(["invitationTemplate"]) || (data.invitationTemplate == event.get("invitationTemplate", "") && data.invitationTemplate in ["layla-zaid"]))
         && (event.get("invitationTemplate", "") == "" || data.get("invitationTemplate", "") == event.invitationTemplate)
         && scheduleMatches;
+    }
+
+    // Music in the public projection. Optional while the event uses the default
+    // song, so existing events and older publishing code are unchanged. Once an
+    // administrator picks "off" or "custom", the projection must carry the exact
+    // mode and version, so a stale projection cannot play the wrong song.
+    function canonicalSharedMusic(event, data) {
+      let mode = event.get("musicMode", "default");
+      let version = event.get("musicVersion", 0);
+      return (!data.keys().hasAny(["musicMode"]) || data.musicMode == mode)
+        && (!data.keys().hasAny(["musicVersion"]) || data.musicVersion == version)
+        && (mode == "default" || (data.get("musicMode", "") == mode && data.get("musicVersion", -1) == version));
     }
 
     function canonicalCustomerInvitationData(weddingId, token, data) {
@@ -849,6 +898,13 @@ service cloud.firestore {
         && invitation.data.updatedAt == request.time;
     }
 
+    // A derivative may follow an RSVP only inside the batch that wrote the invitation
+    // itself. Writing that document takes the bearer token, which the guest ID alone
+    // does not reveal, so a visitor cannot touch derivatives without the invitation.
+    function publicGuestWrittenInThisBatch(weddingId, token) {
+      return getAfter(/databases/$(database)/documents/weddings/$(weddingId)/publicGuests/$(token)).data.updatedAt == request.time;
+    }
+
     function isPublicGuestRsvpSeatingMirrorUpdate(weddingId, guestId) {
       let secret = get(invitationSecretPath(weddingId, guestId));
       let token = secret.data.token;
@@ -864,7 +920,8 @@ service cloud.firestore {
         && request.resource.data.side == resource.data.side
         && request.resource.data.additionalGuests == guestAfter.data.additionalGuests
         && request.resource.data.rsvpStatus == guestAfter.data.rsvpStatus
-        && request.resource.data.updatedAt == request.time;
+        && request.resource.data.updatedAt == request.time
+        && publicGuestWrittenInThisBatch(weddingId, token);
     }
 
     function isPublicGuestRsvpCheckinMirrorUpdate(weddingId, guestId) {
@@ -879,7 +936,8 @@ service cloud.firestore {
         && index.data.status == "active" && index.data.purpose == "guest-invitation" && index.data.guestId == guestId
         && changed.hasOnly(["rsvpStatus", "updatedAt"])
         && request.resource.data.rsvpStatus == guestAfter.data.rsvpStatus
-        && request.resource.data.updatedAt == request.time;
+        && request.resource.data.updatedAt == request.time
+        && publicGuestWrittenInThisBatch(weddingId, token);
     }
 
     function validGuestDocumentFields(data, allowUnchangedLegacyCheckInText) {
@@ -1214,6 +1272,24 @@ service cloud.firestore {
         && occupancyAfter.occupied == false;
     }
 
+    // Event music. Missing fields mean "default". The original file label stays
+    // private: only mode and version are projected publicly.
+    function validMusicFields(data) {
+      return data.get("musicMode", "default") in ["off", "default", "custom"]
+        && data.get("musicVersion", 0) is int && data.get("musicVersion", 0) >= 0
+        && data.get("musicName", "") is string && data.get("musicName", "").size() <= 80;
+    }
+
+    // Platform administrators only. The version stays the same or goes up by
+    // exactly one, when a custom song is replaced.
+    function isAdminMusicUpdate(weddingId) {
+      let before = resource.data.get("musicVersion", 0);
+      return isPlatformAdmin() && eventAvailable(weddingId)
+        && validMusicFields(request.resource.data)
+        && request.resource.data.get("musicVersion", 0) in [before, before + 1]
+        && request.resource.data.updatedAt == request.time;
+    }
+
     function canUpdateWedding(weddingId) {
       let changed = request.resource.data.diff(resource.data).affectedKeys();
       return isCustomer(weddingId)
@@ -1225,7 +1301,9 @@ service cloud.firestore {
             ]) && isCustomerEventDetailsUpdate(weddingId))
           || (changed.hasOnly(["hallObjects", "updatedAt"])
             && canManageSeatingLayout(weddingId) && request.resource.data.updatedAt == request.time))
-        : (validEventCategory(request.resource.data) && (
+        : ((changed.hasOnly(["musicMode", "musicVersion", "musicName", "updatedAt"])
+            && isAdminMusicUpdate(weddingId))
+          || validEventCategory(request.resource.data) && (
           (changed.hasOnly([
               "eventCategory", "eventTitle", "eventTitleAr", "coupleName", "brideName", "groomName",
               "eventDateISO", "timeEn", "timeAr", "venueEn", "location", "locationEn",
@@ -1252,14 +1330,166 @@ service cloud.firestore {
             && request.resource.data.deleting == true && request.resource.data.updatedAt == request.time)));
     }
 
+    // A browser cannot send "server time + 24 hours", so an exact comparison
+    // could never pass. Clients send a value between 23 and 24 hours ahead; the
+    // upper bound is the guarantee. No update path lists these two fields, so
+    // they are immutable to every client.
+    function validDemoFieldsOnCreate(data) {
+      return !data.keys().hasAny(["isDemo", "demoExpiresAt"])
+        || (data.keys().hasAll(["isDemo", "demoExpiresAt"])
+          && data.isDemo == true
+          && data.demoExpiresAt is timestamp
+          && data.demoExpiresAt >= request.time + duration.value(23, "h")
+          && data.demoExpiresAt <= request.time + duration.value(24, "h"));
+    }
+
+    function validAuditCode(value, maxSize) {
+      return value is string && value.size() > 0 && value.size() <= maxSize && value.matches("^[a-z][a-z0-9_.-]*$");
+    }
+
+    // actorUid and actorEmail are bound to the signed-in token, so one customer
+    // cannot write entries in another customer's name.
+    function validCustomerAuditEntry(data) {
+      return data.keys().hasOnly(["actorUid", "actorEmail", "action", "targetType", "targetId", "summary", "createdAt"])
+        && data.keys().hasAll(["actorUid", "actorEmail", "action", "targetType", "targetId", "summary", "createdAt"])
+        && data.actorUid == request.auth.uid
+        && data.actorEmail is string && data.actorEmail.size() <= 254
+        && data.actorEmail == request.auth.token.get("email", "").lower()
+        && validAuditCode(data.action, 64)
+        && validAuditCode(data.targetType, 40)
+        && data.targetId is string && data.targetId.size() <= 200
+        && data.summary is string && data.summary.size() <= 500
+        && data.createdAt == request.time;
+    }
+
+    function validFils(value) {
+      return value is int && value >= 0 && value <= 1000000000000;
+    }
+
+    function validLinkedEventIdAt(ids, index) {
+      return ids.size() <= index || ids[index] is string;
+    }
+
+    // join() below would quietly turn a number into text, so types are checked by
+    // index; rules have no loops.
+    function validLinkedEventIds(ids) {
+      return ids is list && ids.size() <= 20
+        && validLinkedEventIdAt(ids, 0) && validLinkedEventIdAt(ids, 1) && validLinkedEventIdAt(ids, 2)
+        && validLinkedEventIdAt(ids, 3) && validLinkedEventIdAt(ids, 4) && validLinkedEventIdAt(ids, 5)
+        && validLinkedEventIdAt(ids, 6) && validLinkedEventIdAt(ids, 7) && validLinkedEventIdAt(ids, 8)
+        && validLinkedEventIdAt(ids, 9) && validLinkedEventIdAt(ids, 10) && validLinkedEventIdAt(ids, 11)
+        && validLinkedEventIdAt(ids, 12) && validLinkedEventIdAt(ids, 13) && validLinkedEventIdAt(ids, 14)
+        && validLinkedEventIdAt(ids, 15) && validLinkedEventIdAt(ids, 16) && validLinkedEventIdAt(ids, 17)
+        && validLinkedEventIdAt(ids, 18) && validLinkedEventIdAt(ids, 19);
+    }
+
+    function validClientData(data) {
+      return data.keys().hasOnly(["name", "phone", "email", "notes", "linkedEventIds", "priceFils", "currency", "createdAt", "updatedAt"])
+        && data.keys().hasAll(["name", "linkedEventIds", "priceFils", "currency", "createdAt", "updatedAt"])
+        && data.name is string && data.name.size() > 0 && data.name.size() <= 160
+        && data.get("phone", "") is string && data.get("phone", "").size() <= 40
+        && data.get("email", "") is string && data.get("email", "").size() <= 254
+        && data.get("notes", "") is string && data.get("notes", "").size() <= 5000
+        && validLinkedEventIds(data.linkedEventIds)
+        && data.linkedEventIds.join(",").matches("^([A-Za-z0-9_-]{1,150}(,[A-Za-z0-9_-]{1,150})*)?$")
+        && (data.linkedEventIds.size() == 0 || data.linkedEventIds.join(",").split(",").size() == data.linkedEventIds.size())
+        && validFils(data.priceFils)
+        && data.currency == "AED"
+        && data.createdAt is timestamp
+        && data.updatedAt == request.time;
+    }
+
+    // Kept deliberately small: this runs once per line against the budget of 1000
+    // expressions per request. Four keys plus reading these four names fixes the
+    // exact shape, and totalFils is the product of two checked integers.
+    function validQuoteLine(line) {
+      return line.size() == 4
+        && line.description is string && line.description.size() <= 500
+        && line.quantity is int && line.quantity >= 1
+        && line.unitPriceFils is int
+        && line.totalFils == line.quantity * line.unitPriceFils && line.totalFils >= 0;
+    }
+
+    function validQuoteLineAt(lines, index) {
+      return index >= lines.size() || validQuoteLine(lines[index]);
+    }
+
+    // Rules have no loops, so each line is checked by index. Ten checks is what
+    // fits the budget with every optional field present; the emulator test proves
+    // it for create and update. Quotes are admin-only, so later lines are bounded
+    // by count and validated by the UI, which also computes subtotalFils.
+    function validQuoteLines(lines) {
+      return lines is list && lines.size() > 0 && lines.size() <= 50
+        && validQuoteLineAt(lines, 0) && validQuoteLineAt(lines, 1) && validQuoteLineAt(lines, 2)
+        && validQuoteLineAt(lines, 3) && validQuoteLineAt(lines, 4) && validQuoteLineAt(lines, 5)
+        && validQuoteLineAt(lines, 6) && validQuoteLineAt(lines, 7) && validQuoteLineAt(lines, 8)
+        && validQuoteLineAt(lines, 9);
+    }
+
+    function validQuoteTotals(totals) {
+      return totals.size() == 4
+        && validFils(totals.subtotalFils) && validFils(totals.discountFils)
+        && validFils(totals.vatFils) && validFils(totals.totalFils)
+        && totals.discountFils <= totals.subtotalFils
+        && totals.totalFils == totals.subtotalFils - totals.discountFils + totals.vatFils;
+    }
+
+    function validQuoteData(data) {
+      return data.keys().hasOnly(["number", "lineItems", "totals", "status", "currency", "terms", "notes", "validUntil", "createdAt", "updatedAt"])
+        && data.number is string && data.number.size() > 0 && data.number.size() <= 40
+        && validQuoteLines(data.lineItems)
+        && validQuoteTotals(data.totals)
+        && data.status in ["draft", "sent", "accepted", "rejected", "expired"]
+        && data.currency == "AED"
+        && data.get("terms", "") is string && data.get("terms", "").size() <= 10000
+        && data.get("notes", "") is string && data.get("notes", "").size() <= 5000
+        && (data.get("validUntil", null) == null || data.get("validUntil", null) is timestamp)
+        && data.createdAt is timestamp
+        && data.updatedAt == request.time;
+    }
+
+    function validNoteInterestAt(interests, index) {
+      return interests.size() <= index || (interests[index] is string && interests[index].size() <= 40);
+    }
+
+    function validNoteInterests(interests) {
+      return interests is list && interests.size() <= 10
+        && validNoteInterestAt(interests, 0) && validNoteInterestAt(interests, 1) && validNoteInterestAt(interests, 2)
+        && validNoteInterestAt(interests, 3) && validNoteInterestAt(interests, 4) && validNoteInterestAt(interests, 5)
+        && validNoteInterestAt(interests, 6) && validNoteInterestAt(interests, 7) && validNoteInterestAt(interests, 8)
+        && validNoteInterestAt(interests, 9);
+    }
+
+    // One entry in a client's timeline. currency is present exactly when
+    // priceFils is, and is then always AED.
+    function validClientNote(data) {
+      let priced = data.keys().hasAny(["priceFils"]);
+      return data.keys().hasOnly(["text", "priceFils", "currency", "interests", "pinned", "authorUid", "authorName", "createdAt", "updatedAt"])
+        && data.text is string && data.text.size() >= 1 && data.text.size() <= 5000
+        && (priced
+          ? (validFils(data.priceFils) && data.get("currency", "") == "AED")
+          : !data.keys().hasAny(["currency"]))
+        && validNoteInterests(data.get("interests", []))
+        && data.get("pinned", false) is bool
+        && data.authorUid is string
+        && data.authorName is string && data.authorName.size() <= 80
+        && data.createdAt is timestamp
+        && data.updatedAt == request.time;
+    }
+
     match /weddings/{weddingId} {
       allow get: if isEventOwner(weddingId) || isFullDashboardAccount(weddingId);
-      allow list: if isFullDashboardAccount(weddingId);
+      // The wildcard is unset while a collection is listed, so the member check
+      // never passes there. Only platform administrators can list every event;
+      // everyone else discovers events through their own weddingAccess cards.
+      allow list: if isPlatformAdmin() || isFullDashboardAccount(weddingId);
 
       allow create: if isPlatformAdmin() &&
         request.auth.uid == request.resource.data.ownerUserId &&
         request.resource.data.eventCategory in ["wedding_engagement", "celebration", "gender_reveal"] &&
-        (request.resource.data.eventCategory != "gender_reveal" || validEventDetails(request.resource.data));
+        (request.resource.data.eventCategory != "gender_reveal" || validEventDetails(request.resource.data)) &&
+        validDemoFieldsOnCreate(request.resource.data) &&
+        validMusicFields(request.resource.data);
 
       // Table positions are stored in their own table documents, but the
       // stage/entrance markers live on the wedding document. Let seating
@@ -1453,7 +1683,7 @@ service cloud.firestore {
       match /genderRevealSessionKeys/{sessionId} {
         // Only this anonymous identity may check its own commit receipt. No
         // response data, other sessions, or collection queries are exposed.
-        allow get: if isAnonymousFirebaseSession() && sessionId == request.auth.uid;
+        allow get: if isAnonymousFirebaseSession() && sessionId == request.auth.uid && eventDemoOpen(weddingId);
         allow list: if isEventDeletingOwner(weddingId);
         allow create: if sessionId == request.auth.uid
           && validGenderRevealSubmissionBundle(weddingId,
@@ -1749,10 +1979,25 @@ service cloud.firestore {
             || getAfter(invitationTokenPath(weddingId, guestToken)).data.status == "revoked");
       }
 
+      // Actions of signed-in customer accounts only. Guests, RSVPs and invitation
+      // activity are never recorded here. Entries are written by the browser, so
+      // a hostile client can omit them: this is a trail of cooperating clients,
+      // not tamper-proof evidence of everything a customer did.
+      match /customerAudit/{entryId} {
+        allow get, list: if isPlatformAdmin();
+        allow create: if isCustomer(weddingId) && isDashboardMember(weddingId)
+          && entryId.size() <= 64 && validCustomerAuditEntry(request.resource.data);
+        allow update: if false;
+        allow delete: if isEventDeletingOwner(weddingId);
+      }
+
       // Client-driven deletion can resume after an interrupted batch. The
-      // deleting flag grants cleanup reads and deletes, never new writes.
+      // deleting flag grants cleanup reads and deletes, never new writes. The
+      // audit trail stays readable by platform administrators only, even here.
       match /{document=**} {
-        allow read, delete: if isEventDeletingOwner(weddingId);
+        allow read: if isEventDeletingOwner(weddingId)
+          && (isPlatformAdmin() || request.path[5] != "customerAudit");
+        allow delete: if isEventDeletingOwner(weddingId);
       }
     }
 
@@ -1764,6 +2009,44 @@ service cloud.firestore {
         (existsAfter(/databases/$(database)/documents/weddings/$(weddingId)/dashboardUsers/$(userId)) ||
           getAfter(/databases/$(database)/documents/weddings/$(weddingId)).data.ownerUserId == userId));
       allow delete: if isPlatformAdmin() || (isSignedIn() && request.auth.uid == userId) || isEventDeletingOwner(weddingId);
+    }
+
+    // Client tracker and quotations. Platform administrators only; every other
+    // account, including every customer, is denied by omission of any other path.
+    match /clients/{clientId} {
+      allow get, list, delete: if isPlatformAdmin();
+      allow create: if isPlatformAdmin() && validClientData(request.resource.data)
+        && request.resource.data.createdAt == request.time;
+      allow update: if isPlatformAdmin()
+        && request.resource.data.createdAt == resource.data.createdAt
+        && validClientData(request.resource.data);
+
+      match /quotes/{quoteId} {
+        allow get, list, delete: if isPlatformAdmin();
+        allow create: if isPlatformAdmin() && validQuoteData(request.resource.data)
+          && request.resource.data.createdAt == request.time;
+        // Immutable fields first: a set() evaluates create and update against one
+        // shared budget, and this fails at once when the document is new.
+        allow update: if isPlatformAdmin()
+          && request.resource.data.createdAt == resource.data.createdAt
+          && request.resource.data.number == resource.data.number
+          && validQuoteData(request.resource.data);
+      }
+
+      // Any administrator may edit or delete any note. Deletion does not need the
+      // client to exist, so a client's notes can be removed before or after it.
+      match /notes/{noteId} {
+        allow get, list, delete: if isPlatformAdmin();
+        allow create: if isPlatformAdmin()
+          && exists(/databases/$(database)/documents/clients/$(clientId))
+          && validClientNote(request.resource.data)
+          && request.resource.data.authorUid == request.auth.uid
+          && request.resource.data.createdAt == request.time;
+        allow update: if isPlatformAdmin()
+          && request.resource.data.authorUid == resource.data.authorUid
+          && request.resource.data.createdAt == resource.data.createdAt
+          && validClientNote(request.resource.data);
+      }
     }
 
     match /platformAdmins/{userId} {

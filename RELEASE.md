@@ -44,6 +44,40 @@ firebase deploy --only firestore:rules,firestore:indexes --project weddinginvita
 
 Then commit and push the tested frontend changes to `main`. The connected Vercel project creates the production deployment automatically. Do not run `firebase deploy --only hosting`, enable billing, or deploy Functions.
 
+### Vercel environment for the admin functions
+
+Set these in Vercel (Settings, Environment Variables), then redeploy. A missing value does not stop the deploy, so check it with the steps below:
+
+- `FIREBASE_SERVICE_ACCOUNT_JSON`: the whole service account JSON file.
+- `PHOTO_BUCKET_API_URL`: the `ApiUrl` printed by `backend/deploy.sh`, with no trailing slash. It must equal `API_URL` in `photo-bucket/config.js`.
+- `CRON_SECRET`: random, at least 32 characters (`openssl rand -hex 32`). Vercel Cron sends it to `/api/demo-cleanup` daily.
+- `DEMO_SERVICE_ADMIN_UID`: an enabled platform admin who is also in the bucket stack's `ADMIN_UIDS`.
+- `FIREBASE_WEB_API_KEY`: the `apiKey` from the site's Firebase config.
+
+### After every deploy: configuration and exposure check
+
+1. Sign in to the live dashboard as a platform admin.
+2. Open the browser's network tab and copy the `Authorization: Bearer ...` value from any `/api/` request. This is an ID token, valid for about an hour.
+3. In a terminal, load the token without echoing it or saving it to shell history, then run the check:
+
+   ```sh
+   read -rs QD_ADMIN_ID_TOKEN && export QD_ADMIN_ID_TOKEN
+   node scripts/post-deploy-check.mjs https://<production-site>
+   unset QD_ADMIN_ID_TOKEN
+   ```
+
+The script only sends GET requests, and it sends the token only to `/api/admin-health`. It prints PASS or FAIL for:
+
+- every configuration check from `/api/admin-health`, each with a plain-language fix;
+- every function answering as deployed;
+- every page route returning 200 with `no-store`;
+- server code, `backend/`, `docs/`, `.orchestrate/` and Markdown files not being publicly served;
+- the CSP `connect-src` allowing the bucket API host.
+
+Do not announce the release until every line passes. A WARNING line passes but needs attention.
+
+Without the script, an admin can open `/api/admin-health` with the same token. It returns `ok`, each check's status and fix, and which functions each failure affects. It never returns secret values.
+
 ## Existing event migration
 
 After the compatible rules are active and the client is deployed:
@@ -57,6 +91,7 @@ Stable browser-generated invitation tokens are retained and reprojected. A value
 
 ## Post-deploy smoke checks
 
+- `node scripts/post-deploy-check.mjs` passes (see above).
 - Owner and authorized account sign in, refresh, and sign out independently in two browser tabs.
 - Bride/groom links route through account sign-in and show only the membership-authorized side.
 - Assign, move, swap, and unassign seats; try the same empty chair from two side accounts at once.

@@ -1,0 +1,69 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>Clients · qdsystems</title>
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin><link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,500;9..144,600&family=Manrope:wght@400;500;600;700;800&display=swap" rel="stylesheet"><link rel="stylesheet" href="./styles.css"><link rel="stylesheet" href="./weddings.css"><link rel="stylesheet" href="./customers.css"><link rel="stylesheet" href="./clients.css?v=3"><link rel="stylesheet" href="./skeleton.css?v=1"></head>
+<body class="weddings-body">
+<main class="weddings-shell" id="workspace" hidden>
+  <header class="workspace-header"><a class="workspace-brand" href="./all-events.html" aria-label="qdsystems, All Events">qdsystems</a><div class="workspace-account"><span id="userEmail"></span><button class="text-button" id="signOut" type="button">Sign out</button></div></header>
+  <nav class="workspace-tabs" aria-label="Workspace"><a href="./all-events.html">Events</a><a href="./all-events.html#buckets">Photo Buckets</a><a href="./all-events.html#demos">Demos</a><a class="is-active" aria-current="page" href="./clients.html">Clients</a><a href="./customers.html">Customers</a></nav>
+
+  <section id="listView">
+    <section class="workspace-hero customer-hero"><div><h1>Clients</h1><p>People you quote and sell to. Prices are in AED. Only platform admins can see this page.</p></div><button class="primary-button" id="addClient" type="button">Add client</button></section>
+    <section class="workspace-controls"><label class="search-field"><span class="sr-only">Search clients</span><input id="search" type="search" placeholder="Search by name, phone or email" /></label></section>
+    <p class="workspace-status" id="status" role="status">Loading clients…</p>
+    <button class="secondary-button" id="retry" type="button" hidden>Try again</button>
+    <div id="clientList" class="client-list"></div>
+    <div class="load-more-row"><button class="secondary-button" id="loadMore" type="button" hidden>Load more clients</button></div>
+  </section>
+
+  <section id="detailView" hidden>
+    <p><button class="text-button" id="backToList" type="button">‹ All clients</button></p>
+    <div id="detailBody"></div>
+  </section>
+</main>
+<section class="workspace-loading" id="loading" role="status">Loading workspace…</section>
+
+<dialog id="clientDialog" class="workspace-dialog"><form id="clientForm" class="workspace-modal" novalidate>
+  <header><h2 id="clientFormTitle">Add client</h2><button class="icon-close" type="button" data-close aria-label="Close">×</button></header>
+  <div class="workspace-modal__body form-grid">
+    <label class="full">Name<input name="name" maxlength="160" required autocomplete="off" /></label>
+    <label>Phone<input name="phone" maxlength="40" inputmode="tel" autocomplete="off" /></label>
+    <label>Email<input name="email" type="email" maxlength="254" autocomplete="off" /></label>
+    <label class="full">Agreed price (AED)<input name="price" inputmode="decimal" placeholder="0.00" autocomplete="off" aria-describedby="priceHelp" /><small id="priceHelp">Whole dirhams or up to two decimals, for example 4500 or 4500.50.</small></label>
+    <label class="full">Notes<textarea name="notes" rows="4" maxlength="5000"></textarea></label>
+    <p class="form-error full" role="alert"></p>
+  </div>
+  <footer><button class="secondary-button" type="button" data-close>Cancel</button><button class="primary-button" type="submit">Save client</button></footer>
+</form></dialog>
+
+<dialog id="deleteDialog" class="workspace-dialog"><form id="deleteForm" class="workspace-modal workspace-modal--small">
+  <header><h2>Delete client?</h2><button class="icon-close" type="button" data-close aria-label="Close">×</button></header>
+  <div class="workspace-modal__body"><p>This permanently deletes <strong id="deleteName"></strong> their notes and all of their quotations. Linked events are not touched.</p><p class="form-error" role="alert"></p></div>
+  <footer><button class="secondary-button" type="button" data-close>Cancel</button><button class="danger-button" type="submit">Delete client</button></footer>
+</form></dialog>
+
+<dialog id="quoteDialog" class="workspace-dialog quote-dialog"><form id="quoteForm" class="workspace-modal" novalidate>
+  <header><div><p class="workspace-kicker" id="quoteKicker">Quotation</p><h2 id="quoteTitle">New quotation</h2></div><button class="icon-close" type="button" data-close aria-label="Close">×</button></header>
+  <div class="workspace-modal__body">
+    <div class="form-grid">
+      <label>Valid until<input name="validUntil" type="date" /></label>
+      <label>Status<select name="status"><option value="draft">Draft</option><option value="sent">Sent</option><option value="accepted">Accepted</option><option value="rejected">Rejected</option><option value="expired">Expired</option></select></label>
+    </div>
+    <fieldset class="quote-lines"><legend>Line items <span id="lineCount"></span></legend>
+      <div id="lineRows"></div>
+      <p class="form-error" id="linesError" role="alert"></p>
+      <button class="secondary-button" id="addLine" type="button">Add line</button>
+    </fieldset>
+    <div class="form-grid quote-money">
+      <label>Discount (AED, optional)<input name="discount" inputmode="decimal" placeholder="0.00" autocomplete="off" /></label>
+      <label class="check-row"><input type="checkbox" name="vat" /> Add 5% VAT <small>Off by default.</small></label>
+    </div>
+    <dl class="quote-totals" aria-live="polite"><div><dt>Subtotal</dt><dd id="tSubtotal"></dd></div><div id="tDiscountRow"><dt>Discount</dt><dd id="tDiscount"></dd></div><div id="tVatRow"><dt>VAT (5%)</dt><dd id="tVat"></dd></div><div class="grand"><dt>Total</dt><dd id="tTotal"></dd></div></dl>
+    <label class="full">Terms and conditions (editable)<textarea name="terms" rows="9" maxlength="10000"></textarea><small>Lines marked OWNER TO COMPLETE are placeholders. Fill them in before sending.</small></label>
+    <p class="form-error" id="quoteError" role="alert"></p>
+  </div>
+  <footer><button class="secondary-button" type="button" data-close>Cancel</button><button class="secondary-button" id="quotePrint" type="button">Print preview</button><button class="primary-button" type="submit">Save quotation</button></footer>
+</form></dialog>
+
+<div id="printSheet" class="print-sheet" aria-hidden="true"></div>
+<script type="module" src="./clients.js?v=1"></script>
+<script type="module" src="./action-feedback.js?v=1"></script></body></html>

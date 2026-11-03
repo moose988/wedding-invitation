@@ -24,6 +24,11 @@ import {
   waitForFirebaseSessionPersistence,
 } from "./firebase-service-scopes.js";
 import * as accountApi from "./firebase-config.js";
+import { recordCustomerAudit } from "./customer-audit.js";
+import { skeleton } from "./skeleton.js";
+import { mountMusicSettings } from "./music-settings.js";
+import { runFromEvent } from "./action-feedback.js";
+import { bindScheduleEditor, scheduleEditorMarkup } from "./schedule-editor.js";
 import { isPlatformAdmin } from "./account-access.js";
 import { persistCanonicalSeatDiff as persistCanonicalSeatDiffWithApi } from "./seating-transactions.js";
 import { createDashboardPersistence } from "./dashboard-persistence.js?v=20261028-invitation-sync-retry-1";
@@ -996,6 +1001,7 @@ async function init() {
       }
       state.weddingId = await resolveAccessibleWeddingId(user);
       if (!state.weddingId) {
+        if (state.redirectingToEvents) return;
         redirectToLogin("access-denied");
         return;
       }
@@ -1289,7 +1295,7 @@ function handleDocumentClick(event) {
     if (fromGuestMenu) {
       closeGuestMenu({ restoreFocus: false });
     }
-    void handleAction(action, actionNode.dataset, event);
+    void runFromEvent(event, () => handleAction(action, actionNode.dataset, event), { what: "That action", onError: (error, message) => showToast(message, "error") });
     return;
   }
 
@@ -2520,7 +2526,7 @@ function renderGlobalActions() {
     : dashboardHasUnsavedChanges()
       ? "Save or discard your unsaved changes before refreshing."
       : "Refresh current view";
-  elements.globalActions.innerHTML = `
+  elements.globalActions.innerHTML = `${state.isAdmin === true ? `<button class="da3wa-button" type="button" data-action="open-customer-audit">Customer activity log</button>` : ""}
     <button class="da3wa-icon-button da3wa-refresh-button${state.isRefreshing ? " is-refreshing" : ""}" type="button" data-action="refresh-dashboard" aria-label="Refresh current view" title="${escapeAttribute(title)}" aria-busy="${state.isRefreshing}" ${disabled ? 'disabled aria-disabled="true"' : 'aria-disabled="false"'}>
       <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M20 11a8 8 0 0 0-14.9-3M4 4v4h4M4 13a8 8 0 0 0 14.9 3M20 20v-4h-4" /></svg>
     </button>`;
@@ -2764,8 +2770,7 @@ function renderOverviewPage() {
     return;
   }
   if (state.loadingGuests || state.loadingTables) {
-    elements.pageContent.innerHTML =
-      '<div class="da3wa-skeleton" aria-hidden="true"></div>';
+    elements.pageContent.innerHTML = skeleton.cards(3, "Loading the overview…");
     return;
   }
 
@@ -2872,7 +2877,7 @@ function genderRevealDashboardSummary(responses = state.genderRevealResponses) {
 
 function renderGenderRevealOverviewPage() {
   if (state.genderRevealResponsesLoading) {
-    elements.pageContent.innerHTML = '<section class="gr-dashboard"><div class="da3wa-skeleton" aria-hidden="true"></div></section>';
+    elements.pageContent.innerHTML = `<section class="gr-dashboard">${skeleton.rows(4, "Loading responses…")}</section>`;
     return;
   }
   if (state.genderRevealResponsesError) {
@@ -2923,7 +2928,7 @@ function getFilteredGenderRevealResponses() {
 
 function renderGenderRevealResponsesPage() {
   if (state.genderRevealResponsesLoading) {
-    elements.pageContent.innerHTML = '<section class="gr-dashboard"><div class="da3wa-skeleton" aria-hidden="true"></div></section>';
+    elements.pageContent.innerHTML = `<section class="gr-dashboard">${skeleton.rows(4, "Loading responses…")}</section>`;
     return;
   }
   if (state.genderRevealResponsesError) {
@@ -2971,8 +2976,7 @@ function renderGuestPage() {
     return;
   }
   if (state.loadingGuests) {
-    elements.pageContent.innerHTML =
-      '<section class="guest-page"><div class="da3wa-skeleton" aria-hidden="true"></div></section>';
+    elements.pageContent.innerHTML = `<section class="guest-page">${skeleton.rows(6, "Loading guests…")}</section>`;
     return;
   }
 
@@ -3716,18 +3720,24 @@ function validateEventSettingsDraft(draft) {
   if (!genderReveal) try {
     const scheduleText = String(draft.schedule || "[]").trim();
     if (/<iframe\b/i.test(scheduleText) || /google\.com\/maps\/embed/i.test(scheduleText)) {
-      errors.schedule = "This is map embed code. Paste only the URL from its src=\"…\" into Google Maps embed URL above. Leave this schedule as [] if you do not need a schedule.";
+      errors.schedule = "This is map embed code. Paste only the URL from its src=\"…\" into Google Maps embed URL above. Leave the schedule empty if you do not need one.";
     }
     const schedule = JSON.parse(scheduleText);
     if (!Array.isArray(schedule) || schedule.length > 12 || schedule.some((item) =>
       !item || typeof item !== "object" || Array.isArray(item) ||
       ["time", "timeAr", "titleEn", "titleAr", "descriptionEn", "descriptionAr"].some((key) => item[key] !== undefined && (typeof item[key] !== "string" || item[key].length > 240)) ||
       !(String(item.titleEn || "").trim() || String(item.titleAr || "").trim())
-    )) errors.schedule = "Use a JSON list of up to 12 items. Each item needs titleEn or titleAr; text values can be up to 240 characters.";
+    )) errors.schedule = "Use up to 12 schedule items. Each item needs a title in English or Arabic; each text can be up to 240 characters.";
   } catch {
-    errors.schedule ||= "Enter a valid JSON list for the schedule, or leave it as [].";
+    errors.schedule ||= "The schedule could not be read. Remove its items and add them again.";
   }
   return errors;
+}
+
+// Best-effort trail of customer actions for platform admins. Never awaited: it
+// cannot fail a save. Guests and invitations are not recorded.
+function auditCustomerAction(action, targetType, targetId = "", summary = "") {
+  void recordCustomerAudit({ api: accountApi, db: state.services.db, weddingId: state.weddingId, user: state.currentUser, permissions: state.permissions, action, targetType, targetId: String(targetId ?? ""), summary });
 }
 
 async function saveEventSettings(event) {
@@ -3803,6 +3813,7 @@ async function saveEventSettings(event) {
           state.eventSettingsOriginal = null;
           state.dirtyEventSettings = false;
           state.eventSettingsErrors = {};
+          auditCustomerAction("event_settings_saved", "event", state.weddingId, "Event settings were saved");
           const publishingError = getDashboardPersistence().publicationError;
           state.eventSettingsMessage = publishingError ? "Event details saved. Invitation layout refresh is pending; use Refresh to retry once." : "Event details saved.";
           showToast(state.eventSettingsMessage, publishingError ? "error" : "success");
@@ -4042,6 +4053,7 @@ function renderEventSettingsPage() {
       `}
 
       ${isWeddingOwner() ? '<section class="event-settings-section share-card" id="customerAccessPanel"></section>' : ""}
+      ${state.isAdmin === true && !genderReveal && !hideOptionsAndLifecycle ? '<section class="event-settings-section share-card" id="musicPanel"></section>' : ""}
       <form class="event-settings-section share-card" id="eventSettingsForm" novalidate>
         <header class="event-settings-section__header">
           <div><h2>Event details</h2></div>
@@ -4059,7 +4071,7 @@ function renderEventSettingsPage() {
           ${genderReveal ? `${field("eventTitleAr", "Arabic event name", "text", true)}${field("genderRevealArtworkUrl", "Cover artwork path", "text", true)}${field("genderRevealOpeningVideoUrl", "Opening video path (optional)", "text", true)}${field("genderRevealMusicUrl", "Music path", "text", true)}<p class="event-settings-timezone is-full">Use a repository path under /images/, /videos/, or /music/, or an HTTPS URL. Commit repository files with the site; there is no media upload here. The opening video is optional and falls back to the cover artwork.</p>${textareaField("genderRevealMessageEn", "English invitation wording")}${textareaField("genderRevealMessageAr", "Arabic invitation wording")}` : ""}
           ${hideInvitationScheduleAndMapEmbed ? "" : `${field("venueMapEmbedUrl", "Google Maps embed URL", "url", true, false)}
           <p class="event-settings-timezone">Paste only the URL inside the Google Maps iframe's src="…" attribute, not the full iframe code. It is saved for this event only.</p>
-          <label class="event-settings-field is-full"><span>Invitation schedule (JSON, optional)</span><textarea class="da3wa-input" name="schedule" rows="8" data-event-setting-field ${canEditDetails ? "" : "disabled aria-disabled=\"true\""}>${escapeHtml(draft.schedule || "[]")}</textarea><small class="event-setting-error" role="alert">${escapeHtml(errors.schedule || "")}</small><small class="event-settings-timezone">Use up to 12 JSON items with time, timeAr, titleEn, titleAr, descriptionEn, and descriptionAr. Leave [] to hide the schedule. The map URL belongs in Google Maps embed URL above.</small></label>`}
+          ${scheduleEditorMarkup(draft.schedule, errors.schedule, canEditDetails)}`}
           ${hideInvitationScheduleAndMapEmbed ? "" : `<p class="event-settings-timezone">Date and time use the same local time display as the rest of the dashboard.</p>`}
         </div>
         <div class="event-settings-actions">
@@ -4076,6 +4088,8 @@ function renderEventSettingsPage() {
       `}
     </section>
   `;
+  const musicPanel = document.getElementById("musicPanel");
+  if (musicPanel && state.isAdmin === true) mountMusicSettings({ host: musicPanel, db: state.services.db, user: state.currentUser, wedding: state.wedding, eventId: state.weddingId, onChange: (m) => { state.wedding = { ...state.wedding, musicMode: m.mode, musicVersion: m.version, musicName: m.name }; } });
   if (isWeddingOwner()) {
     const placeholder = document.getElementById("customerAccessPanel");
     if (previousCustomerPanel) placeholder.replaceWith(previousCustomerPanel);
@@ -4085,6 +4099,7 @@ function renderEventSettingsPage() {
   const eventSettingsForm = document.getElementById("eventSettingsForm");
   if (eventSettingsForm) {
     bindEventSettingsFieldTracking(eventSettingsForm, updateEventSettingsDraftState);
+    bindScheduleEditor(eventSettingsForm);
   }
   if (focusedFieldName) {
     const nextField = elements.pageContent.querySelector(
@@ -5475,6 +5490,11 @@ async function handleAction(action, dataset, event = null) {
         updatedAt: serverTimestamp(),
       });
       return;
+    case "open-customer-audit": {
+      if (state.isAdmin !== true) return;
+      void import("./admin-workspace.js").then((module) => module.openEventAudit({ id: state.weddingId }, { db: state.services.db, title: getEventDisplayTitle(state.wedding) })).catch(() => showToast("The activity log could not open.", "error"));
+      return;
+    }
     case "copy-guest-invite": {
       const guest = state.guests.find(
         (item) => item.id === dataset.id || item.id === dataset.guestId,
@@ -6264,6 +6284,7 @@ async function updateBulkRsvp(status) {
       });
       await batch.commit();
     }
+    auditCustomerAction("guests_rsvp_updated", "guest", "", `RSVP set to ${status} for selected guests`);
     showToast("Selected guests updated.", "success");
   } catch (error) {
     console.error(error);
@@ -6427,6 +6448,7 @@ async function saveGuest(event) {
       await batch.commit();
     }
     state.dirtyGuestForm = false;
+    auditCustomerAction(guestId ? "guest_updated" : "guest_added", "guest", guestId || "", guestId ? "A guest was updated" : "A guest was added");
     elements.guestModal.close();
     const publishingError = getPendingPublicationError();
     if (publishingError) showGuestSyncFailure(guestId, publishingError);
@@ -6566,6 +6588,7 @@ async function saveBulkGuests(event) {
     }
     elements.bulkAddForm.reset();
     elements.bulkAddModal.close();
+    auditCustomerAction("guests_added", "guest", "", `${payloads.length} guest(s) added in bulk`);
     showToast(
       `${payloads.length} guest${payloads.length === 1 ? "" : "s"} added.`,
       "success",
@@ -6630,6 +6653,7 @@ async function updateGuest(guestId, payload) {
   showInvitationFlowStatus(can("canEditGuests") ? "Saving guest and syncing invitation…" : "Saving guest…", "info");
   try {
     await persistGuestAndInvitation(guestId, payload);
+    auditCustomerAction("guest_updated", "guest", guestId, "A guest was updated");
     const publishingError = can("canEditGuests") ? getPendingPublicationError() : null;
     if (publishingError) showGuestSyncFailure(guestId, publishingError);
     else showInvitationFlowStatus("Guest updated.", "success");
@@ -6717,6 +6741,7 @@ async function deleteGuest(guestId) {
     state.guests = syncGuestSeatingSummaries(nextGuests, state.tables);
     state.selectedSeatId = "";
     renderAll();
+      auditCustomerAction("guest_deleted", "guest", guestId, "A guest was deleted");
       showToast("Guest deleted.", "success");
   } catch (error) {
     console.error(error);
@@ -6890,6 +6915,7 @@ async function saveTable(event) {
     state.dirtyTableForm = false;
     elements.tableModal.close();
     renderAll();
+      auditCustomerAction("table_saved", "table", state.selectedTableId, "A table was saved");
       showToast("Table saved successfully.", "success");
   } catch (error) {
     console.error(error);
@@ -6940,6 +6966,7 @@ async function duplicateTable(table) {
     });
     state.tables = hydrateTables([...state.tables, duplicated]);
     renderAll();
+      auditCustomerAction("table_duplicated", "table", table?.id, "A table was duplicated");
       showToast("Table duplicated.", "success");
   } catch (error) {
     console.error(error);
@@ -7057,6 +7084,7 @@ async function deleteTable(tableId) {
     state.activeModalOperation = "";
     elements.tableDeleteModal?.close();
     renderAll();
+      auditCustomerAction("table_deleted", "table", tableId, "A table was deleted");
       showToast("Table deleted.", "success");
   } catch (error) {
     console.error(error);
@@ -7873,6 +7901,7 @@ async function savePartyAssignment(guest, selectedChairs, movingParty = false) {
     state.tables = savedTables;
     state.guests = savedGuests;
   }
+  auditCustomerAction("seat_assigned", "guest", guest?.id, "Seats were assigned");
 }
 
 function applyPartyAssignmentToTables(
@@ -8057,6 +8086,7 @@ function renderChairDetailsModal(guestId) {
           )
           .join("")}
       </div>
+      ${renderChairInvitationLink(guest, assignments)}
       ${state.modalError ? `<div class="planner-warning-list"><span class="warning-chip">${escapeHtml(state.modalError)}</span></div>` : ""}
     </div>
     <div class="da3wa-sheet__footer">
@@ -8067,6 +8097,20 @@ function renderChairDetailsModal(guestId) {
       </div>
     </div>
   `;
+}
+
+// Same copy flow as the guest list (data-action="copy-guest-invite"), so tokens behave identically.
+// Hidden where the list's copy would fail: Gender Reveal events (one shared link) and live roles that cannot edit guests.
+function renderChairInvitationLink(guest, assignments) {
+  if (isGenderRevealEvent(state.wedding)) return "";
+  if (state.mode === "live" && !can("canEditGuests")) return "";
+  const seat = assignments.find((item) => item.partyMemberIndex === 0) || assignments[0];
+  const name = guest.fullName || "Guest";
+  return `
+      <div class="chair-invitation-link">
+        <p><strong>${escapeHtml(name)}</strong> - Party of ${getPartySize(guest)}${seat ? ` - ${escapeHtml(seat.tableName || seat.tableId)}, Chair ${escapeHtml(String(seat.seatNumber))}` : ""}</p>
+        <button class="da3wa-button da3wa-button--secondary" type="button" data-action="copy-guest-invite" data-guest-id="${escapeAttribute(guest.id)}" aria-label="Copy invitation link for ${escapeAttribute(name)}"${state.activeModalOperation ? ' disabled aria-disabled="true"' : ""}>Copy invitation link</button>
+      </div>`;
 }
 
 function renderMovePartyModal(guestId) {
@@ -8200,6 +8244,7 @@ async function confirmPartyUnassign(guestId) {
     state.pendingPartyUnassignId = "";
     state.pendingPartyUnassignSignature = "";
     elements.chairDetailsModal?.close();
+    auditCustomerAction("party_unassigned", "guest", guestId, "A party was unassigned from its seats");
     showToast("The entire party has been unassigned.", "success");
   } catch (error) {
     const diagnosticError = reportSeatingOperationFailure(
@@ -8434,6 +8479,7 @@ async function unassignSingleSeat(tableId, chairId) {
     state.tables = savedTables;
     state.guests = savedGuests;
     state.selectedSeatId = "";
+    auditCustomerAction("seat_unassigned", "seat", `${tableId}:${chairId}`, "A seat was unassigned");
     renderAll();
   }
 }
@@ -9118,6 +9164,7 @@ async function persistHallObjects(errorMessage = "Venue layout could not be save
       updatedAt: serverTimestamp(),
     });
     setSaveState("saved");
+    auditCustomerAction("hall_layout_updated", "layout", state.weddingId, "Venue layout updated");
     return true;
   } catch (error) {
     console.error(error);
@@ -9221,6 +9268,16 @@ function redirectToLogin(message = "session-required") {
 
 async function resolveAccessibleWeddingId(user) {
   const rememberedWeddingId = localStorage.getItem(lastWeddingStorageKey);
+  // A platform admin needs no membership. Use the remembered event if it still exists,
+  // otherwise go to the event list. Never scan events one by one.
+  if (await isPlatformAdmin(accountApi, state.services.db, user.uid)) {
+    if (rememberedWeddingId) {
+      try { if ((await getDoc(doc(state.services.db, "weddings", rememberedWeddingId))).exists()) return rememberedWeddingId; } catch { /* fall through to the list */ }
+    }
+    state.redirectingToEvents = true;
+    window.location.replace("./all-events.html");
+    return "";
+  }
   if (
     rememberedWeddingId &&
     (await canViewWedding(user, rememberedWeddingId))

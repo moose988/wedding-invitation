@@ -1,3 +1,5 @@
+import { runFromEvent } from "./action-feedback.js";
+import { DEFAULT_SONG, musicModeOf, resolveMusic } from "./invitation-music.js";
 import { invitationRefreshIsCurrent, invitationRsvpStorageKey, invitationRsvpView } from "./invitations/shared/rsvp-state.js";
 import { buildSatelliteMapEmbedUrl } from "./invitations/shared/map-embed.js";
 import { buildInvitationCalendar } from "./invitations/shared/calendar.js";
@@ -51,7 +53,7 @@ const demoWedding = {
   ownerUserId: "",
   status: "active",
   media: {
-    audio: "./music/wedding.mp3",
+    audio: "./music/wedding.m4a",
     heroImage: "./images/couple.jpg",
   },
   gallery: [
@@ -558,6 +560,8 @@ function normaliseWedding(wedding) {
       ...demoWedding.media,
       ...(wedding.media || {}),
     },
+    musicMode: musicModeOf(wedding),
+    musicVersion: Number.isInteger(wedding.musicVersion) ? wedding.musicVersion : 0,
     palette: Array.isArray(wedding.palette) && wedding.palette.length ? wedding.palette : demoWedding.palette,
     schedule: Array.isArray(wedding.schedule) ? wedding.schedule : [],
   };
@@ -649,7 +653,8 @@ function populateInvitation() {
   } else {
     setText("heroEventLine", heroDetails.join(" · "));
   }
-  if (elements.weddingAudio?.querySelector("source") && wedding.media.audio) {
+  if (wedding.id && wedding.id !== "luxury-wedding-demo" || wedding.musicMode === "off") void configureMusic(wedding);
+  else if (elements.weddingAudio?.querySelector("source") && wedding.media.audio) {
     const source = elements.weddingAudio.querySelector("source");
     const nextSource = new URL(wedding.media.audio, document.baseURI).toString();
     if (source.src !== nextSource) {
@@ -2024,12 +2029,12 @@ function bindBaseEvents() {
     }
     const mapPreviewButton = event.target.closest("[data-load-map-preview]");
     if (mapPreviewButton) {
-      loadLaylaMapPreview(mapPreviewButton);
+      void runFromEvent(event, async () => loadLaylaMapPreview(mapPreviewButton), { what: "Loading the map" });
       return;
     }
     const calendarButton = event.target.closest("[data-calendar-download]");
     if (calendarButton) {
-      downloadCalendarFile();
+      void runFromEvent(event, async () => downloadCalendarFile(), { what: "The calendar file", success: "Calendar file downloaded." });
     }
 
     if (event.target.closest("[data-scroll-details]")) {
@@ -2151,12 +2156,34 @@ function revealInvitation() {
   if (siteContent) siteContent.inert = false;
   if (elements.skipOpeningButton) elements.skipOpeningButton.hidden = true;
   if (isLaylaInvitation()) setupLaylaDetailsBackdrop();
-  elements.musicToggle.hidden = false;
+  elements.musicToggle.hidden = state.musicOff === true;
   elements.stickyActions.hidden = false;
   setupRevealObserver();
 }
 
+// Applies the event's music setting: off plays nothing and hides the button; default keeps the shipped song;
+// custom loads the uploaded song and falls back to the default only if it cannot be loaded.
+async function configureMusic(wedding) {
+  const audio = elements.weddingAudio; if (!audio) return;
+  const plan = await resolveMusic(wedding);
+  state.musicOff = plan.mode === "off";
+  if (state.musicOff) {
+    audio.pause(); audio.removeAttribute("src"); audio.querySelector("source")?.remove(); audio.load();
+    state.musicAvailable = false; if (elements.musicToggle) elements.musicToggle.hidden = true; return;
+  }
+  if (elements.musicToggle && document.body.classList.contains("invitation-open")) elements.musicToggle.hidden = false;
+  let source = audio.querySelector("source");
+  if (!source) { source = document.createElement("source"); audio.append(source); }
+  const set = (src, type) => { const next = new URL(src, document.baseURI).toString(); if (source.src !== next) { source.src = next; source.type = type; audio.load(); } };
+  set(plan.src, plan.type);
+  if (plan.mode === "custom") {
+    // If the uploaded file fails to play, use the default song once.
+    audio.addEventListener("error", () => { if (source.dataset.fellBack) return; source.dataset.fellBack = "1"; state.musicAvailable = true; set(DEFAULT_SONG.src, DEFAULT_SONG.type); }, { once: true });
+  }
+}
+
 async function playWeddingMusicFromGesture() {
+  if (state.musicOff) return;
   if (!state.musicAvailable || !elements.weddingAudio) {
     setMusicToggleState("unavailable", "♫", isLaylaInvitation() ? laylaText("musicUnavailable") : "Event music unavailable");
     return;
@@ -2172,7 +2199,7 @@ async function playWeddingMusicFromGesture() {
 }
 
 async function handleMusicToggle() {
-  if (!state.musicAvailable || !elements.weddingAudio) {
+  if (state.musicOff || !state.musicAvailable || !elements.weddingAudio) {
     return;
   }
 

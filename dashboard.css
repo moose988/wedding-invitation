@@ -5964,3 +5964,17 @@ body.is-overview-view .overview-page { width: 100%; max-width: var(--da3wa-conte
 .dash-loading__slow .da3wa-button { margin-left: 8px; min-height: 44px; }
 @keyframes dash-loading-slow { to { opacity: 1; visibility: visible; } }
 .dash-loading[hidden], .da3wa-shell:has(> #dashboardApp:not([hidden])) > .dash-loading { display: none; }
+
+/* Phones: every seat keeps a 44 px touch target at any zoom, without changing how it looks. */
+@media (max-width: 700px) {
+  .mobile-seating-map .planner-chair::after { content: ""; position: absolute; left: 50%; top: 50%; width: var(--chair-hit, calc(44px / var(--planner-zoom, 1))); height: var(--chair-hit, calc(44px / var(--planner-zoom, 1))); min-width: 100%; min-height: 100%; transform: translate(-50%, -50%); border-radius: 50%; pointer-events: auto; }
+  .mobile-seating-map-tools .da3wa-button { min-height: 44px; min-width: 44px; }
+}
+
+/* Phones: the title keeps its width; extra header actions (such as the admin activity log) move to their own row. */
+@media (max-width: 700px) {
+  .da3wa-main > .da3wa-topbar { flex-wrap: wrap; }
+  .da3wa-topbar__intro { flex: 1 1 180px; min-width: 0; }
+  .da3wa-topbar__actions, .da3wa-topbar__action-row { flex-wrap: wrap; max-width: 100%; }
+  .da3wa-topbar__action-row .da3wa-button { min-height: 44px; }
+}

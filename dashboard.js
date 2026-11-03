@@ -3322,11 +3322,20 @@ function renderMobileSeatingPage({ seatingStats, sideStats, isSaving }) {
   }
   if (!state.plannerViewCenter) fitMobilePlannerView();
   else restorePlannerViewport();
+  updateChairHitArea();
 }
 
+// Fitting a whole venue on a phone made seats about 3 px wide. Phones open at a readable zoom instead and pan from there.
+const MOBILE_MIN_FIT_ZOOM = 1;
 function fitMobilePlannerView() {
   const fit = calculatePlannerFit();
   if (!fit) return;
+  if (window.matchMedia("(max-width: 700px)").matches && fit.zoom < MOBILE_MIN_FIT_ZOOM) {
+    // Zoomed in, the whole venue no longer fits, so start on the tables rather than the middle of everything
+    // (stage and entrance markers can sit far from them).
+    fit.zoom = MOBILE_MIN_FIT_ZOOM;
+    fit.center = getPlannerTablesCenter() || fit.center;
+  }
   state.plannerZoom = fit.zoom;
   state.plannerViewCenter = fit.center;
   setPlannerCanvasZoom(document.getElementById("plannerCanvas"), fit.zoom);
@@ -3356,6 +3365,20 @@ function getPlannerContentBounds() {
   });
   if (!Number.isFinite(bounds.minX)) return { minX: 0, minY: 0, maxX: state.plannerMapWidth, maxY: state.plannerMapHeight };
   return bounds;
+}
+
+function getPlannerTablesCenter() {
+  const canvas = document.getElementById("plannerCanvas");
+  const tables = canvas ? [...canvas.querySelectorAll(".planner-table")] : [];
+  if (!tables.length) return null;
+  const canvasRect = canvas.getBoundingClientRect(), zoom = Math.max(0.001, state.plannerZoom);
+  const xs = [], ys = [];
+  for (const table of tables) {
+    const rect = table.getBoundingClientRect();
+    xs.push((rect.left - canvasRect.left) / zoom, (rect.right - canvasRect.left) / zoom);
+    ys.push((rect.top - canvasRect.top) / zoom, (rect.bottom - canvasRect.top) / zoom);
+  }
+  return { x: (Math.min(...xs) + Math.max(...xs)) / 2, y: (Math.min(...ys) + Math.max(...ys)) / 2 };
 }
 
 function calculatePlannerFit() {
@@ -7110,6 +7133,17 @@ function setPlannerCanvasZoom(canvas, zoom) {
   if (!canvas) return;
   canvas.style.setProperty("--planner-zoom", String(zoom));
   canvas.style.setProperty("--planner-object-scale", String(Math.min(1, 1 / zoom)));
+  updateChairHitArea(canvas);
+}
+
+// Seats sit inside tables that are scaled again for their size, so the map zoom alone cannot size a 44 px touch
+// target. Measure how big a seat really renders and size the invisible touch area from that.
+function updateChairHitArea(canvas = document.getElementById("plannerCanvas")) {
+  if (!canvas) return;
+  const scales = [...canvas.querySelectorAll(".planner-chair")].slice(0, 12)
+    .map((chair) => chair.offsetWidth ? chair.getBoundingClientRect().width / chair.offsetWidth : 0).filter((s) => s > 0);
+  if (!scales.length) return;
+  canvas.style.setProperty("--chair-hit", `${Math.ceil(44 / Math.min(...scales))}px`);
 }
 
 function resetPlannerView() {

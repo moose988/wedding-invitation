@@ -78,10 +78,10 @@ async function proxyPhotoBucket(req, res, requestUrl) {
   } else {
     if (!["GET", "PUT"].includes(req.method)) return send(res, 405, "Method Not Allowed");
     try { target = new URL(requestUrl.searchParams.get("url")); } catch { return send(res, 400, "Invalid storage URL"); }
-    if (target.protocol !== "https:" || !/^pb-[a-z0-9.-]+\.s3[.-][a-z0-9-]+\.amazonaws\.com$/i.test(target.hostname) || target.username || target.password || target.port) return send(res, 403, "Invalid storage host");
+    if (target.protocol !== "https:" || !/^pbs?-[a-z0-9.-]+\.s3[.-][a-z0-9-]+\.amazonaws\.com$/i.test(target.hostname) || target.username || target.password || target.port) return send(res, 403, "Invalid storage host");
   }
   const headers = {};
-  for (const name of ["authorization", "content-type", "x-amz-checksum-sha256", "x-amz-server-side-encryption"]) if (req.headers[name]) headers[name] = req.headers[name];
+  for (const name of ["authorization", "content-type", "content-length", "x-amz-checksum-sha256", "x-amz-server-side-encryption"]) if (req.headers[name]) headers[name] = req.headers[name];
   try {
     const options = { method: req.method, headers, redirect: "error" };
     if (["POST", "PATCH", "PUT"].includes(req.method)) { options.body = Readable.toWeb(req); options.duplex = "half"; }

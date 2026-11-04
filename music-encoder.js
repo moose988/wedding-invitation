@@ -43,7 +43,7 @@ export async function decodeAudio(file, { signal } = {}) {
   return samples;
 }
 
-export function encodeMp3(samples, { onProgress = () => {}, workerUrl = "/music-worker.js", signal } = {}) {
+function convertInWorker(workerUrl, input, { onProgress = () => {}, signal, transfer = [] } = {}) {
   return new Promise((resolve, reject) => {
     signal?.throwIfAborted();
     const worker = new Worker(workerUrl);
@@ -59,13 +59,28 @@ export function encodeMp3(samples, { onProgress = () => {}, workerUrl = "/music-
     worker.onmessage = ({ data }) => {
       if (data.type === "progress") onProgress(data.value);
       else if (data.type === "done") finish(resolve, data.blob);
+      else if (data.type === "unsupported") finish(resolve, null);
       else if (data.type === "error") finish(reject, new Error(`The song could not be converted: ${data.message}`));
     };
     worker.onerror = () => finish(reject, new Error("The converter could not start. Reload the page and try again."));
     try {
-      worker.postMessage({ samples, sampleRate: SAMPLE_RATE, kbps: MUSIC_LIMITS.kbps }, [samples.buffer]);
+      worker.postMessage(input, transfer);
     } catch (error) {
       finish(reject, error);
     }
   });
+}
+
+export function encodeMp3(samples, { workerUrl = "/music-worker.js", ...options } = {}) {
+  return convertInWorker(workerUrl, { samples, sampleRate: SAMPLE_RATE, kbps: MUSIC_LIMITS.kbps }, {
+    ...options, transfer: [samples.buffer],
+  });
+}
+
+export async function convertSongToMp3(file, options) {
+  if (/^audio\/(?:mpeg|mp3)$/i.test(file.type) && typeof globalThis.AudioDecoder === "function") {
+    const output = await convertInWorker("/music-stream-worker.js", file, options);
+    if (output) return output;
+  }
+  return encodeMp3(await decodeAudio(file, options), options);
 }

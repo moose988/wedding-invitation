@@ -3,7 +3,7 @@ import test from "node:test";
 import { updateAdminEventArchiveStatus } from "../admin-events.js";
 import { noteBubbleHtml } from "../client-notes-core.js";
 import { itemCardHtml } from "../customer-list.js";
-import { decodeAudio, encodeMp3 } from "../music-encoder.js";
+import { convertSongToMp3, decodeAudio, encodeMp3 } from "../music-encoder.js";
 import { uploadAndCommitSong } from "../music-api.js";
 
 function useGlobal(t, name, value) {
@@ -87,6 +87,43 @@ test("encoding transfers the mono data and terminates the worker on cancellation
   controller.abort();
   await assert.rejects(promise, { name: "AbortError" });
   assert.equal(terminations, 1);
+});
+
+test("song conversion uses the streaming worker for MP3 and falls back to Web Audio when needed", async t => {
+  const converted = new Blob(["output"], { type: "audio/mpeg" });
+  const seen = [];
+  let supported = true;
+  let decoded = 0;
+  useGlobal(t, "AudioDecoder", class {});
+  useGlobal(t, "OfflineAudioContext", class {
+    async decodeAudioData() {
+      decoded++;
+      return { duration: 1, numberOfChannels: 1, getChannelData: () => Float32Array.of(0.5) };
+    }
+  });
+  useGlobal(t, "Worker", class {
+    constructor(url) { this.url = url; }
+    postMessage(input) {
+      seen.push([this.url, input instanceof Blob]);
+      this.onmessage({ data: this.url === "/music-stream-worker.js" && !supported
+        ? { type: "unsupported" }
+        : { type: "done", blob: converted } });
+    }
+    terminate() {}
+  });
+  const mp3 = new Blob(["compressed"], { type: "audio/mpeg" });
+  assert.equal(await convertSongToMp3(mp3), converted);
+  assert.equal(decoded, 0);
+  supported = false;
+  assert.equal(await convertSongToMp3(mp3), converted);
+  assert.equal(await convertSongToMp3(new Blob(["wav"], { type: "audio/wav" })), converted);
+  assert.equal(decoded, 2);
+  assert.deepEqual(seen, [
+    ["/music-stream-worker.js", true],
+    ["/music-stream-worker.js", true],
+    ["/music-worker.js", false],
+    ["/music-worker.js", false],
+  ]);
 });
 
 test("song upload does not retry a commit rejected by a concurrent writer", async t => {

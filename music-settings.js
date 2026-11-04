@@ -6,7 +6,7 @@ import { skeleton } from "./skeleton.js";
 import { confirmAction, runAction, showToast } from "./action-feedback.js";
 import { esc } from "./admin-api.js";
 import { projectionEqual, publicEventData } from "./event-publishing.js?v=20261018-guest-invitation-regressions-2";
-import { MUSIC_LIMITS, checkAudioFile, decodeAudio, encodeMp3, songNameFrom } from "./music-encoder.js";
+import { MUSIC_LIMITS, checkAudioFile, convertSongToMp3, songNameFrom } from "./music-encoder.js";
 import { previewSongUrl, removeSongFile, uploadAndCommitSong } from "./music-api.js";
 
 export const MUSIC_COPY = Object.freeze({
@@ -26,7 +26,7 @@ const panels = new Map(); // eventId -> { paint, error } of the panel currently 
 export async function convertAndUploadSong({ file, eventId, user, onStatus = () => {}, confirmBlob = null, signal }) {
   const bad = checkAudioFile(file); if (bad) throw new Error(bad);
   onStatus({ phase: "reading", value: 0, message: "Reading the audio file…" });
-  const blob = await encodeMp3(await decodeAudio(file, { signal }), { signal, onProgress: value => onStatus({ phase: "converting", value, message: `Converting to MP3 · ${Math.round(value * 100)}%` }) });
+  const blob = await convertSongToMp3(file, { signal, onProgress: value => onStatus({ phase: "converting", value, message: `Converting to MP3 · ${Math.round(value * 100)}%` }) });
   if (confirmBlob && !(await confirmBlob(blob))) return null;
   onStatus({ phase: "uploading", value: 0, message: "Uploading…" });
   await uploadAndCommitSong({ user, eventId, blob, onProgress: value => onStatus({ phase: "uploading", value, message: `Uploading · ${Math.round(value * 100)}%` }) });

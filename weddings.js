@@ -586,12 +586,14 @@ function updateCategoryFields() {
   if (photoBucket) { el.continueEventButton.disabled = false; return; }
   const wedding = category === EVENT_CATEGORIES.WEDDING_ENGAGEMENT;
   const genderReveal = category === EVENT_CATEGORIES.GENDER_REVEAL;
+  const templateInputs = [...el.eventTemplateStep.querySelectorAll(`[data-template-category="${category}"] input[name="invitationTemplate"]`)];
+  const selectedTemplate = templateInputs.find(input => input.checked) || templateInputs[0];
   el.eventTemplateStep.querySelectorAll("[data-template-category]").forEach((card) => {
     const matches = card.dataset.templateCategory === category;
     card.hidden = !matches;
     const input = card.querySelector('input[name="invitationTemplate"]');
     input.disabled = !matches;
-    if (matches) input.checked = true;
+    input.checked = matches && input === selectedTemplate;
   });
   el.continueEventButton.disabled = !category;
   el.weddingForm.querySelectorAll(".wedding-identity").forEach((label) => {

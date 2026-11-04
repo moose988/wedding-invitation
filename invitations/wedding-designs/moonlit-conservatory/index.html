@@ -1,0 +1,84 @@
+<!doctype html>
+<html lang="en" dir="ltr">
+<head>
+  <base href="../../../" />
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <meta name="theme-color" content="#101f25" />
+  <meta name="description" content="A personal invitation to an unforgettable wedding evening." />
+  <title>Moonlit Conservatory · Wedding Invitation</title>
+  <link rel="icon" type="image/svg+xml" href="./invitations/wedding-designs/moonlit-conservatory/assets/moon.svg" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600&family=Italiana&family=Noto+Naskh+Arabic:wght@400;500;600&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="./invitations/wedding-designs/moonlit-conservatory/styles.css" />
+</head>
+<body class="moonlit-invitation" data-guest-experience="bilingual" data-invitation-template="moonlit-conservatory">
+  <a class="skip-link" href="#siteContent">Skip to invitation</a>
+  <div class="moon-language" id="laylaLanguageToggle" role="group" aria-label="Invitation language">
+    <button type="button" data-language="en" aria-pressed="true" lang="en">EN</button>
+    <button type="button" data-language="ar" aria-pressed="false" lang="ar">عربي</button>
+  </div>
+  <aside class="sample-preview-banner" id="samplePreviewBanner" hidden><span data-layla-text="sampleInvitation">Sample invitation</span></aside>
+
+  <section class="envelope-intro" id="introScreen" aria-label="Open your invitation">
+    <div class="envelope-intro__stage" id="envelopeStage">
+      <img class="envelope-intro__poster" src="./invitations/wedding-designs/moonlit-conservatory/assets/opening.webp" alt="Moonlight through the glass doors of a candlelit conservatory" width="1024" height="1536" fetchpriority="high" />
+      <video class="envelope-intro__video" id="openingVideo" playsinline webkit-playsinline muted preload="none" poster="./invitations/wedding-designs/moonlit-conservatory/assets/opening.webp" aria-label="A journey into the moonlit conservatory">
+        <source src="./invitations/wedding-designs/moonlit-conservatory/assets/opening.mp4" type="video/mp4" />
+      </video>
+      <div class="opening-copy">
+        <p data-layla-language="en">You are invited</p><p data-layla-language="ar" lang="ar" hidden>أنتم مدعوون</p>
+        <h2 data-layla-language="en">An evening<br>to remember.</h2><h2 data-layla-language="ar" lang="ar" hidden>أمسية<br>لا تُنسى.</h2>
+        <button class="luxury-button luxury-button--primary" id="openInvitation" type="button"><span id="openInvitationLabelPrimary" data-layla-text="openInvitation">Enter the celebration</span><span aria-hidden="true">↗</span><span id="introRetryLabel"></span></button>
+        <p class="envelope-intro__caption" data-layla-text="introCaption">A little moonlight. A lifetime of love.</p>
+      </div>
+    </div>
+    <p class="envelope-intro__status" id="introStatus" role="status" aria-live="polite" hidden></p>
+    <button class="envelope-intro__skip" id="skipOpening" type="button" data-layla-text="skip">Skip opening</button>
+  </section>
+
+  <button class="music-toggle" id="musicToggle" type="button" aria-label="Play event music" aria-pressed="false" data-state="paused" hidden><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 18V5l11-2v13M9 9l11-2"/><ellipse cx="6" cy="18" rx="3" ry="2"/><ellipse cx="17" cy="16" rx="3" ry="2"/></svg></button>
+  <audio id="weddingAudio" preload="none" loop><source src="./music/wedding.mp3" type="audio/mpeg" /></audio>
+
+  <main class="site-content" id="siteContent" inert tabindex="-1">
+    <section class="hero section" id="heroSection">
+      <nav class="moon-hero-top" aria-label="Invitation navigation"><a href="#rsvpSection" data-layla-text="rsvp">RSVP</a></nav>
+      <div class="hero-composition">
+        <div class="hero-title"><h1 class="hero-names"><span id="heroEnglishNames" data-layla-language="en"></span><span id="heroArabicNames" data-layla-language="ar" lang="ar" hidden></span></h1>
+          <p id="heroSubtitleEnglish" data-layla-language="en"></p><p id="heroSubtitleArabic" data-layla-language="ar" lang="ar" hidden></p>
+        </div>
+        <figure class="moon-garden"><img src="./invitations/wedding-designs/moonlit-conservatory/assets/garden.webp" width="1536" height="1024" alt="A moonlit garden reflected in still water" fetchpriority="high" /><figcaption><span data-layla-language="en">Where our next chapter begins.</span><span data-layla-language="ar" lang="ar" hidden>هنا يبدأ فصلنا الجديد.</span></figcaption></figure>
+      </div>
+      <div class="hero-bottom"><p class="hero-event-line" id="heroEventLine"></p><button class="luxury-button luxury-button--primary" type="button" data-scroll-details><span data-layla-text="viewDetails">Explore the evening</span><span aria-hidden="true">↓</span></button></div>
+    </section>
+
+    <section class="section countdown-section reveal" id="countdownSection"><div class="section-frame countdown-composition">
+      <div class="section-heading"><h2 data-layla-text="countdownHeading">Every moment,<br>a little closer.</h2><p id="invitationMessageEnglish" data-layla-language="en"></p><p id="invitationMessageArabic" data-layla-language="ar" lang="ar" hidden></p></div>
+      <div class="hero-countdown" id="countdownGrid" aria-label="Time until the wedding"></div>
+    </div></section>
+
+    <section class="section details-section reveal" id="detailsSection"><div class="section-frame details-composition">
+      <figure class="venue-picture"><img class="venue-illustration" src="./invitations/wedding-designs/moonlit-conservatory/assets/table.webp" width="1024" height="1536" alt="A candlelit dinner table, silver cutlery and olive branches" loading="lazy" /></figure>
+      <div class="details-copy"><div class="section-heading"><h2 data-layla-text="detailsHeading">Meet us<br>in the moonlight.</h2></div><div id="detailsGrid"></div><div class="venue-actions" id="venueActions"><a class="luxury-button luxury-button--primary" id="openMapsLink" target="_blank" rel="noopener noreferrer" hidden><span data-layla-text="openInMaps">Open in Maps</span><span aria-hidden="true">↗</span></a><button class="luxury-button luxury-button--secondary" type="button" data-calendar-download data-layla-text="calendar">Add to Calendar</button></div><div id="venueMapPreviewMount"></div></div>
+    </div></section>
+
+    <section class="section schedule-section reveal" id="scheduleSection" hidden><div class="section-frame evening-composition"><div class="evening-title"><h2 data-layla-text="scheduleHeading">The evening<br>unfolds.</h2><img class="botanical-art" src="./invitations/wedding-designs/moonlit-conservatory/assets/botanical.webp" alt="" width="1024" height="1536" loading="lazy" /></div><div><ol class="schedule-timeline" id="scheduleMount"></ol><div id="scheduleActions"></div></div></div></section>
+
+    <section class="section" id="guestSpotlightSection" hidden><div class="section-frame"><h2 id="guestGreetingTitle"></h2><p id="guestGreetingArabic" lang="ar"></p><p id="guestGreetingEnglish"></p></div></section>
+
+    <section class="section seating-section reveal" id="seatingSection" hidden><div class="section-frame"><div class="seating-heading"><h2 data-layla-text="seatingHeading">Your place<br>in our story.</h2><p data-layla-language="en">A seat saved with love.<br>Select a guest to find their place.</p><p data-layla-language="ar" lang="ar" hidden>مكان حُجز بكل حب.<br>اختاروا ضيفاً لعرض مقعده.</p></div><div id="seatDetailsMount"></div><div class="seating-content-outline"><div class="seating-map-shell"><div class="seating-map" id="seatingMap"></div></div></div></div></section>
+
+    <section class="section rsvp-section reveal" id="rsvpSection" aria-labelledby="rsvpTitle"><div class="section-frame rsvp-composition"><div class="rsvp-heading"><img src="./invitations/wedding-designs/moonlit-conservatory/assets/moon.svg" width="92" height="92" alt="" /><h2 id="rsvpTitle" data-layla-text="rsvpHeading">The night needs you.</h2><p data-layla-language="en">Our favourite part of this evening?<br>Sharing it with you.</p><p data-layla-language="ar" lang="ar" hidden>أجمل ما في هذه الأمسية؟<br>أن نشاركها معكم.</p></div><div id="rsvpMount"></div></div></section>
+
+    <section class="section pass-section reveal" id="qrPassSection" hidden><div class="section-frame pass-composition"><div class="section-heading"><h2 data-layla-text="passHeading">Your evening<br>starts here.</h2><p data-layla-language="en">Your invitation, ready at the door.</p><p data-layla-language="ar" lang="ar" hidden>دعوتكم جاهزة عند الوصول.</p></div><div class="qr-pass" id="qrPassMount"></div></div></section>
+
+    <section class="section closing-section reveal"><div class="section-frame closing-card"><img src="./invitations/wedding-designs/moonlit-conservatory/assets/garden.webp" width="1536" height="1024" alt="" loading="lazy" /><div><p id="closingEnglish" data-layla-language="en"></p><p id="closingArabic" data-layla-language="ar" lang="ar" hidden></p><a href="#heroSection" data-layla-language="en">With love, always. ↑</a><a href="#heroSection" data-layla-language="ar" lang="ar" hidden>بكل الحب، دائماً. ↑</a></div></div></section>
+    <footer class="qd-footer"><span data-layla-text="madeBy">Made by</span> <a href="https://qdsystems.ae" target="_blank" rel="noopener noreferrer">QDsystems</a></footer>
+  </main>
+  <nav class="sticky-actions" id="stickyActions" aria-label="Quick event actions" hidden></nav>
+  <div class="toast-rail" id="toastRail" aria-live="polite" aria-atomic="true"></div>
+  <noscript><p class="no-script">Please enable JavaScript to open this personal invitation. يرجى تفعيل جافاسكريبت لفتح الدعوة.</p></noscript>
+  <script type="module" src="./invitations/wedding-designs/moonlit-conservatory/invitation.js"></script>
+</body>
+</html>

@@ -16,11 +16,18 @@ export const weddingDesignRegistry = {
   },
 };
 
-export function getWeddingDesign(weddingId) {
-  return weddingDesignRegistry[weddingId] || null;
+// Template choices apply only when an event has no code-owned assignment.
+// Never infer a filesystem path from persisted input.
+export const weddingTemplateRegistry = Object.freeze({
+  "layla-zaid": Object.freeze({ designId: "layla-zaid", route: "./invitations/wedding-designs/layla-zaid/index.html", name: "Floral Wedding" }),
+  "moonlit-conservatory": Object.freeze({ designId: "moonlit-conservatory", route: "./invitations/wedding-designs/moonlit-conservatory/index.html", name: "Moonlit Conservatory" }),
+});
+
+export function getWeddingDesign(weddingId, invitationTemplate = "") {
+  return (Object.hasOwn(weddingDesignRegistry, weddingId) ? weddingDesignRegistry[weddingId] : null) || (Object.hasOwn(weddingTemplateRegistry, invitationTemplate) ? weddingTemplateRegistry[invitationTemplate] : null);
 }
 
-export function getInvitationRoute(weddingId, baseUrl = window.location.href) {
-  const design = getWeddingDesign(weddingId);
+export function getInvitationRoute(weddingId, baseUrl = window.location.href, invitationTemplate = "") {
+  const design = getWeddingDesign(weddingId, invitationTemplate);
   return design ? new URL(design.route, baseUrl) : null;
 }

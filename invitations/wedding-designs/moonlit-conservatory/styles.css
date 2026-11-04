@@ -1,0 +1,246 @@
+/* Every rule belongs to this template. No legacy invitation stylesheet loads. */
+@layer moonlit {
+:root:has(.moonlit-invitation) { color-scheme: dark; scroll-behavior: smooth; background:#101f25; }
+.moonlit-invitation { --ink:#101f25; --paper:#e9ece4; --silver:#c6d0c4; --muted:#b4c2bd; --field:#20383c; --ease:cubic-bezier(.22,1,.36,1); margin:0; background:var(--ink); color:var(--paper); font:400 16px/1.65 'DM Sans',Arial,sans-serif; -webkit-font-smoothing:antialiased; }
+.moonlit-invitation *, .moonlit-invitation *::before,.moonlit-invitation *::after { box-sizing:border-box; }
+.moonlit-invitation [hidden] { display:none!important; }
+.moonlit-invitation h1,.moonlit-invitation h2,.moonlit-invitation h3,.moonlit-invitation p,.moonlit-invitation figure { margin:0; }
+.moonlit-invitation h1,.moonlit-invitation h2 { font-family:'Italiana',Georgia,serif; font-weight:400; line-height:1.05; text-wrap:balance; }
+.moonlit-invitation h2 { font-size:clamp(40px,5.2vw,76px); max-width:16ch; }
+.moonlit-invitation h3 { font-weight:500; }
+.moonlit-invitation a { color:inherit; text-underline-offset:5px; }
+.moonlit-invitation button,.moonlit-invitation input,.moonlit-invitation textarea { font:inherit; }
+.moonlit-invitation button,.moonlit-invitation a { -webkit-tap-highlight-color:transparent; }
+.moonlit-invitation button { cursor:pointer; }
+.moonlit-invitation button:disabled { opacity:.55; cursor:wait; }
+.moonlit-invitation :focus-visible { outline:3px solid #8cadad; outline-offset:5px; }
+.moonlit-invitation img { display:block; max-width:100%; height:auto; }
+.moonlit-invitation svg { width:23px; height:23px; fill:none; stroke:currentColor; stroke-width:1.4; }
+.moonlit-invitation .luxury-button { min-height:50px; padding:14px 23px; display:inline-flex; align-items:center; justify-content:center; gap:18px; border:1px solid transparent; border-radius:0; text-decoration:none; line-height:1.4; font-size:15px; font-weight:500; transition:transform 200ms var(--ease),background-color 200ms var(--ease); }
+.moonlit-invitation .luxury-button--primary { color:var(--ink); background:var(--silver); }
+.moonlit-invitation .luxury-button--secondary { color:inherit; border-color:currentColor; background:transparent; }
+.moonlit-invitation .luxury-button:hover { transform:translateY(-2px); background:#dbe3d6; color:var(--ink); }
+.moonlit-invitation button:active { transform:translateY(1px); }
+.moonlit-invitation .skip-link { position:fixed; top:10px; left:12px; z-index:200; padding:12px; background:var(--paper); color:var(--ink); transform:translateY(-160%); }
+.moonlit-invitation .skip-link:focus { transform:none; }
+.moonlit-invitation .moon-language { position:fixed; z-index:100; inset-block-start:calc(var(--layla-notice-height,0px) + max(18px,env(safe-area-inset-top))); inset-inline-end:max(24px,env(safe-area-inset-right)); display:flex; direction:ltr; background:var(--ink); padding:3px; }
+.moonlit-invitation .moon-language button { min-width:48px; min-height:44px; border:0; color:var(--paper); background:transparent; font-size:14px; }
+.moonlit-invitation .moon-language button[aria-pressed=true] { background:#c6d0c4; color:var(--ink); }
+.moonlit-invitation .sample-preview-banner { position:fixed; z-index:101; top:8px; left:10px; padding:7px 12px; font-size:13px; background:var(--ink); }
+.moonlit-invitation.intro-active { overflow:hidden; }
+.moonlit-invitation .envelope-intro { position:fixed; z-index:80; inset:0; background:#0b151a; transition:opacity 450ms var(--ease),visibility 450ms; }
+.moonlit-invitation .envelope-intro.is-hidden { opacity:0; visibility:hidden; pointer-events:none; }
+.moonlit-invitation .envelope-intro__stage { height:100%; position:relative; overflow:hidden; }
+.moonlit-invitation .envelope-intro__poster,.moonlit-invitation .envelope-intro__video { position:absolute; inset:0; width:100%; height:100%; object-fit:cover; object-position:50% 48%; }
+.moonlit-invitation .envelope-intro__video { opacity:0; transition:opacity 300ms var(--ease); }
+.moonlit-invitation .is-playing .envelope-intro__video { opacity:1; }
+.moonlit-invitation .opening-copy { position:absolute; bottom:9%; inset-inline-start:7%; padding:30px; background:#101f25e8; max-width:500px; transition:opacity 250ms var(--ease),transform 400ms var(--ease); }
+.moonlit-invitation .opening-copy>p:first-child { margin-bottom:18px; font-size:16px; }
+.moonlit-invitation .opening-copy h2 { font-size:clamp(48px,6.5vw,92px); margin-bottom:30px; }
+.moonlit-invitation .envelope-intro__caption { margin-top:19px; font-size:14px; color:var(--muted); }
+.moonlit-invitation .is-playing .opening-copy { opacity:0; transform:translateY(12px); pointer-events:none; }
+.moonlit-invitation #introRetryLabel:empty { display:none; }
+.moonlit-invitation .envelope-intro__skip { position:absolute; bottom:24px; inset-inline-end:24px; min-height:48px; padding:10px 20px; color:var(--paper); background:var(--ink); border:1px solid var(--silver); }
+.moonlit-invitation .envelope-intro__status { position:absolute; bottom:90px; inset-inline:24px; width:fit-content; max-width:85%; padding:12px 18px; background:var(--ink); }
+.moonlit-invitation .site-content { overflow:clip; }
+.moonlit-invitation .section { padding:110px max(28px,5vw); scroll-margin-top:80px; }
+.moonlit-invitation .section-frame { width:min(1200px,100%); margin-inline:auto; }
+.moonlit-invitation .section-heading p { max-width:38ch; margin-top:28px; }
+.moonlit-invitation .hero { padding-top:100px; padding-bottom:55px; min-height:100svh; display:flex; flex-direction:column; justify-content:center; }
+.moonlit-invitation .moon-hero-top { display:flex; justify-content:flex-end; margin-bottom:35px; padding-inline-end:135px; font-size:14px; }
+.moonlit-invitation .moon-hero-top a,.moonlit-invitation .closing-card a { display:inline-flex; min-height:44px; align-items:center; padding-block:8px; }
+.moonlit-invitation .hero-composition { position:relative; display:grid; grid-template-columns:1.05fr 1fr; align-items:center; }
+.moonlit-invitation .hero-title { position:relative; z-index:1; margin-inline-end:-20%; padding-block:50px; }
+.moonlit-invitation .hero-names { font-size:clamp(85px,12vw,185px); line-height:1.02; letter-spacing:-.055em; max-width:9ch; overflow-wrap:anywhere; }
+.moonlit-invitation .hero-title>p { max-width:33ch; margin-top:30px; font-size:18px; }
+.moonlit-invitation .moon-garden { align-self:stretch; }
+.moonlit-invitation .moon-garden img { width:100%; height:100%; max-height:650px; aspect-ratio:4/5; object-fit:cover; border-radius:48% 48% 0 0; }
+.moonlit-invitation figcaption { font-size:13px; padding-top:12px; color:var(--muted); }
+.moonlit-invitation .moon-garden figcaption { text-align:end; }
+.moonlit-invitation .hero-bottom { display:flex; align-items:end; justify-content:space-between; gap:30px; margin-top:42px; }
+.moonlit-invitation .hero-event-line { display:flex; gap:30px; flex-wrap:wrap; font-size:17px; }
+.moonlit-invitation .hero-event-line span { display:block; }
+.moonlit-invitation .countdown-section { background:var(--paper); color:var(--ink); }
+.moonlit-invitation .countdown-composition { display:grid; grid-template-columns:1fr 1.15fr; align-items:center; gap:70px; }
+.moonlit-invitation .hero-countdown { display:grid; grid-template-columns:repeat(4,1fr); gap:16px; text-align:center; direction:ltr; }
+.moonlit-invitation .countdown-card__value { font:400 clamp(38px,5vw,76px)/1.1 'Italiana',Georgia,serif; font-variant-numeric:tabular-nums; }
+.moonlit-invitation .countdown-card__label { margin-top:15px; font-size:13px; }
+.moonlit-invitation .details-composition { display:grid; grid-template-columns:1fr 1fr; gap:8%; align-items:start; }
+.moonlit-invitation .venue-picture img { width:100%; aspect-ratio:4/5; object-fit:cover; }
+.moonlit-invitation .details-copy { padding-top:30px; }
+.moonlit-invitation .details-copy h2 { margin-bottom:36px; }
+.moonlit-invitation .detail-tabs { display:flex; flex-wrap:wrap; gap:6px; }
+.moonlit-invitation .detail-tab { min-height:46px; padding:10px 15px; border:0; color:var(--paper); background:var(--field); font-size:14px; }
+.moonlit-invitation .detail-tab[aria-selected=true] { color:var(--ink); background:var(--silver); }
+.moonlit-invitation .detail-card { min-height:150px; padding-block:25px; }
+.moonlit-invitation .detail-card__icon { display:none; }
+.moonlit-invitation .detail-card h3 { font-size:14px; color:var(--muted); margin-bottom:10px; }
+.moonlit-invitation .detail-card p { font-size:21px; max-width:34ch; }
+.moonlit-invitation .venue-actions { display:flex; flex-wrap:wrap; gap:12px; }
+.moonlit-invitation .venue-map-card__venue { display:none; }
+.moonlit-invitation .venue-map-preview { margin-block:24px; background:var(--field); min-height:220px; display:grid; place-items:center; }
+.moonlit-invitation .venue-map-preview iframe { width:100%; height:240px; border:0; }
+.moonlit-invitation .venue-map-preview>p { padding:24px; font-size:14px; }
+.moonlit-invitation .venue-map-preview:has(iframe)>p { display:none; }
+.moonlit-invitation .map-preview-button { min-height:48px; padding:12px; background:var(--silver); color:var(--ink); border:0; }
+.moonlit-invitation .schedule-section { background:#1c3236; }
+.moonlit-invitation .evening-composition { display:grid; grid-template-columns:1fr 1.1fr; gap:10%; }
+.moonlit-invitation .evening-title { position:relative; }
+.moonlit-invitation .botanical-art { width:180px; height:240px; object-fit:contain; margin-top:30px; }
+.moonlit-invitation .schedule-timeline { margin:0; padding:0; list-style:none; display:grid; gap:36px; }
+.moonlit-invitation .schedule-item { display:grid; grid-template-columns:95px 36px 1fr; gap:22px; align-items:start; }
+.moonlit-invitation .schedule-item__icon { display:grid; place-items:center; padding-top:4px; }
+.moonlit-invitation .schedule-item__icon svg { width:30px; height:30px; }
+.moonlit-invitation .schedule-item time { font-size:14px; padding-top:4px; }
+.moonlit-invitation .schedule-item h3 { font-size:20px; margin-bottom:10px; }
+.moonlit-invitation .schedule-item p { font-size:15px; color:var(--muted); max-width:34ch; }
+.moonlit-invitation #scheduleActions { margin-top:38px; }
+.moonlit-invitation .seating-section { background:var(--paper); color:var(--ink); }
+.moonlit-invitation .seating-heading { display:flex; align-items:end; justify-content:space-between; gap:30px; margin-bottom:40px; }
+.moonlit-invitation .layla-seat-greeting h3 { font-size:22px; margin-bottom:24px; }
+.moonlit-invitation .layla-party-seat-selector { display:flex; gap:12px; flex-wrap:wrap; margin-bottom:25px; }
+.moonlit-invitation .layla-party-chair { display:grid; grid-template-columns:36px 1fr; column-gap:12px; text-align:start; padding:17px 22px; border:1px solid #95aaa3; background:transparent; color:var(--ink); min-width:190px; max-width:100%; }
+.moonlit-invitation .layla-party-chair__art { grid-row:span 2; position:relative; }
+.moonlit-invitation .layla-party-chair__art img { width:32px; height:48px; }
+.moonlit-invitation .layla-party-chair__number { display:none; }
+.moonlit-invitation .layla-party-chair__name { font-weight:500; overflow-wrap:anywhere; }
+.moonlit-invitation .layla-party-chair__assignment { font-size:13px; }
+.moonlit-invitation .layla-party-chair.is-selected { background:var(--ink); color:var(--paper); }
+.moonlit-invitation .layla-party-seat-status { margin-bottom:20px; }
+.moonlit-invitation .seat-plan-toolbar { display:flex; justify-content:flex-end; gap:8px; flex-wrap:wrap; margin-bottom:12px; }
+.moonlit-invitation .seat-plan-toolbar button { min-width:48px; min-height:48px; padding:8px 14px; background:var(--ink); color:var(--paper); border:0; }
+.moonlit-invitation .seat-plan-viewport { position:relative; height:480px; overflow:hidden; touch-action:none; cursor:grab; background:#d8e0d7; border:1px solid #9dafa6; direction:ltr; }
+.moonlit-invitation .seat-plan-viewport:active { cursor:grabbing; }
+.moonlit-invitation .seat-plan-canvas { position:absolute; inset:0; width:1100px; height:900px; transform-origin:0 0; }
+.moonlit-invitation .seat-plan-floor { position:absolute; inset:18px; border:1px solid #a1b2a6; }
+.moonlit-invitation .seat-plan-object { position:absolute; transform:translate(-50%,-50%); display:grid; place-items:center; color:#2d4948; background:#c4d2c6; font-size:12px; }
+.moonlit-invitation .seat-plan-table { position:absolute; transform:translate(-50%,-50%); }
+.moonlit-invitation .seat-plan-table__surface { position:absolute; inset:0; display:grid; place-content:center; text-align:center; border:2px solid var(--table-border,#a5b4a9); border-radius:50%; background:var(--table-fill,#e9ece4); color:#192b2c; }
+.moonlit-invitation .seat-plan-table__surface--rectangle,.moonlit-invitation .seat-plan-table__surface--square { border-radius:8px; }
+.moonlit-invitation .seat-plan-table__surface--u-shape { border-radius:8px; clip-path:polygon(0 0,100% 0,100% 100%,74% 100%,74% 34%,26% 34%,26% 100%,0 100%); }
+.moonlit-invitation .seat-plan-table__surface--u-shape .seat-plan-table__label { position:absolute; inset-block-start:5%; width:100%; }
+.moonlit-invitation .seat-plan-table__surface strong { font-size:13px; }
+.moonlit-invitation .seat-plan-table__surface small,.moonlit-invitation .seat-plan-table__surface span { font-size:11px; }
+.moonlit-invitation .seat-plan-chair { position:absolute; z-index:4; width:34px; height:34px; display:grid; place-items:center; transform:translate(-50%,-50%) rotate(var(--chair-rotation,0deg)); border:2px solid #507170; border-radius:7px; background:var(--chair-color,#2c5550); color:var(--chair-ink,#fff); font-size:11px; }
+.moonlit-invitation .seat-plan-chair>span { transform:rotate(calc(0deg - var(--chair-rotation,0deg))); }
+.moonlit-invitation .seat-plan-chair.is-empty { background:#e9ece4; color:#294440; }
+.moonlit-invitation .seat-plan-chair.is-yours { background:#254f50; color:#fff; outline:3px solid #254f50; outline-offset:3px; }
+.moonlit-invitation .seat-plan-chair.is-selected { outline:4px solid #101f25; outline-offset:5px; }
+.moonlit-invitation .seat-plan-chair__marker { position:absolute; top:-12px; right:-12px; padding:2px; color:#fff; background:#101f25; border-radius:50%; }
+.moonlit-invitation .seat-plan-caption { font-size:14px; text-align:center; margin-top:18px; }
+.moonlit-invitation .rsvp-section { padding-block:120px; }
+.moonlit-invitation .rsvp-composition { display:grid; grid-template-columns:1fr 1fr; gap:10%; align-items:center; }
+.moonlit-invitation .rsvp-heading>img { width:80px; margin-bottom:30px; }
+.moonlit-invitation .rsvp-heading h2 { margin-bottom:28px; }
+.moonlit-invitation .rsvp-form,.moonlit-invitation .rsvp-summary { display:grid; gap:25px; }
+.moonlit-invitation .rsvp-choice { display:grid; grid-template-columns:1fr 1fr; gap:12px; }
+.moonlit-invitation .rsvp-answer { position:relative; display:flex; align-items:center; justify-content:center; gap:10px; min-height:68px; padding:14px; border:1px solid #6f8b84; cursor:pointer; }
+.moonlit-invitation .rsvp-answer:has(input:checked) { color:var(--ink); background:var(--silver); }
+.moonlit-invitation .rsvp-answer input { accent-color:#24464a; width:19px; height:19px; }
+.moonlit-invitation .rsvp-form__message { display:grid; gap:12px; }
+.moonlit-invitation textarea { width:100%; min-height:125px; resize:vertical; background:var(--field); color:var(--paper); border:1px solid #607e78; border-radius:0; padding:16px; }
+.moonlit-invitation textarea::placeholder { color:var(--muted); }
+.moonlit-invitation .rsvp-form__submit { justify-self:start; }
+.moonlit-invitation .rsvp-confirmation-mark { width:65px; height:65px; display:grid; place-items:center; background:var(--silver); color:var(--ink); font-size:30px; border-radius:50%; }
+.moonlit-invitation .rsvp-summary h3 { font:400 34px/1.25 'Italiana',Georgia,serif; }
+.moonlit-invitation .rsvp-summary__eyebrow { color:var(--muted); }
+.moonlit-invitation .firebase-rsvp-status[data-tone=error] { color:#ffd2c6; }
+.moonlit-invitation .pass-section { background:var(--silver); color:var(--ink); }
+.moonlit-invitation .pass-composition { display:grid; grid-template-columns:1fr 1fr; align-items:center; gap:80px; }
+.moonlit-invitation .qr-pass__content { display:grid; justify-items:center; text-align:center; gap:20px; }
+.moonlit-invitation .qr-pass__code { background:#fff; padding:24px; width:fit-content; }
+.moonlit-invitation .qr-pass__code canvas,.moonlit-invitation .qr-pass__code img { width:220px; height:220px; max-width:100%; }
+.moonlit-invitation .qr-pass__copy { font-size:14px; }
+.moonlit-invitation .closing-section { padding-bottom:35px; }
+.moonlit-invitation .closing-card { display:grid; grid-template-columns:1fr 1fr; align-items:center; gap:8%; }
+.moonlit-invitation .closing-card>img { width:100%; aspect-ratio:1; object-fit:cover; border-radius:50%; }
+.moonlit-invitation .closing-card p { font:400 clamp(30px,4vw,54px)/1.2 'Italiana',Georgia,serif; margin-bottom:30px; text-wrap:balance; }
+.moonlit-invitation .closing-card a { font-size:14px; }
+.moonlit-invitation .qd-footer { padding:35px 25px 110px; text-align:center; color:var(--muted); font-size:13px; }
+.moonlit-invitation .music-toggle { position:fixed; z-index:100; top:calc(var(--layla-notice-height,0px) + max(18px,env(safe-area-inset-top))); left:24px; right:auto; display:flex; align-items:center; justify-content:center; min-width:50px; min-height:50px; padding:12px; background:var(--ink); color:var(--paper); border:1px solid #738c84; }
+.moonlit-invitation .music-toggle__label { font-size:13px; }
+.moonlit-invitation .music-toggle[data-state=playing] { color:var(--ink); background:var(--silver); }
+.moonlit-invitation .sticky-actions { position:fixed; z-index:50; bottom:max(23px,env(safe-area-inset-bottom)); inset-inline-end:24px; transition:opacity 180ms var(--ease),transform 180ms var(--ease); }
+.moonlit-invitation .sticky-actions.is-soft-hidden,.moonlit-invitation .sticky-actions.is-scroll-hidden { opacity:0; pointer-events:none; transform:translateY(12px); }
+.moonlit-invitation.hero-actions-visible .sticky-actions,.moonlit-invitation.moon-rsvp-visible .sticky-actions { visibility:hidden; pointer-events:none; }
+.moonlit-invitation .toast-rail { position:fixed; z-index:110; inset-inline:20px; bottom:95px; display:grid; justify-content:center; gap:10px; pointer-events:none; }
+.moonlit-invitation .toast { background:var(--paper); color:var(--ink); padding:14px 22px; max-width:450px; }
+.moonlit-invitation .toast.is-leaving { opacity:0; transition:opacity 180ms var(--ease); }
+.moonlit-invitation .invitation-error { min-height:100svh; display:grid; place-items:center; padding:25px; }
+.moonlit-invitation .invitation-error__card { max-width:600px; display:grid; gap:25px; }
+.moonlit-invitation .invitation-error h1 { font-size:52px; }
+.moonlit-invitation .no-script { position:fixed; inset:0; z-index:300; background:var(--ink); padding:60px; }
+.moonlit-invitation [lang=ar],.moonlit-invitation.layla-arabic { font-family:'Noto Naskh Arabic',serif; }
+.moonlit-invitation.layla-arabic h1,.moonlit-invitation.layla-arabic h2,.moonlit-invitation.layla-arabic .closing-card p,.moonlit-invitation.layla-arabic .rsvp-summary h3 { font-family:'Noto Naskh Arabic',serif; line-height:1.3; letter-spacing:0; }
+.moonlit-invitation.layla-arabic .hero-names { font-size:clamp(70px,10vw,145px); }
+.moonlit-invitation.layla-arabic .hero-event-line { font-size:20px; }
+.moonlit-invitation.layla-arabic .countdown-card__label { direction:rtl; }
+.moonlit-invitation .keyboard-navigation *, .moonlit-invitation.keyboard-navigation * { scroll-behavior:auto!important; transition:none!important; }
+@media (min-width:850px) {
+  .moonlit-invitation .envelope-intro__poster,.moonlit-invitation .envelope-intro__video { width:52%; inset-inline-start:auto; inset-inline-end:5%; object-fit:cover; }
+  .moonlit-invitation .opening-copy { inset-inline-start:7%; bottom:20%; background:var(--ink); max-width:47%; }
+}
+@media (max-width:760px) {
+  .moonlit-invitation .section { padding:75px 24px; }
+  .moonlit-invitation h2 { font-size:43px; }
+  .moonlit-invitation .hero { padding-top:110px; padding-bottom:45px; min-height:auto; }
+  .moonlit-invitation .moon-hero-top { font-size:13px; padding:0; margin-bottom:25px; }
+  .moonlit-invitation .hero-composition { display:flex; flex-direction:column; align-items:stretch; }
+  .moonlit-invitation .hero-title { margin:0; padding:0; }
+  .moonlit-invitation .hero-names { font-size:clamp(68px,15.5vw,115px); max-width:100%; letter-spacing:-.045em; }
+  .moonlit-invitation .hero-title>p { margin-top:22px; font-size:18px; max-width:34ch; }
+  .moonlit-invitation .moon-garden { margin-top:30px; margin-inline-start:17%; }
+  .moonlit-invitation .moon-garden img { max-height:390px; aspect-ratio:4/4.1; }
+  .moonlit-invitation .moon-garden figcaption { font-size:13px; }
+  .moonlit-invitation .hero-bottom { display:block; margin-top:35px; }
+  .moonlit-invitation .hero-event-line { font-size:17px; gap:4px; flex-direction:column; margin-bottom:22px; }
+  .moonlit-invitation .hero-event-line span:first-child { font-size:23px; }
+  .moonlit-invitation .countdown-composition,.moonlit-invitation .details-composition,.moonlit-invitation .evening-composition,.moonlit-invitation .rsvp-composition,.moonlit-invitation .pass-composition,.moonlit-invitation .closing-card { grid-template-columns:1fr; gap:40px; }
+  .moonlit-invitation .countdown-card__value { font-size:44px; }
+  .moonlit-invitation .hero-countdown { gap:8px; margin-top:6px; }
+  .moonlit-invitation .countdown-card__label { font-size:12px; }
+  .moonlit-invitation .venue-picture { margin-inline-end:15%; }
+  .moonlit-invitation .venue-picture img { max-height:400px; }
+  .moonlit-invitation .details-copy { padding:0; }
+  .moonlit-invitation .evening-title { display:flex; justify-content:space-between; gap:20px; align-items:center; }
+  .moonlit-invitation .botanical-art { margin:0; width:100px; height:150px; }
+  .moonlit-invitation .schedule-item { grid-template-columns:72px 25px 1fr; gap:12px; }
+  .moonlit-invitation .schedule-item time { font-size:12px; }
+  .moonlit-invitation .schedule-item__icon svg { width:25px; height:25px; }
+  .moonlit-invitation .schedule-item h3 { font-size:18px; }
+  .moonlit-invitation .schedule-item p { font-size:14px; }
+  .moonlit-invitation .seating-heading { display:block; }
+  .moonlit-invitation .seating-heading p { margin-top:25px; }
+  .moonlit-invitation .layla-party-seat-selector { display:grid; grid-template-columns:1fr; }
+  .moonlit-invitation .seat-plan-viewport { height:360px; }
+  .moonlit-invitation .rsvp-heading>img { width:60px; }
+  .moonlit-invitation .closing-card>img { width:70%; margin-inline:auto; }
+  .moonlit-invitation .opening-copy { inset-inline:24px; bottom:12%; max-width:none; padding:25px; }
+  .moonlit-invitation .opening-copy h2 { font-size:48px; }
+  .moonlit-invitation .opening-copy>p:first-child { font-size:14px; }
+  .moonlit-invitation .envelope-intro__caption { font-size:12px; }
+  .moonlit-invitation .moon-language { inset-inline-end:15px; }
+  .moonlit-invitation .music-toggle { left:14px; right:auto; }
+  .moonlit-invitation .sticky-actions { inset-inline-end:14px; }
+  .moonlit-invitation .sticky-actions .luxury-button { padding-inline:18px; }
+  .moonlit-invitation.layla-arabic .hero-names { font-size:clamp(60px,15vw,100px); }
+}
+@media (prefers-reduced-motion:no-preference) {
+  .moonlit-invitation.invitation-open .hero-title { animation:moon-title 850ms var(--ease) both; }
+  .moonlit-invitation.invitation-open .moon-garden { animation:moon-picture 1100ms var(--ease) both; }
+  .moonlit-invitation .moon-arrival .section-heading,.moonlit-invitation .moon-arrival .details-copy,.moonlit-invitation .moon-arrival .rsvp-heading,.moonlit-invitation .moon-arrival .seating-heading { animation:moon-title 650ms var(--ease) both; }
+  .moonlit-invitation .moon-arrival .schedule-item { animation:moon-row 650ms var(--ease) both; animation-delay:calc(var(--item-index,0) * 80ms); }
+  .moonlit-invitation .moon-arrival .venue-picture,.moonlit-invitation .moon-arrival .botanical-art,.moonlit-invitation .moon-arrival .qr-pass,.moonlit-invitation .moon-arrival>img { animation:moon-picture 850ms var(--ease) both; }
+  @supports (animation-timeline:scroll()) {
+    .moonlit-invitation.invitation-open .hero-names { animation:moon-monument linear both; animation-timeline:scroll(root); animation-range:0px 700px; transform-origin:center; }
+  }
+}
+@keyframes moon-title { from { opacity:0; transform:translateY(20px); } to { opacity:1; transform:none; } }
+@keyframes moon-picture { from { opacity:.35; transform:translateY(25px) scale(.97); } to { opacity:1; transform:none; } }
+@keyframes moon-row { from { opacity:0; transform:translateX(14px); } to { opacity:1; transform:none; } }
+@keyframes moon-monument { from { transform:scale(1); } to { transform:scale(.96); } }
+@media (prefers-reduced-motion:reduce) {
+  :root:has(.moonlit-invitation) { scroll-behavior:auto!important; }
+  .moonlit-invitation *,.moonlit-invitation *::before,.moonlit-invitation *::after { animation:none!important; transition:none!important; scroll-behavior:auto!important; }
+}
+}

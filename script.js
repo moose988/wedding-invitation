@@ -18,9 +18,12 @@ import {
   resolveTableName,
 } from "./seating-utils.js?v=20261018-invitation-seat-map";
 import { getEventDisplayTitle, isCelebrationEvent } from "./event-utils.js";
+import { getInvitationRoute } from "./invitations/wedding-designs/registry.js";
 import { formatPartySeatLabel, getPartySeatSelection, resolvePartySeatTarget, retainPartySeatSelection } from "./invitations/wedding-designs/layla-zaid/party-seat-selector.js?v=20261027-seat-label-1";
 import { renderLaylaScheduleIcon, resolveLaylaScheduleIcon } from "./invitations/wedding-designs/layla-zaid/schedule-icons.js?v=20261027-timeline-icons-2";
 
+// Optional configuration is installed only by an isolated design entry point.
+const invitationDesign = globalThis.invitationDesignConfig || {};
 const demoWedding = {
   coupleName: "Layla & Zaid",
   brideName: "Layla",
@@ -94,13 +97,14 @@ const demoTables = [
   { id: "table-d", name: "Pearl Lounge", capacity: 10, x: 68, y: 60, shape: "rectangle", floorZone: "Garden Wing" },
 ];
 
+Object.assign(demoWedding, invitationDesign.demoWedding || {});
 const invitationParams = new URLSearchParams(window.location.search);
 const initialInvitationCredential = new URLSearchParams(String(window.location.hash || "").replace(/^#/, ""));
 const explicitDemoMode = invitationParams.get("demo") === "1";
 const explicitSampleMode = invitationParams.get("sample") === "1" && invitationParams.get("wedding") === "luxury-wedding-demo";
 const rsvpStorageKey = explicitSampleMode ? "" : invitationRsvpStorageKey(invitationParams.get("wedding"), initialInvitationCredential.get("guest"));
 let invitationDataApiPromise = null;
-const laylaLanguageStorageKey = "layla-zaid-invitation-language";
+const laylaLanguageStorageKey = invitationDesign.languageStorageKey || "layla-zaid-invitation-language";
 const laylaCopy = {
   heroKicker: { en: "Our Wedding Day", ar: "يوم زفافنا" },
   playMusic: { en: "Play event music", ar: "تشغيل موسيقى الحفل" },
@@ -208,7 +212,7 @@ const state = {
   activeDetailTab: "date",
   detailItems: [],
   firebaseReady: false,
-  laylaLanguage: document.body?.classList.contains("layla-zaid-invitation") && localStorage.getItem(laylaLanguageStorageKey) === "ar" ? "ar" : "en",
+  laylaLanguage: isLaylaInvitation() && localStorage.getItem(laylaLanguageStorageKey) === "ar" ? "ar" : "en",
   invitationOpening: false,
   introCompletion: null,
   introSequence: null,
@@ -276,7 +280,7 @@ function setupIntroSequence() {
     startupTimeout: isLaylaInvitation() ? 10000 : undefined,
     bufferTimeout: isLaylaInvitation() ? 10000 : undefined,
     // The Layla envelope video's motion settles at ~3s of its 4.5s; the rest is a still frame.
-    finishAt: isLaylaInvitation() ? 3 : null,
+    finishAt: invitationDesign.finishAt ?? (isLaylaInvitation() ? 3 : null),
     onState: updateIntroPresentation,
     onFrame: () => {
       elements.introScreen?.classList.add("is-playing");
@@ -500,8 +504,8 @@ async function loadFirebaseInvitation(weddingId, guestToken, invitationApi, requ
     "Guest details are taking longer than expected. Please try again.",
   );
   if (!invitationRefreshIsCurrent(requestVersion, state.invitationRefreshVersion)) return;
-  if (context.wedding.invitationTemplate === "layla-zaid" && !isLaylaInvitation()) {
-    const target = new URL("./invitations/wedding-designs/layla-zaid/index.html", window.location.href);
+  const target = getInvitationRoute(weddingId, new URL("./", import.meta.url), context.wedding.invitationTemplate);
+  if (target && target.pathname !== window.location.pathname) {
     target.search = window.location.search;
     target.hash = window.location.hash;
     window.location.replace(target.href);
@@ -556,8 +560,8 @@ function normaliseWedding(wedding) {
     locationAr: wedding.locationAr || "",
     mapsUrl: wedding.mapsUrl || "",
     venueMapEmbedUrl: wedding.venueMapEmbedUrl || "",
-    closingEn: wedding.closingEn || "",
-    closingAr: wedding.closingAr || "",
+    closingEn: wedding.closingEn || invitationDesign.copy?.closing?.en || "",
+    closingAr: wedding.closingAr || invitationDesign.copy?.closing?.ar || "",
     media: {
       ...demoWedding.media,
       ...(wedding.media || {}),
@@ -684,8 +688,8 @@ function populateInvitation() {
   }
 }
 
-function isLaylaInvitation() { return document.body.classList.contains("layla-zaid-invitation"); }
-function laylaText(key) { return laylaCopy[key]?.[state.laylaLanguage] || laylaCopy[key]?.en || key; }
+function isLaylaInvitation() { return document.body.classList.contains("layla-zaid-invitation") || document.body.dataset.guestExperience === "bilingual"; }
+function laylaText(key) { return invitationDesign.copy?.[key]?.[state.laylaLanguage] || laylaCopy[key]?.[state.laylaLanguage] || laylaCopy[key]?.en || key; }
 function laylaValue(en, ar) { return state.laylaLanguage === "ar" ? (ar || en || "") : (en || ""); }
 function applyLaylaLanguage() {
   if (!isLaylaInvitation()) return;
@@ -694,6 +698,7 @@ function applyLaylaLanguage() {
   // Keep the document's geometry left-to-right so centered cards and fixed
   // controls never mirror when only the invitation copy switches to Arabic.
   document.documentElement.dir = "ltr";
+  if (invitationDesign.rtl) document.documentElement.dir = arabic ? "rtl" : "ltr";
   document.body.classList.toggle("layla-arabic", arabic);
   document.querySelectorAll("[data-layla-text]").forEach((node) => { node.textContent = laylaText(node.dataset.laylaText); });
   const wedding = state.wedding || {};
@@ -744,7 +749,7 @@ function renderGuestCard() {
     return;
   }
 
-  if (document.body.classList.contains("layla-zaid-invitation")) {
+  if (isLaylaInvitation()) {
     elements.guestSpotlightSection.hidden = true;
     return;
   }
@@ -1250,7 +1255,7 @@ function renderSeatSection() {
   elements.seatingSection.hidden = false;
   const assignments = getInvitationSeatAssignments(state.guest);
 
-  if (document.body.classList.contains("layla-zaid-invitation")) {
+  if (isLaylaInvitation()) {
     const partyMembers = getInvitationPartyMembers(state.guest, assignments);
     state.seatingSelectedPersonKey = retainPartySeatSelection(state.seatingSelectedPersonKey, partyMembers);
     const selection = getPartySeatSelection(state.seatingSelectedPersonKey, partyMembers, state.tables);
@@ -1330,7 +1335,7 @@ function renderLaylaPartyChairMember(member, selectedPersonKey) {
   return `
     <button class="layla-party-chair ${selected ? "is-selected" : ""} ${isUnassigned ? "is-unassigned" : "is-assigned"}" type="button" data-party-person-key="${escapeAttribute(member.personKey)}" ${targetAttributes} aria-pressed="${selected}" aria-label="${escapeAttribute(accessibleLabel)}">
       <span class="layla-party-chair__art" aria-hidden="true">
-        <img src="./invitations/wedding-designs/layla-zaid/assets/layla-zaid-louis-chair.webp?v=20261026-chair-selector-1" alt="" loading="lazy" decoding="async" />
+        <img src="${invitationDesign.chairArtwork || './invitations/wedding-designs/layla-zaid/assets/layla-zaid-louis-chair.webp?v=20261026-chair-selector-1'}" alt="" loading="lazy" decoding="async" />
         <span class="layla-party-chair__number">${member.index + 1}</span>
       </span>
       <strong class="layla-party-chair__name"><bdi dir="auto">${escapeHtml(member.label)}</bdi></strong>
@@ -2044,7 +2049,7 @@ function bindBaseEvents() {
       const detailsTarget = isLaylaInvitation()
         ? document.querySelector("#countdownSection .section-frame")
         : document.getElementById("detailsSection");
-      detailsTarget?.scrollIntoView({ behavior: "smooth", block: "start" });
+      detailsTarget?.scrollIntoView({ behavior: invitationDesign.scrollBehavior?.() || "smooth", block: "start" });
     }
 
     const rsvpTrigger = event.target.closest("[data-scroll-rsvp]");
@@ -2057,6 +2062,10 @@ function bindBaseEvents() {
       if (event.target.closest("[data-change-rsvp]")) {
         state.rsvpSelection = usesSampleRsvp() ? (state.sampleRsvpResponse?.status || "") : "";
         if (usesSampleRsvp()) state.rsvpMessage = state.sampleRsvpResponse?.message || "";
+        else if (invitationDesign.prefillSavedRsvp) {
+          state.rsvpSelection = state.guest?.rsvpStatus || "";
+          state.rsvpMessage = state.guest?.rsvpMessage || "";
+        }
       }
       state.isRsvpEditing = true;
       renderRsvp();
@@ -2099,6 +2108,10 @@ function configureInlineEnvelopePlayback(video) {
 
 function handleOpenInvitation() {
   if (document.body.classList.contains("invitation-open")) return;
+  if (invitationDesign.skipOpening?.()) {
+    revealInvitation();
+    return;
+  }
 
   const video = elements.openingVideo;
   if (state.introSequence?.active) {
@@ -2146,6 +2159,10 @@ function handleOpenInvitation() {
 
 function revealInvitation() {
   if (document.body.classList.contains("invitation-open")) return;
+  if (invitationDesign.requireReady && !state.invitationReady) {
+    completeIntroSequence();
+    return;
+  }
   document.body.classList.add("invitation-open");
   const finishIntro = state.introCompletion;
   state.introCompletion = null;
@@ -2468,7 +2485,7 @@ function setMusicToggleState(stateName, label, ariaLabel) {
 }
 
 function scrollToRsvp() {
-  document.getElementById("rsvpSection")?.scrollIntoView({ behavior: "smooth", block: "start" });
+  document.getElementById("rsvpSection")?.scrollIntoView({ behavior: invitationDesign.scrollBehavior?.() || "smooth", block: "start" });
 }
 
 function downloadCalendarFile() {

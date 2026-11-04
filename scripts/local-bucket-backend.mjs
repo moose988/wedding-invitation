@@ -30,6 +30,14 @@ function diskFiles({ dir, origin, signKey }) {
   const indexFile = path.join(dir, 'objects.json'), blobs = path.join(dir, 'blobs');
   const index = existsSync(indexFile) ? JSON.parse(readFileSync(indexFile, 'utf8')) : { photos: {}, backups: {} };
   const events = [];
+  let indexWrite = Promise.resolve();
+  function saveIndex() {
+    const snapshot = JSON.stringify(index);
+    // Uploads, commits and backups share one index and one atomic-write temp file.
+    // Keep the snapshots in order and let a later save proceed after a disk error.
+    indexWrite = indexWrite.catch(() => {}).then(() => atomicWrite(indexFile, snapshot));
+    return indexWrite;
+  }
   const list = (name, key) => (index[name === 'backups' ? 'backups' : 'photos'][key] ||= []);
   const current = (name, key) => { const v = index[name === 'backups' ? 'backups' : 'photos'][key]?.at(-1); return v && !v.marker ? v : null; };
   const blob = async v => readFile(path.join(blobs, v.blob));
@@ -37,7 +45,7 @@ function diskFiles({ dir, origin, signKey }) {
   const sign = (method, key, size, exp) => createHmac('sha256', signKey).update(`${method}\n${key}\n${size}\n${exp}`).digest('base64url');
   const signed = (method, key, size) => { const exp = Date.now() + (method === 'PUT' ? 600 : 300) * 1000; const q = new URLSearchParams({ k: key, m: method, s: String(size), e: String(exp), sig: sign(method, key, size, exp) }); return `${origin}${OBJECT_ROUTE}?${q}`; };
   const files = {
-    events, save: () => atomicWrite(indexFile, JSON.stringify(index)),
+    events, save: saveIndex,
     async init() { await mkdir(blobs, { recursive: true }); },
     verify(url, method) {
       const q = url.searchParams, key = q.get('k'), size = q.get('s'), exp = Number(q.get('e')), given = Buffer.from(q.get('sig') || '', 'base64url'), want = Buffer.from(sign(q.get('m'), key, size, exp), 'base64url');

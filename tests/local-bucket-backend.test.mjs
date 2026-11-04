@@ -88,3 +88,44 @@ test('admins, customers and guests work end to end locally, and data survives a 
     await s.close();
   } finally { await rm(dir, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 }); }
 });
+
+test('simultaneous local uploads persist without racing on the object index', async () => {
+  const dir = await mkdtemp(path.join(tmpdir(), 'pb-local-parallel-'));
+  const admins = new Set(['admin-uid']);
+  let s;
+  try {
+    s = await start(dir, admins);
+    const bucket = await s.api('POST', '/owner/create', {
+      token: 'admin-token', body: { name: 'Concurrent local bucket', date: '2027-01-01', location: 'Test Hall', gb: 15 },
+    });
+    assert.equal(bucket.status, 201);
+    const prefix = `/b/${bucket.body.id}`;
+    const guest = await s.api('POST', `${prefix}/guest`);
+    assert.equal(guest.status, 200);
+    const token = guest.body.token;
+    const image = await jpeg(800, 600), thumb = await jpeg(120, 90);
+    const photos = await Promise.all(Array.from({ length: 6 }, async (_, index) => {
+      const id = `concurrent-${index}`;
+      const grant = await s.api('POST', `${prefix}/uploads`, { token, body: { photoId: id, size: image.length, thumbSize: thumb.length } });
+      assert.equal(grant.status, 200);
+      return { id, ...grant.body };
+    }));
+    await Promise.all(photos.flatMap(photo => [
+      [photo.image, image], [photo.thumbnail, thumb],
+    ]).map(async ([target, body]) => {
+      const uploaded = await s.storage(target.url, { method: 'PUT', headers: target.headers, body, signal: AbortSignal.timeout(5000) });
+      assert.equal(uploaded.status, 200);
+    }));
+    for (const photo of photos) {
+      const result = await s.api('POST', `${prefix}/photos/${photo.id}/commit`, { token, body: { uploadId: photo.uploadId } });
+      assert.equal(result.status, 200);
+    }
+    await s.close();
+    s = await start(dir, admins);
+    const gallery = await s.api('GET', `${prefix}/photos`, { token });
+    assert.deepEqual(gallery.body.items.map(photo => photo.id).sort(), photos.map(photo => photo.id).sort());
+  } finally {
+    await s?.close();
+    await rm(dir, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 });
+  }
+});

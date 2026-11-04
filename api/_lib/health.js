@@ -35,7 +35,7 @@ export async function runHealthChecks({ env, mode, auth, db, configApiUrl, fetch
     if (shape === 'ok') add('service_account', 'pass', 'FIREBASE_SERVICE_ACCOUNT_JSON is set and parses.');
     else add('service_account', 'fail', `FIREBASE_SERVICE_ACCOUNT_JSON is ${shape}.`, 'In Vercel, Settings, Environment Variables: paste the whole service account JSON file from Firebase Console, Project settings, Service accounts, then redeploy.');
   }
-  try { await db.doc('platformAdmins/__health_probe__').get(); add('firestore', 'pass', 'Firestore answered a read.'); }
+  try { await db.doc('platformAdmins/health-probe').get(); add('firestore', 'pass', 'Firestore answered a read.'); }
   catch (error) { add('firestore', 'fail', `Firestore read failed (${error?.code || error?.name}).`, 'Check the service account belongs to this Firebase project and has the Firebase Admin role.'); }
   try {
     await auth.getUser('__health_probe__');

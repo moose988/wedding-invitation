@@ -167,7 +167,6 @@ export function fakeFiles() {
     presignPut: async (key, size) => ({ url: `put://${key}`, headers: {}, size }),
     presignGet: async (key, options) => `get://${key}${options?.contentType ? `#${options.contentType}` : ''}`,
     presignPutAudio: async (key, size) => ({ url: `put://${key}`, headers: { 'content-type': 'audio/mpeg' }, size }),
-    purgeAudio: async (prefix, keep) => { if (!/^audio\/[^/]+\/$/.test(prefix)) throw new Error('bad prefix'); for (const k of [...photos.keys()]) if (k.startsWith(prefix) && k !== keep) photos.delete(k); },
     head: async key => { const v = current(photos, key); return v ? { size: v.size } : null; },
     readRange: async (key, length, start = 0) => { ranges.push(length); const v = current(photos, key); return v ? v.body.subarray(start, start + length) : null; },
     readTail: async (key, length) => { const v = current(photos, key); return v ? v.body.subarray(Math.max(0, v.body.length - length)) : null; },

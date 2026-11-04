@@ -9,6 +9,12 @@ const S3_BUSY = new Set(['SlowDown', 'ServiceUnavailable', 'InternalError', 'Req
 export const s3Busy = error => S3_BUSY.has(error?.name) || [500, 502, 503, 504].includes(error?.$metadata?.httpStatusCode);
 const guard = client => ({ send: command => client.send(command).catch(error => { throw s3Busy(error) ? Object.assign(new Error('S3 is busy'), { busy: true, cause: error }) : error; }) });
 
+export async function purgeSongFiles(files, keys) {
+  const audioKey = /^audio\/(?:__uploads__\/)?[^/]+\/[a-f0-9]{32}(?:-[a-f0-9]{32})?\.mp3$/;
+  if (!keys.every(key => audioKey.test(key))) throw new Error('Refusing to purge outside song keys.');
+  if (keys.length) await files.purgeKeys('photos', keys);
+}
+
 export function createFiles({ s3: rawS3, bucket, backupS3: rawBackupS3, backupBucket }) {
   const s3 = guard(rawS3), backupS3 = guard(rawBackupS3); // the presigner below gets the raw client: it sends nothing
   const target = name => (name === 'backups' ? { client: backupS3, Bucket: backupBucket } : { client: s3, Bucket: bucket });
@@ -70,17 +76,6 @@ export function createFiles({ s3: rawS3, bucket, backupS3: rawBackupS3, backupBu
           const { Errors = [] } = await client.send(new DeleteObjectsCommand({ Bucket, Delete: { Objects, Quiet: true } }));
           if (Errors.length) throw new Error(`S3 refused ${Errors.length} deletes`);
         }
-      }
-    },
-    // Every version of every song file of one event, except the key to keep. The API role may do this under audio/ only.
-    async purgeAudio(prefix, keep) {
-      if (!/^audio\/[^/]+\/$/.test(prefix)) throw new Error('Refusing to purge outside one event song prefix.');
-      for (;;) {
-        const page = await s3.send(new ListObjectVersionsCommand({ Bucket: bucket, Prefix: prefix, MaxKeys: 1000 }));
-        const Objects = [...(page.Versions || []), ...(page.DeleteMarkers || [])].filter(v => v.Key !== keep).map(({ Key, VersionId }) => ({ Key, VersionId }));
-        if (!Objects.length) return;
-        const { Errors = [] } = await s3.send(new DeleteObjectsCommand({ Bucket: bucket, Delete: { Objects, Quiet: true } }));
-        if (Errors.length) throw new Error(`S3 refused ${Errors.length} deletes`);
       }
     },
     // Removes every version and delete marker under one bucket's prefix. Only the sweep functions can list and delete a

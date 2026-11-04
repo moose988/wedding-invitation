@@ -1,5 +1,6 @@
 import { createHmac, randomUUID } from 'node:crypto';
-import { HttpError, LIMITS, SONG_MAX_BYTES, assertPhotoHeader, cleanGuestName, hasJpegEnd, id3Skip, looksLikeMp3, songKey, validEventId, cleanDetails, newBucketId, objectKeys, signGuestToken, validBucketId, validId, validUid, verifyGuestToken } from './lib.mjs';
+import { purgeSongFiles } from './files.mjs';
+import { HttpError, LIMITS, SONG_MAX_BYTES, assertPhotoHeader, cleanGuestName, hasJpegEnd, id3Skip, looksLikeMp3, songKey, songUploadKey, validEventId, cleanDetails, newBucketId, objectKeys, signGuestToken, validBucketId, validId, validUid, verifyGuestToken } from './lib.mjs';
 import { BUCKET_SIZES_GB, DEFAULT_DEMO_EXPIRY_HOURS, DEMO_EXPIRY_HOURS, DEMO_SIZE_GB, bytesForGb, isAllowedSize, overdueInfo } from './sizes.mjs';
 import { DEMO_SHARDS, SHARDS } from './store.mjs';
 
@@ -174,7 +175,8 @@ export function createHandler({ store, files, purgePhotoFiles, verifyOwner, secr
         throwRefused(error);
       }
     }
-    await files.remove([sourceImage, sourceThumb]).catch(() => {});
+    await files.remove([sourceImage, sourceThumb])
+      .catch(error => console.error(JSON.stringify({ removeIncomingFailed: true, code: error.cause?.name || error.code || error.name })));
     if (previous) await purgeFiles(bid, previous); // a guest replacing a photo purges the old one, same as deleting it
     return publicPhoto(photo);
   }
@@ -322,45 +324,90 @@ export function createHandler({ store, files, purgePhotoFiles, verifyOwner, secr
     return reply(200, { contributorId, ...(name ? { name } : {}), token: signGuestToken(secret, id, contributorId, stamp) });
   }
 
+  const songRevision = song => song?.revision ?? song?.key ?? null;
+  const newSongRevision = () => randomUUID().replaceAll('-', '');
+  const songChanged = () => new HttpError(409, 'The song changed in another tab. Reload and try again.', 'SONG_CONFLICT');
+  const songIncomplete = () => new HttpError(400, 'The upload did not finish. Please retry.', 'UPLOAD_INCOMPLETE');
+  const songResponse = song => reply(200, { eventId: song.eventId, size: song.size, updatedAt: song.updatedAt });
+  // Keep the previous key in the record until the next successful change so a retry can complete cleanup.
+  async function cleanSong(song) {
+    const keys = [song?.previousKey, song?.uploadId && songUploadKey(song.eventId, song.uploadId)].filter(Boolean);
+    await purgeSongFiles(files, keys);
+  }
+
   // Event songs for invitations. Admins upload; anyone with the event id can play the current song.
   async function songRoute(event, method, [, rawId, sub = ''], body) {
     let eventId;
     try { eventId = decodeURIComponent(rawId); } catch { eventId = null; }
     if (!validEventId(eventId)) throw new HttpError(400, 'Invalid event.', 'INVALID_EVENT');
-    const prefix = `audio/${eventId}/`;
     if (method === 'GET' && sub === '/song') {
       const song = await store.getSong(eventId);
-      if (!song) throw new HttpError(404, 'This event has no song.', 'NO_SONG');
+      if (!song?.key) throw new HttpError(404, 'This event has no song.', 'NO_SONG');
       const expiresIn = 900, url = await files.presignGet(song.key, { contentType: 'audio/mpeg', expiresIn });
       // Cacheable for well under the URL's life, so a cached answer still plays.
       return reply(200, { url, expiresAt: now() + expiresIn * 1000, updatedAt: song.updatedAt, size: song.size }, { 'cache-control': 'public, max-age=300' });
     }
     const a = await authenticate(event.headers || {});
     needAdmin(a);
+    const current = await store.getSong(eventId);
+    const baseRevision = songRevision(current);
     if (method === 'POST' && sub === '/song/uploads') {
       const size = Number(body.size);
       if (!Number.isInteger(size) || size < 1 || size > SONG_MAX_BYTES) throw new HttpError(400, 'Choose an MP3 of up to 15 MB.', 'INVALID_AUDIO');
-      const id = randomUUID().replaceAll('-', '');
-      return reply(200, { uploadId: id, upload: await files.presignPutAudio(songKey(eventId, id), size) });
+      const id = newSongRevision();
+      await store.putSongUpload(eventId, id, baseRevision, now() + 600_000);
+      return reply(200, { uploadId: id, upload: await files.presignPutAudio(songUploadKey(eventId, id), size) });
     }
     if (method === 'POST' && sub === '/song/commit') {
-      const id = uploadId(body.uploadId), key = songKey(eventId, id), current = await store.getSong(eventId);
-      if (current?.uploadId === id) return reply(200, { eventId, size: current.size, updatedAt: current.updatedAt });
-      const head = await files.head(key);
-      if (!head) throw new HttpError(400, 'The upload did not finish. Please retry.', 'UPLOAD_INCOMPLETE');
-      if (head.size > SONG_MAX_BYTES) throw new HttpError(400, 'Choose an MP3 of up to 15 MB.', 'INVALID_AUDIO');
-      const start = id3Skip(await files.readRange(key, Math.min(10, head.size)) || Buffer.alloc(0));
-      const frames = start < head.size ? await files.readRange(key, Math.min(4096, head.size - start), start) : null;
-      if (!frames || !looksLikeMp3(frames)) throw new HttpError(400, 'This file is not an MP3.', 'INVALID_AUDIO');
-      const song = { eventId, key, uploadId: id, size: head.size, updatedAt: now(), updatedBy: a.uid };
-      await store.putSong(song);
-      await files.purgeAudio(prefix, key); // the previous song and any upload that was never committed
-      return reply(200, { eventId, size: song.size, updatedAt: song.updatedAt });
+      const id = uploadId(body.uploadId);
+      if (current?.uploadId === id) { await cleanSong(current); return songResponse(current); }
+      const grant = await store.getSongUpload(eventId, id);
+      if (!grant || grant.expiresAt <= now()) throw songIncomplete();
+      if (grant.baseRevision !== baseRevision) throw songChanged();
+      await cleanSong(current);
+
+      const revision = newSongRevision(), key = songKey(eventId, id, revision);
+      const source = songUploadKey(eventId, id);
+      // Copy to an attempt-specific key: the upload URL can still overwrite the staging key,
+      // and two retries for one upload must never delete or change each other's candidate.
+      if (!await files.copy(source, key)) {
+        const winner = await store.getSong(eventId);
+        if (winner?.uploadId === id) return songResponse(winner);
+        throw songIncomplete();
+      }
+      let song;
+      try {
+        const head = await files.head(key);
+        if (!head) throw songIncomplete();
+        if (head.size > SONG_MAX_BYTES) throw new HttpError(400, 'Choose an MP3 of up to 15 MB.', 'INVALID_AUDIO');
+        const start = id3Skip(await files.readRange(key, Math.min(10, head.size)) || Buffer.alloc(0));
+        const frames = start < head.size ? await files.readRange(key, Math.min(4096, head.size - start), start) : null;
+        if (!frames || !looksLikeMp3(frames)) throw new HttpError(400, 'This file is not an MP3.', 'INVALID_AUDIO');
+        song = { eventId, revision, key, uploadId: id, size: head.size, updatedAt: now(), updatedBy: a.uid, ...(current?.key ? { previousKey: current.key } : {}) };
+      } catch (error) {
+        await purgeSongFiles(files, [key]);
+        throw error;
+      }
+      try { await store.putSong(song, baseRevision); }
+      catch (error) {
+        if (!error.conflict) throw error;
+        const winner = await store.getSong(eventId);
+        // A transport retry can observe the condition fail after its first write succeeded.
+        if (winner?.key === key) { await cleanSong(winner); return songResponse(winner); }
+        await purgeSongFiles(files, [key]);
+        if (winner?.uploadId === id) { await cleanSong(winner); return songResponse(winner); }
+        throw songChanged();
+      }
+      await cleanSong(song);
+      return songResponse(song);
     }
-    // Deleting the song, or the event: either way every song file of the event goes, all versions.
     if (method === 'DELETE' && (sub === '/song' || sub === '')) {
-      await store.deleteSong(eventId);
-      await files.purgeAudio(prefix, null);
+      await cleanSong(current);
+      // Keep a short-lived fence even when no song exists, so an upload granted before
+      // the delete cannot bring it back. The fence outlives all outstanding upload grants.
+      const removed = { eventId, revision: newSongRevision(), ttl: Math.ceil(now() / 1000) + 86400, ...(current?.key ? { previousKey: current.key } : {}) };
+      await store.putSong(removed, baseRevision);
+      await cleanSong(removed);
       return reply(204);
     }
     throw new HttpError(404, 'Not found.', 'NOT_FOUND');

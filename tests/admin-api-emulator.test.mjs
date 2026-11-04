@@ -447,7 +447,7 @@ test('cleanup keeps the Auth user when the account has another event', options, 
 
   // Demo account also owning a real bucket.
   const onBucket = await seedExpiredDemo();
-  const realBucket = 'b-kept';
+  const realBucket = `b-${'a'.repeat(32)}`;
   api.buckets.set(realBucket, { id: realBucket, demo: false, owners: [], status: 'active' });
   assert.equal((await link(onBucket.uid, [{ kind: 'bucket', id: realBucket }])).ok, true);
 
@@ -561,15 +561,19 @@ test('multi-event link and unlink report per event and never downgrade', options
   const [plain, ownedByUser, seating, existing, deleting] = await Promise.all([
     newRealEvent({ eventTitle: 'Plain', venueEn: 'Hall' }), newRealEvent({ ownerUserId: user.uid }), newRealEvent(), newRealEvent(), newRealEvent({ deleting: true }),
   ]);
-  const expired = await newRealEvent({ isDemo: true, demoExpiresAt: Timestamp.fromMillis(Date.now() + 500) });
+  const expired = await newRealEvent({ isDemo: true, demoExpiresAt: Timestamp.fromMillis(Date.now() - HOUR) });
   await db.doc(`weddings/${seating}/dashboardUsers/${user.uid}`).set({ userId: user.uid, role: 'seating', seatingOnly: true, canEditSeating: true });
   await db.doc(`weddings/${existing}/dashboardUsers/${user.uid}`).set({ userId: user.uid, email: user.email, role: 'customer', allowedViews: ['guests'] });
-  api.buckets.set('b-one', { id: 'b-one', demo: false, owners: [], status: 'active' });
-  await new Promise((resolve) => setTimeout(resolve, 600));
+  const bucketId = `b-${'1'.repeat(32)}`, missingBucketId = `demo-${'2'.repeat(32)}`;
+  api.buckets.set(bucketId, { id: bucketId, demo: false, owners: [], status: 'active' });
+  for (const id of ['b-one', `b-${'A'.repeat(32)}`, `demo-${'2'.repeat(31)}`]) {
+    await assert.rejects(call('link', [{ kind: 'bucket', id }]), { status: 400, code: 'INVALID_TARGETS' });
+  }
+  assert.equal(api.calls.length, 0, 'invalid bucket IDs never reach the photo service');
 
   const targets = [
     { kind: 'event', id: plain }, { kind: 'event', id: plain }, { kind: 'event', id: ownedByUser }, { kind: 'event', id: seating }, { kind: 'event', id: existing },
-    { kind: 'event', id: deleting }, { kind: 'event', id: expired }, { kind: 'event', id: 'missing-event' }, { kind: 'bucket', id: 'b-one' }, { kind: 'bucket', id: 'b-missing' },
+    { kind: 'event', id: deleting }, { kind: 'event', id: expired }, { kind: 'event', id: 'missing-event' }, { kind: 'bucket', id: bucketId }, { kind: 'bucket', id: missingBucketId },
   ];
   const linked = await call('link', targets);
   const by = Object.fromEntries(linked.results.map((row) => [row.id, row]));
@@ -582,10 +586,10 @@ test('multi-event link and unlink report per event and never downgrade', options
   assert.equal(by[deleting].code, 'EVENT_DELETING');
   assert.equal(by[expired].code, 'EVENT_EXPIRED');
   assert.equal(by['missing-event'].code, 'EVENT_NOT_FOUND');
-  assert.equal(by['b-one'].status, 'linked');
-  assert.equal(by['b-missing'].code, 'BUCKET_NOT_FOUND');
+  assert.equal(by[bucketId].status, 'linked');
+  assert.equal(by[missingBucketId].code, 'BUCKET_NOT_FOUND');
   assert.equal(linked.failed, 4);
-  assert.deepEqual(api.buckets.get('b-one').owners, [user.uid]);
+  assert.deepEqual(api.buckets.get(bucketId).owners, [user.uid]);
 
   const member = (await db.doc(`weddings/${plain}/dashboardUsers/${user.uid}`).get()).data();
   assert.equal(member.role, 'customer');
@@ -600,22 +604,22 @@ test('multi-event link and unlink report per event and never downgrade', options
   assert.equal((await getDoc(doc(customer.db, 'weddings', plain))).exists(), true, 'the rules honour the membership');
 
   await db.doc(`customerGrants/${encodeURIComponent(user.email)}~${encodeURIComponent(plain)}`).set({ email: user.email, weddingId: plain, role: 'customer' });
-  const unlinked = await call('unlink', [{ kind: 'event', id: plain }, { kind: 'event', id: seating }, { kind: 'event', id: ownedByUser }, { kind: 'bucket', id: 'b-one' }, { kind: 'event', id: 'never-linked' }]);
+  const unlinked = await call('unlink', [{ kind: 'event', id: plain }, { kind: 'event', id: seating }, { kind: 'event', id: ownedByUser }, { kind: 'bucket', id: bucketId }, { kind: 'event', id: 'never-linked' }]);
   const out = Object.fromEntries(unlinked.results.map((row) => [row.id, row]));
   assert.equal(out[plain].status, 'unlinked');
   assert.equal(out[seating].code, 'PRESERVED_ROLE');
   assert.equal(out[ownedByUser].code, 'PRESERVED_ROLE');
-  assert.equal(out['b-one'].status, 'unlinked');
+  assert.equal(out[bucketId].status, 'unlinked');
   assert.equal(out['never-linked'].status, 'not_linked');
   assert.equal(await exists(`weddings/${plain}/dashboardUsers/${user.uid}`), false);
   assert.equal(await exists(`users/${user.uid}/weddingAccess/${plain}`), false);
   assert.equal(await exists(`customerGrants/${encodeURIComponent(user.email)}~${encodeURIComponent(plain)}`), false);
   assert.equal((await db.doc(`weddings/${seating}/dashboardUsers/${user.uid}`).get()).data().role, 'seating');
-  assert.deepEqual(api.buckets.get('b-one').owners, []);
+  assert.deepEqual(api.buckets.get(bucketId).owners, []);
 
   const timedOut = await call('link', [{ kind: 'event', id: plain }], { budgetMs: 0 });
   assert.equal(timedOut.results[0].code, 'NOT_ATTEMPTED');
-  const noApi = await manageCustomerAccess({ auth, db, token: adminToken, action: 'link', userId: user.uid, targets: [{ kind: 'bucket', id: 'b-one' }] });
+  const noApi = await manageCustomerAccess({ auth, db, token: adminToken, action: 'link', userId: user.uid, targets: [{ kind: 'bucket', id: bucketId }] });
   assert.equal(noApi.results[0].code, 'BUCKET_API_UNCONFIGURED');
 });
 

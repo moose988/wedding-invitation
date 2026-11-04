@@ -7,7 +7,7 @@ import { parse } from 'yaml';
 import { compress, createBackupHandler } from '../src/backup.mjs';
 import { LIMITS, hasJpegEnd, jpegSize, parseImageKey, signGuestToken, validBucketId, verifyGuestToken } from '../src/lib.mjs';
 import { createClients } from '../src/clients.mjs';
-import { createFiles } from '../src/files.mjs';
+import { createFiles, purgeSongFiles } from '../src/files.mjs';
 import { createPurgeInvoker } from '../src/invoke.mjs';
 import { createDemoSweep, createAdminSweep, purgeTombstone } from '../src/purge.mjs';
 import { BUCKET_SIZES_GB, DEMO_EXPIRY_HOURS, bytesForGb, estimatePhotos, overdueInfo } from '../src/sizes.mjs';
@@ -520,6 +520,24 @@ test('backup state is recorded per photo, countable and re-drivable; nothing is 
   assert.deepEqual((await backup({ Records: [s3Message(keys[0])] })).batchItemFailures, [], 'redelivery is a no-op');
   assert.equal((await status()).backupBytes, before); assert.equal(h.files.backups.get(keys[0].replace('/photos/', '/backup/')).length, versions);
 });
+test('secondary commit and backup failures log error codes and retain their original outcomes', async t => {
+  const log = t.mock.method(console, 'error', () => {});
+  const h = harness(), { id, a } = await ready(h);
+  const image = await jpeg(), thumb = await jpeg(60, 40);
+  h.files.remove = async () => { throw Object.assign(new Error('private details'), { name: 'AccessDenied' }); };
+  const committed = await commitOne(h, a.token, id, 'p1', image, thumb);
+  assert.equal(committed.status, 200);
+  const photo = await h.store.getPhoto(id, 'p1');
+  assert.equal(photo.backupState, 'pending');
+
+  h.store.markBackupFailed = async () => { throw Object.assign(new Error('private details'), { code: 'MARK_DENIED' }); };
+  const backup = createBackupHandler({ store: h.store, files: h.files, encode: async () => { throw new Error('encode failed'); } });
+  assert.deepEqual(await backup({ Records: [s3Message(photo.imageKey)] }), { batchItemFailures: [{ itemIdentifier: photo.imageKey }] });
+  const entries = log.mock.calls.map(call => JSON.parse(call.arguments[0]));
+  assert.ok(entries.some(row => row.removeIncomingFailed && row.code === 'AccessDenied'));
+  assert.ok(entries.some(row => row.markBackupFailed && row.code === 'MARK_DENIED'));
+  assert.ok(entries.every(row => !JSON.stringify(row).includes('private details')));
+});
 test('backup event racing its commit is retried, later orphans are dropped, S3 test events ignored', async () => {
   const h = harness(); const { id } = await ready(h); let now = 1_800_000_000_000;
   const backup = createBackupHandler({ store: h.store, files: h.files, now: () => now });
@@ -567,6 +585,8 @@ test('PhotoPurge takes only a tombstone id, and refuses without a tombstone or w
   await h.call('DELETE', `/b/${id}/photos/p1`, { token: 'customer-token' });
   assert.equal((await purge(`${id}/p1.${p.uid}`)).reason, 'still-owned');
   assert.ok(h.files.currentBackup(p.backupKey));
+  await assert.rejects(purgeSongFiles(h.files, [p.imageKey]), /outside song keys/);
+  assert.ok(h.files.photos.has(p.imageKey), 'song cleanup cannot delete the hidden original');
   for (const file of ['handler.mjs', 'index.mjs']) assert.ok(!/purgeKeys|\.purge\(/.test(readFileSync(new URL(`../src/${file}`, import.meta.url), 'utf8')), `${file} cannot purge directly`);
 });
 test('the API invokes PhotoPurge synchronously with only the tombstone id, correctly signed', async () => {
@@ -747,7 +767,7 @@ const mp3 = (frames = 6) => Buffer.concat(Array.from({ length: frames }, () => m
 async function songUpload(h, eventId, bytes, token = 'admin-token') {
   const grant = await h.call('POST', `/events/${encodeURIComponent(eventId)}/song/uploads`, { token, body: { size: bytes.length } });
   if (grant.status !== 200) return { grant };
-  h.files.store(`audio/${eventId}/${grant.body.uploadId}.mp3`, bytes);
+  h.files.store(grant.body.upload.url.slice('put://'.length), bytes);
   return { grant, commit: await h.call('POST', `/events/${encodeURIComponent(eventId)}/song/commit`, { token, body: { uploadId: grant.body.uploadId } }) };
 }
 test('event songs: admin-only upload with MP3 checks, public short-lived URL, replace and delete purge', async () => {
@@ -757,14 +777,14 @@ test('event songs: admin-only upload with MP3 checks, public short-lived URL, re
   for (const bad of ['..', '__x__', 'a'.repeat(129), 'a%2Fb', 'a%01b']) assert.equal((await h.call('GET', `/events/${bad}/song`)).body.code, 'INVALID_EVENT', bad);
   assert.equal((await h.call('POST', `/events/${ev}/song/uploads`, { token: 'admin-token', body: { size: 15 * 1024 * 1024 + 1 } })).body.code, 'INVALID_AUDIO');
   const grant = await h.call('POST', `/events/${ev}/song/uploads`, { token: 'admin-token', body: { size: 1000 } });
-  assert.match(grant.body.upload.url, new RegExp(`^put://audio/${ev}/[a-f0-9]{32}\\.mp3$`)); assert.equal(grant.body.upload.headers['content-type'], 'audio/mpeg');
+  assert.match(grant.body.upload.url, new RegExp(`^put://audio/__uploads__/${ev}/[a-f0-9]{32}\\.mp3$`)); assert.equal(grant.body.upload.headers['content-type'], 'audio/mpeg');
   // Not MP3, or a single frame header followed by junk: refused.
   assert.equal((await songUpload(h, ev, await jpeg())).commit.body.code, 'INVALID_AUDIO');
   assert.equal((await songUpload(h, ev, Buffer.concat([mp3Frame(), Buffer.alloc(500, 7)]))).commit.body.code, 'INVALID_AUDIO');
   const first = await songUpload(h, ev, mp3());
   assert.equal(first.commit.status, 200, JSON.stringify(first.commit.body));
-  const firstKey = `audio/${ev}/${first.grant.body.uploadId}.mp3`;
-  assert.equal([...h.files.photos.keys()].filter(k => k.startsWith(`audio/${ev}/`)).length, 1, 'refused uploads were purged with the commit');
+  const firstKey = (await h.store.getSong(ev)).key;
+  assert.equal([...h.files.photos.keys()].filter(k => k.startsWith(`audio/${ev}/`)).length, 1, 'refused uploads stay under the expiring staging prefix');
   assert.equal((await h.call('POST', `/events/${ev}/song/commit`, { token: 'admin-token', body: { uploadId: first.grant.body.uploadId } })).status, 200, 'idempotent');
   const played = await h.call('GET', `/events/${ev}/song`);
   assert.equal(played.status, 200); assert.equal(played.body.url, `get://${firstKey}#audio/mpeg`);
@@ -778,12 +798,94 @@ test('event songs: admin-only upload with MP3 checks, public short-lived URL, re
   assert.equal((await h.call('DELETE', `/events/${ev}/song`, { token: 'customer-token' })).status, 403);
   assert.equal((await h.call('DELETE', `/events/${ev}/song`, { token: 'admin-token' })).status, 204);
   assert.equal((await h.call('GET', `/events/${ev}/song`)).body.code, 'NO_SONG');
-  assert.equal([...h.files.photos.keys()].filter(k => k.startsWith('audio/')).length, 0);
+  assert.equal([...h.files.photos.keys()].filter(k => k.startsWith(`audio/${ev}/`)).length, 0);
+  assert.ok([...h.files.photos.keys()].every(k => k.startsWith('audio/__uploads__/')));
   // Deleting the event purges its song too, and touches no other event.
   await songUpload(h, ev, mp3()); await songUpload(h, 'other-event', mp3());
   assert.equal((await h.call('DELETE', `/events/${ev}`, { token: 'admin-token' })).status, 204);
   assert.equal((await h.call('GET', `/events/${ev}/song`)).status, 404);
   assert.equal((await h.call('GET', '/events/other-event/song')).status, 200);
+});
+
+test('parallel song commits and stale retries cannot erase or replace the winner', async () => {
+  const h = harness(), eventId = 'song-race', root = `/events/${eventId}/song`;
+  const token = 'admin-token';
+  async function stage(bytes) {
+    const grant = await h.call('POST', `${root}/uploads`, { token, body: { size: bytes.length } });
+    assert.equal(grant.status, 200);
+    const key = grant.body.upload.url.slice('put://'.length);
+    h.files.store(key, bytes);
+    return { id: grant.body.uploadId, key };
+  }
+  const commit = id => h.call('POST', `${root}/commit`, { token, body: { uploadId: id } });
+  const first = await stage(mp3(4)), second = await stage(mp3(5));
+  const copy = h.files.copy;
+  let release, arrived;
+  const blocked = new Promise(resolve => { arrived = resolve; });
+  const ready = new Promise(resolve => { release = resolve; });
+  h.files.copy = async (source, target) => {
+    if (source === first.key) { arrived(); await ready; }
+    return copy(source, target);
+  };
+
+  const slowCommit = commit(first.id);
+  await blocked;
+  const winner = await commit(second.id);
+  release();
+  assert.equal(winner.status, 200);
+  assert.equal((await slowCommit).body.code, 'SONG_CONFLICT');
+  assert.equal((await commit(first.id)).body.code, 'SONG_CONFLICT', 'automatic retry cannot reuse an old grant');
+  const current = await h.store.getSong(eventId);
+  assert.equal(current.uploadId, second.id);
+  assert.ok(h.files.current(current.key), 'losing commit did not purge the winning object');
+  assert.deepEqual([...h.files.photos.keys()].filter(key => key.startsWith(`audio/${eventId}/`)), [current.key]);
+
+  // A delete fences off grants created before it, even if the event has no song.
+  assert.equal((await h.call('DELETE', root, { token })).status, 204);
+  const third = await stage(mp3(6));
+  assert.equal((await h.call('DELETE', root, { token })).status, 204);
+  assert.equal((await commit(third.id)).body.code, 'SONG_CONFLICT');
+  assert.equal((await h.call('GET', root)).body.code, 'NO_SONG');
+});
+
+test('a song commit retry finishes cleaning up a legacy song after a storage failure', async () => {
+  const h = harness(), eventId = 'old-song', root = `/events/${eventId}/song`;
+  const token = 'admin-token', oldId = 'a'.repeat(32), oldKey = `audio/${eventId}/${oldId}.mp3`;
+  h.dynamo.put({ pk: `EVENT#${eventId}`, sk: 'SONG', eventId, key: oldKey, uploadId: oldId, size: mp3().length, updatedAt: Date.now() });
+  h.files.store(oldKey, mp3());
+  const purge = h.files.purgeKeys;
+  let refused = false;
+  h.files.purgeKeys = async (target, keys) => {
+    if (!refused && keys.includes(oldKey)) { refused = true; throw Object.assign(new Error('S3 is busy'), { busy: true }); }
+    return purge(target, keys);
+  };
+  const { grant, commit } = await songUpload(h, eventId, mp3(4));
+  assert.equal(commit.status, 503);
+  const winningKey = (await h.store.getSong(eventId)).key;
+  assert.ok(h.files.current(winningKey));
+  assert.ok(h.files.current(oldKey));
+  assert.equal((await h.call('POST', `${root}/commit`, { token, body: { uploadId: grant.body.uploadId } })).status, 200);
+  assert.ok(h.files.current(winningKey));
+  assert.equal(h.files.current(oldKey), null);
+});
+
+test('the one-day song lifecycle matches abandoned uploads and never a committed song', async () => {
+  const h = harness();
+  const rules = template('template.yaml').Resources.PhotoBucket.Properties.LifecycleConfiguration.Rules;
+  const expiring = rules.find(rule => rule.Id === 'expire-unfinished-song-uploads');
+  assert.equal(expiring.ExpirationInDays, 1);
+  assert.equal(expiring.NoncurrentVersionExpiration.NoncurrentDays, 1);
+  const matchesCurrentExpiration = key => rules.some(rule => rule.ExpirationInDays && key.startsWith(rule.Prefix || ''));
+  for (const eventId of ['uploads', 'عقد']) {
+    const abandoned = await songUpload(h, eventId, Buffer.from('Not an MP3'));
+    assert.equal(abandoned.commit.body.code, 'INVALID_AUDIO');
+    const active = await songUpload(h, eventId, mp3());
+    assert.equal(active.commit.status, 200);
+    const current = await h.store.getSong(eventId);
+    assert.ok(matchesCurrentExpiration(abandoned.grant.body.upload.url.slice('put://'.length)));
+    assert.equal(matchesCurrentExpiration(current.key), false);
+    assert.equal(matchesCurrentExpiration(`audio/${eventId}/${active.grant.body.uploadId}.mp3`), false, 'existing songs remain safe');
+  }
 });
 
 // ---------- demos ----------

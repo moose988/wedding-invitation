@@ -313,8 +313,24 @@ export function createStore({ client, table, random = Math.random, sleep = ms =>
     setContributorName: (id, contributorId, name, stamp) => send(new PutCommand({ TableName: table, Item: { pk: pk(id), sk: `CONTRIB#${contributorId}`, name, updatedAt: stamp } })),
     // Event songs: one record per Firestore event id, outside any bucket.
     async getSong(eventId) { const { Item } = await send(new GetCommand({ TableName: table, Key: { pk: `EVENT#${eventId}`, sk: 'SONG' }, ConsistentRead: true })); return strip(Item); },
-    putSong: song => send(new PutCommand({ TableName: table, Item: { pk: `EVENT#${song.eventId}`, sk: 'SONG', ...song } })),
-    deleteSong: eventId => send(new DeleteCommand({ TableName: table, Key: { pk: `EVENT#${eventId}`, sk: 'SONG' } })),
+    putSong(song, baseRevision) {
+      // Older records have no revision, so compare their immutable object key instead.
+      const condition = baseRevision === null
+        ? 'attribute_not_exists(#pk)'
+        : '#revision = :base OR (attribute_not_exists(#revision) AND #key = :base)';
+      return send(new PutCommand({
+        TableName: table, Item: { pk: `EVENT#${song.eventId}`, sk: 'SONG', ...song },
+        ConditionExpression: condition, ExpressionAttributeNames: names(condition),
+        ...(baseRevision === null ? {} : { ExpressionAttributeValues: { ':base': baseRevision } }),
+      }));
+    },
+    async getSongUpload(eventId, id) {
+      const { Item } = await send(new GetCommand({ TableName: table, Key: { pk: `EVENT#${eventId}`, sk: `UPLOAD#${id}` }, ConsistentRead: true }));
+      return strip(Item);
+    },
+    putSongUpload: (eventId, id, baseRevision, expiresAt) => send(new PutCommand({
+      TableName: table, Item: { pk: `EVENT#${eventId}`, sk: `UPLOAD#${id}`, baseRevision, expiresAt, ttl: Math.ceil(expiresAt / 1000) },
+    })),
     // --- Used by the sweeps only ---
     async markDeleting(id, meta, { stamp, by, queue }) {
       const fields = { status: 'deleting', deleteRequestedAt: meta.deleteRequestedAt || stamp, updatedAt: stamp, ...(by ? { deleteRequestedBy: by } : {}), ...(queue ? { gsi2pk: 'PURGE', gsi2sk: `${stamp13(stamp)}#${id}` } : {}) };

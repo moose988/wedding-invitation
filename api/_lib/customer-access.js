@@ -7,7 +7,7 @@ const MAX_TARGETS = 50;
 const POOL = 5;
 const EMAIL = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 const validEventId = (id) => typeof id === 'string' && id.length >= 1 && id.length <= 128 && !id.includes('/') && id !== '.' && id !== '..' && !/^__.*__$/.test(id);
-const validBucketId = (id) => typeof id === 'string' && /^[a-z0-9-]{3,64}$/.test(id);
+const validBucketId = (id) => typeof id === 'string' && /^(?:b|demo)-[a-f0-9]{32}$/.test(id);
 
 export async function lookupCustomer({ auth, db, token, email }) {
   await requireAdmin(auth, db, token);

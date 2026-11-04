@@ -92,7 +92,9 @@ export function cleanGuestName(value) {
 // S3 keys and logs should never carry.
 export const validEventId = id => typeof id === 'string' && id.length >= 1 && id.length <= 128 && !id.includes('/') && id !== '.' && id !== '..' && !/^__.*__$/.test(id) && !/[\u0000-\u001f\u007f]/.test(id);
 export const SONG_MAX_BYTES = 15 * 1024 * 1024;
-export const songKey = (eventId, uploadId) => `audio/${eventId}/${uploadId}.mp3`;
+// Firestore reserves __...__ ids, so the lifecycle prefix cannot contain a real event's song.
+export const songUploadKey = (eventId, uploadId) => `audio/__uploads__/${eventId}/${uploadId}.mp3`;
+export const songKey = (eventId, uploadId, revision) => `audio/${eventId}/${uploadId}-${revision}.mp3`;
 
 // MP3 checks on the first bytes only. id3Skip says where audio frames start after an optional ID3v2 tag.
 export function id3Skip(head) {

@@ -1330,19 +1330,6 @@ service cloud.firestore {
             && request.resource.data.deleting == true && request.resource.data.updatedAt == request.time)));
     }
 
-    // A browser cannot send "server time + 24 hours", so an exact comparison
-    // could never pass. Clients send a value between 23 and 24 hours ahead; the
-    // upper bound is the guarantee. No update path lists these two fields, so
-    // they are immutable to every client.
-    function validDemoFieldsOnCreate(data) {
-      return !data.keys().hasAny(["isDemo", "demoExpiresAt"])
-        || (data.keys().hasAll(["isDemo", "demoExpiresAt"])
-          && data.isDemo == true
-          && data.demoExpiresAt is timestamp
-          && data.demoExpiresAt >= request.time + duration.value(23, "h")
-          && data.demoExpiresAt <= request.time + duration.value(24, "h"));
-    }
-
     function validAuditCode(value, maxSize) {
       return value is string && value.size() > 0 && value.size() <= maxSize && value.matches("^[a-z][a-z0-9_.-]*$");
     }
@@ -1358,7 +1345,8 @@ service cloud.firestore {
         && validAuditCode(data.action, 64)
         && validAuditCode(data.targetType, 40)
         && data.targetId is string && data.targetId.size() <= 200
-        && data.summary is string && data.summary.size() <= 500
+        // String size counts bytes here. RE2 counts Unicode code points and includes newlines with (?s).
+        && data.summary is string && data.summary.matches("(?s)^.{0,500}$")
         && data.createdAt == request.time;
     }
 
@@ -1488,7 +1476,7 @@ service cloud.firestore {
         request.auth.uid == request.resource.data.ownerUserId &&
         request.resource.data.eventCategory in ["wedding_engagement", "celebration", "gender_reveal"] &&
         (request.resource.data.eventCategory != "gender_reveal" || validEventDetails(request.resource.data)) &&
-        validDemoFieldsOnCreate(request.resource.data) &&
+        !request.resource.data.keys().hasAny(["isDemo", "demoExpiresAt", "demoAccountUid"]) &&
         validMusicFields(request.resource.data);
 
       // Table positions are stored in their own table documents, but the

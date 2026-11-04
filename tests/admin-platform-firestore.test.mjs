@@ -195,7 +195,10 @@ test("the customer audit trail is append-only, customer-written and administrato
     await assertSucceeds(put(customer, `${audit}/ok`, auditEntry("customer")));
     await assertSucceeds(put(customer, `${audit}/empty-target`, auditEntry("customer", { targetId: "", summary: "" })));
     await assertSucceeds(put(customer, `${audit}/max`, auditEntry("customer", { action: "a".repeat(64), targetType: "t".repeat(40), targetId: "i".repeat(200), summary: "s".repeat(500) })));
+    const arabicSummary = "أ".repeat(250) + "\n" + "ب".repeat(248) + "🎉";
+    await assertSucceeds(put(customer, `${audit}/arabic-max`, auditEntry("customer", { summary: arabicSummary })));
     for (const [id, data] of Object.entries({
+      longArabicSummary: auditEntry("customer", { summary: arabicSummary + "ب" }),
       forgedUid: auditEntry("customer", { actorUid: "other" }),
       forgedEmail: auditEntry("customer", { actorEmail: "other@example.test" }),
       clientTime: auditEntry("customer", { createdAt: new Date() }),
@@ -390,7 +393,7 @@ async function seedDemo(db, id, fields, category = "wedding_engagement") {
   await put(db, `weddings/${id}/genderRevealSessionKeys/anonymous-session-identifier`, { responseId: "r", createdAt: new Date() });
 }
 
-test("demo creation: platform admins only, expiry inside 24 hours, both fields immutable", { skip }, async () => {
+test("demo metadata is server-owned even for platform administrators", { skip }, async () => {
   const env = await environment("demo-demo-create");
   try {
     await seed(env, async (db) => {
@@ -398,12 +401,15 @@ test("demo creation: platform admins only, expiry inside 24 hours, both fields i
       await put(db, "platformAdmins/second", { enabled: true });
       await put(db, "weddings/plain", { ...event, ownerUserId: "admin" });
       await put(db, "weddings/plain/dashboardUsers/customer", customerMembership("customer", "customer@example.test", new Date()));
+      await put(db, "weddings/demo", { ...event, ownerUserId: "admin", isDemo: true, demoExpiresAt: inHours(23.5), demoAccountUid: "demo-fixture" });
     });
     const admin = dbFor(env, "admin"), customer = dbFor(env, "customer");
     const draft = { ...event, ownerUserId: "admin" };
-    await assertSucceeds(put(admin, "weddings/demo", { ...draft, isDemo: true, demoExpiresAt: inHours(23.5) }));
+    await assertSucceeds(api.getDoc(api.doc(admin, "weddings/demo")));
     await assertSucceeds(put(admin, "weddings/ordinary", draft));
     for (const [id, fields] of Object.entries({
+      validDemo: { isDemo: true, demoExpiresAt: inHours(23.5) },
+      accountOnly: { demoAccountUid: "demo-fixture" },
       tooLong: { isDemo: true, demoExpiresAt: inHours(24.5) },
       tooShort: { isDemo: true, demoExpiresAt: inHours(1) },
       past: { isDemo: true, demoExpiresAt: inHours(-1) },
@@ -424,6 +430,7 @@ test("demo creation: platform admins only, expiry inside 24 hours, both fields i
     for (const db of [admin, second]) {
       await assertFails(api.updateDoc(api.doc(db, "weddings/demo"), { demoExpiresAt: inHours(48), updatedAt: now() }));
       await assertFails(api.updateDoc(api.doc(db, "weddings/demo"), { isDemo: false, updatedAt: now() }));
+      await assertFails(api.updateDoc(api.doc(db, "weddings/demo"), { demoAccountUid: "another-demo", updatedAt: now() }));
       await assertFails(api.updateDoc(api.doc(db, "weddings/demo"), { isDemo: api.deleteField(), updatedAt: now() }));
       await assertFails(api.updateDoc(api.doc(db, "weddings/demo"), { demoExpiresAt: api.deleteField(), updatedAt: now() }));
       await assertFails(api.updateDoc(api.doc(db, "weddings/plain"), { isDemo: true, demoExpiresAt: inHours(23.5), updatedAt: now() }));

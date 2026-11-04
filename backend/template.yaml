@@ -96,6 +96,7 @@ Resources:
       LifecycleConfiguration:
         Rules:
           - { Id: expire-unfinished-uploads, Status: Enabled, Prefix: incoming/, ExpirationInDays: 1, NoncurrentVersionExpiration: { NoncurrentDays: 1 } }
+          - { Id: expire-unfinished-song-uploads, Status: Enabled, Prefix: audio/__uploads__/, ExpirationInDays: 1, NoncurrentVersionExpiration: { NoncurrentDays: 1 } }
           # Originals of deleted photos and old versions expire here, 30 days after being hidden. Backups live in another bucket.
           - { Id: expire-old-versions, Status: Enabled, NoncurrentVersionExpiration: { NoncurrentDays: 30 }, ExpiredObjectDeleteMarker: true, AbortIncompleteMultipartUpload: { DaysAfterInitiation: 1 } }
       # Copy only: commits and restores copy into place, while browsers PUT to incoming/. Thumbnails do not end in .jpg.

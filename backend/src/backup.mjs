@@ -48,7 +48,8 @@ export function createBackupHandler({ store, files, encode = compress, now = Dat
       // Only now may the original go. Until a backup exists, it is the only copy of a deleted photo.
       if (holder) await files.remove([item.imageKey]);
     } catch (error) {
-      await store.markBackupFailed({ bucketId: ref.bucketId, photo: item, deletedId, reason: error.message }).catch(() => {});
+      await store.markBackupFailed({ bucketId: ref.bucketId, photo: item, deletedId, reason: error.message })
+        .catch(markError => console.error(JSON.stringify({ markBackupFailed: true, code: markError.cause?.name || markError.code || markError.name })));
       throw error;
     }
   }

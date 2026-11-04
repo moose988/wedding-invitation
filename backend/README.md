@@ -88,7 +88,7 @@ Each bucket has `showUploaderNames` (default on), set by an admin at creation or
 
 ## Event songs
 
-Admins upload one MP3 per invitation event: `audio/<eventId>/<uploadId>.mp3` in the photo bucket, at most 15 MB, `audio/mpeg` only, checked for two consecutive MPEG Layer III frame headers at commit. A record `EVENT#<eventId> / SONG` points at the current file. Replacing or deleting the song, or calling `DELETE /events/<eventId>`, removes every other version under that event's prefix, permanently. That is the one place the API role may delete object versions, and its IAM allows it under `audio/*` only. Anyone with the event id can get a 15-minute signed URL, cacheable for 5 minutes. Songs are not counted in bucket sizes or backed up.
+Admins upload one MP3 per invitation event, at most 15 MB and signed for `audio/mpeg`. The upload goes to `audio/__uploads__/<eventId>/<uploadId>.mp3`, where a one-day lifecycle rule removes abandoned uploads. Commit validates two consecutive MPEG Layer III frames on a separate playback copy. The `EVENT#<eventId> / SONG` record switches to that copy only if the song revision still matches the revision when the upload was granted. Replacement and deletion permanently remove the previous playback key and its versions without touching concurrent uploads. The API role may delete versions under `audio/*` only. Anyone with the event id can get a 15-minute signed URL, cacheable for 5 minutes. Songs are not counted in bucket sizes or backed up.
 
 ## Monitoring
 

@@ -388,12 +388,20 @@ export function createHandler({ store, files, purgePhotoFiles, verifyOwner, secr
         await purgeSongFiles(files, [key]);
         throw error;
       }
-      try { await store.putSong(song, baseRevision); }
-      catch (error) {
-        if (!error.conflict) throw error;
+      try {
+        try { await store.putSong(song, baseRevision); }
+        catch (error) {
+          if (error.conflict) throw error;
+          // Retry the same candidate. A lost write response must never create
+          // a second permanent object or invalidate a song that was published.
+          await store.putSong(song, baseRevision);
+        }
+      } catch (error) {
         const winner = await store.getSong(eventId);
         // A transport retry can observe the condition fail after its first write succeeded.
         if (winner?.key === key) { await cleanSong(winner); return songResponse(winner); }
+        // An ambiguous write could still publish while its base revision is current.
+        if (!error.conflict && songRevision(winner) === baseRevision) throw error;
         await purgeSongFiles(files, [key]);
         if (winner?.uploadId === id) { await cleanSong(winner); return songResponse(winner); }
         throw songChanged();

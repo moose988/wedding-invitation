@@ -807,6 +807,33 @@ test('event songs: admin-only upload with MP3 checks, public short-lived URL, re
   assert.equal((await h.call('GET', '/events/other-event/song')).status, 200);
 });
 
+test('a song commit recovers from a failed write or a lost acknowledgement without orphaning its copy', async () => {
+  for (const written of [false, true]) {
+    const dynamo = new FakeDynamo();
+    const send = dynamo.send.bind(dynamo);
+    let interrupted = false;
+    dynamo.send = async command => {
+      if (!interrupted && command.input.Item?.sk === 'SONG') {
+        interrupted = true;
+        if (written) await send(command);
+        throw new Error('Simulated lost DynamoDB response');
+      }
+      return send(command);
+    };
+    const h = harness({ dynamo });
+    const eventId = 'song-reconcile';
+    const bytes = mp3();
+    const grant = await h.call('POST', `/events/${eventId}/song/uploads`, { token: 'admin-token', body: { size: bytes.length } });
+    h.files.store(grant.body.upload.url.slice('put://'.length), bytes);
+    const committed = await h.call('POST', `/events/${eventId}/song/commit`, { token: 'admin-token', body: { uploadId: grant.body.uploadId } });
+    assert.equal(committed.status, 200);
+    assert.equal(interrupted, true);
+    assert.equal([...h.files.photos.keys()].filter(key => key.startsWith(`audio/${eventId}/`)).length, 1);
+    assert.equal((await h.call('DELETE', `/events/${eventId}/song`, { token: 'admin-token' })).status, 204);
+    assert.deepEqual([...h.files.photos.keys()], []);
+  }
+});
+
 test('parallel song commits and stale retries cannot erase or replace the winner', async () => {
   const h = harness(), eventId = 'song-race', root = `/events/${eventId}/song`;
   const token = 'admin-token';

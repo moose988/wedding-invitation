@@ -1,3 +1,4 @@
 # Preserve the upstream distribution byte for byte.
 /vendor/lame.min.js -text -whitespace
 /vendor/lamejs-src/** -text -whitespace
+/backend/*.sh text eol=lf

@@ -68,3 +68,12 @@ body[data-account-surface="customer"] #weddingGrid { display: grid; grid-templat
   body[data-account-surface="customer"] .text-button { min-height: 44px; padding: 0 10px; }
   body[data-account-surface="customer"] .workspace-hero h1 { font-size: 2rem; }
 }
+
+@media (max-width: 767px) {
+  body[data-account-surface="customer"] .workspace-brand {
+    display: inline-flex;
+    align-items: center;
+    min-height: 44px;
+    min-width: 44px;
+  }
+}

@@ -9,13 +9,18 @@ if (process.env.FIRESTORE_EMULATOR_HOST !== "127.0.0.1:8080" || process.env.FIRE
 const projectId = "demo-wedding-security";
 const env = await initializeTestEnvironment({ projectId, firestore: { rules: await readFile(new URL("../firestore.rules", import.meta.url), "utf8") } });
 const users = {};
+let adminToken;
 for (const label of ["admin", "customer-a", "customer-b", "customer-c", "multi", "unassigned", "bride", "checkin"]) {
   const result = await fetch("http://127.0.0.1:9099/identitytoolkit.googleapis.com/v1/accounts:signUp?key=demo-key", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ email: `${label}@example.test`, password: "emulator-only", returnSecureToken: true }) }).then((r) => r.json());
   if (!result.localId) {
     const existing = await fetch("http://127.0.0.1:9099/identitytoolkit.googleapis.com/v1/accounts:signInWithPassword?key=demo-key", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ email: `${label}@example.test`, password: "emulator-only", returnSecureToken: true }) }).then((r) => r.json());
     if (!existing.localId) throw new Error(`Could not seed ${label}: ${result.error?.message}`);
     users[label] = existing.localId;
-  } else users[label] = result.localId;
+    if (label === "admin") adminToken = existing.idToken;
+  } else {
+    users[label] = result.localId;
+    if (label === "admin") adminToken = result.idToken;
+  }
 }
 await env.withSecurityRulesDisabled(async (context) => {
   const db = context.firestore();
@@ -49,4 +54,24 @@ await env.withSecurityRulesDisabled(async (context) => {
   }
 });
 await env.cleanup();
+if (process.argv.includes("--fixtures")) {
+  const port = Number(process.env.PORT || 5173);
+  if (!Number.isInteger(port) || port < 1 || port > 65535) throw new Error("Invalid local preview port.");
+  const base = `http://127.0.0.1:${port}/__photo_bucket_api/owner`;
+  const headers = { authorization: `Bearer ${adminToken}`, "content-type": "application/json" };
+  const request = (route, options = {}) => fetch(`${base}/${route}`, {
+    ...options, headers, redirect: "error", signal: AbortSignal.timeout(8000),
+  });
+  const existing = await request(`list?uid=${encodeURIComponent(users.multi)}`);
+  if (!existing.ok) throw new Error(`Local bucket listing failed (HTTP ${existing.status}). Start npm run dev:emulator first.`);
+  const { items } = await existing.json();
+  const name = "Synthetic Browser Photo Bucket";
+  if (!items.some((bucket) => bucket.name === name)) {
+    const created = await request("create", {
+      method: "POST",
+      body: JSON.stringify({ name, date: "2027-05-20", location: "Synthetic Garden Hall", gb: 15, owners: [users.multi], showUploaderNames: false }),
+    });
+    if (!created.ok) throw new Error(`Could not seed the local photo bucket (HTTP ${created.status}).`);
+  }
+}
 console.log("Seeded synthetic administrator, shared/multiple/empty customers, and specialized roles in local emulators.");

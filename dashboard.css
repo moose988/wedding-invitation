@@ -5978,3 +5978,33 @@ body.is-overview-view .overview-page { width: 100%; max-width: var(--da3wa-conte
   .da3wa-topbar__actions, .da3wa-topbar__action-row { flex-wrap: wrap; max-width: 100%; }
   .da3wa-topbar__action-row .da3wa-button { min-height: 44px; }
 }
+
+.is-customer-dashboard .table-builder-field {
+  display: none;
+}
+
+.bulk-add-errors,
+.guest-menu__item--danger {
+  color: var(--da3wa-danger);
+}
+
+@media (max-width: 767px) {
+  body.is-guests-view .guest-card__header .guest-row__menu-toggle,
+  body.is-guests-view .guest-card__header .guest-rsvp-select,
+  body.is-guests-view .guest-card__reservation .guest-card__reservation-link,
+  .guest-name-button,
+  .guest-menu__item,
+  button[data-action="mobile-toggle-seating-summary"],
+  button[data-action="unassign-seat"],
+  button.hall-object--stage,
+  button.hall-object--entrance {
+    min-width: 44px;
+    min-height: 44px;
+  }
+
+  body.is-guests-view .guest-card__header .guest-rsvp-select {
+    width: auto;
+    min-width: 100px;
+    padding-inline: 8px 18px;
+  }
+}

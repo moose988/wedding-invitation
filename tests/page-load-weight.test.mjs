@@ -3,8 +3,9 @@ import { execFileSync } from "node:child_process";
 import { readFileSync } from "node:fs";
 import path from "node:path";
 import test from "node:test";
+import { fileURLToPath } from "node:url";
 
-const root = new URL("..", import.meta.url).pathname;
+const root = fileURLToPath(new URL("..", import.meta.url));
 const files = execFileSync("git", ["ls-files", "*.js", "*.html"], { cwd: root, encoding: "utf8" }).split("\n")
   .filter((f) => f && !/^(backend|tests|api|scripts|vendor)\//.test(f));
 const read = (f) => readFileSync(path.join(root, f), "utf8");

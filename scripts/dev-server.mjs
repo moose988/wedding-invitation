@@ -12,6 +12,9 @@ const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const emulatorMode = process.argv.includes("--emulator");
 const host = "127.0.0.1";
 const port = Number(process.env.PORT || 5173);
+const deployment = JSON.parse(await readFile(path.join(root, "vercel.json"), "utf8"));
+const pageRoutes = new Map(deployment.rewrites.map(({ source, destination }) => [source, destination]));
+const privateRoots = new Set(["api", "backend", "docs", "functions", "node_modules", "scripts", "server", "tests", "package.json", "package-lock.json"]);
 const contentTypes = new Map([
   [".css", "text/css; charset=utf-8"], [".html", "text/html; charset=utf-8"],
   [".js", "text/javascript; charset=utf-8"], [".json", "application/json; charset=utf-8"],
@@ -126,11 +129,13 @@ const server = createServer(async (req, res) => {
   if (pathname === "/dev-banner.js") return send(res, 200, bannerScript, "text/javascript; charset=utf-8");
 
   let relativePath;
-  try { relativePath = decodeURIComponent(pathname).replace(/^\/+/, ""); }
+  try { relativePath = decodeURIComponent(pageRoutes.get(pathname) || pathname).replace(/^\/+/, ""); }
   catch { return send(res, 400, "Bad Request"); }
   if (!relativePath || relativePath.endsWith("/")) relativePath += "index.html";
   const target = path.resolve(root, relativePath);
   if (target !== root && !target.startsWith(root + path.sep)) return send(res, 403, "Forbidden");
+  const parts = path.relative(root, target).split(path.sep);
+  if (privateRoots.has(parts[0].toLowerCase()) || parts.some((part) => part.startsWith(".")) || /\.(?:md|log)$/i.test(target)) return send(res, 404, "Not Found");
 
   try {
     await access(target, constants.R_OK);
@@ -140,7 +145,7 @@ const server = createServer(async (req, res) => {
     res.writeHead(200, { "Content-Type": type, "Cache-Control": "no-store", "X-Content-Type-Options": "nosniff" });
     res.end(req.method === "HEAD" ? undefined : body);
   } catch (error) {
-    if (error.code === "ENOENT" || error.code === "EACCES") return send(res, 404, "Not Found");
+    if (["ENOENT", "EACCES", "EISDIR"].includes(error.code)) return send(res, 404, "Not Found");
     console.error("Preview server error:", error);
     send(res, 500, "Internal Server Error");
   }

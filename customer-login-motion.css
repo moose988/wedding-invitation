@@ -1147,3 +1147,13 @@
   0% { box-shadow: var(--login-shadow), 0 0 0 0 rgba(194, 154, 91, 0.5); }
   100% { box-shadow: var(--login-shadow), 0 0 0 18px rgba(194, 154, 91, 0); }
 }
+
+@media (max-width: 767px) {
+  [data-account-surface="customer"] .planner-login__brand,
+  [data-account-surface="customer"] .planner-login__form-note a {
+    display: inline-flex;
+    align-items: center;
+    min-width: 44px;
+    min-height: 44px;
+  }
+}

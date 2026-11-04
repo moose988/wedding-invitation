@@ -84,7 +84,7 @@ test("online galleries page, load thumbnails lazily and leave no demo text behin
 
 test("admin tools: retry covers pending backups, server fix hints are shown, failed health is not cached", async () => {
   const ws = await readFile(new URL("../admin-workspace.js", import.meta.url), "utf8");
-  assert.match(ws, /\?\.failed \|\| 0\) \+ \(buckets\.backups\.get\(b\.id\)\?\.pending \|\| 0\) > 0/);
+  assert.match(ws, /buckets\.backups\.get\(b\.id\)\?\.failed \|\| buckets\.backups\.get\(b\.id\)\?\.pending/);
   const api = await import("../admin-api.js");
   const failures = api.failedChecks({ ok: false, checks: [{ id: "cron_secret", status: "fail", detail: "too short", fix: "Set CRON_SECRET to 32+ characters." }] });
   assert.match(failures[0].message, /How to fix: Set CRON_SECRET/);

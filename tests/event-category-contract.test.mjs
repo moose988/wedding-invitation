@@ -33,7 +33,7 @@ test("celebration dashboard hides side controls and creates neutral guest values
 test("gender reveal settings use shared general attendance and hide sender controls", async () => {
   const [dashboard, workspace] = await Promise.all([read("dashboard.js"), read("weddings.js")]);
   assert.match(dashboard, /isGenderRevealEvent\(state\.wedding\) \? \[\] : \[/);
-  assert.match(dashboard, /genderReveal \? "" : field\("whatsAppCountryCode"/);
+  assert.match(dashboard, /genderReveal \|\| !state\.isAdmin \? "" : field\("whatsAppCountryCode"/);
   assert.match(dashboard, /"venueEn", genderReveal \? "Venue name \(optional\)" : "Venue name"/);
   assert.match(dashboard, /guestGroupMode: "general"/);
   assert.match(dashboard, /shared invitation link/);

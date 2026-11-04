@@ -3781,7 +3781,7 @@ async function saveEventSettings(event) {
     location: String(draft.location || "").trim(),
     locationEn: String(draft.location || "").trim(),
     mapsUrl: String(draft.mapsUrl || "").trim(),
-    whatsAppCountryCode: isGenderRevealEvent(state.wedding) ? "971" : String(draft.whatsAppCountryCode || "971").trim(),
+    ...(state.isAdmin ? { whatsAppCountryCode: isGenderRevealEvent(state.wedding) ? "971" : String(draft.whatsAppCountryCode || "971").trim() } : {}),
     invitationLanguage: draft.invitationLanguage || "en",
     ...(isWeddingOwner() ? { venueMapEmbedUrl: String(draft.venueMapEmbedUrl || "").trim(), schedule: JSON.parse(String(draft.schedule || "[]")) } : {}),
     updatedAt: serverTimestamp(),

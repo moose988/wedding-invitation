@@ -8,15 +8,17 @@ function comparable(value) {
   return value;
 }
 export const projectionEqual = (left, right) => JSON.stringify(comparable(left)) === JSON.stringify(comparable(right));
-export const publicEventFields = ["eventTitle", "eventTitleAr", "coupleName", "brideName", "groomName", "brideNameAr", "groomNameAr", "eventCategory", "eventStatus", "eventDateISO", "eventTimeZone", "rsvpDeadlineISO", "timeEn", "timeAr", "venueEn", "location", "locationEn", "mapsUrl", "venueMapEmbedUrl", "subtitleEn", "subtitleAr", "invitationMessageEn", "invitationMessageAr", "genderRevealArtworkUrl", "genderRevealOpeningVideoUrl", "genderRevealMusicUrl", "genderRevealMessageEn", "genderRevealMessageAr", "invitationLanguage", "showInvitationQr", "seatingEnabled", "schedule"];
+export const publicEventFields = ["eventTitle", "eventTitleAr", "coupleName", "brideName", "groomName", "brideNameAr", "groomNameAr", "eventCategory", "eventStatus", "eventDateISO", "eventTimeZone", "rsvpDeadlineISO", "timeEn", "timeAr", "venueEn", "location", "locationEn", "mapsUrl", "venueMapEmbedUrl", "subtitleEn", "subtitleAr", "invitationMessageEn", "invitationMessageAr", "genderRevealArtworkUrl", "genderRevealOpeningVideoUrl", "genderRevealMusicUrl", "genderRevealMessageEn", "genderRevealMessageAr", "invitationLanguage", "showInvitationQr", "seatingEnabled", "schedule", "musicMode", "musicVersion"];
 const scheduleFields = ["titleEn", "titleAr", "time", "timeEn", "timeAr", "descriptionEn", "descriptionAr"];
 export function publicEventData(event) {
   const genderReveal = event.eventCategory === "gender_reveal";
-  const defaults = { eventCategory: "wedding_engagement", eventStatus: "draft", invitationLanguage: "en", showInvitationQr: true, seatingEnabled: true, schedule: [], eventTitleAr: "", eventTimeZone: "", genderRevealArtworkUrl: "", genderRevealOpeningVideoUrl: "", genderRevealMusicUrl: "", genderRevealMessageEn: "", genderRevealMessageAr: "" };
+  const defaults = { eventCategory: "wedding_engagement", eventStatus: "draft", invitationLanguage: "en", showInvitationQr: true, seatingEnabled: true, schedule: [], musicMode: "default", musicVersion: 0, eventTitleAr: "", eventTimeZone: "", genderRevealArtworkUrl: "", genderRevealOpeningVideoUrl: "", genderRevealMusicUrl: "", genderRevealMessageEn: "", genderRevealMessageAr: "" };
   const data = Object.fromEntries(publicEventFields.map((key) => [key, event[key] ?? defaults[key] ?? ""]));
   if (event.invitationTemplate) data.invitationTemplate = event.invitationTemplate;
   data.eventStatus = event.status || "draft";
   if (genderReveal) {
+    // Gender reveal has its own music setting (genderRevealMusicUrl); the wedding song settings do not apply.
+    delete data.musicMode; delete data.musicVersion;
     data.showInvitationQr = false;
     data.seatingEnabled = false;
     data.coupleName = "";

@@ -1,3 +1,5 @@
+import { normalizeGuestPhone, normalizedGuestSide } from "./guest-edit.js?v=20261018-guest-invitation-regressions-2";
+
 let sheetJsPromise = null;
 
 function loadSheetJs() {
@@ -21,14 +23,32 @@ function loadSheetJs() {
   return sheetJsPromise;
 }
 
-export async function exportGuests(rows, fileBaseName = "guest-list", options = {}) {
-  const normalisedRows = rows.map((row) => {
+const sideLabels = { bride: "Bride side", groom: "Groom side", family: "Family", general: "General" };
+const rsvpLabels = { pending: "Pending", confirmed: "Confirmed", declined: "Declined" };
+const sortNames = new Intl.Collator(undefined, { numeric: true, sensitivity: "base" });
+
+export function guestExportRows(rows, options = {}) {
+  const compare = (a, b) => {
+    if (options.includeSeating) {
+      const bySeat = sortNames.compare(a.tableName || "", b.tableName || "")
+        || sortNames.compare(a.seatNumber || "", b.seatNumber || "");
+      if (bySeat) return bySeat;
+    }
+    return sortNames.compare(a.fullName || "", b.fullName || "");
+  };
+  return [...rows].sort(compare).map((row) => {
+    const phone = normalizeGuestPhone(row.phone);
+    return guestExportRow(row, phone, options);
+  });
+}
+
+function guestExportRow(row, phone, options) {
     const output = {
       "Guest Name": row.fullName || "",
-      Phone: row.phone || "",
+      Phone: phone ? `+${phone}` : "",
       "Additional Guests": normaliseAdditionalGuests(row.additionalGuests),
-      ...(options.includeSide === false ? {} : { Side: row.side || "" }),
-      "RSVP Status": row.rsvpStatus || "",
+      ...(options.includeSide === false ? {} : { Side: row.side ? sideLabels[normalizedGuestSide(row.side)] : "" }),
+      "RSVP Status": Object.hasOwn(rsvpLabels, row.rsvpStatus) ? rsvpLabels[row.rsvpStatus] : "Pending",
     };
     if (options.includeSeating) {
       output.Table = row.tableName || "";
@@ -36,14 +56,17 @@ export async function exportGuests(rows, fileBaseName = "guest-list", options = 
     }
     return {
       ...output,
-      Invitation: row.inviteLink || row.guestToken ? "Ready" : "Not ready",
+      Invitation: row.inviteLink ? "Ready" : "No link yet",
       "Checked In": row.checkedIn ? "Yes" : "No",
       "Checked In At": row.checkedInAt || "",
       "Invite Link": row.inviteLink || "",
-      "QR Code": row.qrCodeValue || "",
+      "Check-in link": row.qrCodeValue || "",
     };
-  });
+}
 
+export async function exportGuests(rows, fileBaseName = "guest-list", options = {}) {
+  if (rows.length === 0) return null;
+  const normalisedRows = guestExportRows(rows, options);
   try {
     const XLSX = await loadSheetJs();
     const workbook = XLSX.utils.book_new();
@@ -51,26 +74,8 @@ export async function exportGuests(rows, fileBaseName = "guest-list", options = 
     XLSX.utils.book_append_sheet(workbook, worksheet, "Guests");
     XLSX.writeFile(workbook, `${fileBaseName}.xlsx`);
     return "xlsx";
-  } catch (error) {
-    const fallbackShape = {
-      "Guest Name": "",
-      Phone: "",
-      "Additional Guests": "",
-      ...(options.includeSide === false ? {} : { Side: "" }),
-      "RSVP Status": "",
-    };
-    if (options.includeSeating) {
-      fallbackShape.Table = "";
-      fallbackShape["Seat Number"] = "";
-    }
-    const header = Object.keys(normalisedRows[0] || {
-      ...fallbackShape,
-      Invitation: "",
-      "Checked In": "",
-      "Checked In At": "",
-      "Invite Link": "",
-      "QR Code": "",
-    });
+  } catch {
+    const header = Object.keys(normalisedRows[0]);
     const csv = [header.join(","), ...normalisedRows.map((row) => header.map((column) => csvCell(row[column])).join(","))].join("\r\n");
     downloadFile(`${fileBaseName}.csv`, "text/csv;charset=utf-8", csv);
     return "csv";

@@ -265,7 +265,7 @@ function render() {
         .join("")}
     </section>
 
-    <p class="sender-footnote">Sent progress is saved in this browser tab only.<br />Made with qdsystems Planner Suite.</p>
+    <p class="sender-footnote">Sent progress is saved in this browser tab only.<br />Made with QD Events.</p>
   `;
 }
 

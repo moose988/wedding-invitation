@@ -28,7 +28,7 @@ test("role-pending account changes hide controls until the actual role is rechec
 
   assert.match(script, /setEventControlsVisibility\(false\);[\s\S]*?state\.roleResolved = false;[\s\S]*?el\.workspace\.hidden = true;/);
   assert.match(script, /state\.isAdmin = await isPlatformAdmin\(accountApi, state\.services\.db, user\.uid\);\s*state\.roleResolved = true;/);
-  assert.match(script, /if \(!state\.isAdmin && !customerSurface\) return location\.replace\("\.\/customer-events\.html"\);/);
+  assert.match(script, /if \(!state\.isAdmin && !customerSurface\) return location\.replace\(CUSTOMER_ADMIN_REDIRECT\);/);
   assert.match(script, /if \(state\.isAdmin && customerSurface\) return location\.replace\("\.\/all-events\.html"\);/);
   assert.match(adminHtml, /id="workspaceControls" aria-label="Event controls">/);
   assert.match(adminHtml, /id="filterRow"/);

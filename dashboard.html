@@ -3,7 +3,7 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>qdsystems Planner Dashboard</title>
+    <title>Planner Dashboard · QD Events</title>
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link
@@ -11,12 +11,54 @@
       rel="stylesheet"
     />
     <link rel="stylesheet" href="./styles.css?v=20261012-seating-refresh-2" />
-    <link rel="stylesheet" href="./dashboard.css?v=20261028-invitation-sync-retry-1" />
+    <link rel="stylesheet" href="./dashboard.css?v=20261104-seating-touch-3" />
     <link rel="stylesheet" href="./gender-reveal-dashboard.css?v=part2-2" />
     <link rel="stylesheet" href="./password-visibility.css?v=1" />
+  <link rel="stylesheet" href="./skeleton.css?v=1">
+    <!-- modulepreload:start -->
+    <link rel="modulepreload" href="./firebase-config.js" />
+    <link rel="modulepreload" href="./firebase-service-scopes.js" />
+    <link rel="modulepreload" href="./firebase-settings.js" />
+    <link rel="modulepreload" href="./local-firestore-diagnostics.js" />
+    <link rel="modulepreload" href="./customer-audit.js" />
+    <link rel="modulepreload" href="./skeleton.js" />
+    <link rel="modulepreload" href="./action-feedback.js" />
+    <link rel="modulepreload" href="./schedule-editor.js" />
+    <link rel="modulepreload" href="./admin-api.js" />
+    <link rel="modulepreload" href="./account-access.js" />
+    <link rel="modulepreload" href="./seating-transactions.js" />
+    <link rel="modulepreload" href="./dashboard-persistence.js?v=20261028-invitation-sync-retry-1" />
+    <link rel="modulepreload" href="./event-publishing.js?v=20261018-guest-invitation-regressions-2" />
+    <link rel="modulepreload" href="./invitations/shared/invitation-token.js?v=20261018-guest-invitation-regressions-2" />
+    <link rel="modulepreload" href="./guest-edit.js?v=20261018-guest-invitation-regressions-2" />
+    <link rel="modulepreload" href="./customer-access-ui.js?v=20261029-password-visibility" />
+    <link rel="modulepreload" href="./password-visibility.js?v=1" />
+    <link rel="modulepreload" href="./gender-reveal-publication.js" />
+    <link rel="modulepreload" href="./share-link.js" />
+    <link rel="modulepreload" href="./invitations/shared/invitation-token-service.js?v=20261018-guest-invitation-regressions-2" />
+    <link rel="modulepreload" href="./seating-firestore.js" />
+    <link rel="modulepreload" href="./dashboard-access.js" />
+    <link rel="modulepreload" href="./event-utils.js" />
+    <link rel="modulepreload" href="./event-date-time.js" />
+    <link rel="modulepreload" href="./event-settings-state.js" />
+    <link rel="modulepreload" href="./sender-codec.js" />
+    <link rel="modulepreload" href="./seating-utils.js?v=20261018-invitation-seat-map" />
+    <!-- modulepreload:end -->
   </head>
   <body class="dashboard-body">
     <main class="da3wa-shell">
+      <section class="dash-loading" id="dashboardLoading" aria-busy="true" aria-labelledby="dashboardLoadingText">
+        <div class="dash-loading__head"><span class="sk-line sk-line--short"></span><span class="sk-line sk-line--title"></span><span class="sk-line sk-line--mid"></span></div>
+        <div class="dash-loading__cards">
+          <div class="sk-card"><span class="sk-line sk-line--short"></span><span class="sk-line sk-line--title"></span><span class="sk-line"></span></div>
+          <div class="sk-card"><span class="sk-line sk-line--short"></span><span class="sk-line sk-line--title"></span><span class="sk-line"></span></div>
+          <div class="sk-card"><span class="sk-line sk-line--short"></span><span class="sk-line sk-line--title"></span><span class="sk-line"></span></div>
+        </div>
+        <div class="sk-row"><span class="sk sk-row__avatar"></span><span class="sk-row__text"><span class="sk-line sk-line--mid"></span><span class="sk-line sk-line--short"></span></span></div>
+        <div class="sk-row"><span class="sk sk-row__avatar"></span><span class="sk-row__text"><span class="sk-line sk-line--mid"></span><span class="sk-line sk-line--short"></span></span></div>
+        <p class="dash-loading__text" id="dashboardLoadingText" role="status">Loading your event…</p>
+        <p class="dash-loading__slow">This is taking longer than usual. A weak connection can slow it down. <a class="da3wa-button da3wa-button--secondary" href="">Try again</a></p>
+      </section>
       <section class="da3wa-app" id="dashboardApp" hidden>
         <aside class="da3wa-sidebar" id="dashboardSidebar">
           <button class="da3wa-button da3wa-button--secondary da3wa-sidebar-desktop-toggle" type="button" id="desktopSidebarToggleButton" aria-controls="dashboardSidebar" aria-expanded="true">Collapse navigation</button>
@@ -136,7 +178,7 @@
             <div class="da3wa-form-grid">
               <label class="is-full">
                 <span>One guest per line — “Name, phone” (phone and extra seats optional: “Name, phone, 2”)</span>
-                <textarea class="da3wa-input bulk-add-textarea" name="entries" rows="8" placeholder="Noor Ahmed, 0501234567&#10;Omar Saleh, +971 50 765 4321, 2&#10;Huda Mansour"></textarea>
+                <textarea class="da3wa-input bulk-add-textarea" name="entries" aria-describedby="bulkAddPreview bulkAddErrors" rows="8" placeholder="Noor Ahmed, 0501234567&#10;Omar Saleh, +971 50 765 4321, 2&#10;Huda Mansour"></textarea>
                 <small>Use: Name, phone, seats.</small>
               </label>
               <label data-wedding-side-control>
@@ -149,6 +191,7 @@
               </label>
             </div>
             <p class="da3wa-form-hint" id="bulkAddPreview" aria-live="polite"></p>
+            <ul class="da3wa-form-hint bulk-add-errors" id="bulkAddErrors" hidden></ul>
           </section>
         </div>
 
@@ -192,24 +235,24 @@
           </section>
 
           <section class="da3wa-form-section">
-            <h3>Capacity and geometry</h3>
+            <h3>Capacity</h3>
             <div class="da3wa-form-grid">
               <label>
                 <span>Seat count</span>
                 <input class="da3wa-input" name="seatCount" type="number" min="2" max="30" value="8" required />
               </label>
-              <label>
+              <label class="table-builder-field">
                 <span>Width</span>
                 <input class="da3wa-input" name="width" type="number" min="120" max="420" value="180" />
               </label>
-              <label>
+              <label class="table-builder-field">
                 <span>Height</span>
                 <input class="da3wa-input" name="height" type="number" min="80" max="320" value="180" />
               </label>
             </div>
           </section>
 
-          <section class="da3wa-form-section">
+          <section class="da3wa-form-section table-builder-field">
             <h3>Palette</h3>
             <div class="da3wa-form-grid">
               <label>
@@ -221,7 +264,7 @@
                 <input class="da3wa-input da3wa-input--color" name="borderColor" type="color" value="#BC9B61" />
               </label>
               <label>
-                <span>Chair color</span>
+                <span>Seat color</span>
                 <input class="da3wa-input da3wa-input--color" name="chairColor" type="color" value="#24554A" />
               </label>
             </div>
@@ -295,5 +338,5 @@
 
     <div class="da3wa-toast-rail" id="toastRail" aria-live="polite" aria-atomic="true"></div>
     <script type="module" src="./dashboard.js?v=20261029-password-visibility"></script>
-  </body>
+  <script type="module" src="./action-feedback.js"></script></body>
 </html>

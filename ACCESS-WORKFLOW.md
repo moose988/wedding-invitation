@@ -104,7 +104,7 @@ There is no browser bootstrap or open administrator-claim path.
 ## Local verification
 
 `npm test` runs the unit and contract suites. `npm run test:security` starts the
-Firestore emulator and runs all five behavioral security files. Their demo
+Firestore emulator and runs all behavioral security files. Their demo
 project IDs are separate from the browser fixtures.
 
 For browser mutation tests, run Auth and Firestore emulators with project

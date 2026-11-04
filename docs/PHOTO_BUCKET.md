@@ -70,3 +70,14 @@ node scripts/check-photo-bucket-browser.mjs
 ```
 
 The browser harness requires Playwright and installed Chrome (already available in the development environment). It serves a disposable static test origin, creates synthetic users/events only in the demo emulators, uses real IndexedDB and the actual existing login, and writes screenshots, downloads, print PDF, results and a request audit to `.local-evidence/photo-bucket/`. Existing tests that require emulators still need their normal environment. Native camera picker behavior, physical QR scanning and real network upload retries need actual devices/a future backend; browser file injection does not verify those.
+
+## Online mode (when `API_URL` is set)
+
+The sections above describe the browser-only demo. With an API URL the same pages use `photo-bucket/adapter-api.js`. These parts differ:
+
+- **Gallery.** The owner and guest galleries load 100 photos at a time with a Load more button. Thumbnails load through a queue (`photo-bucket/thumb-queue.js`): at most 4 requests in flight, only for photos within about 600 px of the viewport, with a placeholder until each arrives. A photo that scrolls away before its turn is dropped from the queue. Thumbnails are cached in a bounded least-recently-used cache (300 entries), each failure affects only its own tile, and the host page polls only the first page every 5 seconds.
+- **Download all.** The ZIP reads the full photo list, not only the loaded page. A bucket over 500 photos or 128 MB downloads in numbered parts (`photo-bucket-photos-part-2-of-5.zip`), one button per part.
+- **Retries.** Online uploads make up to 6 attempts with full jitter (a random wait between zero and a capped doubling delay) and wait for `Retry-After` when the server sends it. The local demo keeps 3 attempts.
+- **Deleted photos.** Photos an owner or admin deletes are listed for admins at `GET /b/:id/deleted` and restored with `POST /b/:id/deleted/:deletedId/restore`. The restored photo is the quality 80 backup copy, not the original. There is no time limit: a deleted photo stays restorable until its bucket is deleted. Photos deleted by a guest are permanent and cannot be restored.
+- **Admin screens.** The Photo Buckets tab shows overdue buckets (more than 48 hours past the event; a filter and a count), the backup state of each bucket, and a Re-drive button for failed backups. Nothing is deleted automatically except demos: an admin deletes overdue buckets by hand.
+- **Terms.** Quotations state that photo buckets are deleted 48 hours after the event.

@@ -5931,3 +5931,80 @@ body.is-overview-view .overview-page { width: 100%; max-width: var(--da3wa-conte
 #customerAccessPanel > [data-customer-status] { margin: 0; color: #52665a; font-size: .85rem; }
 #customerAccessPanel > [data-customer-status]:empty { display: none; }
 @media (max-width: 800px) { #customerAccessPanel .seating-account-form:not([hidden]) { grid-template-columns: 1fr; padding: 16px; } #customerAccessPanel .seating-account-form [type="submit"] { width: 100%; } }
+
+.chair-invitation-link { display: grid; gap: 8px; margin-top: 14px; }
+.chair-invitation-link p { margin: 0; overflow-wrap: anywhere; }
+.chair-invitation-link .da3wa-button { justify-self: start; }
+.schedule-editor { padding: 0; border: 0; margin: 0; }
+.schedule-editor legend { padding: 0; margin-bottom: 6px; color: var(--da3wa-text-soft); font-size: 13px; font-weight: 700; }
+.schedule-row { display: grid; gap: 10px; margin: 0 0 12px; padding: 14px; border: 1px solid var(--da3wa-line, #e6dfd2); border-radius: 14px; background: rgba(255, 255, 255, .7); }
+.schedule-row__head { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+.schedule-row__grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
+.schedule-row__field { display: grid; gap: 4px; min-width: 0; font-size: 12px; font-weight: 700; }
+.schedule-row__field.is-wide { grid-column: span 1; }
+.schedule-row__field input, .schedule-row__field textarea { width: 100%; min-width: 0; box-sizing: border-box; }
+@media (max-width: 640px) { .schedule-row__grid { grid-template-columns: minmax(0, 1fr); } }
+.music-modes { display: grid; gap: 10px; margin: 0 0 12px; padding: 0; border: 0; }
+.music-mode { display: flex; align-items: flex-start; gap: 12px; padding: 14px; border: 1px solid var(--da3wa-line, #e6dfd2); border-radius: 14px; background: #fff; cursor: pointer; }
+.music-mode:has(input:checked) { border-color: #1f5a4d; background: #f1f7f3; }
+.music-mode input { margin-top: 3px; width: 20px; height: 20px; flex: none; }
+.music-mode span { display: grid; gap: 3px; } .music-mode small { color: #68736d; font-weight: 500; }
+.music-custom { display: grid; gap: 12px; }
+.music-custom audio { width: 100%; }
+.music-progress progress { width: 100%; height: 14px; }
+.music-file { display: inline-flex; align-items: center; min-height: 44px; padding: 0 16px; cursor: pointer; }
+.music-file:focus-within { outline: 3px solid rgba(31, 90, 77, .45); outline-offset: 2px; }
+
+/* Placeholder shown from the first paint until the dashboard is ready. */
+.dash-loading { display: grid; gap: 16px; width: min(1100px, 100%); margin: 0 auto; padding: 24px max(16px, env(safe-area-inset-left, 0px)) 40px; }
+.dash-loading__head { display: grid; gap: 10px; max-width: 520px; }
+.dash-loading__cards { display: grid; gap: 14px; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); }
+.dash-loading__text { margin: 4px 0 0; color: var(--da3wa-text, #2f312d); font-weight: 600; }
+.dash-loading__slow { margin: 0; color: var(--da3wa-text, #2f312d); opacity: 0; visibility: hidden; animation: dash-loading-slow 0s linear 10s forwards; }
+.dash-loading__slow .da3wa-button { margin-left: 8px; min-height: 44px; }
+@keyframes dash-loading-slow { to { opacity: 1; visibility: visible; } }
+.dash-loading[hidden], .da3wa-shell:has(> #dashboardApp:not([hidden])) > .dash-loading { display: none; }
+
+/* Phones: every seat keeps a 44 px touch target at any zoom, without changing how it looks. */
+@media (max-width: 700px) {
+  .mobile-seating-map .planner-chair::after { content: ""; position: absolute; left: 50%; top: 50%; width: var(--chair-hit, calc(44px / var(--planner-zoom, 1))); height: var(--chair-hit, calc(44px / var(--planner-zoom, 1))); min-width: 100%; min-height: 100%; transform: translate(-50%, -50%); border-radius: 50%; pointer-events: auto; }
+  .mobile-seating-map-tools .da3wa-button { min-height: 44px; min-width: 44px; }
+}
+
+/* Phones: the title keeps its width; extra header actions (such as the admin activity log) move to their own row. */
+@media (max-width: 700px) {
+  .da3wa-main > .da3wa-topbar { flex-wrap: wrap; }
+  .da3wa-topbar__intro { flex: 1 1 180px; min-width: 0; }
+  .da3wa-topbar__actions, .da3wa-topbar__action-row { flex-wrap: wrap; max-width: 100%; }
+  .da3wa-topbar__action-row .da3wa-button { min-height: 44px; }
+}
+
+.is-customer-dashboard .table-builder-field {
+  display: none;
+}
+
+.bulk-add-errors,
+.guest-menu__item--danger {
+  color: var(--da3wa-danger);
+}
+
+@media (max-width: 767px) {
+  body.is-guests-view .guest-card__header .guest-row__menu-toggle,
+  body.is-guests-view .guest-card__header .guest-rsvp-select,
+  body.is-guests-view .guest-card__reservation .guest-card__reservation-link,
+  .guest-name-button,
+  .guest-menu__item,
+  button[data-action="mobile-toggle-seating-summary"],
+  button[data-action="unassign-seat"],
+  button.hall-object--stage,
+  button.hall-object--entrance {
+    min-width: 44px;
+    min-height: 44px;
+  }
+
+  body.is-guests-view .guest-card__header .guest-rsvp-select {
+    width: auto;
+    min-width: 100px;
+    padding-inline: 8px 18px;
+  }
+}

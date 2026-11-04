@@ -15,18 +15,38 @@ export function mockTransport({ failures = () => 0, delay = 100, backoff = 350 }
   };
 }
 // Real uploads: the adapter's commit() sends the processed photo to the server and reports retryable network errors.
+// Retries use full jitter (a random wait between 0 and the capped exponential delay) so a crowd of
+// phones does not retry in step, and honour error.retryAfter (seconds) when the server sends it.
+export const jitteredWait = (attempt, error, { backoff = 1000, cap = 30000, random = Math.random } = {}) =>
+  sleep(Number(error?.retryAfter) > 0 ? Math.min(Number(error.retryAfter), 60) * 1000 : Math.floor(random() * Math.min(cap, backoff * 2 ** (attempt - 1))));
+// Real (not simulated) failures get this many automatic tries, with full jitter between them.
+// Time spent offline is not counted: see waitOnline and the queue below.
+export const ONLINE_ATTEMPTS = 10;
+// Resolves when the browser reports it is online again (the online event, or the tab becoming
+// visible while online), with a slow poll as a safety net. Never rejects.
+export function waitOnline({ poll = 5000 } = {}) {
+  return new Promise(resolve => {
+    const ready = () => typeof navigator === 'undefined' || navigator.onLine !== false;
+    if (ready()) return resolve();
+    let timer;
+    const done = () => { if (!ready()) return; clearInterval(timer); window.removeEventListener('online', done); document.removeEventListener('visibilitychange', done); resolve(); };
+    window.addEventListener('online', done); document.addEventListener('visibilitychange', done); timer = setInterval(done, poll);
+  });
+}
 export function liveTransport({ backoff = 1000 } = {}) {
   return {
+    maxAttempts: ONLINE_ATTEMPTS, online: true, waitOnline,
     async run(job, file, progress) { const image = await processImage(file); await progress(25, image.thumbnail); return image; },
-    wait: attempt => sleep(backoff * 2 ** (attempt - 1)),
+    wait: (attempt, error) => jitteredWait(attempt, error, { backoff }),
   };
 }
 export function uploadQueue({ adapter, bucketId, changed = () => {}, transport = mockTransport() }) {
   const running = new Set(); let stopped = false, pumping = false;
+  const maxAttempts = transport.maxAttempts || 3;
   async function process(job) {
     try {
-      // Three automatic attempts total. Manual retry resets this budget.
-      while (job.attempts < 3 && !stopped) {
+      // Automatic attempts: 3 for the local demo, 10 online. Manual retry resets this budget.
+      while (job.attempts < maxAttempts && !stopped) {
         job = await adapter.updateJob(bucketId, job.id, { attempts: job.attempts + 1, state: 'processing', error: '' });
         changed({ ...job, progress: 0 });
         try {
@@ -41,8 +61,18 @@ export function uploadQueue({ adapter, bucketId, changed = () => {}, transport =
           await adapter.commit(bucketId, job.id, image);
           changed({ ...job, state: 'saved', progress: 100 }); return;
         } catch (error) {
-          if (error.retryable && job.attempts < 3) { changed({ ...job, state: 'retrying', error: 'Retrying local processing…' }); await transport.wait(job.attempts); continue; }
-          const reason = error.retryable ? 'Automatic retries finished. Tap Retry to try local processing again.' : friendlyError(error);
+          // A dropped connection is not a failed attempt: give the attempt back, pause until the phone is online
+          // again (minutes if needed), then try the same photo again. The commit is idempotent (job id = photo id).
+          if (transport.online && globalThis.navigator?.onLine === false) {
+            job = await adapter.updateJob(bucketId, job.id, { attempts: Math.max(0, job.attempts - 1), state: 'processing', error: '' });
+            changed({ ...job, state: 'waiting', error: 'Waiting for a connection…' });
+            await transport.waitOnline();
+            if (stopped) return;
+            await sleep(Math.floor(Math.random() * 3000));
+            continue;
+          }
+          if (error.retryable && job.attempts < maxAttempts) { changed({ ...job, state: 'retrying', error: transport.online ? 'The service is busy. Trying again shortly…' : 'Retrying local processing…' }); await transport.wait(job.attempts, error); continue; }
+          const reason = error.retryable ? (transport.online ? 'The upload did not go through after several tries. Tap Retry.' : 'Automatic retries finished. Tap Retry to try local processing again.') : friendlyError(error);
           await adapter.updateJob(bucketId, job.id, { state: 'failed', error: reason }); changed({ ...job, state: 'failed', error: reason }); return;
         }
       }

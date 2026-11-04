@@ -1,18 +1,25 @@
 .git
 .firebase
 .local-evidence
+.local-buckets
 .playwright-mcp
 node_modules
 functions
 tests
 scripts
 *.log
-README.md
-SECURITY.md
-RELEASE.md
-ACCESS-WORKFLOW.md
 firestore.rules
 firestore.indexes.json
 firebase.json
-package-lock.json
+# package-lock.json is deployed so the server functions install the exact tested versions;
+# vercel.json redirects it (and package.json) away so neither is served publicly.
 backend
+docs
+# Every Markdown file, including README, SECURITY, RELEASE and ACCESS-WORKFLOW.
+*.md
+.orchestrate
+.omc
+.claude
+# Licence notices stay deployed.
+!vendor/THIRD-PARTY-NOTICES.md
+!vendor/lamejs-src/README.md

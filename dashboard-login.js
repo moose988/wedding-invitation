@@ -164,11 +164,15 @@ async function redirectAfterLogin() {
     return;
   }
   if (!services.isAdmin) {
-    // A customer whose account has exactly one Photo Bucket goes straight to it; anyone else sees My Events.
+    // Only bucket-only accounts bypass the combined event list.
     try {
+      const user = services.auth.currentUser;
       const { createOwnerAdapter } = await import("./photo-bucket/adapters.js");
-      const list = (await createOwnerAdapter(services.auth.currentUser)).list();
-      const target = soleBucketTarget(await Promise.race([list, new Promise((resolve) => setTimeout(resolve, 5000, []))]));
+      const events = accountApi.query(accountApi.collection(services.db, "users", user.uid, "weddingAccess"), accountApi.limit(1));
+      const buckets = (await createOwnerAdapter(user)).list();
+      const lookup = Promise.all([accountApi.getDocs(events), buckets]);
+      const [eventAccess, linkedBuckets] = await Promise.race([lookup, new Promise((resolve) => setTimeout(resolve, 5000, []))]);
+      const target = eventAccess?.empty ? soleBucketTarget(linkedBuckets) : "";
       if (target) {
         window.location.replace(target);
         return;

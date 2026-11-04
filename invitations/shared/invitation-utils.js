@@ -1,7 +1,17 @@
-export function escapeHtml(value = "") {
-  const node = document.createElement("span");
-  node.textContent = String(value);
-  return node.innerHTML;
+import { getEventDisplayTitle } from "../../event-utils.js";
+
+const htmlEntities = { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;", "\u0060": "&#096;" };
+
+export function escapeHtml(value) {
+  return String(value ?? "").replace(/[&<>"'\u0060]/g, character => htmlEntities[character]);
+}
+
+export function hideFailedInvitationImages(root) {
+  for (const image of root.querySelectorAll("img[data-hide-on-error]")) {
+    const hide = () => { image.hidden = true; };
+    image.addEventListener("error", hide, { once: true });
+    if (image.complete && image.naturalWidth === 0) hide();
+  }
 }
 
 export function formatEventDate(value) {
@@ -17,4 +27,3 @@ export function guestSeat(guest) {
 export function setDocumentTitle(wedding) {
   document.title = `${getEventDisplayTitle(wedding)} | Event Invitation`;
 }
-import { getEventDisplayTitle } from "../../event-utils.js";

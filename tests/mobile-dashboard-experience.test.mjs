@@ -121,7 +121,8 @@ test("mobile guest cards omit secondary guest details and keep footer actions fo
   assert.match(card, /guest-card__additional-count">\+\$\{escapeHtml\(String\(additionalGuestCount\)\)\} \$\{additionalGuestCount === 1 \? "guest" : "guests"\}/);
   assert.match(card, /renderReservationReadinessBadge\(guest\)/);
   assert.match(reservationBadge, /data-action="nav-seating"/);
-  assert.match(reservationBadge, /Seat Assignment Missing/);
+  assert.match(reservationBadge, /Seat assignment missing/);
+  assert.match(reservationBadge, /!readiness\.ready && guest\.rsvpStatus !== "confirmed"/);
   assert.match(reservationBadge, /Invitation Ready/);
   assert.match(card, /Message for the couple/);
   assert.match(card, /guest-card__header[\s\S]*?renderGuestRsvpSelect\(guest\)[\s\S]*?renderGuestMenuToggle\(guest, "card"/);

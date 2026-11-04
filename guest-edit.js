@@ -1,3 +1,41 @@
+// Maps Arabic-Indic and Extended Arabic-Indic digits to ASCII.
+export function normalizeDigits(value) {
+  return String(value ?? "").replace(/[٠-٩۰-۹]/g, (digit) =>
+    String(digit.charCodeAt(0) & 0xf),
+  );
+}
+
+export function normalizeGuestPhone(phone, countryCode = "971") {
+  const raw = String(phone || "").trim();
+  const digits = normalizeDigits(raw).replace(/[^\d]/g, "");
+  if (!digits || raw.startsWith("+")) return digits;
+  if (digits.startsWith("00")) return digits.replace(/^0+/, "");
+  if (digits.startsWith("0")) return `${countryCode}${digits.slice(1)}`;
+  return digits;
+}
+
+export function parseBulkGuestEntries(text, normalizePhone) {
+  return String(text ?? "").split(/\r?\n/).flatMap((line, index) => {
+    if (!line.trim()) return [];
+    const parts = line.trim().split(/[,،\t]/).map((part) => part.trim());
+    const [fullName, rawPhone = "", rawExtra = ""] = parts;
+    const phone = normalizePhone(rawPhone);
+    const extraDigits = normalizeDigits(rawExtra);
+    const additionalGuests = Number(extraDigits);
+    const errors = [];
+    if (!fullName) errors.push("Enter a guest name.");
+    if (new TextEncoder().encode(fullName).length > 160) errors.push("Use a shorter guest name.");
+    if (rawPhone && (!/^\+?[\d ()-]+$/.test(normalizeDigits(rawPhone)) || !/^[1-9]\d{6,14}$/.test(phone))) {
+      errors.push("Enter a valid phone number with its area or country code.");
+    }
+    if ((extraDigits && !/^\d+$/.test(extraDigits)) || !Number.isSafeInteger(additionalGuests) || additionalGuests > 10) {
+      errors.push("Extra guests must be a whole number from 0 to 10.");
+    }
+    if (parts.length > 3) errors.push("Use three columns: name, phone, extra guests.");
+    return [{ line, number: index + 1, fullName, phone, additionalGuests, errors }];
+  });
+}
+
 // This is the form's canonical save path, shared with emulator/browser tests.
 // No token, roster, table collection or unrelated seat reads belong here.
 export function normalizedGuestSide(value) {

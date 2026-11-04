@@ -24,15 +24,19 @@ import {
   waitForFirebaseSessionPersistence,
 } from "./firebase-service-scopes.js";
 import * as accountApi from "./firebase-config.js";
+import { recordCustomerAudit } from "./customer-audit.js";
+import { skeleton } from "./skeleton.js";
+import { confirmAction, copyWithFallback, runAction, runFromEvent, showToast as notify } from "./action-feedback.js";
+import { bindScheduleEditor, scheduleEditorMarkup } from "./schedule-editor.js";
 import { isPlatformAdmin } from "./account-access.js";
 import { persistCanonicalSeatDiff as persistCanonicalSeatDiffWithApi } from "./seating-transactions.js";
 import { createDashboardPersistence } from "./dashboard-persistence.js?v=20261028-invitation-sync-retry-1";
-import { commitGuestEdit, guestFormPatch, saveFailureMessage } from "./guest-edit.js?v=20261018-guest-invitation-regressions-2";
+import { commitGuestEdit, guestFormPatch, normalizeDigits, normalizeGuestPhone, parseBulkGuestEntries, saveFailureMessage } from "./guest-edit.js?v=20261018-guest-invitation-regressions-2";
 import { projectionEqual } from "./event-publishing.js?v=20261018-guest-invitation-regressions-2";
 import { mountCustomerAccess } from "./customer-access-ui.js?v=20261029-password-visibility";
 import { ensureGenderRevealPublished } from "./gender-reveal-publication.js";
 import { createShareUrl } from "./share-link.js";
-import { exportGuests, exportGenderRevealResponses } from "./export.js";
+// export.js loads on demand when someone exports.
 import { buildInvitationProjection, generateInvitationToken, isValidInvitationToken } from "./invitations/shared/invitation-token.js?v=20261018-guest-invitation-regressions-2";
 import { createInvitationTokenService } from "./invitations/shared/invitation-token-service.js?v=20261018-guest-invitation-regressions-2";
 import { projectSeatAssignments, migrateLegacySeating, seatAssignmentRef, seatedPersonRef, seatOccupancyRef } from "./seating-firestore.js";
@@ -50,7 +54,7 @@ import {
   normalizeTableShape,
   resolveTableName,
   summarizePartySeating,
-} from "./seating-utils.js?v=20261012-seating-refresh-2";
+} from "./seating-utils.js?v=20261018-invitation-seat-map";
 
 const params = new URLSearchParams(window.location.search);
 const legacySeatingEditorRoute = params.get("seatingEditor") === "1";
@@ -904,6 +908,7 @@ const elements = {
   bulkAddModal: document.getElementById("bulkAddModal"),
   bulkAddForm: document.getElementById("bulkAddForm"),
   bulkAddPreview: document.getElementById("bulkAddPreview"),
+  bulkAddErrors: document.getElementById("bulkAddErrors"),
   tableModal: document.getElementById("tableModal"),
   tableForm: document.getElementById("tableForm"),
   tableModalTitle: document.getElementById("tableModalTitle"),
@@ -996,6 +1001,7 @@ async function init() {
       }
       state.weddingId = await resolveAccessibleWeddingId(user);
       if (!state.weddingId) {
+        if (state.redirectingToEvents) return;
         redirectToLogin("access-denied");
         return;
       }
@@ -1059,12 +1065,12 @@ function bindEvents() {
     refreshPlannerAfterSidebarChange();
   });
   elements.guestForm?.addEventListener("submit", saveGuest);
-  elements.tableForm?.addEventListener("submit", saveTable);
+  elements.tableForm?.addEventListener("submit", (event) => submitDashboardForm(event, saveTable, "Saving table…"));
   elements.danceFloorForm?.addEventListener("submit", saveDanceFloor);
-  elements.bulkAddForm?.addEventListener("submit", saveBulkGuests);
+  elements.bulkAddForm?.addEventListener("submit", (event) => submitDashboardForm(event, saveBulkGuests, "Adding guests…"));
   elements.bulkAddForm?.entries?.addEventListener(
     "input",
-    updateBulkAddPreview,
+    () => updateBulkAddPreview(),
   );
   elements.tableDeleteButton?.addEventListener("click", () => {
     if (state.selectedTableId) {
@@ -1074,24 +1080,11 @@ function bindEvents() {
   elements.tableDeleteConfirmButton?.addEventListener("click", () => {
     void deleteSelectedTableFromModal();
   });
-  elements.guestDeleteButton?.addEventListener("click", async () => {
-    if (!state.selectedGuestId) {
-      return;
-    }
-    const guest = state.guests.find(
-      (item) => item.id === state.selectedGuestId,
-    );
-    if (!guest) {
-      return;
-    }
-    const confirmed = window.confirm(
-      `Delete ${guest.fullName}? This cannot be undone.`,
-    );
-    if (!confirmed) {
-      return;
-    }
-    elements.guestModal.close();
-    await deleteGuest(guest.id);
+  elements.guestDeleteButton?.addEventListener("click", (event) => {
+    void runAction(event.currentTarget, () => confirmDeleteGuest(state.selectedGuestId), {
+      busyLabel: "Deleting…",
+      markSuccess: false,
+    });
   });
 
   elements.guestForm?.addEventListener("input", () => {
@@ -1138,21 +1131,12 @@ function bindEvents() {
     "click",
     handleDialogBackdropClick,
   );
-  elements.guestModal?.addEventListener("cancel", (event) => {
-    if (state.dirtyGuestForm && !window.confirm("Discard guest changes?")) {
+  for (const modal of [elements.guestModal, elements.tableModal, elements.bulkAddModal]) {
+    modal?.addEventListener("cancel", (event) => {
       event.preventDefault();
-    }
-  });
-  elements.tableModal?.addEventListener("cancel", (event) => {
-    if (state.dirtyTableForm && !window.confirm("Discard table changes?")) {
-      event.preventDefault();
-    }
-  });
-  elements.bulkAddModal?.addEventListener("cancel", (event) => {
-    if (bulkAddHasContent() && !window.confirm("Discard this guest list?")) {
-      event.preventDefault();
-    }
-  });
+      void requestDashboardDialogClose(modal);
+    });
+  }
   [
     elements.tableDeleteModal,
     elements.assignmentModal,
@@ -1236,42 +1220,7 @@ function handleDocumentClick(event) {
 
   const closeTrigger = event.target.closest("[data-close-modal]");
   if (closeTrigger) {
-    if (state.activeModalOperation) {
-      return;
-    }
-    const modal = document.getElementById(closeTrigger.dataset.closeModal);
-    if (
-      closeTrigger.dataset.closeModal === "guestModal" &&
-      state.dirtyGuestForm
-    ) {
-      const shouldClose = window.confirm("Discard guest changes?");
-      if (!shouldClose) {
-        return;
-      }
-      state.dirtyGuestForm = false;
-    }
-    if (
-      closeTrigger.dataset.closeModal === "tableModal" &&
-      state.dirtyTableForm
-    ) {
-      const shouldClose = window.confirm("Discard table changes?");
-      if (!shouldClose) {
-        return;
-      }
-      state.dirtyTableForm = false;
-    }
-    if (
-      closeTrigger.dataset.closeModal === "bulkAddModal" &&
-      bulkAddHasContent()
-    ) {
-      if (!window.confirm("Discard this guest list?")) {
-        return;
-      }
-    }
-    if (closeTrigger.dataset.closeModal === "assignmentModal") {
-      cancelAssignmentSession();
-    }
-    modal?.close();
+    void requestDashboardDialogClose(document.getElementById(closeTrigger.dataset.closeModal));
     return;
   }
 
@@ -1289,7 +1238,7 @@ function handleDocumentClick(event) {
     if (fromGuestMenu) {
       closeGuestMenu({ restoreFocus: false });
     }
-    void handleAction(action, actionNode.dataset, event);
+    void runFromEvent(event, () => handleAction(action, actionNode.dataset, event), { what: "That action", markSuccess: false, onError: (error, message) => showToast(message, "error") });
     return;
   }
 
@@ -1302,38 +1251,38 @@ function handleDocumentClick(event) {
   }
 }
 
+function submitDashboardForm(event, save, busyLabel) {
+  event.preventDefault();
+  const form = event.currentTarget;
+  const submit = event.submitter || form.querySelector('[type="submit"]');
+  void runAction(submit, async () => {
+    form.setAttribute("aria-busy", "true");
+    try {
+      await save(event);
+    } finally {
+      form.removeAttribute("aria-busy");
+    }
+  }, { busyLabel, markSuccess: false });
+}
+
 function handleDialogBackdropClick(event) {
-  if (event.target !== event.currentTarget) {
-    return;
-  }
-  if (state.activeModalOperation) {
-    return;
-  }
-  const modal = event.currentTarget;
-  if (
-    modal.id === "guestModal" &&
-    state.dirtyGuestForm &&
-    !window.confirm("Discard guest changes?")
-  ) {
-    return;
-  }
-  if (
-    modal.id === "tableModal" &&
-    state.dirtyTableForm &&
-    !window.confirm("Discard table changes?")
-  ) {
-    return;
-  }
-  if (
-    modal.id === "bulkAddModal" &&
-    bulkAddHasContent() &&
-    !window.confirm("Discard this guest list?")
-  ) {
-    return;
-  }
-  if (modal.id === "assignmentModal") {
-    cancelAssignmentSession();
-  }
+  if (event.target === event.currentTarget) void requestDashboardDialogClose(event.currentTarget);
+}
+
+async function requestDashboardDialogClose(modal) {
+  if (!modal?.open || state.activeModalOperation || modal.querySelector('form[aria-busy="true"]')) return;
+  if (modal === elements.guestModal && state.guestSavePending) return;
+  const message = modal === elements.guestModal && state.dirtyGuestForm
+    ? "Discard guest changes?"
+    : modal === elements.tableModal && state.dirtyTableForm
+      ? "Discard table changes?"
+      : modal === elements.bulkAddModal && bulkAddHasContent()
+        ? "Discard this guest list?"
+        : "";
+  if (message && !await confirmAction({ message, confirmLabel: "Discard", danger: true })) return;
+  if (modal === elements.guestModal) state.dirtyGuestForm = false;
+  if (modal === elements.tableModal) state.dirtyTableForm = false;
+  if (modal === elements.assignmentModal) cancelAssignmentSession();
   modal.close();
 }
 
@@ -1420,7 +1369,7 @@ function updateEventSettingsDraftState(settingsField) {
 }
 
 function showEditorAccessError() {
-  elements.dashboardApp.hidden = false;
+  revealDashboard();
   elements.dashboardSidebar.hidden = true;
   elements.pageEyebrow.textContent = "Seating access";
   elements.pageTitle.textContent = "Access unavailable";
@@ -1432,8 +1381,14 @@ function showEditorAccessError() {
 }
 
 function showDashboardBootstrapError(error) {
+  revealDashboard();
   const permissionDenied = error?.code === "permission-denied";
-  elements.dashboardApp.hidden = false;
+  const customer = state.isAdmin !== true && (state.permissions?.role === "customer" || state.loginSurface === "customer");
+  const backLabel = customer ? "My events" : "All Events";
+  if (permissionDenied && customer) {
+    elements.dashboardSidebar.hidden = true;
+    if (elements.navToggleButton) elements.navToggleButton.hidden = true;
+  }
   elements.pageEyebrow.textContent = "Dashboard";
   elements.pageTitle.textContent = permissionDenied
     ? "Event access unavailable"
@@ -1442,14 +1397,42 @@ function showDashboardBootstrapError(error) {
     ? "Your signed-in account does not have permission to open this event."
     : "The event could not be loaded. Check your connection and try again.";
   elements.globalActions.innerHTML = "";
-  elements.pageContent.innerHTML = `<section class="share-page"><article class="share-card"><h3>${permissionDenied ? "Check event access" : "Try loading again"}</h3><p>${permissionDenied ? "Return to All Events and open an event you have access to." : "Refresh this page to retry loading the event."}</p><button class="da3wa-button da3wa-button--primary" type="button" id="dashboardRetryButton">${permissionDenied ? "All Events" : "Refresh"}</button></article></section>`;
+  const email = permissionDenied && customer ? state.currentUser?.email : "";
+  elements.pageContent.innerHTML = `<section class="share-page"><article class="share-card"><h2>${permissionDenied ? "Check event access" : "Try loading again"}</h2>${email ? `<p>Signed in as <bdi>${escapeHtml(email)}</bdi></p>` : ""}<p>${permissionDenied ? `Return to ${backLabel} and open an event you have access to.` : "Refresh this page to retry loading the event."}</p><button class="da3wa-button da3wa-button--primary" type="button" id="dashboardRetryButton">${permissionDenied ? backLabel : "Refresh"}</button></article></section>`;
   document.getElementById("dashboardRetryButton")?.addEventListener("click", () => {
     if (permissionDenied) {
-      window.location.href = "./all-events.html";
+      const url = new URL(customer ? "./customer-events.html" : "./all-events.html", window.location.href);
+      if (new URLSearchParams(window.location.search).get("emulator") === "1") url.searchParams.set("emulator", "1");
+      window.location.assign(url);
       return;
     }
     window.location.reload();
   });
+}
+
+const savingGuestRsvps = new Set();
+
+async function saveGuestRsvp(control) {
+  const guestId = control.dataset.guestId;
+  if (savingGuestRsvps.has(guestId)) return;
+  savingGuestRsvps.add(guestId);
+  control.disabled = true;
+  control.setAttribute("aria-busy", "true");
+  try {
+    await updateGuest(guestId, { rsvpStatus: control.value, updatedAt: serverTimestamp() });
+  } finally {
+    savingGuestRsvps.delete(guestId);
+    const guest = state.guests.find((item) => item.id === guestId);
+    for (const select of document.querySelectorAll("[data-guest-rsvp-status]")) {
+      if (select.dataset.guestId !== guestId) continue;
+      const status = guest?.rsvpStatus || "pending";
+      select.value = status;
+      select.className = `guest-rsvp-select guest-rsvp-select--${status}`;
+      select.disabled = !can("canEditGuests");
+      select.removeAttribute("aria-busy");
+      if (!select.disabled) select.removeAttribute("aria-disabled");
+    }
+  }
 }
 
 function handleDocumentChange(event) {
@@ -1490,10 +1473,7 @@ function handleDocumentChange(event) {
 
   const guestRsvpStatus = event.target.closest("[data-guest-rsvp-status]");
   if (guestRsvpStatus) {
-    void updateGuest(guestRsvpStatus.dataset.guestId, {
-      rsvpStatus: guestRsvpStatus.value,
-      updatedAt: serverTimestamp(),
-    });
+    void saveGuestRsvp(guestRsvpStatus);
     return;
   }
 
@@ -1688,7 +1668,10 @@ async function bootstrapDashboard() {
   );
 
   if (!state.isAdmin && (!permissionDoc.exists() || !permissionDoc.data().canViewDashboard)) {
-    window.location.replace("./customer-events.html?message=access-denied");
+    const target = new URL("./customer-events.html", window.location.href);
+    target.searchParams.set("message", "access-denied");
+    if (new URLSearchParams(window.location.search).get("emulator") === "1") target.searchParams.set("emulator", "1");
+    window.location.replace(target);
     return;
   }
 
@@ -2301,7 +2284,14 @@ async function syncPublicStats({ force = false } = {}) {
 }
 
 function showDashboard() {
+  revealDashboard();
+}
+
+// The static loading placeholder in dashboard.html stays until the app or an error message is shown.
+function revealDashboard() {
   elements.dashboardApp.hidden = false;
+  const loading = document.getElementById("dashboardLoading");
+  if (loading) { loading.hidden = true; loading.removeAttribute("aria-busy"); }
 }
 
 let persistenceRecord = null;
@@ -2353,6 +2343,7 @@ function renderChrome() {
   const isOverviewView = state.activeView === "overview";
   const isSeatingEditorView = state.editorMode && state.activeView === "seating";
   const isAccountSeatingWorkspace = state.permissions?.seatingOnly === true;
+  document.body.classList.toggle("is-customer-dashboard", state.permissions?.role === "customer");
   document.body.classList.toggle("is-seating-view", isSeatingView);
   document.body.classList.toggle("is-overview-view", isOverviewView);
   document.body.classList.toggle("is-guests-view", state.activeView === "guests");
@@ -2378,6 +2369,7 @@ function renderChrome() {
   elements.pageTitle.textContent = isSeatingEditorView
     ? `${state.editorRole === "all" ? "All sides" : `${state.editorRole[0].toUpperCase()}${state.editorRole.slice(1)}`} — Seating Editor`
     : meta.title;
+  document.title = `${elements.pageTitle.textContent} · ${getEventDisplayTitle(state.wedding)} · QD Events`;
   elements.pageDescription.textContent = isSeatingEditorView
     ? "Changes are synchronized live with the event dashboard."
     : meta.description;
@@ -2520,7 +2512,7 @@ function renderGlobalActions() {
     : dashboardHasUnsavedChanges()
       ? "Save or discard your unsaved changes before refreshing."
       : "Refresh current view";
-  elements.globalActions.innerHTML = `
+  elements.globalActions.innerHTML = `${state.isAdmin === true ? `<button class="da3wa-button" type="button" data-action="open-customer-audit">Customer activity log</button>` : ""}
     <button class="da3wa-icon-button da3wa-refresh-button${state.isRefreshing ? " is-refreshing" : ""}" type="button" data-action="refresh-dashboard" aria-label="Refresh current view" title="${escapeAttribute(title)}" aria-busy="${state.isRefreshing}" ${disabled ? 'disabled aria-disabled="true"' : 'aria-disabled="false"'}>
       <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M20 11a8 8 0 0 0-14.9-3M4 4v4h4M4 13a8 8 0 0 0 14.9 3M20 20v-4h-4" /></svg>
     </button>`;
@@ -2690,11 +2682,11 @@ function overviewMenuButton(label, action, disabled = false) {
   return `<button class="overview-actions-menu__item" type="button" role="menuitem" data-action="${escapeAttribute(action)}" ${disabled ? 'disabled aria-disabled="true"' : ""}>${escapeHtml(label)}</button>`;
 }
 
-function switchView(view) {
+async function switchView(view) {
   if (!canViewDashboardPage(view, state.permissions)) return;
   if (view === "settings" && !canViewEventSettings()) return;
   if (state.dirtyEventSettings && view !== state.activeView) {
-    if (!window.confirm("Discard unsaved event detail changes and leave Event Settings?")) {
+    if (!await confirmAction({ message: "Discard unsaved event detail changes and leave Event Settings?", confirmLabel: "Discard", danger: true })) {
       return;
     }
     state.dirtyEventSettings = false;
@@ -2764,8 +2756,7 @@ function renderOverviewPage() {
     return;
   }
   if (state.loadingGuests || state.loadingTables) {
-    elements.pageContent.innerHTML =
-      '<div class="da3wa-skeleton" aria-hidden="true"></div>';
+    elements.pageContent.innerHTML = skeleton.cards(3, "Loading the overview…");
     return;
   }
 
@@ -2830,6 +2821,10 @@ function renderOverviewPage() {
     : `role="img" aria-label="Seat assignment capacity: ${assignedSeats} assigned ${assignedSeats === 1 ? "seat" : "seats"} and zero usable seats"`;
   const eventStatus = state.wedding?.status ? prettifyShape(state.wedding.status) : "Active";
   const overCapacitySeats = Math.max(0, -remainingSeats);
+  const seatsStillNeeded = state.guests.reduce((count, guest) => count + (
+    guest.rsvpStatus === "confirmed" ? getGuestRemainingSeats(guest) : 0
+  ), 0);
+  const seatShortfall = Math.max(0, seatsStillNeeded - Math.max(0, remainingSeats));
   const seatingTone = overCapacitySeats > 0 ? "is-over-capacity" : usableSeats === 0 && assignedSeats > 0 ? "is-over-capacity" : "";
 
   elements.pageContent.innerHTML = `
@@ -2841,8 +2836,8 @@ function renderOverviewPage() {
       <section class="overview-card overview-guests" aria-labelledby="overviewGuestsTitle">
         <div class="overview-section-heading"><div><h2 id="overviewGuestsTitle">Guest summary</h2></div><div class="overview-summary-links">${canOpenGuests ? '<button class="overview-text-link" type="button" data-action="overview-guests">View guests</button>' : ""}${canOpenCheckin ? '<button class="overview-text-link" type="button" data-action="nav-checkin">Check-in</button>' : ""}</div></div>
         <div class="overview-total-grid" aria-label="Invitation and people totals">
-          <article class="overview-total overview-total--invitations"><span class="overview-total__icon">${icon("invitation")}</span><div><strong>${stats.total}</strong><span>Invitations</span></div></article>
-          <article class="overview-total overview-total--people"><span class="overview-total__icon">${icon("people")}</span><div><strong>${totalPeople}</strong><span>Maximum invited people</span><small>${additionalPlaces ? `${additionalPlaces} extra guest places` : "Invited guests only"}</small></div></article>
+          <article class="overview-total overview-total--invitations"><span class="overview-total__icon">${icon("invitation")}</span><div><strong>${stats.total}</strong><span>${stats.total === 1 ? "Invitation" : "Invitations"}</span></div></article>
+          <article class="overview-total overview-total--people"><span class="overview-total__icon">${icon("people")}</span><div><strong>${totalPeople}</strong><span>Maximum invited people</span><small>${additionalPlaces ? `${additionalPlaces} extra guest place${additionalPlaces === 1 ? "" : "s"}` : "Invited guests only"}</small></div></article>
         </div>
         <div class="overview-response-heading"><h3>Responses</h3><span>Counted per invitation</span></div>
         <div class="overview-response-grid" aria-label="Invitation responses">${responseCards}</div>
@@ -2852,7 +2847,7 @@ function renderOverviewPage() {
           <div class="overview-section-heading"><h2 id="overviewAttentionTitle">Needs attention</h2></div>
           ${attention.length ? `<div class="overview-action-list">${attentionRows(visibleAttention)}</div>${attention.length > 3 ? `<details class="overview-more-issues"><summary>Show all ${attention.length} issues</summary><div class="overview-action-list">${attentionRows(attention.slice(3))}</div></details>` : ""}` : `<p class="overview-all-clear">${icon("check")}<span>Everything is in good shape.</span></p>`}
         </section>
-        ${seatingEnabled ? `<section class="overview-card overview-seating ${seatingTone}" aria-labelledby="overviewSeatingTitle"><div class="overview-section-heading"><h2 id="overviewSeatingTitle">${icon("seat")}<span>Seating</span></h2><span class="overview-capacity-label">${usableSeats} usable seats</span></div><div class="overview-capacity" ${capacityAccessibility}><div class="overview-capacity__track"><span style="width:${capacityPct}%"></span></div><div class="overview-capacity__labels"><span>Seat assignment</span><strong>${capacityDisplay}</strong></div></div><div class="overview-seat-stats"><div><strong>${assignedSeats}</strong><span>Assigned seats</span></div><div><strong>${remainingSeats}</strong><span>Available seats</span></div></div>${usableSeats === 0 ? `<p class="overview-capacity-warning">${assignedSeats > 0 ? `${assignedSeats} assigned ${assignedSeats === 1 ? "seat" : "seats"} with no usable capacity` : "No usable seats configured"}</p>` : overCapacitySeats > 0 ? `<p class="overview-capacity-warning">${overCapacitySeats} assigned ${overCapacitySeats === 1 ? "seat is" : "seats are"} over usable capacity.</p>` : ""}${canOpenSeating ? '<button class="da3wa-button da3wa-button--secondary" type="button" data-action="nav-seating">Open seating plan</button>' : ""}</section>` : ""}
+        ${seatingEnabled ? `<section class="overview-card overview-seating ${seatingTone}" aria-labelledby="overviewSeatingTitle"><div class="overview-section-heading"><h2 id="overviewSeatingTitle">${icon("seat")}<span>Seating</span></h2><span class="overview-capacity-label">${usableSeats} usable seats</span></div><div class="overview-capacity" ${capacityAccessibility}><div class="overview-capacity__track"><span style="width:${capacityPct}%"></span></div><div class="overview-capacity__labels"><span>Seat assignment</span><strong>${capacityDisplay}</strong></div></div><div class="overview-seat-stats"><div><strong>${assignedSeats}</strong><span>Assigned seats</span></div><div><strong>${remainingSeats}</strong><span>Available seats</span></div></div>${usableSeats === 0 ? `<p class="overview-capacity-warning">${assignedSeats > 0 ? `${assignedSeats} assigned ${assignedSeats === 1 ? "seat" : "seats"} with no usable capacity` : "No usable seats configured"}</p>` : overCapacitySeats > 0 ? `<p class="overview-capacity-warning">${overCapacitySeats} assigned ${overCapacitySeats === 1 ? "seat is" : "seats are"} over usable capacity.</p>` : ""}${seatShortfall > 0 ? `<p class="overview-capacity-warning">${seatShortfall} more seat${seatShortfall === 1 ? " is" : "s are"} needed for confirmed guests.</p>` : ""}${canOpenSeating ? '<button class="da3wa-button da3wa-button--secondary" type="button" data-action="nav-seating">Open seating plan</button>' : ""}</section>` : ""}
       </div>
     </section>
   `;
@@ -2872,7 +2867,7 @@ function genderRevealDashboardSummary(responses = state.genderRevealResponses) {
 
 function renderGenderRevealOverviewPage() {
   if (state.genderRevealResponsesLoading) {
-    elements.pageContent.innerHTML = '<section class="gr-dashboard"><div class="da3wa-skeleton" aria-hidden="true"></div></section>';
+    elements.pageContent.innerHTML = `<section class="gr-dashboard">${skeleton.rows(4, "Loading responses…")}</section>`;
     return;
   }
   if (state.genderRevealResponsesError) {
@@ -2923,7 +2918,7 @@ function getFilteredGenderRevealResponses() {
 
 function renderGenderRevealResponsesPage() {
   if (state.genderRevealResponsesLoading) {
-    elements.pageContent.innerHTML = '<section class="gr-dashboard"><div class="da3wa-skeleton" aria-hidden="true"></div></section>';
+    elements.pageContent.innerHTML = `<section class="gr-dashboard">${skeleton.rows(4, "Loading responses…")}</section>`;
     return;
   }
   if (state.genderRevealResponsesError) {
@@ -2971,8 +2966,7 @@ function renderGuestPage() {
     return;
   }
   if (state.loadingGuests) {
-    elements.pageContent.innerHTML =
-      '<section class="guest-page"><div class="da3wa-skeleton" aria-hidden="true"></div></section>';
+    elements.pageContent.innerHTML = `<section class="guest-page">${skeleton.rows(6, "Loading guests…")}</section>`;
     return;
   }
 
@@ -3312,11 +3306,20 @@ function renderMobileSeatingPage({ seatingStats, sideStats, isSaving }) {
   }
   if (!state.plannerViewCenter) fitMobilePlannerView();
   else restorePlannerViewport();
+  updateChairHitArea();
 }
 
+// Fitting a whole venue on a phone made seats about 3 px wide. Phones open at a readable zoom instead and pan from there.
+const MOBILE_MIN_FIT_ZOOM = 1;
 function fitMobilePlannerView() {
   const fit = calculatePlannerFit();
   if (!fit) return;
+  if (window.matchMedia("(max-width: 700px)").matches && fit.zoom < MOBILE_MIN_FIT_ZOOM) {
+    // Zoomed in, the whole venue no longer fits, so start on the tables rather than the middle of everything
+    // (stage and entrance markers can sit far from them).
+    fit.zoom = MOBILE_MIN_FIT_ZOOM;
+    fit.center = getPlannerTablesCenter() || fit.center;
+  }
   state.plannerZoom = fit.zoom;
   state.plannerViewCenter = fit.center;
   setPlannerCanvasZoom(document.getElementById("plannerCanvas"), fit.zoom);
@@ -3346,6 +3349,20 @@ function getPlannerContentBounds() {
   });
   if (!Number.isFinite(bounds.minX)) return { minX: 0, minY: 0, maxX: state.plannerMapWidth, maxY: state.plannerMapHeight };
   return bounds;
+}
+
+function getPlannerTablesCenter() {
+  const canvas = document.getElementById("plannerCanvas");
+  const tables = canvas ? [...canvas.querySelectorAll(".planner-table")] : [];
+  if (!tables.length) return null;
+  const canvasRect = canvas.getBoundingClientRect(), zoom = Math.max(0.001, state.plannerZoom);
+  const xs = [], ys = [];
+  for (const table of tables) {
+    const rect = table.getBoundingClientRect();
+    xs.push((rect.left - canvasRect.left) / zoom, (rect.right - canvasRect.left) / zoom);
+    ys.push((rect.top - canvasRect.top) / zoom, (rect.bottom - canvasRect.top) / zoom);
+  }
+  return { x: (Math.min(...xs) + Math.max(...xs)) / 2, y: (Math.min(...ys) + Math.max(...ys)) / 2 };
 }
 
 function calculatePlannerFit() {
@@ -3716,18 +3733,24 @@ function validateEventSettingsDraft(draft) {
   if (!genderReveal) try {
     const scheduleText = String(draft.schedule || "[]").trim();
     if (/<iframe\b/i.test(scheduleText) || /google\.com\/maps\/embed/i.test(scheduleText)) {
-      errors.schedule = "This is map embed code. Paste only the URL from its src=\"…\" into Google Maps embed URL above. Leave this schedule as [] if you do not need a schedule.";
+      errors.schedule = "This is map embed code. Paste only the URL from its src=\"…\" into Google Maps embed URL above. Leave the schedule empty if you do not need one.";
     }
     const schedule = JSON.parse(scheduleText);
     if (!Array.isArray(schedule) || schedule.length > 12 || schedule.some((item) =>
       !item || typeof item !== "object" || Array.isArray(item) ||
       ["time", "timeAr", "titleEn", "titleAr", "descriptionEn", "descriptionAr"].some((key) => item[key] !== undefined && (typeof item[key] !== "string" || item[key].length > 240)) ||
       !(String(item.titleEn || "").trim() || String(item.titleAr || "").trim())
-    )) errors.schedule = "Use a JSON list of up to 12 items. Each item needs titleEn or titleAr; text values can be up to 240 characters.";
+    )) errors.schedule = "Use up to 12 schedule items. Each item needs a title in English or Arabic; each text can be up to 240 characters.";
   } catch {
-    errors.schedule ||= "Enter a valid JSON list for the schedule, or leave it as [].";
+    errors.schedule ||= "The schedule could not be read. Remove its items and add them again.";
   }
   return errors;
+}
+
+// Best-effort trail of customer actions for platform admins. Never awaited: it
+// cannot fail a save. Guests and invitations are not recorded.
+function auditCustomerAction(action, targetType, targetId = "", summary = "") {
+  void recordCustomerAudit({ api: accountApi, db: state.services.db, weddingId: state.weddingId, user: state.currentUser, permissions: state.permissions, action, targetType, targetId: String(targetId ?? ""), summary });
 }
 
 async function saveEventSettings(event) {
@@ -3758,7 +3781,7 @@ async function saveEventSettings(event) {
     location: String(draft.location || "").trim(),
     locationEn: String(draft.location || "").trim(),
     mapsUrl: String(draft.mapsUrl || "").trim(),
-    whatsAppCountryCode: isGenderRevealEvent(state.wedding) ? "971" : String(draft.whatsAppCountryCode || "971").trim(),
+    ...(state.isAdmin ? { whatsAppCountryCode: isGenderRevealEvent(state.wedding) ? "971" : String(draft.whatsAppCountryCode || "971").trim() } : {}),
     invitationLanguage: draft.invitationLanguage || "en",
     ...(isWeddingOwner() ? { venueMapEmbedUrl: String(draft.venueMapEmbedUrl || "").trim(), schedule: JSON.parse(String(draft.schedule || "[]")) } : {}),
     updatedAt: serverTimestamp(),
@@ -3803,6 +3826,7 @@ async function saveEventSettings(event) {
           state.eventSettingsOriginal = null;
           state.dirtyEventSettings = false;
           state.eventSettingsErrors = {};
+          auditCustomerAction("event_settings_saved", "event", state.weddingId, "Event settings were saved");
           const publishingError = getDashboardPersistence().publicationError;
           state.eventSettingsMessage = publishingError ? "Event details saved. Invitation layout refresh is pending; use Refresh to retry once." : "Event details saved.";
           showToast(state.eventSettingsMessage, publishingError ? "error" : "success");
@@ -3930,7 +3954,7 @@ async function updateEventLifecycle(action) {
   const confirmation = completing
     ? `Mark “${title}” as completed? It will move into Old Events. You can reopen it later.`
     : `Reopen “${title}” and return it to the active event list?`;
-  if (!window.confirm(confirmation)) return;
+  if (!await confirmAction({ message: confirmation, confirmLabel: "Continue" })) return;
 
   const previousStatus = ["draft", "upcoming", "active"].includes(wedding.status)
     ? wedding.status
@@ -4042,6 +4066,7 @@ function renderEventSettingsPage() {
       `}
 
       ${isWeddingOwner() ? '<section class="event-settings-section share-card" id="customerAccessPanel"></section>' : ""}
+      ${state.isAdmin === true && !genderReveal && !hideOptionsAndLifecycle ? '<section class="event-settings-section share-card" id="musicPanel"></section>' : ""}
       <form class="event-settings-section share-card" id="eventSettingsForm" novalidate>
         <header class="event-settings-section__header">
           <div><h2>Event details</h2></div>
@@ -4054,12 +4079,12 @@ function renderEventSettingsPage() {
           ${field("venueEn", genderReveal ? "Venue name (optional)" : "Venue name", "text", false, !genderReveal)}
           ${field("location", "Location / address", "text", false, false, "street-address")}
           ${field("mapsUrl", "Maps link", "url", true, false)}
-          ${genderReveal ? "" : field("whatsAppCountryCode", "Country calling code", "text", false, true)}
+          ${genderReveal || !state.isAdmin ? "" : field("whatsAppCountryCode", "Country calling code", "text", false, true)}
           <label class="event-settings-field"><span>Invitation language</span><select class="da3wa-input" name="invitationLanguage" data-event-setting-field ${canEditDetails ? "" : "disabled"}><option value="en" ${draft.invitationLanguage === "en" ? "selected" : ""}>English</option><option value="ar" ${draft.invitationLanguage === "ar" ? "selected" : ""}>Arabic</option></select></label>
           ${genderReveal ? `${field("eventTitleAr", "Arabic event name", "text", true)}${field("genderRevealArtworkUrl", "Cover artwork path", "text", true)}${field("genderRevealOpeningVideoUrl", "Opening video path (optional)", "text", true)}${field("genderRevealMusicUrl", "Music path", "text", true)}<p class="event-settings-timezone is-full">Use a repository path under /images/, /videos/, or /music/, or an HTTPS URL. Commit repository files with the site; there is no media upload here. The opening video is optional and falls back to the cover artwork.</p>${textareaField("genderRevealMessageEn", "English invitation wording")}${textareaField("genderRevealMessageAr", "Arabic invitation wording")}` : ""}
           ${hideInvitationScheduleAndMapEmbed ? "" : `${field("venueMapEmbedUrl", "Google Maps embed URL", "url", true, false)}
           <p class="event-settings-timezone">Paste only the URL inside the Google Maps iframe's src="…" attribute, not the full iframe code. It is saved for this event only.</p>
-          <label class="event-settings-field is-full"><span>Invitation schedule (JSON, optional)</span><textarea class="da3wa-input" name="schedule" rows="8" data-event-setting-field ${canEditDetails ? "" : "disabled aria-disabled=\"true\""}>${escapeHtml(draft.schedule || "[]")}</textarea><small class="event-setting-error" role="alert">${escapeHtml(errors.schedule || "")}</small><small class="event-settings-timezone">Use up to 12 JSON items with time, timeAr, titleEn, titleAr, descriptionEn, and descriptionAr. Leave [] to hide the schedule. The map URL belongs in Google Maps embed URL above.</small></label>`}
+          ${scheduleEditorMarkup(draft.schedule, errors.schedule, canEditDetails)}`}
           ${hideInvitationScheduleAndMapEmbed ? "" : `<p class="event-settings-timezone">Date and time use the same local time display as the rest of the dashboard.</p>`}
         </div>
         <div class="event-settings-actions">
@@ -4076,6 +4101,8 @@ function renderEventSettingsPage() {
       `}
     </section>
   `;
+  const musicPanel = document.getElementById("musicPanel");
+  if (musicPanel && state.isAdmin === true) import("./music-settings.js").then(({ mountMusicSettings }) => mountMusicSettings({ host: musicPanel, db: state.services.db, user: state.currentUser, wedding: state.wedding, eventId: state.weddingId, onChange: (m) => { state.wedding = { ...state.wedding, musicMode: m.mode, musicVersion: m.version, musicName: m.name }; } })).catch(() => { musicPanel.textContent = "Music settings could not load. Check your connection and refresh."; });
   if (isWeddingOwner()) {
     const placeholder = document.getElementById("customerAccessPanel");
     if (previousCustomerPanel) placeholder.replaceWith(previousCustomerPanel);
@@ -4085,6 +4112,7 @@ function renderEventSettingsPage() {
   const eventSettingsForm = document.getElementById("eventSettingsForm");
   if (eventSettingsForm) {
     bindEventSettingsFieldTracking(eventSettingsForm, updateEventSettingsDraftState);
+    bindScheduleEditor(eventSettingsForm);
   }
   if (focusedFieldName) {
     const nextField = elements.pageContent.querySelector(
@@ -4273,8 +4301,8 @@ function renderGuestRow(guest) {
       <td><input type="checkbox" value="${escapeAttribute(guest.id)}" data-guest-select ${isSelected ? "checked" : ""} aria-label="Select ${escapeAttribute(guest.fullName || "guest")}" /></td>
       <td>
         <div class="guest-primary">
-          <button class="guest-name-button" type="button" data-action="edit-guest" data-id="${escapeAttribute(guest.id)}">${escapeHtml(guest.fullName || "Guest")}</button>
-          ${guest.rsvpMessage ? `<details class="guest-rsvp-message"><summary>Message for the couple</summary><p>${escapeHtml(guest.rsvpMessage)}</p></details>` : ""}
+          <button class="guest-name-button" dir="auto" type="button" data-action="edit-guest" data-id="${escapeAttribute(guest.id)}">${escapeHtml(guest.fullName || "Guest")}</button>
+          ${guest.rsvpMessage ? `<details class="guest-rsvp-message"><summary>Message for the couple</summary><p dir="auto">${escapeHtml(guest.rsvpMessage)}</p></details>` : ""}
         </div>
       </td>
       <td>${escapeHtml(guest.phone || "Not set")}</td>
@@ -4300,7 +4328,7 @@ function renderGuestCard(guest) {
       <div class="guest-card__main">
         <header class="guest-card__header">
           <div class="guest-card__identity">
-            <button class="guest-name-button" type="button" data-action="edit-guest" data-id="${escapeAttribute(guest.id)}">${escapeHtml(guest.fullName || "Guest")}</button>
+            <button class="guest-name-button" dir="auto" type="button" data-action="edit-guest" data-id="${escapeAttribute(guest.id)}">${escapeHtml(guest.fullName || "Guest")}</button>
             <span class="guest-card__additional-count">+${escapeHtml(String(additionalGuestCount))} ${additionalGuestCount === 1 ? "guest" : "guests"}</span>
           </div>
           <div class="guest-card__header-actions">
@@ -4308,7 +4336,7 @@ function renderGuestCard(guest) {
             ${renderGuestMenuToggle(guest, "card", state.activeGuestMenu?.guestId === guest.id)}
           </div>
         </header>
-        ${guest.rsvpMessage ? `<details class="guest-rsvp-message"><summary>Message for the couple</summary><p>${escapeHtml(guest.rsvpMessage)}</p></details>` : ""}
+        ${guest.rsvpMessage ? `<details class="guest-rsvp-message"><summary>Message for the couple</summary><p dir="auto">${escapeHtml(guest.rsvpMessage)}</p></details>` : ""}
       </div>
       <footer class="guest-card__actions">
         ${isSeatingEnabled() ? `<div class="guest-card__reservation">${renderReservationReadinessBadge(guest)}</div>` : ""}
@@ -4354,9 +4382,10 @@ function renderGuestMenuToggle(guest, surface, expanded = false) {
 
 function renderGuestRsvpSelect(guest) {
   const status = guest.rsvpStatus || "pending";
-  const disabled = !can("canEditGuests");
+  const saving = savingGuestRsvps.has(guest.id);
+  const disabled = saving || !can("canEditGuests");
   return `
-    <select class="guest-rsvp-select guest-rsvp-select--${escapeAttribute(status)}" data-guest-rsvp-status data-guest-id="${escapeAttribute(guest.id)}" ${disabled ? 'disabled aria-disabled="true"' : ""} aria-label="Change RSVP status for ${escapeAttribute(guest.fullName || "guest")}">
+    <select class="guest-rsvp-select guest-rsvp-select--${escapeAttribute(status)}" data-guest-rsvp-status data-guest-id="${escapeAttribute(guest.id)}" ${disabled ? 'disabled aria-disabled="true"' : ""} ${saving ? 'aria-busy="true"' : ""} aria-label="Change RSVP status for ${escapeAttribute(guest.fullName || "guest")}">
       <option value="confirmed" ${status === "confirmed" ? "selected" : ""}>Confirmed</option>
       <option value="pending" ${status === "pending" ? "selected" : ""}>Pending</option>
       <option value="declined" ${status === "declined" ? "selected" : ""}>Declined</option>
@@ -4413,7 +4442,7 @@ function renderPlannerChair(table, chair) {
     assignment?.guestId && assignment.guestId === state.activePartyGuestId;
   const label = String(chair.seatNumber);
   const chairLabel = assignment
-    ? `Chair ${chair.seatNumber}, assigned to ${partyMemberLabel(guest, assignment.partyMemberIndex)}`
+    ? `Seat ${chair.seatNumber}, assigned to ${partyMemberLabel(guest, assignment.partyMemberIndex)}`
     : `Available chair ${chair.seatNumber}${isTemporary ? ", selected for this assignment" : ""}`;
   return `
     <button
@@ -4833,7 +4862,7 @@ function renderAssignmentControls() {
       <p class="assignment-bar__message ${difference === 0 ? "is-complete" : ""}" role="status">${escapeHtml(state.modalError || selectionMessage)}</p>
       <details class="assignment-bar__details">
         <summary>Selected chairs</summary>
-        <span>${escapeHtml(getSelectedChairSummary(session.selectedChairs) || "No chairs selected yet")}</span>
+        <span>${escapeHtml(getSelectedChairSummary(session.selectedChairs) || "No seats selected yet")}</span>
       </details>
       <div class="assignment-bar__actions">
         <button class="da3wa-button da3wa-button--secondary" type="button" data-action="cancel-assignment">Cancel</button>
@@ -4872,7 +4901,7 @@ function renderSeatAssignment(selectedSeat) {
       </div>
       <div class="seat-assignment__row">
         <span>Seat details</span>
-        <strong>${escapeHtml(selectedSeat.table.name)} · Chair ${escapeHtml(String(selectedSeat.chair.seatNumber))}</strong>
+        <strong>${escapeHtml(selectedSeat.table.name)} · Seat ${escapeHtml(String(selectedSeat.chair.seatNumber))}</strong>
       </div>
     </div>
 
@@ -4963,7 +4992,7 @@ function actionButton(
 
 function menuItem(label, action, guestId, disabled = false) {
   return `
-    <button class="guest-menu__item ${disabled ? "is-disabled" : ""}" type="button" role="menuitem" data-action="${escapeAttribute(action)}" data-guest-id="${escapeAttribute(guestId)}" ${disabled ? 'disabled aria-disabled="true"' : ""}>
+    <button class="guest-menu__item ${action === "delete-guest" ? "guest-menu__item--danger" : ""} ${disabled ? "is-disabled" : ""}" type="button" role="menuitem" data-action="${escapeAttribute(action)}" data-guest-id="${escapeAttribute(guestId)}" ${disabled ? 'disabled aria-disabled="true"' : ""}>
       ${escapeHtml(label)}
     </button>
   `;
@@ -4997,8 +5026,8 @@ async function manageGuestInvitationLink(guestId, action) {
   }
   const guest = state.guests.find((item) => item.id === guestId);
   if (!guest) return;
-  if (action === "revoke" && !window.confirm(`Revoke the invitation link for ${guest.fullName || "this guest"}? Anyone with the old link will lose access.`)) return;
-  if (action === "regenerate" && !window.confirm(`Create a new invitation link for ${guest.fullName || "this guest"}? The old link will stop working immediately.`)) return;
+  if (action === "revoke" && !await confirmAction({ message: `Revoke the invitation link for ${guest.fullName || "this guest"}? Anyone with the old link will lose access.`, confirmLabel: "Revoke link", danger: true })) return;
+  if (action === "regenerate" && !await confirmAction({ message: `Create a new invitation link for ${guest.fullName || "this guest"}? The old link will stop working immediately.`, confirmLabel: "Create new link" })) return;
   try {
     const requestId = action === "regenerate" ? window.crypto?.randomUUID?.() : undefined;
     if (action === "regenerate" && !requestId) throw new Error("Secure request IDs are not supported in this browser.");
@@ -5018,31 +5047,9 @@ async function manageGuestInvitationLink(guestId, action) {
 }
 
 async function copyPreparedInvitationLink(url, successMessage = "Invitation link copied.", notify = true) {
-  if (await copyText(url)) {
-    if (notify) showToast(successMessage, "success");
-    return true;
-  }
-  const dialog = document.createElement("dialog");
-  dialog.className = "workspace-dialog";
-  const label = document.createElement("label");
-  label.textContent = "Invitation link";
-  const input = document.createElement("input");
-  input.readOnly = true;
-  input.value = url;
-  input.style.cssText = "display:block;min-width:280px;width:60vw;max-width:100%;margin:1rem 0";
-  label.append(input);
-  const close = document.createElement("button");
-  close.type = "button";
-  close.textContent = "Close link";
-  close.addEventListener("click", () => dialog.close());
-  dialog.append(label, close);
-  dialog.addEventListener("close", () => dialog.remove(), { once: true });
-  document.body.append(dialog);
-  dialog.showModal();
-  input.focus();
-  input.select();
-  if (notify) showToast("The invitation link is saved. Select and copy the link.", "info");
-  return false;
+  const copied = await copyWithFallback(url, { title: "Invitation link" });
+  if (copied && notify) showToast(successMessage, "success");
+  return copied;
 }
 
 async function copyGuestInvitation(guestId) {
@@ -5235,10 +5242,11 @@ function renderReservationReadinessBadge(guest) {
   const readiness = getGuestSeatReadiness(guest);
   const label = readiness.ready
     ? "Invitation Ready"
-    : "Seat Assignment Missing";
+    : "Seat assignment missing";
   const tone = readiness.ready ? "reservation-ready" : "reservation-missing";
   const detail = `${readiness.assignedCount} of ${readiness.requiredCount} seats assigned`;
   const badgeAttributes = `title="${escapeAttribute(detail)}" aria-label="${escapeAttribute(`${label}: ${detail}`)}"`;
+  if (!readiness.ready && guest.rsvpStatus !== "confirmed") return "";
   if (!readiness.ready) {
     return `<button class="guest-badge guest-badge--${tone} guest-card__reservation-link" type="button" data-action="nav-seating" ${badgeAttributes}>${escapeHtml(label)}</button>`;
   }
@@ -5249,7 +5257,7 @@ async function handleAction(action, dataset, event = null) {
   switch (action) {
     case "overview-guests":
       state.guestPageIndex = 0;
-      switchView("guests");
+      await switchView("guests");
       return;
     case "gender-response-page":
       state.genderRevealResponsePageIndex = Math.max(0, Number(dataset.page) || 0);
@@ -5259,7 +5267,7 @@ async function handleAction(action, dataset, event = null) {
       state.guestFilters.rsvp = ["confirmed", "pending", "declined"].includes(dataset.rsvp) ? dataset.rsvp : "all";
       state.guestFilters.search = "";
       state.guestPageIndex = 0;
-      switchView("guests");
+      await switchView("guests");
       return;
     case "open-add-guest":
       await openGuestModal();
@@ -5321,10 +5329,10 @@ async function handleAction(action, dataset, event = null) {
       await updateEventLifecycle(action);
       return;
     case "nav-seating":
-      switchView("seating");
+      await switchView("seating");
       return;
     case "nav-checkin":
-      switchView("checkin");
+      await switchView("checkin");
       return;
     case "open-seating-for-guest":
       elements.missingSeatsModal?.close();
@@ -5475,6 +5483,11 @@ async function handleAction(action, dataset, event = null) {
         updatedAt: serverTimestamp(),
       });
       return;
+    case "open-customer-audit": {
+      if (state.isAdmin !== true) return;
+      void import("./admin-workspace.js").then((module) => module.openEventAudit({ id: state.weddingId }, { db: state.services.db, title: getEventDisplayTitle(state.wedding) })).catch(() => showToast("The activity log could not open.", "error"));
+      return;
+    }
     case "copy-guest-invite": {
       const guest = state.guests.find(
         (item) => item.id === dataset.id || item.id === dataset.guestId,
@@ -5628,7 +5641,7 @@ async function handleAction(action, dataset, event = null) {
       const chairId = dataset.chairId;
       state.assignmentSession = null;
       elements.assignmentModal?.close();
-      handleAssignmentChairClick(tableId, chairId, event?.target);
+      await handleAssignmentChairClick(tableId, chairId, event?.target);
       return;
     }
     case "open-layout-library":
@@ -5715,7 +5728,7 @@ async function handleAction(action, dataset, event = null) {
     case "select-seat":
       state.selectedTableId = dataset.tableId;
       state.selectedSeatId = buildSeatKey(dataset.tableId, dataset.chairId);
-      handleAssignmentChairClick(
+      await handleAssignmentChairClick(
         dataset.tableId,
         dataset.chairId,
         event?.target,
@@ -6264,6 +6277,7 @@ async function updateBulkRsvp(status) {
       });
       await batch.commit();
     }
+    auditCustomerAction("guests_rsvp_updated", "guest", "", `RSVP set to ${status} for selected guests`);
     showToast("Selected guests updated.", "success");
   } catch (error) {
     console.error(error);
@@ -6345,7 +6359,7 @@ async function saveGuest(event) {
   const reducingAllowance = additionalGuests < Number(state.guestFormBaseline?.additionalGuestAllowance ?? existingGuest?.additionalGuestAllowance ?? existingGuest?.additionalGuests ?? additionalGuests);
   if (reducingAllowance && assignedSeats > 1 + additionalGuests) {
     elements.guestForm.additionalGuests.setCustomValidity(
-      `This guest already has ${assignedSeats} assigned chairs. Unassign or move seats before reducing the party size.`,
+      `This guest already has ${assignedSeats} assigned seats. Unassign or move seats before reducing the party size.`,
     );
     elements.guestForm.reportValidity();
     return;
@@ -6427,6 +6441,7 @@ async function saveGuest(event) {
       await batch.commit();
     }
     state.dirtyGuestForm = false;
+    auditCustomerAction(guestId ? "guest_updated" : "guest_added", "guest", guestId || "", guestId ? "A guest was updated" : "A guest was added");
     elements.guestModal.close();
     const publishingError = getPendingPublicationError();
     if (publishingError) showGuestSyncFailure(guestId, publishingError);
@@ -6438,6 +6453,7 @@ async function saveGuest(event) {
   } finally {
     state.guestSavePending = false;
     if (submitButton) submitButton.disabled = false;
+    renderChrome();
   }
 }
 
@@ -6451,6 +6467,7 @@ function openBulkAddModal() {
     return;
   }
   elements.bulkAddForm?.reset();
+  elements.bulkAddForm.side.value = getDefaultGuestSide(state.wedding);
   updateBulkAddPreview();
   document.body.classList.add("is-modal-open");
   elements.bulkAddModal.showModal();
@@ -6459,32 +6476,22 @@ function openBulkAddModal() {
   });
 }
 
-function parseBulkEntries(raw) {
-  return String(raw || "")
-    .split(/\r?\n/)
-    .map((line) => line.trim())
-    .filter(Boolean)
-    .map((line) => {
-      const parts = line.split(/[,،\t]/).map((part) => part.trim());
-      const additionalGuests = parseAdditionalGuests(parts[2] || "0");
-      return {
-        fullName: parts[0] || "",
-        phone: cleanPhone(parts[1] || ""),
-        additionalGuests: additionalGuests === null ? 0 : additionalGuests,
-      };
-    })
-    .filter((entry) => entry.fullName);
+function getBulkEntries() {
+  return parseBulkGuestEntries(elements.bulkAddForm?.entries?.value, normalizeWhatsAppPhone);
 }
 
-function updateBulkAddPreview() {
-  if (!elements.bulkAddPreview) {
-    return;
-  }
-  const entries = parseBulkEntries(elements.bulkAddForm?.entries?.value);
-  const withPhone = entries.filter((entry) => entry.phone).length;
+function updateBulkAddPreview(entries = getBulkEntries()) {
+  const errors = entries.filter((entry) => entry.errors.length);
   elements.bulkAddPreview.textContent = entries.length
-    ? `${entries.length} guest${entries.length === 1 ? "" : "s"} ready to add · ${withPhone} with phone numbers`
-    : "Nothing to add yet — paste at least one line.";
+    ? `${entries.length - errors.length} ready${errors.length ? `, ${errors.length} need${errors.length === 1 ? "s" : ""} fixing` : ""}`
+    : "Paste at least one guest line.";
+  elements.bulkAddErrors.replaceChildren(...errors.map((entry) => {
+    const item = document.createElement("li");
+    item.textContent = `Line ${entry.number}: ${entry.errors.join(" ")}`;
+    return item;
+  }));
+  elements.bulkAddErrors.hidden = errors.length === 0;
+  elements.bulkAddForm.entries.setAttribute("aria-invalid", String(errors.length > 0));
 }
 
 async function saveBulkGuests(event) {
@@ -6494,7 +6501,12 @@ async function saveBulkGuests(event) {
     showToast("Your role does not allow guest editing.", "error");
     return;
   }
-  const entries = parseBulkEntries(elements.bulkAddForm.entries.value);
+  const entries = getBulkEntries();
+  updateBulkAddPreview(entries);
+  if (entries.some((entry) => entry.errors.length)) {
+    elements.bulkAddForm.entries.focus();
+    return;
+  }
   if (!entries.length) {
     showToast("Add at least one guest line first.", "error");
     return;
@@ -6548,7 +6560,8 @@ async function saveBulkGuests(event) {
 
   let committed = 0;
   try {
-    const chunkSize = 200;
+    // Customer rules read each guest after the write to validate its projections.
+    const chunkSize = 15;
     for (let index = 0; index < payloads.length; index += chunkSize) {
       const chunk = payloads.slice(index, index + chunkSize);
       const batch = writeBatch(state.services.db);
@@ -6566,6 +6579,7 @@ async function saveBulkGuests(event) {
     }
     elements.bulkAddForm.reset();
     elements.bulkAddModal.close();
+    auditCustomerAction("guests_added", "guest", "", `${payloads.length} guest(s) added in bulk`);
     showToast(
       `${payloads.length} guest${payloads.length === 1 ? "" : "s"} added.`,
       "success",
@@ -6574,17 +6588,7 @@ async function saveBulkGuests(event) {
     console.error(error);
     if (committed > 0) {
       const remaining = entries.slice(committed);
-      elements.bulkAddForm.entries.value = remaining
-        .map((entry) =>
-          [
-            entry.fullName,
-            entry.phone,
-            entry.additionalGuests || "",
-          ]
-            .filter(Boolean)
-            .join(", "),
-        )
-        .join("\n");
+      elements.bulkAddForm.entries.value = remaining.map((entry) => entry.line).join("\n");
       updateBulkAddPreview();
       showToast(
         `Added ${committed} guests before an error occurred. The remaining lines are still in the box — press Add again to retry them.`,
@@ -6601,12 +6605,7 @@ async function confirmDeleteGuest(guestId) {
   if (!guest) {
     return;
   }
-  const confirmed = window.confirm(
-    `Delete ${guest.fullName}? This cannot be undone.`,
-  );
-  if (!confirmed) {
-    return;
-  }
+  if (!await confirmAction({ message: `Delete ${guest.fullName}? This cannot be undone.`, confirmLabel: "Delete guest", danger: true })) return false;
   await deleteGuest(guestId);
 }
 
@@ -6630,6 +6629,7 @@ async function updateGuest(guestId, payload) {
   showInvitationFlowStatus(can("canEditGuests") ? "Saving guest and syncing invitation…" : "Saving guest…", "info");
   try {
     await persistGuestAndInvitation(guestId, payload);
+    auditCustomerAction("guest_updated", "guest", guestId, "A guest was updated");
     const publishingError = can("canEditGuests") ? getPendingPublicationError() : null;
     if (publishingError) showGuestSyncFailure(guestId, publishingError);
     else showInvitationFlowStatus("Guest updated.", "success");
@@ -6717,6 +6717,7 @@ async function deleteGuest(guestId) {
     state.guests = syncGuestSeatingSummaries(nextGuests, state.tables);
     state.selectedSeatId = "";
     renderAll();
+      auditCustomerAction("guest_deleted", "guest", guestId, "A guest was deleted");
       showToast("Guest deleted.", "success");
   } catch (error) {
     console.error(error);
@@ -6801,7 +6802,7 @@ async function saveTable(event) {
     : false;
   if (removedAssignedSeat) {
     showToast(
-      "This seat count would remove an assigned chair. Unassign or move that party first.",
+      "This seat count would remove an assigned seat. Unassign or move that party first.",
       "error",
     );
     return;
@@ -6890,6 +6891,7 @@ async function saveTable(event) {
     state.dirtyTableForm = false;
     elements.tableModal.close();
     renderAll();
+      auditCustomerAction("table_saved", "table", state.selectedTableId, "A table was saved");
       showToast("Table saved successfully.", "success");
   } catch (error) {
     console.error(error);
@@ -6940,6 +6942,7 @@ async function duplicateTable(table) {
     });
     state.tables = hydrateTables([...state.tables, duplicated]);
     renderAll();
+      auditCustomerAction("table_duplicated", "table", table?.id, "A table was duplicated");
       showToast("Table duplicated.", "success");
   } catch (error) {
     console.error(error);
@@ -7057,6 +7060,7 @@ async function deleteTable(tableId) {
     state.activeModalOperation = "";
     elements.tableDeleteModal?.close();
     renderAll();
+      auditCustomerAction("table_deleted", "table", tableId, "A table was deleted");
       showToast("Table deleted.", "success");
   } catch (error) {
     console.error(error);
@@ -7076,6 +7080,17 @@ function setPlannerCanvasZoom(canvas, zoom) {
   if (!canvas) return;
   canvas.style.setProperty("--planner-zoom", String(zoom));
   canvas.style.setProperty("--planner-object-scale", String(Math.min(1, 1 / zoom)));
+  updateChairHitArea(canvas);
+}
+
+// Seats sit inside tables that are scaled again for their size, so the map zoom alone cannot size a 44 px touch
+// target. Measure how big a seat really renders and size the invisible touch area from that.
+function updateChairHitArea(canvas = document.getElementById("plannerCanvas")) {
+  if (!canvas) return;
+  const scales = [...canvas.querySelectorAll(".planner-chair")].slice(0, 12)
+    .map((chair) => chair.offsetWidth ? chair.getBoundingClientRect().width / chair.offsetWidth : 0).filter((s) => s > 0);
+  if (!scales.length) return;
+  canvas.style.setProperty("--chair-hit", `${Math.ceil(44 / Math.min(...scales))}px`);
 }
 
 function resetPlannerView() {
@@ -7429,7 +7444,7 @@ function openCenteredModal(
   requestAnimationFrame(() => modal.querySelector(focusSelector)?.focus());
 }
 
-function handleAssignmentChairClick(tableId, chairId, trigger) {
+async function handleAssignmentChairClick(tableId, chairId, trigger) {
   if (!can("canEditSeating")) {
     showToast("Your role does not allow seating edits.", "error");
     return;
@@ -7446,7 +7461,7 @@ function handleAssignmentChairClick(tableId, chairId, trigger) {
   rememberModalFocus(trigger);
   const assignment = getChairAssignment(tableId, chair);
   if (state.assignmentSession) {
-    toggleTemporaryChair(tableId, chairId);
+    await toggleTemporaryChair(tableId, chairId);
     return;
   }
   if (assignment?.guestId) {
@@ -7636,7 +7651,7 @@ function chooseGuestForAssignment(guestId) {
   renderActiveView();
 }
 
-function toggleTemporaryChair(tableId, chairId) {
+async function toggleTemporaryChair(tableId, chairId) {
   const session = state.assignmentSession;
   if (!session?.guestId) {
     return;
@@ -7657,12 +7672,12 @@ function toggleTemporaryChair(tableId, chairId) {
     return;
   }
   if (getChairAssignment(tableId, chair)) {
-    showToast("That chair is already assigned to another party.", "error");
+    showToast("That seat is already assigned to another party.", "error");
     return;
   }
   if (session.selectedChairs.length >= session.requiredSeats) {
     showToast(
-      "This party already has the required number of chairs selected.",
+      "This party already has the required number of seats selected.",
       "error",
     );
     return;
@@ -7670,12 +7685,8 @@ function toggleTemporaryChair(tableId, chairId) {
   if (session.selectedChairs.some((item) => item.tableId !== tableId)) {
     // Already split; no extra confirmation needed.
   } else if (session.startingTableId !== tableId) {
-    const confirmed = window.confirm(
-      "This will split the party across tables. Continue?",
-    );
-    if (!confirmed) {
-      return;
-    }
+    if (!await confirmAction({ message: "This will split the party across tables. Continue?", confirmLabel: "Split party" })) return;
+    if (state.assignmentSession !== session) return;
   }
   session.selectedChairs.push({ tableId, chairId });
   state.modalError = "";
@@ -7873,6 +7884,7 @@ async function savePartyAssignment(guest, selectedChairs, movingParty = false) {
     state.tables = savedTables;
     state.guests = savedGuests;
   }
+  auditCustomerAction("seat_assigned", "guest", guest?.id, "Seats were assigned");
 }
 
 function applyPartyAssignmentToTables(
@@ -8034,7 +8046,7 @@ function renderChairDetailsModal(guestId) {
   elements.chairDetailsContent.innerHTML = `
     <div class="da3wa-sheet__header">
       <div>
-        <p class="da3wa-eyebrow">Chair details</p>
+        <p class="da3wa-eyebrow">Seat details</p>
         <h2>${escapeHtml(guest.fullName || "Guest")}</h2>
       </div>
       <button class="da3wa-icon-button" type="button" data-close-modal="chairDetailsModal" aria-label="Close chair details">x</button>
@@ -8050,13 +8062,14 @@ function renderChairDetailsModal(guestId) {
             (assignment) => `
           <div class="chair-detail-row">
             <strong>${escapeHtml(partyMemberLabel(guest, assignment.partyMemberIndex))}</strong>
-            <span>${escapeHtml(assignment.tableName || assignment.tableId)} - Chair ${escapeHtml(String(assignment.seatNumber))}${assignment.partyMemberIndex === 0 ? " - Main guest chair" : ""}</span>
-            <button class="guest-quick-button" type="button" data-action="unassign-seat" data-table-id="${escapeAttribute(assignment.tableId)}" data-chair-id="${escapeAttribute(assignment.chairId)}" ${state.activeModalOperation ? 'disabled aria-disabled="true"' : ""}>Unassign this seat</button>
+            <span>${escapeHtml(assignment.tableName || assignment.tableId)} - Seat ${escapeHtml(String(assignment.seatNumber))}${assignment.partyMemberIndex === 0 ? " - Main guest seat" : ""}</span>
+            <button class="guest-quick-button guest-menu__item--danger" type="button" data-action="unassign-seat" data-table-id="${escapeAttribute(assignment.tableId)}" data-chair-id="${escapeAttribute(assignment.chairId)}" ${state.activeModalOperation ? 'disabled aria-disabled="true"' : ""}>Unassign this seat</button>
           </div>
         `,
           )
           .join("")}
       </div>
+      ${renderChairInvitationLink(guest, assignments)}
       ${state.modalError ? `<div class="planner-warning-list"><span class="warning-chip">${escapeHtml(state.modalError)}</span></div>` : ""}
     </div>
     <div class="da3wa-sheet__footer">
@@ -8067,6 +8080,20 @@ function renderChairDetailsModal(guestId) {
       </div>
     </div>
   `;
+}
+
+// Same copy flow as the guest list (data-action="copy-guest-invite"), so tokens behave identically.
+// Hidden where the list's copy would fail: Gender Reveal events (one shared link) and live roles that cannot edit guests.
+function renderChairInvitationLink(guest, assignments) {
+  if (isGenderRevealEvent(state.wedding)) return "";
+  if (state.mode === "live" && !can("canEditGuests")) return "";
+  const seat = assignments.find((item) => item.partyMemberIndex === 0) || assignments[0];
+  const name = guest.fullName || "Guest";
+  return `
+      <div class="chair-invitation-link">
+        <p><strong>${escapeHtml(name)}</strong> - Party of ${getPartySize(guest)}${seat ? ` - ${escapeHtml(seat.tableName || seat.tableId)}, Seat ${escapeHtml(String(seat.seatNumber))}` : ""}</p>
+        <button class="da3wa-button da3wa-button--secondary" type="button" data-action="copy-guest-invite" data-guest-id="${escapeAttribute(guest.id)}" aria-label="Copy invitation link for ${escapeAttribute(name)}"${state.activeModalOperation ? ' disabled aria-disabled="true"' : ""}>Copy invitation link</button>
+      </div>`;
 }
 
 function renderMovePartyModal(guestId) {
@@ -8085,7 +8112,8 @@ function renderMovePartyModal(guestId) {
         .filter(Boolean),
     ),
   ];
-  const tablesWithoutParty = clearGuestFromTables(state.tables, guestId);
+  const currentTableIds = new Set(currentAssignments.map((assignment) => assignment.tableId));
+  const otherTables = state.tables.filter((table) => !currentTableIds.has(table.id));
   elements.chairDetailsContent.innerHTML = `
     <div class="da3wa-sheet__header">
       <div>
@@ -8099,10 +8127,10 @@ function renderMovePartyModal(guestId) {
         <strong>Party size ${partySize}</strong>
         <span>Current table: ${escapeHtml(currentTables.join(", ") || "Not assigned")}</span>
       </div>
-      <p class="planner-note">Choose one destination table with enough available chairs. The move keeps the party together and only saves after every chair is confirmed available.</p>
+      <p class="planner-note">Choose one destination table with enough available seats. The move keeps the party together and only saves after every seat is confirmed available.</p>
       ${state.modalError ? `<div class="planner-warning-list"><span class="warning-chip">${escapeHtml(state.modalError)}</span></div>` : ""}
       <div class="chair-detail-list">
-        ${tablesWithoutParty
+        ${otherTables
           .map((table) => {
             const available = getAvailableChairs(table).length;
             const disabled =
@@ -8110,8 +8138,8 @@ function renderMovePartyModal(guestId) {
             return `
             <button class="assignment-guest-option ${disabled ? "is-disabled" : ""}" type="button" data-action="move-party-destination" data-guest-id="${escapeAttribute(guest.id)}" data-table-id="${escapeAttribute(table.id)}" ${disabled ? 'disabled aria-disabled="true"' : ""}>
               <strong>${escapeHtml(table.name || "Table")}</strong>
-              <span>${available} available chair${available === 1 ? "" : "s"} - needs ${partySize}</span>
-              <small>${available < partySize ? "Not enough free chairs for this party" : "Ready to move the full party here"}</small>
+              <span>${available} available seat${available === 1 ? "" : "s"} - needs ${partySize}</span>
+              <small>${available < partySize ? "Not enough free seats for this party" : "Ready to move the full party here"}</small>
             </button>
           `;
           })
@@ -8200,6 +8228,7 @@ async function confirmPartyUnassign(guestId) {
     state.pendingPartyUnassignId = "";
     state.pendingPartyUnassignSignature = "";
     elements.chairDetailsModal?.close();
+    auditCustomerAction("party_unassigned", "guest", guestId, "A party was unassigned from its seats");
     showToast("The entire party has been unassigned.", "success");
   } catch (error) {
     const diagnosticError = reportSeatingOperationFailure(
@@ -8319,7 +8348,7 @@ function renderSeatUnassignConfirmation(seat, assignment, guest) {
       </div>
       <div class="seat-unassign-confirmation__seat">
         <span>Selected seat</span>
-        <strong>${escapeHtml(seat.table.name)} · Chair ${escapeHtml(String(seat.chair.seatNumber))}</strong>
+        <strong>${escapeHtml(seat.table.name)} · Seat ${escapeHtml(String(seat.chair.seatNumber))}</strong>
       </div>
       <p class="seat-unassign-confirmation__note">Only this chair will be cleared. The guest and their other seat assignments will stay unchanged.</p>
       ${state.modalError ? `<div class="planner-warning-list"><span class="warning-chip">${escapeHtml(state.modalError)}</span></div>` : ""}
@@ -8434,6 +8463,7 @@ async function unassignSingleSeat(tableId, chairId) {
     state.tables = savedTables;
     state.guests = savedGuests;
     state.selectedSeatId = "";
+    auditCustomerAction("seat_unassigned", "seat", `${tableId}:${chairId}`, "A seat was unassigned");
     renderAll();
   }
 }
@@ -8497,9 +8527,10 @@ async function confirmMovePartyToTable(guestId, tableId) {
       (table) => table.id === tableId,
     ),
   ).length;
-  const confirmed = window.confirm(
-    `Move party of ${partySize} from ${currentTables.join(", ") || "unassigned"} to ${destination.name}? ${available} chair${available === 1 ? "" : "s"} available.`,
-  );
+  const confirmed = await confirmAction({
+    message: `Move party of ${partySize} from ${currentTables.join(", ") || "unassigned"} to ${destination.name}? ${available} seat${available === 1 ? "" : "s"} available.`,
+    confirmLabel: "Move party",
+  });
   if (!confirmed) {
     return;
   }
@@ -8547,7 +8578,7 @@ async function movePartyToTable(guestId, destinationTableId) {
     const availableChairs = getAvailableChairs(destination);
     if (availableChairs.length < partySize) {
       throw new Error(
-        `${destination.name} only has ${availableChairs.length} available chair${availableChairs.length === 1 ? "" : "s"} for a party of ${partySize}.`,
+        `${destination.name} only has ${availableChairs.length} available seat${availableChairs.length === 1 ? "" : "s"} for a party of ${partySize}.`,
       );
     }
     const selectedChairs = availableChairs
@@ -8620,7 +8651,7 @@ async function assignGuestToChair(tableId, chairId, guestId) {
     : null;
   if (!table || !targetChair || !guest) {
     showToast(
-      "That guest or chair is no longer available. The seating plan has been refreshed.",
+      "That guest or seat is no longer available. The seating plan has been refreshed.",
       "error",
     );
     return;
@@ -8732,9 +8763,17 @@ async function handleExport(type) {
     }
   })();
 
+  if (!filtered.length) {
+    showToast("No guests to export", "info");
+    return;
+  }
+
+  const preparedTokens = new Map();
   if (state.mode === "live" && can("canEditGuests")) {
     try {
-      await Promise.all(filtered.map((guest) => ensureGuestInvitationToken(guest.id)));
+      await Promise.all(filtered.map(async (guest) => {
+        preparedTokens.set(guest.id, await ensureGuestInvitationToken(guest.id));
+      }));
     } catch (error) {
       console.error("Guest export could not prepare invitation links.", error?.code || "unavailable");
       showToast("Export was not created because invitation links could not be saved.", "error");
@@ -8742,13 +8781,18 @@ async function handleExport(type) {
     }
   }
 
+  const { exportGuests } = await import("./export.js");
   const format = await exportGuests(
-    filtered.map((guest) => ({
-      ...guest,
-      checkedInAt: formatTimestamp(guest.checkedInAt),
-      inviteLink: guest.guestToken ? buildInviteLink(guest.guestToken, guest.id) : "",
-      qrCodeValue: guest.guestToken && isInvitationQrEnabled() ? buildCheckinLink(guest.guestToken) : "",
-    })),
+    filtered.map((guest) => {
+      const token = preparedTokens.get(guest.id) || guest.guestToken;
+      return {
+        ...guest,
+        phone: normalizeWhatsAppPhone(guest.phone),
+        checkedInAt: formatTimestamp(guest.checkedInAt),
+        inviteLink: token ? buildInviteLink(token, guest.id) : "",
+        qrCodeValue: token && isInvitationQrEnabled() ? buildCheckinLink(token) : "",
+      };
+    }),
     `guests-${type || "all"}`,
     { includeSeating: type === "tables", includeSide: eventUsesGuestSides(state.wedding) },
   );
@@ -8760,6 +8804,7 @@ async function handleExportGenderRevealResponses() {
   try {
     const snapshot = await getDocs(collection(state.services.db, "weddings", state.weddingId, "genderRevealResponses"));
     const responses = snapshot.docs.map((row) => row.data());
+    const { exportGenderRevealResponses } = await import("./export.js");
     const format = await exportGenderRevealResponses(responses, `gender-reveal-responses-${state.weddingId}`);
     showToast(`Gender Reveal response export completed as ${format.toUpperCase()}.`, "success");
   } catch (error) {
@@ -9118,6 +9163,7 @@ async function persistHallObjects(errorMessage = "Venue layout could not be save
       updatedAt: serverTimestamp(),
     });
     setSaveState("saved");
+    auditCustomerAction("hall_layout_updated", "layout", state.weddingId, "Venue layout updated");
     return true;
   } catch (error) {
     console.error(error);
@@ -9202,7 +9248,7 @@ async function duplicateDanceFloor(id) {
 
 async function deleteDanceFloor(id) {
   const item = state.hallObjects.find((object) => object.id === id && object.type === "dance-floor");
-  if (!item || !canManageSeatingLayout() || !window.confirm(`Delete ${item.label}? This cannot be undone.`)) return;
+  if (!item || !canManageSeatingLayout() || !await confirmAction({ message: `Delete ${item.label}? This cannot be undone.`, confirmLabel: "Delete", danger: true })) return;
   state.hallObjects = state.hallObjects.filter((object) => object.id !== id); state.selectedHallObjectId = "";
   if (await persistHallObjects("Dance floor could not be deleted.")) renderActiveView();
 }
@@ -9221,6 +9267,16 @@ function redirectToLogin(message = "session-required") {
 
 async function resolveAccessibleWeddingId(user) {
   const rememberedWeddingId = localStorage.getItem(lastWeddingStorageKey);
+  // A platform admin needs no membership. Use the remembered event if it still exists,
+  // otherwise go to the event list. Never scan events one by one.
+  if (await isPlatformAdmin(accountApi, state.services.db, user.uid)) {
+    if (rememberedWeddingId) {
+      try { if ((await getDoc(doc(state.services.db, "weddings", rememberedWeddingId))).exists()) return rememberedWeddingId; } catch { /* fall through to the list */ }
+    }
+    state.redirectingToEvents = true;
+    window.location.replace("./all-events.html");
+    return "";
+  }
   if (
     rememberedWeddingId &&
     (await canViewWedding(user, rememberedWeddingId))
@@ -9323,28 +9379,9 @@ function setSaveState(value) {
 }
 
 async function copyText(text) {
-  try {
-    if (navigator.clipboard?.writeText) {
-      await navigator.clipboard.writeText(text);
-    } else {
-      const helper = document.createElement("textarea");
-      helper.value = text;
-      helper.setAttribute("readonly", "");
-      helper.style.position = "fixed";
-      helper.style.opacity = "0";
-      document.body.appendChild(helper);
-      helper.select();
-      const copied = document.execCommand("copy");
-      helper.remove();
-      if (!copied) throw new Error("Clipboard access is unavailable.");
-    }
-    showToast("Copied to clipboard.", "success");
-    return true;
-  } catch (error) {
-    console.error(error);
-    showToast("Could not copy the link automatically.", "error");
-    return false;
-  }
+  const copied = await copyWithFallback(text, { title: "Copy link" });
+  if (copied) showToast("Copied to clipboard.", "success");
+  return copied;
 }
 
 function percentage(value, total) {
@@ -9416,36 +9453,9 @@ function buildWhatsAppReminderLink(guest) {
   return `https://wa.me/${phone}?text=${encodeURIComponent(message)}`;
 }
 
-function cleanPhone(phone) {
-  return normalizeDigits(String(phone || "")).replace(/[^\d]/g, "");
-}
-
-// Maps Arabic-Indic (٠-٩) and Extended Arabic-Indic (۰-۹) digits to ASCII.
-function normalizeDigits(value) {
-  return String(value ?? "").replace(/[٠-٩۰-۹]/g, (digit) =>
-    String(digit.charCodeAt(0) & 0xf),
-  );
-}
-
-// wa.me links require country-code-prefixed numbers with no leading zero.
-// Local formats like 0501234567 get the wedding's country code prepended.
 function normalizeWhatsAppPhone(phone) {
-  const raw = String(phone || "").trim();
-  const digits = cleanPhone(phone);
-  if (!digits) {
-    return "";
-  }
-  if (raw.startsWith("+")) {
-    return digits;
-  }
-  if (digits.startsWith("00")) {
-    return digits.replace(/^0+/, "");
-  }
-  if (digits.startsWith("0")) {
-    const countryCode = String(state.wedding?.whatsAppCountryCode || state.wedding?.whatsappCountryCode || "971");
-    return `${countryCode}${digits.replace(/^0+/, "")}`;
-  }
-  return digits;
+  const countryCode = state.wedding?.whatsAppCountryCode || state.wedding?.whatsappCountryCode || "971";
+  return normalizeGuestPhone(phone, countryCode);
 }
 
 function buildInviteLink(guestToken, guestId = "") {
@@ -9556,7 +9566,7 @@ function renderMissingSeatsModal(blocked, side = "all") {
       <button class="da3wa-icon-button" type="button" data-close-modal="missingSeatsModal" aria-label="Close missing seats warning">x</button>
     </div>
     <div class="da3wa-sheet__body">
-      <p class="planner-note">Every person in an invitation needs an assigned chair before sending. You can still open the sender now if you want to send invitations before seating is complete.</p>
+      <p class="planner-note">Every person in an invitation needs an assigned seat before sending. You can still open the sender now if you want to send invitations before seating is complete.</p>
       <div class="planner-warning-list">
         ${blocked
           .map(
@@ -9772,14 +9782,7 @@ function showGuestSyncFailure(guestId, error) {
 
 function showToast(message, tone = "info") {
   elements.toastRail.querySelector(".toast--invitation-flow")?.remove();
-  const toast = document.createElement("div");
-  toast.className = `toast toast--${tone}`;
-  toast.textContent = message;
-  elements.toastRail.appendChild(toast);
-  window.setTimeout(() => {
-    toast.classList.add("is-leaving");
-    window.setTimeout(() => toast.remove(), 260);
-  }, 2600);
+  notify(message, tone);
 }
 
 function escapeHtml(value) {

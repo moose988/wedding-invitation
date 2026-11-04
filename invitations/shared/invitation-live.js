@@ -1,4 +1,4 @@
-import { generateTableChairs } from "../../seating-utils.js";
+import { generateTableChairs } from "../../seating-utils.js?v=20261018-invitation-seat-map";
 
 export function invitationReadError(error) {
   const code = String(error?.code || "").replace(/^firestore\//, "");

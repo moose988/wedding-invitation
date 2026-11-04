@@ -329,10 +329,18 @@ export function createHandler({ store, files, purgePhotoFiles, verifyOwner, secr
   const songChanged = () => new HttpError(409, 'The song changed in another tab. Reload and try again.', 'SONG_CONFLICT');
   const songIncomplete = () => new HttpError(400, 'The upload did not finish. Please retry.', 'UPLOAD_INCOMPLETE');
   const songResponse = song => reply(200, { eventId: song.eventId, size: song.size, updatedAt: song.updatedAt });
-  // Keep the previous key in the record until the next successful change so a retry can complete cleanup.
+  // Immediate cleanup is best effort across invocations. The attempt remains
+  // queued until every exact-key purge succeeds.
   async function cleanSong(song) {
-    const keys = [song?.previousKey, song?.uploadId && songUploadKey(song.eventId, song.uploadId)].filter(Boolean);
+    if (!song) return;
+    const keys = [song.previousKey, song.uploadId && songUploadKey(song.eventId, song.uploadId)].filter(Boolean);
     await purgeSongFiles(files, keys);
+    if (song.revision) await store.deleteSongAttempt(song);
+  }
+
+  async function discardSongAttempt(attempt) {
+    await purgeSongFiles(files, [attempt.key]);
+    await store.deleteSongAttempt(attempt);
   }
 
   // Event songs for invitations. Admins upload; anyone with the event id can play the current song.
@@ -368,9 +376,12 @@ export function createHandler({ store, files, purgePhotoFiles, verifyOwner, secr
 
       const revision = newSongRevision(), key = songKey(eventId, id, revision);
       const source = songUploadKey(eventId, id);
+      const attempt = { eventId, revision, key, uploadId: id, ...(current?.key ? { previousKey: current.key } : {}) };
+      await store.putSongAttempt(attempt, now());
       // Copy to an attempt-specific key: the upload URL can still overwrite the staging key,
       // and two retries for one upload must never delete or change each other's candidate.
       if (!await files.copy(source, key)) {
+        await discardSongAttempt(attempt);
         const winner = await store.getSong(eventId);
         if (winner?.uploadId === id) return songResponse(winner);
         throw songIncomplete();
@@ -383,9 +394,9 @@ export function createHandler({ store, files, purgePhotoFiles, verifyOwner, secr
         const start = id3Skip(await files.readRange(key, Math.min(10, head.size)) || Buffer.alloc(0));
         const frames = start < head.size ? await files.readRange(key, Math.min(4096, head.size - start), start) : null;
         if (!frames || !looksLikeMp3(frames)) throw new HttpError(400, 'This file is not an MP3.', 'INVALID_AUDIO');
-        song = { eventId, revision, key, uploadId: id, size: head.size, updatedAt: now(), updatedBy: a.uid, ...(current?.key ? { previousKey: current.key } : {}) };
+        song = { ...attempt, size: head.size, updatedAt: now(), updatedBy: a.uid };
       } catch (error) {
-        await purgeSongFiles(files, [key]);
+        await discardSongAttempt(attempt);
         throw error;
       }
       try {
@@ -402,7 +413,7 @@ export function createHandler({ store, files, purgePhotoFiles, verifyOwner, secr
         if (winner?.key === key) { await cleanSong(winner); return songResponse(winner); }
         // An ambiguous write could still publish while its base revision is current.
         if (!error.conflict && songRevision(winner) === baseRevision) throw error;
-        await purgeSongFiles(files, [key]);
+        await discardSongAttempt(attempt);
         if (winner?.uploadId === id) { await cleanSong(winner); return songResponse(winner); }
         throw songChanged();
       }
@@ -414,6 +425,7 @@ export function createHandler({ store, files, purgePhotoFiles, verifyOwner, secr
       // Keep a short-lived fence even when no song exists, so an upload granted before
       // the delete cannot bring it back. The fence outlives all outstanding upload grants.
       const removed = { eventId, revision: newSongRevision(), ttl: Math.ceil(now() / 1000) + 86400, ...(current?.key ? { previousKey: current.key } : {}) };
+      await store.putSongAttempt(removed, now());
       await store.putSong(removed, baseRevision);
       await cleanSong(removed);
       return reply(204);

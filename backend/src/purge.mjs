@@ -1,4 +1,5 @@
-import { DEMO_ID, TOMBSTONE_ID, photoObjects, validBucketId } from './lib.mjs';
+import { purgeSongFiles } from './files.mjs';
+import { DEMO_ID, TOMBSTONE_ID, photoObjects, songUploadKey, validBucketId } from './lib.mjs';
 
 // Permanent delete of one guest photo. Takes only a tombstone id, and acts only if that tombstone exists and nothing
 // still owns the upload: not a live photo, not an owner's audit record. This is the only path from the API to version
@@ -63,7 +64,7 @@ export const createDemoSweep = ({ store, files, now = Date.now }) => async (_eve
 // marked deleting on the record itself. It also repeats the purge of each guest-deleted photo once its tombstone is
 // due, which catches a failed first purge and a backup that was already running when the guest deleted.
 export const createAdminSweep = ({ store, files, now = Date.now }) => async (_event, context) => {
-  const hasTime = timeLeft(context), result = { purged: 0, unfinished: 0, refused: 0, failed: 0, photos: 0 };
+  const hasTime = timeLeft(context), result = { purged: 0, unfinished: 0, refused: 0, failed: 0, photos: 0, songs: 0 };
   let cursor;
   do {
     const page = await store.listDueTombstones({ now: now(), cursor });
@@ -86,6 +87,25 @@ export const createAdminSweep = ({ store, files, now = Date.now }) => async (_ev
         const { done } = await purgeBucket({ store, files, bucketId: id, hasTime });
         result[done ? 'purged' : 'unfinished'] += 1;
       } catch (error) { result.failed += 1; console.error(JSON.stringify({ sweep: 'admin', bucketId: id, error: error.name || error.message })); }
+    }
+    cursor = page.nextCursor;
+  } while (cursor);
+  do {
+    const page = await store.listDueSongAttempts({ now: now(), cursor });
+    for (const key of page.keys) {
+      if (!hasTime()) { result.unfinished += 1; continue; }
+      try {
+        const attempt = await store.claimSongAttempt(key, now());
+        if (!attempt) continue;
+        // An unpublished copy cannot become current after the claim. A published
+        // copy belongs to the active song or a later attempt that replaced it.
+        const keys = attempt.published
+          ? [attempt.previousKey, attempt.uploadId && songUploadKey(attempt.eventId, attempt.uploadId)]
+          : [attempt.key];
+        await purgeSongFiles(files, keys.filter(Boolean));
+        await store.deleteSongAttempt(attempt);
+        result.songs += 1;
+      } catch (error) { result.failed += 1; console.error(JSON.stringify({ sweep: 'song', code: error.code || error.name })); }
     }
     cursor = page.nextCursor;
   } while (cursor);

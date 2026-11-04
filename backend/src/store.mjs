@@ -16,10 +16,13 @@ import { BatchGetCommand, BatchWriteCommand, DeleteCommand, GetCommand, PutComma
 // The size cap: limitBytes = sum(free) + sum(bytes), always. Each shard holds an allowance and spends it under the
 // condition free >= delta inside the commit transaction, so the cap cannot be exceeded at all, by any number of writers.
 export const SHARDS = 32, DEMO_SHARDS = 4, TOMB_GRACE_MS = 5 * 60 * 1000;
+// The API invocation and its S3 requests must have stopped before the sweep claims an attempt.
+export const SONG_CLEANUP_GRACE_MS = 5 * 60 * 1000;
 const pk = id => `BUCKET#${id}`;
 const metaKey = id => ({ pk: pk(id), sk: 'META' });
 const shardKey = (id, n) => ({ pk: pk(id), sk: `COUNTER#${String(n).padStart(2, '0')}` });
 const photoKey = (id, pid) => ({ pk: pk(id), sk: `PHOTO#${pid}` });
+const songAttemptKey = (eventId, revision) => ({ pk: `EVENT#${eventId}`, sk: `SONGATTEMPT#${revision}` });
 const stamp13 = t => String(t).padStart(13, '0');
 const HIDDEN = new Set(['pk', 'sk', 'gsi1pk', 'gsi1sk', 'gsi2pk', 'gsi2sk', 'gsi3pk', 'gsi3sk', 'gsi4pk', 'gsi4sk', 'ttl']);
 const strip = item => { if (!item) return item; const out = {}; for (const [k, v] of Object.entries(item)) if (!HIDDEN.has(k)) out[k] = v instanceof Set ? [...v] : v; return out; };
@@ -318,12 +321,30 @@ export function createStore({ client, table, random = Math.random, sleep = ms =>
       const condition = baseRevision === null
         ? 'attribute_not_exists(#pk)'
         : '#revision = :base OR (attribute_not_exists(#revision) AND #key = :base)';
-      return send(new PutCommand({
+      // Publish the new pointer and mark the attempt together. A sweep that
+      // already claimed the attempt prevents a late write from publishing it.
+      const Put = {
         TableName: table, Item: { pk: `EVENT#${song.eventId}`, sk: 'SONG', ...song },
         ConditionExpression: condition, ExpressionAttributeNames: names(condition),
         ...(baseRevision === null ? {} : { ExpressionAttributeValues: { ':base': baseRevision } }),
-      }));
+      };
+      const Update = {
+        TableName: table, Key: songAttemptKey(song.eventId, song.revision),
+        UpdateExpression: 'SET #published = :yes',
+        ConditionExpression: 'attribute_exists(#pk) AND attribute_not_exists(#purging)',
+        ExpressionAttributeNames: names('#published #pk #purging'),
+        ExpressionAttributeValues: { ':yes': true },
+      };
+      return send(new TransactWriteCommand({ ClientRequestToken: song.revision, TransactItems: [{ Put }, { Update }] }));
     },
+    putSongAttempt({ eventId, revision, uploadId, key, previousKey }, stamp) {
+      const dueAt = stamp + SONG_CLEANUP_GRACE_MS;
+      return send(new PutCommand({ TableName: table, Item: {
+        ...songAttemptKey(eventId, revision), eventId, revision, uploadId, key, previousKey,
+        dueAt, gsi2pk: 'SONGCLEANUP', gsi2sk: `${stamp13(dueAt)}#${revision}`,
+      } }));
+    },
+    deleteSongAttempt: ({ eventId, revision }) => send(new DeleteCommand({ TableName: table, Key: songAttemptKey(eventId, revision) })),
     async getSongUpload(eventId, id) {
       const { Item } = await send(new GetCommand({ TableName: table, Key: { pk: `EVENT#${eventId}`, sk: `UPLOAD#${id}` }, ConsistentRead: true }));
       return strip(Item);
@@ -332,6 +353,25 @@ export function createStore({ client, table, random = Math.random, sleep = ms =>
       TableName: table, Item: { pk: `EVENT#${eventId}`, sk: `UPLOAD#${id}`, baseRevision, expiresAt, ttl: Math.ceil(expiresAt / 1000) },
     })),
     // --- Used by the sweeps only ---
+    async listDueSongAttempts({ now, limit = 100, cursor }) {
+      const fixed = { gsi2pk: 'SONGCLEANUP' };
+      const page = await query({ index: 'GSI2', keyExpr: '#gsi2pk = :p AND #gsi2sk <= :t', values: { ':p': 'SONGCLEANUP', ':t': `${stamp13(now)}~` }, limit, cursor, fixed, allowed: ['gsi2sk', 'pk', 'sk'] });
+      return { keys: page.items.map(({ pk, sk }) => ({ pk, sk })), nextCursor: page.nextCursor };
+    },
+    async claimSongAttempt(Key, now) {
+      const condition = 'attribute_exists(#pk) AND #dueAt <= :now';
+      try {
+        const { Attributes } = await send(new UpdateCommand({
+          TableName: table, Key, ConditionExpression: condition, UpdateExpression: 'SET #purging = :yes',
+          ExpressionAttributeNames: names(condition, '#purging'), ExpressionAttributeValues: { ':now': now, ':yes': true },
+          ReturnValues: 'ALL_NEW',
+        }));
+        return strip(Attributes);
+      } catch (error) {
+        if (!error.conflict) throw error;
+        return null; // the API or another sweep already completed this attempt
+      }
+    },
     async markDeleting(id, meta, { stamp, by, queue }) {
       const fields = { status: 'deleting', deleteRequestedAt: meta.deleteRequestedAt || stamp, updatedAt: stamp, ...(by ? { deleteRequestedBy: by } : {}), ...(queue ? { gsi2pk: 'PURGE', gsi2sk: `${stamp13(stamp)}#${id}` } : {}) };
       const { Attributes } = await send(new UpdateCommand(setFields(metaKey(id), fields)));

@@ -376,7 +376,7 @@ Resources:
                 - !Sub 'arn:aws:s3:::${BackupBucketName}/incoming/demo-*'
       Events:
         Schedule: { Type: Schedule, Properties: { Schedule: 'rate(15 minutes)' } }
-  # Purges buckets an admin deleted through the API, and repeats the purge of guest-deleted photos. Separate from the demo sweep so that one stays narrow.
+  # Purges buckets an admin deleted through the API, repeats guest-photo purges, and reconciles interrupted song writes.
   AdminSweepFunction:
     Type: AWS::Serverless::Function
     Properties:
@@ -400,7 +400,11 @@ Resources:
             - Effect: Allow
               Action: [dynamodb:Query]
               Resource: !Sub '${Table.Arn}/index/GSI2'
-              Condition: { 'ForAllValues:StringLike': { 'dynamodb:LeadingKeys': ['PURGE', 'PHOTOPURGE'] } }
+              Condition: { 'ForAllValues:StringLike': { 'dynamodb:LeadingKeys': ['PURGE', 'PHOTOPURGE', 'SONGCLEANUP'] } }
+            - Effect: Allow
+              Action: [dynamodb:UpdateItem]
+              Resource: !GetAtt Table.Arn
+              Condition: { 'ForAllValues:StringLike': { 'dynamodb:LeadingKeys': ['EVENT#*'] } }
             - Effect: Allow
               Action: [s3:ListBucketVersions]
               Resource: [!Sub 'arn:aws:s3:::pbs-${Stage}-${AWS::AccountId}-${AWS::Region}', !Sub 'arn:aws:s3:::${BackupBucketName}']
@@ -409,6 +413,7 @@ Resources:
               Resource:
                 - !Sub 'arn:aws:s3:::pbs-${Stage}-${AWS::AccountId}-${AWS::Region}/buckets/*'
                 - !Sub 'arn:aws:s3:::pbs-${Stage}-${AWS::AccountId}-${AWS::Region}/incoming/*'
+                - !Sub 'arn:aws:s3:::pbs-${Stage}-${AWS::AccountId}-${AWS::Region}/audio/*'
                 - !Sub 'arn:aws:s3:::${BackupBucketName}/buckets/*'
       Events:
         Schedule: { Type: Schedule, Properties: { Schedule: 'rate(5 minutes)' } }

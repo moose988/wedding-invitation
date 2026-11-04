@@ -11,7 +11,7 @@ import { createFiles, purgeSongFiles } from '../src/files.mjs';
 import { createPurgeInvoker } from '../src/invoke.mjs';
 import { createDemoSweep, createAdminSweep, purgeTombstone } from '../src/purge.mjs';
 import { BUCKET_SIZES_GB, DEMO_EXPIRY_HOURS, bytesForGb, estimatePhotos, overdueInfo } from '../src/sizes.mjs';
-import { classify, createStore } from '../src/store.mjs';
+import { classify, createStore, SONG_CLEANUP_GRACE_MS } from '../src/store.mjs';
 import { CUSTOMER, FakeDynamo, SECRET, counterTotals, details, fakeFiles, harness, jpeg, pages } from './helpers.mjs';
 
 async function ready(h, body) {
@@ -813,7 +813,7 @@ test('a song commit recovers from a failed write or a lost acknowledgement witho
     const send = dynamo.send.bind(dynamo);
     let interrupted = false;
     dynamo.send = async command => {
-      if (!interrupted && command.input.Item?.sk === 'SONG') {
+      if (!interrupted && command.input.TransactItems?.[0]?.Put?.Item?.sk === 'SONG') {
         interrupted = true;
         if (written) await send(command);
         throw new Error('Simulated lost DynamoDB response');
@@ -832,6 +832,50 @@ test('a song commit recovers from a failed write or a lost acknowledgement witho
     assert.equal((await h.call('DELETE', `/events/${eventId}/song`, { token: 'admin-token' })).status, 204);
     assert.deepEqual([...h.files.photos.keys()], []);
   }
+});
+
+test('the sweep removes an abandoned song copy after both publication attempts fail', async () => {
+  const dynamo = new FakeDynamo();
+  const send = dynamo.send.bind(dynamo);
+  let failures = 2, stamp = Date.now();
+  dynamo.send = async command => {
+    if (failures && command.input.TransactItems?.[0]?.Put?.Item?.sk === 'SONG') {
+      failures -= 1;
+      throw new Error('Simulated DynamoDB outage');
+    }
+    return send(command);
+  };
+  const h = harness({ dynamo, clock: () => stamp });
+  const eventId = 'song-outage';
+  const root = `/events/${eventId}/song`;
+  const token = 'admin-token';
+  const { grant, commit } = await songUpload(h, eventId, mp3(), token);
+  assert.equal(commit.status, 500);
+  const orphan = [...h.files.photos.keys()].find(key => key.startsWith(`audio/${eventId}/`));
+  assert.ok(orphan);
+  const sweep = createAdminSweep({ store: h.store, files: h.files, now: () => stamp });
+  assert.equal((await sweep()).songs, 0, 'a live writer still owns its candidate');
+  const retried = await h.call('POST', `${root}/commit`, { token, body: { uploadId: grant.body.uploadId } });
+  assert.equal(retried.status, 200);
+  const active = (await h.store.getSong(eventId)).key;
+  assert.notEqual(active, orphan);
+  stamp += SONG_CLEANUP_GRACE_MS;
+  assert.equal((await sweep()).songs, 1);
+  assert.deepEqual([...h.files.photos.keys()], [active]);
+  assert.equal((await h.call('GET', root)).status, 200);
+});
+
+test('claiming an abandoned song attempt prevents late publication', async () => {
+  const h = harness();
+  const attempt = { eventId: 'song-fenced', revision: 'unique-revision', key: 'candidate' };
+  const stamp = Date.now();
+  await h.store.putSongAttempt(attempt, stamp);
+  const dueAt = stamp + SONG_CLEANUP_GRACE_MS;
+  const { keys } = await h.store.listDueSongAttempts({ now: dueAt });
+  assert.equal(keys.length, 1);
+  assert.ok(await h.store.claimSongAttempt(keys[0], dueAt));
+  await assert.rejects(h.store.putSong(attempt, null), { conflict: true });
+  assert.equal(await h.store.getSong(attempt.eventId), undefined);
 });
 
 test('parallel song commits and stale retries cannot erase or replace the winner', async () => {

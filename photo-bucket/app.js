@@ -7,7 +7,8 @@ import { guestUrl, readGuestUrl, validId, dateLabel, isLoopback } from './links.
 import { LIMITS, validateFile, friendlyError } from './limits.js';
 import { uploadQueue, ONLINE_ATTEMPTS } from './transport.js';
 import { skeleton } from '../skeleton.js';
-import { runFromEvent } from '../action-feedback.js';
+import { confirmAction, copyWithFallback, runFromEvent } from '../action-feedback.js';
+import { escapeHtml as h } from '../invitations/shared/invitation-utils.js';
 import { decode, rotatedCanvas, cropRect, processImage } from './images.js';
 import { qrCanvas, canvasBlob } from './qr.js';
 import { download, makeZip, photoFilename, splitZipParts, zipPartName } from './zip.js';
@@ -18,7 +19,6 @@ let totalPhotos = null, nextCursor = null, firstPageIds = new Set(), extraPages 
 try { if (localStorage.getItem('photo-bucket:sort') === 'oldest') sortOrder = 'oldest'; } catch { /* storage blocked: default order */ }
 const jobUrls = new Map();
 const $ = selector => document.querySelector(selector);
-const h = value => String(value ?? '').replace(/[&<>"']/g, c => ({ '&':'&amp;', '<':'&lt;', '>':'&gt;', '"':'&quot;', "'":'&#39;' }[c]));
 const icons = {
   camera: '<rect x="3" y="6" width="18" height="15" rx="3"/><path d="m8 6 1-3h6l1 3"/><circle cx="12" cy="13" r="4"/>',
   gallery: '<rect x="3" y="3" width="18" height="18" rx="3"/><circle cx="8" cy="8" r="1.5"/><path d="m3 17 5-5 4 4 4-6 5 7"/>',
@@ -26,7 +26,7 @@ const icons = {
 };
 const icon = name => `<svg viewBox="0 0 24 24" aria-hidden="true">${icons[name]}</svg>`;
 const brand = back => `<nav class="pb-brand" aria-label="Photo Bucket">${back ? '<a class="pb-back" href="./all-events.html"><span aria-hidden="true">‹</span> Back to my list</a>' : ''}<span class="pb-wordmark">${icon('camera')} PHOTO BUCKET</span><span class="pb-demo">${online ? 'Live' : 'Local demo · this browser'}</span></nav>`;
-const meta = () => `<p class="pb-event-meta"><span>${h(dateLabel(bucket.date))}</span><span>${h(bucket.location)}</span></p>`;
+const meta = () => `<p class="pb-event-meta"><span>${h(dateLabel(bucket.date))}</span><span dir="auto">${h(bucket.location)}</span></p>`;
 const frozenNotice = () => `<div id="frozenNotice" class="pb-notice pb-notice--frozen" role="status" ${bucket.frozen ? '' : 'hidden'}><strong>Everything is paused.</strong> Guests and the customer see a "paused until the event" message, and nothing is running. Your photos are safe. Press "Resume everything" when you are ready.</div>`;
 const notice = () => `<div id="pauseNotice" class="pb-notice" role="status" ${bucket.paused ? '' : 'hidden'}>New photos are paused. ${owner ? 'Resume whenever you are ready.' : 'Your host will welcome more photos soon. You can still edit your saved moments.'}</div>`;
 function message(text, error = false) { const node = $('#message'); if (node) { node.textContent = text; node.classList.toggle('pb-error', error); } }
@@ -39,8 +39,8 @@ function savedName() { try { return localStorage.getItem(nameKey()) || ''; } cat
 function currentName() { const value = ($('#uploaderName')?.value || '').trim().slice(0, 40); try { if (value) localStorage.setItem(nameKey(), value); } catch { /* storage blocked: not remembered */ } return value; }
 function thumb(blob) { const url = URL.createObjectURL(blob); galleryUrls.push(url); return url; }
 function dialogs() {
-  return `<dialog id="viewer" class="pb-dialog pb-viewer" aria-labelledby="viewerTitle"><header><h2 id="viewerTitle">A shared moment</h2><button type="button" class="pb-icon-button" data-close="viewer" aria-label="Close photo viewer">×</button></header><button type="button" class="pb-nav pb-nav-prev" id="prevPhoto" aria-label="Previous photo">‹</button><img id="viewerImage" alt="Selected event photo" draggable="false"><button type="button" class="pb-nav pb-nav-next" id="nextPhoto" aria-label="Next photo">›</button><div class="pb-dialog-body"><p id="viewerCaption"></p></div></dialog>
-  <dialog id="confirmDelete" class="pb-dialog" aria-labelledby="deleteTitle"><header><h2 id="deleteTitle">Delete this photo?</h2></header><div class="pb-dialog-body"><p>${owner ? `This hides the photo and frees its space. A QD Systems admin can restore it, as a smaller backup copy.` : `This permanently deletes your photo${online ? '' : ' from this browser'}. It cannot be undone, and nobody can bring it back.`}</p><p id="deleteError" class="pb-error" role="alert"></p></div><footer><button type="button" data-close="confirmDelete" autofocus>Keep photo</button><button id="deleteConfirm" type="button" class="pb-danger">${owner ? 'Delete photo' : 'Delete permanently'}</button></footer></dialog>
+  return `<dialog id="viewer" class="pb-dialog pb-viewer" aria-labelledby="viewerTitle"><header><h2 id="viewerTitle">A shared moment</h2><button type="button" class="pb-icon-button" data-close="viewer" aria-label="Close photo viewer">×</button></header><button type="button" class="pb-nav pb-nav-prev" id="prevPhoto" aria-label="Previous photo">‹</button><img id="viewerImage" alt="Selected event photo" draggable="false"><button type="button" class="pb-nav pb-nav-next" id="nextPhoto" aria-label="Next photo">›</button><div class="pb-dialog-body"><p id="viewerCaption" dir="auto"></p></div></dialog>
+  <dialog id="confirmDelete" class="pb-dialog" aria-labelledby="deleteTitle"><header><h2 id="deleteTitle">Delete this photo?</h2></header><div class="pb-dialog-body"><p>${owner ? `This hides the photo and frees its space. A QD Events admin can restore it from a smaller backup copy.` : `This permanently deletes your photo${online ? '' : ' from this browser'}. It cannot be undone, and nobody can bring it back.`}</p><p id="deleteError" class="pb-error" role="alert"></p></div><footer><button type="button" data-close="confirmDelete" autofocus>Keep photo</button><button id="deleteConfirm" type="button" class="pb-danger">${owner ? 'Delete photo' : 'Delete permanently'}</button></footer></dialog>
   ${owner ? '' : `<dialog id="editor" class="pb-dialog pb-editor" aria-labelledby="editorTitle"><header><h2 id="editorTitle">Make it yours</h2><button type="button" class="pb-icon-button" data-close="editor" aria-label="Cancel photo editing">×</button></header><div class="pb-dialog-body"><div class="pb-editor-stage"><canvas id="editCanvas" aria-label="Photo preview with crop boundary"></canvas></div><div class="pb-editor-tools"><button type="button" id="rotateButton">↻ Rotate</button><button type="button" id="replaceButton">Replace photo</button></div><div class="pb-crop-controls"><label>Crop size <input id="cropSize" type="range" min="40" max="100" value="100"></label><label>Horizontal position<input id="cropX" type="range" min="0" max="100" value="50"></label><label>Vertical position<input id="cropY" type="range" min="0" max="100" value="50"></label></div><p class="pb-subtle">Move the crop with the sliders. Save keeps the area inside the frame.</p><p id="editError" class="pb-error" role="alert"></p><input id="replaceInput" type="file" accept="image/jpeg,image/png,image/webp,image/avif" hidden></div><footer><button type="button" data-close="editor">Cancel</button><button id="saveEdit" type="button" class="pb-primary">Save photo</button></footer></dialog>`}`;
 }
 async function boot() {
@@ -67,7 +67,7 @@ async function boot() {
       }));
     }
     else {
-      owner ? renderOwner() : renderGuest(); bindCommon(); bindViewer();
+      owner ? renderOwner() : renderGuest(); bindCommon(); bindViewer(); bindSort();
       if (owner) { bindOwner(); await renderShare(); setInterval(autoRefresh, 5000); }
       else { bindGuest(); queue = uploadQueue({ adapter, bucketId: bucket.id, changed: onJobChange, transport: defaultTransport() }); await loadQueue(); await queue.start(); }
       await refreshGallery();
@@ -79,20 +79,22 @@ async function boot() {
   }
 }
 function renderGuest() {
-  app.innerHTML = `${brand(false)}<header class="pb-hero"><p class="pb-kicker">A day to remember, together</p><h1 class="pb-event-title" id="eventName">${h(bucket.name)}</h1><div id="eventMeta">${meta()}</div><div class="pb-rule"></div><p class="pb-welcome">The little moments.<br>The big feelings. Your point of view.</p></header>
-  <section class="pb-upload" aria-labelledby="uploadHeading"><h2 id="uploadHeading">Share a little joy</h2><p class="pb-subtle">Your memories belong in the picture.</p>${bucket.showUploaderNames ? `<label class="pb-name-field">Your name (optional)<input id="uploaderName" maxlength="40" autocomplete="name" placeholder="So the hosts know who shared it" value="${h(savedName())}"></label>` : ''}<div class="pb-upload-actions"><button type="button" class="pb-primary" id="cameraButton">${icon('camera')}Take a photo</button><button type="button" id="galleryButton">${icon('gallery')}Choose from gallery</button></div><input id="cameraInput" type="file" accept="image/*" capture="environment" hidden><input id="galleryInput" type="file" accept="image/*" multiple hidden>
+  app.innerHTML = `${brand(false)}<header class="pb-hero"><p class="pb-kicker">A day to remember, together</p><h1 class="pb-event-title" id="eventName" dir="auto">${h(bucket.name)}</h1><div id="eventMeta">${meta()}</div><div class="pb-rule"></div><p class="pb-welcome">The little moments.<br>The big feelings. Your point of view.</p></header>
+  <section class="pb-upload" aria-labelledby="uploadHeading"><h2 id="uploadHeading">Share a little joy</h2><p class="pb-subtle">Your memories belong in the picture.</p>${bucket.showUploaderNames ? `<label class="pb-name-field">Your name (optional)<input id="uploaderName" dir="auto" maxlength="40" autocomplete="name" placeholder="So the hosts know who shared it" value="${h(savedName())}"></label>` : ''}<div class="pb-upload-actions"><button type="button" class="pb-primary" id="cameraButton">${icon('camera')}Take a photo</button><button type="button" id="galleryButton">${icon('gallery')}Choose from gallery</button></div><input id="cameraInput" type="file" accept="image/*" capture="environment" hidden><input id="galleryInput" type="file" accept="image/*" multiple hidden>
   </section>
   ${notice()}<p id="message" class="pb-message" role="status" aria-live="polite"></p><section id="queueSection" hidden aria-label="${online ? 'Upload progress' : 'Local demo processing'}"><div class="pb-section-head"><h2>Saving your moments</h2></div><p class="pb-subtle">${online ? 'Uploading' : 'Local demo processing'} · Keep this page open while saving.</p><div id="queueList" class="pb-queue"></div></section>
-  <section aria-labelledby="galleryHeading"><div class="pb-section-head"><h2 id="galleryHeading">Your moments</h2><span id="photoCount" class="pb-count"></span></div><div id="gallery" class="pb-grid">${skeleton.tiles(6)}</div><div id="galleryState" class="pb-state" role="status">Loading your photos…</div></section>${dialogs()}`;
+  <section aria-labelledby="galleryHeading"><div class="pb-section-head"><h2 id="galleryHeading">Your moments</h2><span id="photoCount" class="pb-count"></span></div><div class="pb-gallery-toolbar">${sortControl()}</div><div id="gallery" class="pb-grid">${skeleton.tiles(6)}</div><div id="galleryState" class="pb-state" role="status">Loading your photos…</div></section>${dialogs()}`;
 }
 function renderOwner() {
-  app.innerHTML = `${brand(true)}<header class="pb-owner-heading"><div><h1 id="eventName">${h(bucket.name)}</h1><div id="eventMeta">${meta()}</div></div></header>${frozenNotice()}${notice()}<p id="message" class="pb-message" role="status" aria-live="polite"></p>
-  <div class="pb-owner-layout"><section aria-labelledby="galleryHeading"><div class="pb-section-head pb-gallery-head"><h2 id="galleryHeading">The photo collection</h2><span id="photoCount" class="pb-count"></span></div><div class="pb-gallery-toolbar"><button type="button" id="zipButton">Download all as ZIP</button><button type="button" id="pauseButton">${bucket.paused ? 'Resume uploads' : 'Pause uploads'}</button>${bucket.canFreeze ? `<button type="button" id="freezeButton" class="pb-danger">${bucket.frozen ? 'Resume everything' : 'Pause everything'}</button>` : ''}<label class="pb-sort">Sort photos<select id="sortSelect"><option value="newest">Newest first</option><option value="oldest">Oldest first</option></select></label></div><p id="zipStatus" class="pb-subtle" role="status"></p><div id="gallery" class="pb-grid">${skeleton.tiles(6)}</div><div id="galleryState" class="pb-state" role="status">Loading your photos…</div>
+  app.innerHTML = `${brand(true)}<header class="pb-owner-heading"><div><h1 id="eventName" dir="auto">${h(bucket.name)}</h1><div id="eventMeta">${meta()}</div></div></header>${frozenNotice()}${notice()}<p id="message" class="pb-message" role="status" aria-live="polite"></p>
+  <div class="pb-owner-layout"><section aria-labelledby="galleryHeading"><div class="pb-section-head pb-gallery-head"><h2 id="galleryHeading">The photo collection</h2><span id="photoCount" class="pb-count"></span></div><div class="pb-gallery-toolbar"><button type="button" id="zipButton">Download all as ZIP</button><button type="button" id="pauseButton">${bucket.paused ? 'Resume uploads' : 'Pause uploads'}</button>${bucket.canFreeze ? `<button type="button" id="freezeButton" class="pb-danger">${bucket.frozen ? 'Resume everything' : 'Pause everything'}</button>` : ''}${sortControl()}</div><p id="zipStatus" class="pb-subtle" role="status"></p><div id="gallery" class="pb-grid">${skeleton.tiles(6)}</div><div id="galleryState" class="pb-state" role="status">Loading your photos…</div>
   </section>
   <aside><section class="pb-panel pb-sharing" aria-labelledby="shareHeading"><h2 id="shareHeading">Invite their perspective</h2><div id="qrSlot" class="pb-qr-slot" role="status">Preparing QR code…</div><button type="button" id="copyLink">Copy guest link</button><a id="guestLink" class="pb-button" target="_blank" rel="noopener">Open guest page</a><button type="button" id="downloadQr">Download QR image</button><a class="pb-button" href="./photo-bucket-poster.html?bucket=${encodeURIComponent(bucket.id)}">Preview & print A5 card</a></section>
-  <details class="pb-panel pb-owner-details"><summary>Edit details</summary><form id="detailsForm"><label>Event title<input name="name" required maxlength="100" value="${h(bucket.name)}"></label><label>Date<input name="date" type="date" required value="${h(bucket.date)}"${bucket.canAdmin ? '' : ' readonly aria-describedby="dateLockNote"'}>${bucket.canAdmin ? '' : '<small id="dateLockNote" class="pb-subtle">Only QD Systems can change the date.</small>'}</label><label>Place<input name="location" required maxlength="160" value="${h(bucket.location)}"></label>${online && bucket.canAdmin ? `<label class="pb-switch"><input name="showUploaderNames" type="checkbox" ${bucket.showUploaderNames === true ? 'checked' : ''}> Show who uploaded each photo</label>` : ''}<button type="submit" class="pb-primary">Save</button></form></details></aside></div>${dialogs()}`;
+  <details class="pb-panel pb-owner-details"><summary>Edit details</summary><form id="detailsForm"><label>Event title<input name="name" dir="auto" required maxlength="100" value="${h(bucket.name)}"></label><label>Date<input name="date" type="date" required value="${h(bucket.date)}"${bucket.canAdmin ? '' : ' readonly aria-describedby="dateLockNote"'}>${bucket.canAdmin ? '' : '<small id="dateLockNote" class="pb-subtle">Only a QD Events admin can change the date.</small>'}</label><label>Place<input name="location" dir="auto" required maxlength="160" value="${h(bucket.location)}"></label>${online && bucket.canAdmin ? `<label class="pb-switch"><input name="showUploaderNames" type="checkbox" ${bucket.showUploaderNames === true ? 'checked' : ''}> Show who uploaded each photo</label>` : ''}<button type="submit" class="pb-primary">Save</button></form></details></aside></div>${dialogs()}`;
 }
-let gallerySignature = '';
+const sortControl = () => '<label class="pb-sort">Sort photos<select id="sortSelect"><option value="newest">Newest first</option><option value="oldest">Oldest first</option></select></label>';
+const photoSignature = list => JSON.stringify(list.map(photo => [photo.id, photo.revision, photo.name]));
+let gallerySignature = '', loadingMore = false;
 const byTime = (a, b) => sortOrder === 'oldest' ? a.createdAt - b.createdAt : b.createdAt - a.createdAt;
 const timeLabel = ms => { try { return new Intl.DateTimeFormat(undefined, { day: 'numeric', month: 'short', hour: 'numeric', minute: '2-digit' }).format(ms); } catch { return ''; } };
 // quiet = background refresh: no redraw when nothing changed, and no error banner if the network blips.
@@ -109,17 +111,18 @@ async function refreshGallery(quiet = false) {
     let next;
     if (adapter.photosPage) {
       // Online: one page of 100. A background refresh re-reads only that first page and keeps any pages the viewer loaded.
-      const page = await adapter.photosPage(bucket.id, undefined, sortOrder);
-      if (disposed) return;
+      const order = sortOrder;
+      const page = await adapter.photosPage(bucket.id, undefined, order);
+      if (disposed || order !== sortOrder) return;
       if (Number.isInteger(page.total)) totalPhotos = page.total;
       const ids = new Set(page.items.map(p => p.id));
-      next = (extraPages ? [...photos.filter(p => !firstPageIds.has(p.id)), ...page.items] : page.items).sort(byTime);
+      next = (extraPages ? [...photos.filter(p => !firstPageIds.has(p.id) && !ids.has(p.id)), ...page.items] : page.items).sort(byTime);
       firstPageIds = ids; if (!extraPages) nextCursor = page.nextCursor;
-      var signature = page.items.map(p => `${p.id}:${p.revision}`).join('|') + `|${nextCursor || ''}`;
+      var signature = photoSignature(page.items) + `|${nextCursor || ''}`;
     } else {
       next = (await adapter.photos(bucket.id)).sort(byTime);
       if (disposed) return;
-      signature = next.map(p => `${p.id}:${p.revision}`).join('|');
+      signature = photoSignature(next);
     }
     if (quiet && signature === gallerySignature) return;
     photos = next; gallerySignature = signature;
@@ -129,24 +132,46 @@ async function refreshGallery(quiet = false) {
 }
 // Thumbnails: placeholders first, then only photos within 600px of the viewport load, at most 4 at a time.
 // A tile that scrolls away before its turn is dropped from the queue and asked for again when it returns.
-function thumbKey(photo) { return `${photo.id}:${photo.revision}`; }
+function thumbKey(photo) { return `${bucket.id}:${photo.id}:${photo.revision}`; }
+const thumbnailTargets = new Map();
 function watchThumbnails() {
-  tileObserver?.disconnect(); thumbQueue?.clear();
+  tileObserver?.disconnect();
+  thumbQueue?.clear();
+  thumbnailTargets.clear();
   const pending = [...$('#gallery').querySelectorAll('img[data-thumb]')];
   if (!pending.length || !adapter.thumbnail) return;
-  thumbQueue ||= createThumbQueue({ concurrency: 4, load: (key, photo) => adapter.thumbnail(bucket.id, photo) });
+  thumbQueue ||= createThumbQueue({ concurrency: 4, load: (_key, photo) => adapter.thumbnail(bucket.id, photo) });
   const byId = new Map(photos.map(p => [p.id, p]));
-  if (typeof IntersectionObserver === 'undefined') { pending.forEach(img => { const photo = byId.get(img.dataset.thumb); if (photo) thumbQueue.request(thumbKey(photo), photo, blob => { if (img.isConnected) { img.src = thumb(blob); img.classList.remove('pb-thumb-pending'); } }); }); return; }
+  const request = img => {
+    const photo = byId.get(img.dataset.thumb);
+    if (!photo || img.getAttribute('src')) return;
+    const key = thumbKey(photo);
+    thumbnailTargets.set(key, img);
+    thumbQueue.request(key, photo, blob => {
+      const target = thumbnailTargets.get(key);
+      thumbnailTargets.delete(key);
+      if (!target?.isConnected) return;
+      target.src = thumb(blob);
+      target.classList.remove('pb-thumb-pending', 'pb-thumb-failed');
+    }, () => {
+      const target = thumbnailTargets.get(key);
+      thumbnailTargets.delete(key);
+      if (!target?.isConnected) return;
+      target.classList.add('pb-thumb-failed');
+      target.alt = 'This photo preview could not load';
+    });
+  };
+  if (typeof IntersectionObserver === 'undefined') { pending.forEach(request); return; }
   tileObserver = new IntersectionObserver(entries => {
     for (const entry of entries) {
-      const img = entry.target, photo = byId.get(img.dataset.thumb); if (!photo) continue;
-      if (!entry.isIntersecting) { thumbQueue.cancel(thumbKey(photo)); continue; }
-      if (img.dataset.state === 'loading' || img.getAttribute('src')) continue;
-      img.dataset.state = 'loading';
-      thumbQueue.request(thumbKey(photo), photo, blob => {
-        if (!img.isConnected) return;
-        img.src = thumb(blob); img.classList.remove('pb-thumb-pending', 'pb-thumb-failed'); delete img.dataset.state;
-      }, () => { if (img.isConnected) { img.classList.add('pb-thumb-failed'); img.alt = 'This photo preview could not load'; delete img.dataset.state; } });
+      if (entry.isIntersecting) request(entry.target);
+      else {
+        const photo = byId.get(entry.target.dataset.thumb);
+        if (!photo) continue;
+        const key = thumbKey(photo);
+        thumbnailTargets.delete(key);
+        thumbQueue.cancel(key);
+      }
     }
   }, { rootMargin: '600px 0px' });
   pending.forEach(img => tileObserver.observe(img));
@@ -155,16 +180,30 @@ function paintLoadMore() {
   let button = $('#loadMorePhotos');
   if (!nextCursor || !adapter.photosPage) { button?.remove(); return; }
   if (!button) { button = document.createElement('button'); button.type = 'button'; button.id = 'loadMorePhotos'; button.className = 'pb-load-more'; $('#gallery').after(button); button.addEventListener('click', loadMorePhotos); }
-  button.textContent = 'Load more photos';
+  button.disabled = loadingMore;
+  button.textContent = loadingMore ? 'Loading…' : 'Load more photos';
 }
 async function loadMorePhotos() {
-  const button = $('#loadMorePhotos'); if (!button || !nextCursor) return; button.disabled = true; button.textContent = 'Loading…';
+  const button = $('#loadMorePhotos'), cursor = nextCursor, order = sortOrder;
+  if (!button || !cursor || loadingMore) return;
+  loadingMore = true;
+  paintLoadMore();
   try {
-    const page = await adapter.photosPage(bucket.id, nextCursor, sortOrder);
+    const page = await adapter.photosPage(bucket.id, cursor, order);
+    if (cursor !== nextCursor || order !== sortOrder) return;
     const known = new Set(photos.map(p => p.id));
-    photos = [...photos, ...page.items.filter(p => !known.has(p.id))].sort(byTime); nextCursor = page.nextCursor; extraPages = true;
-    gallerySignature = ''; drawGallery();
-  } catch (error) { button.disabled = false; button.textContent = 'Could not load more. Try again.'; }
+    photos = [...photos, ...page.items.filter(p => !known.has(p.id))].sort(byTime);
+    nextCursor = page.nextCursor;
+    extraPages = true;
+    gallerySignature = '';
+    drawGallery();
+    message('More photos loaded.');
+  } catch (error) {
+    message(friendlyError(error), true);
+  } finally {
+    loadingMore = false;
+    if (!disposed) paintLoadMore();
+  }
 }
 // With names off, customers get no contributor ids and the server refuses the contributor filter (403 NAMES_HIDDEN), so it is never applied.
 const filterAllowed = () => !(owner && bucket.showUploaderNames === false && !bucket.canAdmin);
@@ -178,7 +217,7 @@ function drawGallery() {
   $('#photoCount').textContent = count > visible.length ? `Showing ${visible.length} of ${count.toLocaleString()} photos` : `${count} ${count === 1 ? 'photo' : 'photos'}`;
   $('#galleryState').hidden = Boolean(visible.length);
   $('#galleryState').innerHTML = filter ? '<strong>No photos from this contributor</strong>Choose Everyone to see the collection.' : `<strong>${owner ? 'The best moments are still to come' : 'Your story starts here'}</strong>${owner ? (online ? 'Share the guest link to start collecting photos.' : 'Share the guest link or add demo samples below.') : 'Take a photo or choose a favourite from your gallery.'}`;
-  $('#gallery').innerHTML = visible.map(photo => `<article class="pb-tile"><button class="pb-image-button" type="button" data-photo="${h(photo.id)}" data-action="view" aria-label="Open photo by ${h(photo.name || 'Anonymous guest')}"><img ${photo.thumbnail ? `src="${thumb(photo.thumbnail)}"` : `data-thumb="${h(photo.id)}" class="pb-thumb-pending"`} alt="Event memory shared by ${h(photo.name || 'Anonymous guest')}" loading="lazy" width="240" height="300"></button><div class="pb-tile-body"><p>${h(owner ? (photo.name || '') : (online ? 'Saved online' : 'Saved on this device'))}${photo.source === 'fixture' ? ' · Demo sample' : ''}</p><small class="pb-tile-time">${h(timeLabel(photo.createdAt))}</small><div class="pb-tile-actions"><button type="button" data-photo="${h(photo.id)}" data-action="${owner ? 'download' : 'edit'}">${owner ? 'Download' : 'Edit photo'}</button><button type="button" class="pb-danger" data-photo="${h(photo.id)}" data-action="delete" aria-label="Delete photo by ${h(photo.name || 'Anonymous guest')}">Delete</button></div></div></article>`).join('');
+  $('#gallery').innerHTML = visible.map(photo => `<article class="pb-tile"><button class="pb-image-button" type="button" data-photo="${h(photo.id)}" data-action="view" aria-label="Open photo by ${h(photo.name || 'Anonymous guest')}"><img ${photo.thumbnail ? `src="${thumb(photo.thumbnail)}"` : `data-thumb="${h(photo.id)}" class="pb-thumb-pending"`} alt="Event memory shared by ${h(photo.name || 'Anonymous guest')}" loading="lazy" width="240" height="300"></button><div class="pb-tile-body"><p dir="auto">${h(owner ? (photo.name || '') : (online ? 'Saved online' : 'Saved on this device'))}${photo.source === 'fixture' ? ' · Demo sample' : ''}</p><small class="pb-tile-time">${h(timeLabel(photo.createdAt))}</small><div class="pb-tile-actions"><button type="button" data-photo="${h(photo.id)}" data-action="${owner ? 'download' : 'edit'}">${owner ? 'Download' : 'Edit photo'}</button><button type="button" class="pb-danger" data-photo="${h(photo.id)}" data-action="delete" aria-label="Delete photo by ${h(photo.name || 'Anonymous guest')}">Delete</button></div></div></article>`).join('');
   if (owner) $('#zipButton').disabled = !visible.length;
   watchThumbnails(); paintLoadMore();
   if (focusId) {
@@ -189,22 +228,26 @@ function drawGallery() {
 }
 // Photo viewer: previous/next buttons, arrow keys and swipe all move through the photos in the order shown.
 const viewerCache = new Map();
-function viewerBlob(id) {
-  if (!viewerCache.has(id)) { viewerCache.set(id, adapter.image(bucket.id, id)); if (viewerCache.size > 8) viewerCache.delete(viewerCache.keys().next().value); }
-  return viewerCache.get(id).catch(error => { viewerCache.delete(id); throw error; });
+function viewerBlob(photo) {
+  const key = thumbKey(photo);
+  if (!viewerCache.has(key)) {
+    viewerCache.set(key, adapter.image(bucket.id, photo.id));
+    if (viewerCache.size > 8) viewerCache.delete(viewerCache.keys().next().value);
+  }
+  return viewerCache.get(key).catch(error => { viewerCache.delete(key); throw error; });
 }
 async function openViewer(photoId) {
   const list = visiblePhotos(), index = list.findIndex(p => p.id === photoId);
   if (index < 0) return;
   const photo = list[index]; viewerId = photo.id;
-  const blob = await viewerBlob(photo.id);
+  const blob = await viewerBlob(photo);
   if (viewerId !== photo.id) return; // the viewer moved on while this photo was loading
   if (viewerUrl) URL.revokeObjectURL(viewerUrl); viewerUrl = URL.createObjectURL(blob);
   $('#viewerImage').src = viewerUrl;
   $('#viewerCaption').textContent = [photo.name || 'Anonymous guest', photo.source === 'fixture' ? 'Demo sample' : '', timeLabel(photo.createdAt), `${index + 1} of ${list.length}`].filter(Boolean).join(' · ');
   $('#prevPhoto').disabled = index === 0; $('#nextPhoto').disabled = index === list.length - 1;
   if (!$('#viewer').open) $('#viewer').showModal();
-  for (const near of [list[index + 1], list[index - 1]]) if (near) viewerBlob(near.id).catch(() => { /* prefetch only: the photo loads (or reports) when it is opened */ });
+  for (const near of [list[index + 1], list[index - 1]]) if (near) viewerBlob(near).catch(() => { /* prefetch only: the photo loads (or reports) when it is opened */ });
 }
 function stepViewer(delta) {
   const list = visiblePhotos(), target = list[list.findIndex(p => p.id === viewerId) + delta];
@@ -240,10 +283,13 @@ function bindCommon() {
     }
   }));
   $('#viewer').addEventListener('close', () => { $('#viewerImage').removeAttribute('src'); if (viewerUrl) URL.revokeObjectURL(viewerUrl); viewerUrl = null; });
+  const deleteDialog = $('#confirmDelete');
+  const cancelDelete = deleteDialog.querySelector('[data-close]');
+  deleteDialog.addEventListener('cancel', event => { if ($('#deleteConfirm').disabled) event.preventDefault(); });
   listen('#deleteConfirm', 'click', async () => {
-    const button = $('#deleteConfirm'); button.disabled = true;
+    cancelDelete.disabled = true;
     try { await adapter.delete(bucket.id, $('#confirmDelete').dataset.photo); $('#confirmDelete').close(); message(online ? 'Photo deleted.' : 'Photo deleted from this browser.'); await refreshGallery(); }
-    catch (error) { $('#deleteError').textContent = friendlyError(error); } finally { button.disabled = false; }
+    catch (error) { $('#deleteError').textContent = friendlyError(error); return false; } finally { cancelDelete.disabled = false; }
   });
   // Native <dialog> supplies modal focus containment, Escape and focus return.
   window.addEventListener('focus', run(async () => { bucket = owner ? await adapter.get(bucket.id) : await adapter.status(bucket.id); syncDetails(); await refreshGallery(); }));
@@ -256,8 +302,10 @@ function bindGuest() {
   for (const input of ['#cameraInput', '#galleryInput']) {
     listen(input, 'change', async event => {
       const files = [...(event.target.files || [])]; event.target.value = ''; if (!files.length) return;
-      if (files.length > LIMITS.batch) message('Choose up to 30 photos at a time. The first 30 will be processed.', true);
-      let accepted = 0; const errors = [];
+      let accepted = 0;
+      const errors = [];
+      const skipped = files.length - LIMITS.batch;
+      if (skipped > 0) errors.push(`Choose up to ${LIMITS.batch} photos at a time. Choose the remaining ${skipped} in a new batch.`);
       for (const file of files.slice(0, LIMITS.batch)) {
         try { const job = await adapter.enqueue(bucket.id, file, bucket.showUploaderNames ? currentName() : ''); queueStates.set(job.id, job); accepted++; renderJobs(); void queue.start(); }
         catch (error) { errors.push(`${file.name}: ${friendlyError(error)}`); }
@@ -317,11 +365,16 @@ function onJobChange(job) {
 }
 function renderJobs() {
   const jobs = [...queueStates.values()]; $('#queueSection').hidden = !jobs.length;
+  for (const [id, url] of jobUrls) {
+    if (queueStates.has(id)) continue;
+    URL.revokeObjectURL(url);
+    jobUrls.delete(id);
+  }
   $('#queueList').innerHTML = jobs.map(job => {
     const state = { queued:'Queued', processing:`${online ? 'Uploading' : 'Local demo processing'} · ${job.progress || 0}%`, retrying:`Retrying ${online ? 'upload' : 'local processing'} · attempt ${Math.min(job.attempts, online ? ONLINE_ATTEMPTS : 3)}/${online ? ONLINE_ATTEMPTS : 3}`, waiting:'Waiting for a connection. Your photo will upload by itself.', saved:online ? 'Saved online' : 'Saved on this device', failed:job.error || 'Processing did not finish. Tap Retry.' }[job.state] || 'Queued';
     if (job.thumbnail && !jobUrls.has(job.id)) jobUrls.set(job.id, URL.createObjectURL(job.thumbnail));
     const preview = jobUrls.get(job.id);
-    return `<article class="pb-job"><div class="pb-job-icon">${preview ? `<img src="${preview}" alt="Your photo preview">` : icon('gallery')}</div><div><p>${h(job.filename || 'Your photo')}</p><p ${job.state === 'failed' ? 'class="pb-error"' : ''}>${h(state)}</p>${!['saved','failed'].includes(job.state) ? `<progress max="100" value="${job.progress || 0}" aria-label="${online ? 'Upload progress' : 'Local demo processing progress'}"></progress>` : ''}${job.state === 'failed' ? `<button type="button" data-job="${h(job.id)}" data-retry="1">Retry</button><button type="button" data-job="${h(job.id)}">Remove</button>` : ''}</div></article>`;
+    return `<article class="pb-job"><div class="pb-job-icon">${preview ? `<img src="${preview}" alt="Your photo preview">` : icon('gallery')}</div><div><p dir="auto">${h(job.filename || 'Your photo')}</p><p ${job.state === 'failed' ? 'class="pb-error"' : ''}>${h(state)}</p>${!['saved','failed'].includes(job.state) ? `<progress max="100" value="${job.progress || 0}" aria-label="${online ? 'Upload progress' : 'Local demo processing progress'}"></progress>` : ''}${job.state === 'failed' ? `<button type="button" data-job="${h(job.id)}" data-retry="1">Retry</button><button type="button" data-job="${h(job.id)}">Remove</button>` : ''}</div></article>`;
   }).join('');
 }
 async function renderShare() {
@@ -329,14 +382,7 @@ async function renderShare() {
   try { $('#qrSlot').replaceChildren(await qrCanvas(url)); $('#qrSlot').removeAttribute('role'); $('#downloadQr').disabled = false; }
   catch (error) { $('#qrSlot').textContent = error.message; $('#downloadQr').disabled = true; }
 }
-function bindOwner() {
-  listen('#freezeButton', 'click', async () => {
-    const pausing = !bucket.frozen;
-    if (pausing && !confirm('Pause everything?\n\nGuests and the customer will see a "paused until the event" message and nothing will run, so no usage is charged. Your photos are kept. You can resume any time.')) return;
-    bucket = await adapter.setFrozen(bucket.id, pausing); syncDetails();
-    message(pausing ? 'Everything is paused. Press Resume everything when you are ready.' : 'Everything is running again.');
-    if (!pausing) await refreshGallery();
-  });
+function bindSort() {
   if ($('#sortSelect')) $('#sortSelect').value = sortOrder;
   listen('#sortSelect', 'change', async () => {
     sortOrder = $('#sortSelect').value === 'oldest' ? 'oldest' : 'newest';
@@ -345,15 +391,27 @@ function bindOwner() {
       // Paged online: the server sorts the whole collection, so start again from its first page in the new order.
       photos = []; nextCursor = null; extraPages = false; firstPageIds = new Set(); gallerySignature = '';
       $('#gallery').innerHTML = skeleton.tiles(6); await refreshGallery();
-    } else { photos = [...photos].sort(byTime); gallerySignature = photos.map(p => `${p.id}:${p.revision}`).join('|'); drawGallery(); }
+    } else { photos = [...photos].sort(byTime); gallerySignature = photoSignature(photos); drawGallery(); }
+  });
+}
+function bindOwner() {
+  listen('#freezeButton', 'click', async () => {
+    const pausing = !bucket.frozen;
+    if (pausing && !await confirmAction({
+      title: 'Pause everything?',
+      message: 'Guests and the customer will see a paused message. Your photos are kept, and you can resume any time.',
+      confirmLabel: 'Pause everything',
+      danger: true,
+    })) return false;
+    bucket = await adapter.setFrozen(bucket.id, pausing); syncDetails();
+    message(pausing ? 'Everything is paused. Press Resume everything when you are ready.' : 'Everything is running again.');
+    if (!pausing) await refreshGallery();
   });
   listen('#pauseButton', 'click', async () => { bucket = await adapter.setPaused(bucket.id, !bucket.paused); syncDetails(); message(bucket.paused ? (online ? 'New uploads are paused.' : 'New local uploads are paused.') : (online ? 'New uploads can resume.' : 'New local uploads can resume.')); });
   listen('#copyLink', 'click', async () => {
     const url = guestUrl(bucket);
-    try {
-      await navigator.clipboard.writeText(url);
-      message(isLoopback(url) ? 'Local preview link copied. A hosted HTTPS page is needed for phone scanning.' : 'Guest link copied.');
-    } catch { window.prompt('Copy this guest link:', url); }
+    if (!await copyWithFallback(url, { title: 'Copy guest link' })) return false;
+    message(isLoopback(url) ? 'Local preview link copied. A hosted HTTPS page is needed for phone scanning.' : 'Guest link copied.');
   });
   listen('#downloadQr', 'click', async () => download(await canvasBlob($('#qrSlot canvas')), 'photo-bucket-qr.png'));
   listen('#detailsForm', 'submit', async event => {
@@ -387,7 +445,7 @@ function syncDetails() {
   if (owner && $('#freezeButton')) $('#freezeButton').textContent = bucket.frozen ? 'Resume everything' : 'Pause everything';
 }
 async function renderPoster() {
-  app.innerHTML = `<nav class="pb-poster-controls"><a class="pb-button" href="./photo-bucket-manage.html?bucket=${encodeURIComponent(bucket.id)}">Back to collection</a><button type="button" class="pb-primary" id="printPoster">Print / Save as PDF</button></nav><article class="pb-poster" aria-label="A5 photo sharing table card"><img class="pb-floral pb-floral--tl" src="./photo-bucket/assets/botanical.svg" alt=""><img class="pb-floral pb-floral--br" src="./photo-bucket/assets/botanical.svg" alt=""><p class="pb-kicker">A collection of beautiful memories</p><h1>Share the moments</h1><h2>${h(bucket.name)}</h2>${meta()}<div id="posterQr"></div><p class="pb-poster-scan">Scan to share your photos</p><p class="pb-subtle">No login needed</p><p class="pb-poster-demo">${online ? 'Share your photos with the hosts' : 'Local demo · Photos stay on your device'}</p></article><p class="pb-print-note" id="posterNote"></p><p class="pb-print-note">A5 portrait · Print at 100% with browser headers and footers off.<br>Choose “Save as PDF” in your browser’s print dialog.</p>`;
+  app.innerHTML = `<nav class="pb-poster-controls"><a class="pb-button" href="./photo-bucket-manage.html?bucket=${encodeURIComponent(bucket.id)}">Back to collection</a><button type="button" class="pb-primary" id="printPoster">Print / Save as PDF</button></nav><article class="pb-poster" aria-label="A5 photo sharing table card"><img class="pb-floral pb-floral--tl" src="./photo-bucket/assets/botanical.svg" alt=""><img class="pb-floral pb-floral--br" src="./photo-bucket/assets/botanical.svg" alt=""><p class="pb-kicker">A collection of beautiful memories</p><h1>Share the moments</h1><h2 dir="auto">${h(bucket.name)}</h2>${meta()}<div id="posterQr"></div><p class="pb-poster-scan">Scan to share your photos</p><p class="pb-subtle">No login needed</p><p class="pb-poster-demo">${online ? 'Share your photos with the hosts' : 'Local demo · Photos stay on your device'}</p></article><p class="pb-print-note" id="posterNote"></p><p class="pb-print-note">A5 portrait · Print at 100% with browser headers and footers off.<br>Choose “Save as PDF” in your browser’s print dialog.</p>`;
   if (bucket.name.length > 60 || bucket.location.length > 110) $('.pb-poster').classList.add('pb-poster--compact');
   $('#printPoster').disabled = true; const url = guestUrl(bucket);
   $('#posterNote').textContent = isLoopback(url) ? 'Local preview only: set a hosted public origin before printing a card for phone scanning.' : 'This card opens the live photo page. Guests do not need an account.';

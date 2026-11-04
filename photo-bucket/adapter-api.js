@@ -87,8 +87,9 @@ async function blobFor(token, bucketId, photoId, kind) {
 // Thumbnails are fetched on demand through the page's queue, never in bulk. The cache is
 // bounded and keyed by bucket, photo and revision; each failure rejects only its own photo.
 const thumbnails = createLru(300);
+export const thumbnailKey = (bucketId, photo) => `${bucketId}:${photo.id}:${photo.revision}`;
 async function thumbnailFor(token, bucketId, photo) {
-  const key = `${bucketId}:${photo.id}:${photo.revision}`;
+  const key = thumbnailKey(bucketId, photo);
   if (thumbnails.has(key)) return thumbnails.get(key);
   const blob = await blobFor(token, bucketId, photo.id, 'thumb');
   thumbnails.set(key, blob);
@@ -120,7 +121,13 @@ export function ownerAdapterApi(user) {
     // Admin only. Items are DeletedRecord (deletedId, photoId = file number, restorable, restoredAt ...).
     deleted: bucketId => allPages(cursor => api('GET', `/b/${validId(bucketId)}/deleted`, { query: { limit: 100, ...cursor } })),
     // The restored photo is the quality 80 backup copy, not the original.
-    restoreDeleted: (bucketId, deletedId) => api('POST', `/b/${validId(bucketId)}/deleted/${encodeURIComponent(deletedId)}/restore`),
+    async restoreDeleted(bucketId, deletedId) {
+      try { return await api('POST', `/b/${validId(bucketId)}/deleted/${encodeURIComponent(deletedId)}/restore`); }
+      catch (error) {
+        if (error.code !== 'ALREADY_RESTORED') throw error;
+        return { alreadyRestored: true };
+      }
+    },
     get: bucketId => api('GET', `/b/${validId(bucketId)}`),
     update: (bucketId, input) => api('PATCH', `/b/${validId(bucketId)}`, { body: { ...details(input), ...(typeof input?.showUploaderNames === 'boolean' ? { showUploaderNames: input.showUploaderNames } : {}) } }),
     // Main admin only (the server refuses anyone else): pause or resume the whole event.
@@ -160,8 +167,9 @@ export async function guestAdapterApi(publicDetails) {
     return { grant };
   }
   async function finish(bucketId_, photoId, result, image, body) {
-    const photo = result.photo || await api('POST', `/b/${bucketId_}/photos/${photoId}/commit`, { body: { uploadId: result.grant.uploadId, ...body } });
-    thumbnails.set(`${photo.id}:${photo.revision}`, image.thumbnail);
+    if (result.photo) return result.photo; // A previous attempt already saved the canonical photo.
+    const photo = await api('POST', `/b/${bucketId_}/photos/${photoId}/commit`, { body: { uploadId: result.grant.uploadId, ...body } });
+    thumbnails.set(thumbnailKey(bucketId_, photo), image.thumbnail);
     return { ...photo, thumbnail: image.thumbnail };
   }
   return {
@@ -174,7 +182,8 @@ export async function guestAdapterApi(publicDetails) {
     image: (id, photoId) => blobFor(session.token, id, photoId, 'image'),
     async commit(id, jobId, image) {
       validId(id); const job = (await queue.jobs(id)).find(j => j.id === jobId);
-      const photo = await finish(id, jobId, await upload(id, jobId, image, {}), image, { name: job?.name || '' });
+      const name = job?.name?.trim();
+      const photo = await finish(id, jobId, await upload(id, jobId, image, {}), image, name ? { name } : {});
       await queue.discardJob(id, jobId).catch(() => { /* best effort: the photo is saved; a leftover local copy is harmless */ });
       return photo;
     },

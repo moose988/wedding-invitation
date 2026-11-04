@@ -45,7 +45,7 @@ export function uploadQueue({ adapter, bucketId, changed = () => {}, transport =
   const maxAttempts = transport.maxAttempts || 3;
   async function process(job) {
     try {
-      // Automatic attempts: 3 for the local demo, 6 online. Manual retry resets this budget.
+      // Automatic attempts: 3 for the local demo, 10 online. Manual retry resets this budget.
       while (job.attempts < maxAttempts && !stopped) {
         job = await adapter.updateJob(bucketId, job.id, { attempts: job.attempts + 1, state: 'processing', error: '' });
         changed({ ...job, progress: 0 });
@@ -63,7 +63,7 @@ export function uploadQueue({ adapter, bucketId, changed = () => {}, transport =
         } catch (error) {
           // A dropped connection is not a failed attempt: give the attempt back, pause until the phone is online
           // again (minutes if needed), then try the same photo again. The commit is idempotent (job id = photo id).
-          if (transport.online && (error.network || (typeof navigator !== 'undefined' && navigator.onLine === false))) {
+          if (transport.online && globalThis.navigator?.onLine === false) {
             job = await adapter.updateJob(bucketId, job.id, { attempts: Math.max(0, job.attempts - 1), state: 'processing', error: '' });
             changed({ ...job, state: 'waiting', error: 'Waiting for a connection…' });
             await transport.waitOnline();

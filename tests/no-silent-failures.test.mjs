@@ -112,12 +112,27 @@ test("async click handlers in admin files have a result or busy path", async () 
 test("runAction shows busy, then success or a clear error, and never throws", async () => {
   const { runAction } = await import("../action-feedback.js");
   const classes = new Set(), attrs = {}; const toasts = [];
-  const button = { dataset: {}, textContent: "Save", disabled: false, isConnected: true, parentElement: null, classList: { add: (...c) => c.forEach(x => classes.add(x)), remove: (...c) => c.forEach(x => classes.delete(x)), contains: c => classes.has(c) }, setAttribute: (k, v) => { attrs[k] = v; }, removeAttribute: k => { delete attrs[k]; }, insertAdjacentHTML() {}, nextElementSibling: { textContent: "" } };
+  const button = {
+    tagName: "BUTTON", dataset: {}, childNodes: ["Save"], disabled: false, isConnected: true,
+    get textContent() { return this.childNodes.join(""); },
+    set textContent(text) { this.childNodes = [text]; },
+    replaceChildren(...children) { this.childNodes = children; },
+    classList: { add: (...c) => c.forEach(x => classes.add(x)), remove: (...c) => c.forEach(x => classes.delete(x)), contains: c => classes.has(c) },
+    setAttribute: (k, v) => { attrs[k] = v; }, removeAttribute: k => { delete attrs[k]; },
+    ownerDocument: { createElement: () => ({ setAttribute(key, value) { this[key] = value; } }) },
+    after(note) {
+      this.nextElementSibling = note;
+      note.classList = { contains: name => note.className === name };
+      note.remove = () => { this.nextElementSibling = null; };
+    },
+  };
   let seenBusy;
   const ok = await runAction(button, async () => { seenBusy = [button.disabled, classes.has("is-busy"), button.textContent]; return 5; }, { busyLabel: "Saving…", success: "Saved.", toast: (m, k) => toasts.push([m, k]) });
   assert.deepEqual(seenBusy, [true, true, "Saving…"]); assert.equal(ok.ok, true); assert.equal(button.disabled, false); assert.equal(button.textContent, "Save"); assert.deepEqual(toasts[0], ["Saved.", "success"]);
   const bad = await runAction(button, async () => { throw new Error("Server setup is incomplete: X. Contact an admin."); }, { toast: (m, k) => toasts.push([m, k]) });
-  assert.equal(bad.ok, false); assert.equal(toasts.at(-1)[1], "error"); assert.match(toasts.at(-1)[0], /Server setup is incomplete/); assert.equal(button.disabled, false);
-  const net = await runAction(button, async () => { throw new TypeError("Failed to fetch"); }, { what: "Saving", toast: (m, k) => toasts.push([m, k]) });
-  assert.match(toasts.at(-1)[0], /Saving could not reach the server/);
+  assert.equal(bad.ok, false); assert.equal(toasts.length, 1, "the inline alert is announced once");
+  assert.equal(button.nextElementSibling.role, "alert");
+  assert.match(button.nextElementSibling.textContent, /Server setup is incomplete/); assert.equal(button.disabled, false);
+  await runAction(button, async () => { throw new TypeError("Failed to fetch"); }, { what: "Saving" });
+  assert.match(button.nextElementSibling.textContent, /Saving could not reach the server/);
 });

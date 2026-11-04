@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import test from "node:test";
+import { escapeHtml as escapeInvitationHtml } from "../invitations/shared/invitation-utils.js";
 
 const sources = Object.fromEntries(await Promise.all(
   ["script.js", "dashboard.js", "checkin.js", "side.js", "send.js", "weddings.js"]
@@ -15,8 +16,8 @@ function extractFunction(source, name, dependencies = {}) {
 
 test("HTML and attribute encoders neutralize stored XSS payload characters", () => {
   const payload = "<img src=x onerror=\"alert(1)\"> ' `&";
+  assert.match(escapeInvitationHtml(payload), /^&lt;img [^<]+$/);
   for (const [file, name] of [
-    ["script.js", "escapeHtml"],
     ["dashboard.js", "escapeHtml"],
     ["checkin.js", "escapeHtml"],
     ["send.js", "escapeHtml"],
@@ -46,6 +47,6 @@ test("invitation, dashboard, check-in, seating, sender, and event-card render pa
   assert.match(sources["checkin.js"], /<h2>\$\{escapeHtml\(state\.guest\.fullName/);
   assert.match(sources["side.js"], /<b>\$\{esc\(p\.guest\.fullName/);
   assert.match(sources["send.js"], /sender-row__name">\$\{escapeHtml\(names\.displayName\)\}/);
-  assert.match(sources["weddings.js"], /const eventId = escape\(w\.id\)/);
-  assert.match(sources["weddings.js"], /<h2>\$\{escape\(title\)\}<\/h2>/);
+  assert.match(sources["weddings.js"], /const eventId = esc\(w\.id\)/);
+  assert.match(sources["weddings.js"], /<h2(?: dir="auto")?>\$\{esc\(title\)\}<\/h2>/);
 });

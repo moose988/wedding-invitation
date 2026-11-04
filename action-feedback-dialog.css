@@ -1,0 +1,43 @@
+.qd-action-dialog {
+  box-sizing: border-box;
+  width: min(calc(100% - 2rem), 28rem);
+  max-height: calc(100% - 2rem);
+  padding: 1.5rem;
+  border: 1px solid #dcd7cb;
+  border-radius: 1rem;
+  background: #fffdf8;
+  color: #202d28;
+  box-shadow: 0 1rem 3rem #1b2a2450;
+  font: 500 1rem/1.5 Manrope, system-ui, sans-serif;
+}
+.qd-action-dialog::backdrop { background: #15272080; }
+.qd-action-dialog h2 { margin: 0 0 .5rem; color: inherit; font-size: 1.375rem; line-height: 1.3; }
+.qd-action-dialog p { margin: 0 0 1rem; color: inherit; white-space: pre-line; overflow-wrap: anywhere; }
+.qd-action-dialog textarea {
+  box-sizing: border-box;
+  width: 100%;
+  padding: .75rem;
+  border: 1px solid #8d9b91;
+  border-radius: .5rem;
+  background: #fff;
+  color: inherit;
+  font: inherit;
+  resize: vertical;
+}
+.qd-action-dialog__actions { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: .5rem; margin-top: 1rem; }
+.qd-action-dialog button {
+  min-width: 44px;
+  min-height: 44px;
+  padding: .5rem .875rem;
+  border: 1px solid #8d9b91;
+  border-radius: .5rem;
+  background: #fff;
+  color: #202d28;
+  font: inherit;
+  cursor: pointer;
+}
+.qd-action-dialog .qd-action-dialog__primary { border-color: #205746; background: #205746; color: #fff; }
+.qd-action-dialog .qd-action-dialog__danger { border-color: #8d2928; background: #8d2928; color: #fff; }
+.qd-action-dialog :focus-visible { outline: 2px solid #1c6253; outline-offset: 2px; }
+.qd-toast[data-position="top"] { top: max(20px, env(safe-area-inset-top)); bottom: auto; }
+.qd-guest-action-status { margin: 1rem; color: inherit; }

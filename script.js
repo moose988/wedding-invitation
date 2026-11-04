@@ -1,3 +1,4 @@
+import { escapeHtml, hideFailedInvitationImages } from "./invitations/shared/invitation-utils.js";
 import { runFromEvent } from "./action-feedback.js";
 import { DEFAULT_SONG, SONG_URL_MAX_AGE_MS, musicKey, musicModeOf, resolveMusic } from "./invitation-music.js";
 import { invitationRefreshIsCurrent, invitationRsvpStorageKey, invitationRsvpView } from "./invitations/shared/rsvp-state.js";
@@ -265,6 +266,7 @@ const elements = {
 
 document.body.classList.add("intro-active");
 
+hideFailedInvitationImages(document);
 boot();
 
 function setupIntroSequence() {
@@ -748,7 +750,7 @@ function renderGuestCard() {
   }
 
   elements.guestSpotlightSection.hidden = false;
-  setText("guestGreetingTitle", `Dear ${state.guest.fullName || "Guest"}`);
+  setText("guestGreetingName", state.guest.fullName || "Guest");
   setText("guestGreetingArabic", "يسعدنا حضوركم");
   setText(
     "guestGreetingEnglish",
@@ -1122,10 +1124,10 @@ function renderFirebaseRsvp(mount) {
   if (view.showSummary && !state.isRsvpEditing) {
     const confirmationLabel = view.status === "confirmed" ? copy("rsvpConfirmed", "Response saved") : copy("declinedLabel", "Response saved");
     const confirmationHeading = view.status === "confirmed"
-      ? (isLayla ? laylaText("attendanceConfirmed").replace("{name}", escapeHtml(guest.fullName || laylaText("guestFallback"))) : copy("attendanceConfirmed", "Your attendance is confirmed"))
+      ? (isLayla ? laylaText("attendanceConfirmed").replace("{name}", () => `<bdi dir="auto">${escapeHtml(guest.fullName || laylaText("guestFallback"))}</bdi>`) : copy("attendanceConfirmed", "Your attendance is confirmed"))
       : copy("attendanceDeclined", "Your response is recorded as not attending.");
     const confirmationMessage = view.status === "confirmed"
-      ? (isLayla ? laylaText("attendanceConfirmedThanks").replace("{name}", escapeHtml(guest.fullName || laylaText("dear"))) : `Thank you, ${escapeHtml(guest.fullName || "guest")}. We look forward to celebrating with you.`)
+      ? (isLayla ? laylaText("attendanceConfirmedThanks").replace("{name}", () => `<bdi dir="auto">${escapeHtml(guest.fullName || laylaText("dear"))}</bdi>`) : `Thank you, <bdi dir="auto">${escapeHtml(guest.fullName || "guest")}</bdi>. We look forward to celebrating with you.`)
       : copy("attendanceDeclinedThanks", "Thank you for letting us know.");
     mount.innerHTML = `
       <div class="rsvp-summary rsvp-summary--${view.status}" role="status" aria-live="polite">
@@ -1141,7 +1143,7 @@ function renderFirebaseRsvp(mount) {
   const pendingCopy = copy("pendingResponse", "Your response is pending. Please choose an option.");
   const savingCopy = copy("responseSaving", "Saving your response…");
   const errorCopy = state.rsvpSaveError || "";
-  const greeting = isLayla ? "" : `<p class="firebase-rsvp-greeting">${copy("dear", "Dear")} ${escapeHtml(guest.fullName || "Guest")}</p>`;
+  const greeting = isLayla ? "" : `<p class="firebase-rsvp-greeting">${copy("dear", "Dear")} <bdi dir="auto">${escapeHtml(guest.fullName || "Guest")}</bdi></p>`;
   const statusCopy = state.isRsvpSaving ? savingCopy : (errorCopy || (isLayla ? "" : pendingCopy));
   mount.innerHTML = `
     <form class="firebase-rsvp-panel rsvp-form" id="firebaseRsvpForm">
@@ -1185,15 +1187,15 @@ function renderDemoRsvp(mount, { sample = false } = {}) {
     const confirmed = saved.status === "confirmed";
     const name = sample ? (state.guest?.fullName || sampleRsvpGuestName) : demoGuest.fullName;
     const languageAttributes = isLaylaInvitation() && state.laylaLanguage === "ar" ? 'lang="ar" dir="rtl"' : "";
-    const confirmationHeading = confirmed
-      ? laylaText("attendanceConfirmed").replace("{name}", name)
-      : laylaText("attendanceDeclined").replace("{name}", name);
+    const nameMarkup = `<bdi dir="auto">${escapeHtml(name)}</bdi>`;
+    const confirmationHeading = escapeHtml(laylaText(confirmed ? "attendanceConfirmed" : "attendanceDeclined")).replace("{name}", () => nameMarkup);
+    const confirmationMessage = escapeHtml(laylaText(confirmed ? "attendanceConfirmedThanks" : "attendanceDeclinedThanks")).replace("{name}", () => nameMarkup);
     mount.innerHTML = `
       <div class="rsvp-summary rsvp-summary--${confirmed ? "confirmed" : "declined"}" aria-live="polite" ${sample ? languageAttributes : ""}>
         <span class="rsvp-confirmation-mark" aria-hidden="true">${confirmed ? "✓" : "♡"}</span>
         <p class="rsvp-summary__eyebrow">${escapeHtml(confirmed ? laylaText("rsvpConfirmed") : laylaText("declinedLabel"))}</p>
-        <h3>${escapeHtml(confirmationHeading)}</h3>
-        <p>${escapeHtml(confirmed ? laylaText("attendanceConfirmedThanks").replace("{name}", name) : laylaText("attendanceDeclinedThanks"))}</p>
+        <h3>${confirmationHeading}</h3>
+        <p>${confirmationMessage}</p>
         ${saved.message ? `<p class="rsvp-summary__message">${escapeHtml(saved.message)}</p>` : ""}
         ${sample ? `<p class="sample-rsvp-note" role="note">${escapeHtml(laylaText("sampleRsvpNote"))}</p>` : ""}
         <button class="luxury-button luxury-button--secondary" type="button" data-${sample ? "change" : "edit"}-rsvp><span>${escapeHtml(laylaText("changeResponse"))}</span></button>
@@ -1208,7 +1210,7 @@ function renderDemoRsvp(mount, { sample = false } = {}) {
   mount.innerHTML = `
     <form class="rsvp-form" id="${sample ? "sampleRsvpForm" : "rsvpForm"}" ${sample ? languageAttributes : ""}>
       ${sample ? `<p class="sample-rsvp-note" role="note">${escapeHtml(laylaText("sampleRsvpNote"))}</p>` : ""}
-      ${isLaylaInvitation() ? "" : `<p class="rsvp-demo-greeting">${escapeHtml(laylaText("dear"))} ${escapeHtml(guestName)}</p>`}
+      ${isLaylaInvitation() ? "" : `<p class="rsvp-demo-greeting">${escapeHtml(laylaText("dear"))} <bdi dir="auto">${escapeHtml(guestName)}</bdi></p>`}
       ${demoStatusCopy ? `<p class="firebase-rsvp-status" role="status" aria-live="polite">${escapeHtml(demoStatusCopy)}</p>` : ""}
       <div class="rsvp-phases">
         <section class="rsvp-phase" data-rsvp-step="1">
@@ -1258,7 +1260,7 @@ function renderSeatSection() {
     if (state.seatingSelectedPersonKey && !selectedTarget) state.seatPlanViewMode = "manual";
     document.getElementById("seatDetailsMount").innerHTML = `
       <div class="layla-seat-greeting">
-        <h3 ${state.laylaLanguage === "ar" ? 'lang="ar" dir="rtl" class="rtl-copy"' : ""}>${laylaValue(`${laylaText("dear")} ${escapeHtml(state.guest.fullName || laylaText("guestFallback"))}`, `${laylaText("dear")} ${escapeHtml(state.guest.fullName || laylaText("guestFallback"))}`)}</h3>
+        <h3 ${state.laylaLanguage === "ar" ? 'lang="ar" dir="rtl" class="rtl-copy"' : ""}>${laylaText("dear")} <bdi dir="auto">${escapeHtml(state.guest.fullName || laylaText("guestFallback"))}</bdi></h3>
       </div>
       <div class="layla-party-seat-selector${partyMembers.length <= 3 ? " is-compact" : ""}" id="laylaPartySeatSelector" role="group" aria-label="${escapeAttribute(laylaText("partySeatSelectorLabel"))}">
         ${partyMembers.map((member) => renderLaylaPartyChairMember(member, state.seatingSelectedPersonKey)).join("")}
@@ -1277,13 +1279,13 @@ function renderSeatSection() {
 
   document.getElementById("seatDetailsMount").innerHTML = `
       <div class="seat-details-grid">
-        <article class="seat-detail-card"><span>Primary guest</span><strong>${escapeHtml(state.guest.fullName || "Guest")}</strong></article>
+        <article class="seat-detail-card"><span>Primary guest</span><strong><bdi dir="auto">${escapeHtml(state.guest.fullName || "Guest")}</bdi></strong></article>
         <article class="seat-detail-card"><span>Party size</span><strong>${escapeHtml(String(getPartySize(state.guest)))}</strong></article>
       </div>
       <div class="guest-seat-list guest-seat-list--party" aria-label="Your party seating assignments">
         ${partyMembers.map((member) => renderInvitationPartyMember(member, state.seatingSelectedPersonKey)).join("")}
       </div>
-      <p class="guest-seat-selection-status" id="guestSeatSelectionStatus" role="status" aria-live="polite"${selection.member && !selection.target ? "" : " hidden"}>${escapeHtml(selection.member?.label || "This guest")} has not been assigned a seat yet.</p>
+      <p class="guest-seat-selection-status" id="guestSeatSelectionStatus" role="status" aria-live="polite"${selection.member && !selection.target ? "" : " hidden"}><bdi dir="auto">${escapeHtml(selection.member?.label || "This guest")}</bdi> has not been assigned a seat yet.</p>
     `;
 
   setInvitationMapVisibility(!selection.member || Boolean(selection.target));
@@ -1331,7 +1333,7 @@ function renderLaylaPartyChairMember(member, selectedPersonKey) {
         <img src="./invitations/wedding-designs/layla-zaid/assets/layla-zaid-louis-chair.webp?v=20261026-chair-selector-1" alt="" loading="lazy" decoding="async" />
         <span class="layla-party-chair__number">${member.index + 1}</span>
       </span>
-      <strong class="layla-party-chair__name">${escapeHtml(member.label)}</strong>
+      <strong class="layla-party-chair__name"><bdi dir="auto">${escapeHtml(member.label)}</bdi></strong>
       <span class="layla-party-chair__assignment">${escapeHtml(assignmentLabel)}</span>
     </button>
   `;
@@ -1390,7 +1392,7 @@ function renderInvitationPartyMember(member, selectedPersonKey) {
   const selected = member.personKey === selectedPersonKey;
   return `
     <button class="guest-seat-party-member ${target ? "is-assigned" : "is-unassigned"} ${selected ? "is-selected" : ""}" type="button" data-party-member-index="${member.index}" aria-pressed="${selected}" aria-label="${escapeAttribute(target ? `${member.label}, ${member.assignment.tableName || "Table"}, chair ${target.seatNumber}. Focus on map.` : `${member.label}, seat not assigned yet.`)}">
-      <strong>${escapeHtml(member.label)}</strong>
+      <strong><bdi dir="auto">${escapeHtml(member.label)}</bdi></strong>
       <span>${target ? `${escapeHtml(member.assignment.tableName || "Table")} · Chair ${escapeHtml(target.seatNumber)}` : "Seat not assigned yet"}</span>
     </button>
   `;
@@ -2535,15 +2537,6 @@ function setText(id, value) {
   if (node) {
     node.textContent = value || "";
   }
-}
-
-function escapeHtml(value) {
-  return String(value ?? "")
-    .replace(/&/g, "&amp;")
-    .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;")
-    .replace(/"/g, "&quot;")
-    .replace(/'/g, "&#039;");
 }
 
 function escapeAttribute(value) {

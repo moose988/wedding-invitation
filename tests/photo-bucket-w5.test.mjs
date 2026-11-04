@@ -39,7 +39,7 @@ test('chair details modal reuses the copy-guest-invite flow and hides it where c
   assert.match(dashboard, /function handleAssignmentChairClick[\s\S]{0,120}if \(!can\("canEditSeating"\)\)/);
 });
 test('live API_URL is untouched until the new stack is deployed', () => {
-  assert.match(config, /flo4boqpu9/);
+  assert.match(config, /https:\/\/udtnp2ttd3\.execute-api\.eu-north-1\.amazonaws\.com/);
 });
 
 // Behavioural tests of the online adapter with a stubbed fetch.

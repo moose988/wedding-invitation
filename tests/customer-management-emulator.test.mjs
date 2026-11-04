@@ -4,7 +4,7 @@ import { initializeApp, deleteApp } from 'firebase/app';
 import { getAuth, connectAuthEmulator, createUserWithEmailAndPassword, signInWithEmailAndPassword, signOut } from 'firebase/auth';
 import * as firestore from 'firebase/firestore';
 import { createRequire } from 'node:module';
-import { manageCustomer } from '../api/_lib/customer-management.js';
+import { manageCustomer } from '../server/customer-management.js';
 const require = createRequire(new URL('../functions/package.json', import.meta.url));
 import { assignCustomer } from '../account-access.js';
 

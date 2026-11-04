@@ -1,4 +1,3 @@
-import { runFromEvent } from "./action-feedback.js";
 import {
   collection,
   doc,
@@ -302,7 +301,7 @@ function bindEvents() {
   document.addEventListener("click", async (event) => {
     const checkinButton = event.target.closest("[data-checkin-guest]");
     if (checkinButton) {
-      await runFromEvent(event, () => checkInGuest(checkinButton.dataset.checkinGuest), { what: "Checking the guest in", busyLabel: "Checking in…", onError: (error, message) => showToast(message, "error") });
+      await checkInGuest(checkinButton.dataset.checkinGuest);
     }
 
     const searchResult = event.target.closest("[data-select-guest]");

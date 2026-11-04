@@ -1,6 +1,7 @@
-import { AdminError } from './_lib/admin-common.js';
-import { CustomerError, manageCustomer } from './_lib/customer-management.js';
-import { adminServices } from './_lib/firebase-admin-app.js';
+import { cert, getApps, initializeApp } from 'firebase-admin/app';
+import { getAuth } from 'firebase-admin/auth';
+import { getFirestore } from 'firebase-admin/firestore';
+import { CustomerError, manageCustomer } from '../server/customer-management.js';
 
 export default async function handler(req, res) {
   res.setHeader('Cache-Control', 'no-store');
@@ -8,12 +9,10 @@ export default async function handler(req, res) {
   const token = /^Bearer (.+)$/.exec(req.headers.authorization || '')?.[1];
   if (!token) return res.status(401).json({ error: 'Sign in is required.' });
   try {
-    let services;
-    try { services = adminServices(); } catch (error) { throw error instanceof AdminError ? new CustomerError(error.status, 'Customer account management is not configured.') : error; }
-    let body;
-    try { body = req.body; } catch { throw new CustomerError(400, 'The request body is not valid JSON.'); }
-    const { action, userId, password } = body || {};
-    await manageCustomer({ auth: services.auth, db: services.db, token, action, userId, password });
+    if (!process.env.FIREBASE_SERVICE_ACCOUNT_JSON) throw new CustomerError(503, 'Customer account management is not configured.');
+    const app = getApps()[0] || initializeApp({ credential: cert(JSON.parse(process.env.FIREBASE_SERVICE_ACCOUNT_JSON)) });
+    const { action, userId, password } = req.body || {};
+    await manageCustomer({ auth: getAuth(app), db: getFirestore(app), token, action, userId, password });
     return res.status(200).json({ ok: true });
   } catch (error) {
     if (!(error instanceof CustomerError)) console.error('Customer account management failed:', error.code || error.name);

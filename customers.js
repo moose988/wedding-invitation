@@ -1,17 +1,11 @@
 import * as api from "./firebase-config.js";
 import { isPlatformAdmin, assignCustomer } from "./account-access.js";
 import { getEventDisplayTitle } from "./event-utils.js";
-import { adminPost } from "./admin-api.js";
-import { skeleton } from "./skeleton.js";
-import { runFromEvent } from "./action-feedback.js";
-import { mountAdminHealth } from "./admin-health.js";
-import { loadAdminEventsShared } from "./admin-events.js";
-import { mountCustomerLink } from "./customer-link.js";
 import { bindPasswordVisibility, hidePasswords } from "./password-visibility.js?v=1";
 bindPasswordVisibility(document);
 
 const $ = id => document.getElementById(id);
-const state = { services: null, customers: [], events: [], selected: null, pending: new Map(), cursor: null, more: false, eventsLoaded: false, eventsError: "", eventsTruncated: false };
+const state = { services: null, customers: [], events: [], selected: null, pending: new Map() };
 const escape = value => String(value ?? "").replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"})[c]);
 const errorText = error => error?.message || error?.code || "Please try again.";
 const formError = (form, text) => { form.querySelector(".form-error").textContent = text; };
@@ -26,54 +20,42 @@ else {
       if (!await isPlatformAdmin(api, state.services.db, user.uid)) { location.replace("./customer-events.html"); return; }
       $("userEmail").textContent = user.email || "Planner";
       $("loading").hidden = true; $("workspace").hidden = false;
-      void mountAdminHealth(state.services.auth);
-      mountCustomerLink({ services: state.services, user });
       await load();
     } catch (error) { $("loading").textContent = `Workspace could not load: ${errorText(error)}`; $("status").textContent = `Could not load customers: ${errorText(error)}`; }
   });
 }
-$("signOut").onclick = async event => { await runFromEvent(event, async () => { await api.signOut(state.services.auth); location.replace("./dashboard-login.html?message=signed-out"); }, { what: "Signing out", busyLabel: "Signing out…" }); };
-// The directory is read one page at a time and each customer's events load only when
-// the row is opened, so the page cost does not grow with customers times events.
-const PAGE = 50;
-async function load(more = false) {
-  $("status").textContent = "Loading customers…"; $("loadMore").hidden = true; if (!more) $("customerList").innerHTML = skeleton.rows(4, "Loading customers…");
-  const { db } = state.services;
-  try {
-    const parts = [api.collection(db, "customerDirectory"), ...(more && state.cursor ? [api.startAfter(state.cursor)] : []), api.limit(PAGE)];
-    const directory = await api.getDocs(api.query(...parts));
-    const rows = directory.docs.map(row => ({ id: row.id, email: row.data().email || "Unknown email", events: null }));
-    state.customers = (more ? [...state.customers, ...rows] : rows).sort((a, b) => a.email.localeCompare(b.email));
-    state.cursor = directory.docs.at(-1) || state.cursor; state.more = directory.docs.length === PAGE;
-    render();
-  } catch (error) { $("status").textContent = `Could not load customers: ${errorText(error)}`; $("retryCustomers").hidden = false; $("customerList").innerHTML = ""; return; }
-  $("retryCustomers").hidden = true;
-  if (!state.eventsLoaded) void loadEventList();
-}
-async function loadEventList() {
-  try {
-    const { rows, truncated } = await loadAdminEventsShared(api, state.services.db);
-    state.events = rows.filter(e => e.deleting !== true).map(e => ({ id: e.id, ...e })).sort((a, b) => getEventDisplayTitle(a).localeCompare(getEventDisplayTitle(b)));
-    state.eventsLoaded = true; state.eventsTruncated = truncated;
-  } catch (error) { state.eventsError = errorText(error); }
-}
-async function loadAssignments(customer) {
-  const { db } = state.services;
-  const index = await api.getDocs(api.collection(db, "users", customer.id, "weddingAccess"));
-  const assignments = await Promise.all(index.docs.map(async entry => {
-    const member = await api.getDoc(api.doc(db, "weddings", entry.id, "dashboardUsers", customer.id));
-    if (!member.exists() || member.data().role !== "customer") return null;
-    const known = state.events.find(event => event.id === entry.id);
-    return { id: entry.id, name: known ? getEventDisplayTitle(known) : getEventDisplayTitle(entry.data()) };
+$("signOut").onclick = async () => { await api.signOut(state.services.auth); location.replace("./dashboard-login.html?message=signed-out"); };
+async function load() {
+  $("status").textContent = "Loading customers…";
+  const { db, auth } = state.services;
+  const read = async (label, operation) => { try { return await operation; } catch (error) { throw new Error(`${label}: ${errorText(error)}`); } };
+  const [directory, access] = await Promise.all([read("Customer directory", api.getDocs(api.collection(db, "customerDirectory"))), read("Admin event list", api.getDocs(api.collection(db, "users", auth.currentUser.uid, "weddingAccess")))]);
+  const events = await Promise.all(access.docs.map(async row => {
+    try {
+      const member = await api.getDoc(api.doc(db, "weddings", row.id, "dashboardUsers", auth.currentUser.uid));
+      if (!member.exists() || member.data().canViewDashboard !== true) return null;
+      const event = await api.getDoc(api.doc(db, "weddings", row.id));
+      return event.exists() && !event.data().deleting ? { id: row.id, ...event.data() } : null;
+    } catch (error) { if (["permission-denied", "not-found"].includes(error.code)) return null; throw error; }
   }));
-  customer.events = assignments.filter(Boolean);
+  state.events = events.filter(Boolean).sort((a,b) => getEventDisplayTitle(a).localeCompare(getEventDisplayTitle(b)));
+  state.customers = await Promise.all(directory.docs.map(async row => {
+    const index = await read("Customer event assignments", api.getDocs(api.collection(db, "users", row.id, "weddingAccess")));
+    const assignments = await Promise.all(index.docs.map(async entry => {
+      const member = await read("Customer event membership", api.getDoc(api.doc(db, "weddings", entry.id, "dashboardUsers", row.id)));
+      if (!member.exists() || member.data().role !== "customer") return null;
+      const known = state.events.find(event => event.id === entry.id);
+      return { id: entry.id, name: known ? getEventDisplayTitle(known) : getEventDisplayTitle(entry.data()) };
+    }));
+    return { id: row.id, email: row.data().email || "Unknown email", events: assignments.filter(Boolean) };
+  }));
+  state.customers.sort((a,b) => a.email.localeCompare(b.email)); render();
 }
 function render() {
   const term = $("search").value.trim().toLowerCase();
-  const rows = state.customers.filter(row => [row.email, ...(row.events || []).map(e => e.name)].some(value => value.toLowerCase().includes(term)));
-  $("status").textContent = `${rows.length} customer${rows.length === 1 ? "" : "s"} shown${state.more ? ". Search covers the customers loaded so far." : ""}`;
-  $("loadMore").hidden = !state.more;
-  $("customerList").innerHTML = rows.length ? rows.map(row => `<article class="customer-card"><div class="customer-identity"><div class="customer-avatar" aria-hidden="true">${escape(row.email.slice(0,1).toUpperCase())}</div><div class="customer-info"><h2>${escape(row.email)}</h2><p>${row.events ? (row.events.length ? `Assigned to ${row.events.length} event${row.events.length === 1 ? "" : "s"}` : "No events assigned") : "Open to see assigned events"}</p><div class="customer-tags">${(row.events || []).map(e => `<span class="customer-tag">${escape(e.name)}</span>`).join("")}</div>${row.error ? `<p class="form-error" role="alert">${escape(row.error)}</p>` : ""}</div></div><div class="customer-actions"><button class="secondary-button" data-action="events" data-id="${escape(row.id)}" type="button">${row.events ? "Refresh events" : "Show events"}</button><button class="secondary-button" data-action="link" data-id="${escape(row.id)}" type="button">Link or unlink</button><button class="secondary-button" data-action="password" data-id="${escape(row.id)}" type="button">Change password</button><button class="secondary-button delete-customer" data-action="delete" data-id="${escape(row.id)}" type="button">Delete</button></div></article>`).join("") : `<div class="customer-empty"><strong>${term ? "No matching customers" : "No customers yet"}</strong><p>${term ? "Try another email or event name." : "Add a customer to get started, then link them to events above."}</p></div>`;
+  const rows = state.customers.filter(row => [row.email, ...row.events.map(e => e.name)].some(value => value.toLowerCase().includes(term)));
+  $("status").textContent = `${rows.length} customer${rows.length === 1 ? "" : "s"} shown`;
+  $("customerList").innerHTML = rows.length ? rows.map(row => `<article class="customer-card"><div class="customer-identity"><div class="customer-avatar" aria-hidden="true">${escape(row.email.slice(0,1).toUpperCase())}</div><div class="customer-info"><h2>${escape(row.email)}</h2><p>${row.events.length ? `Assigned to ${row.events.length} event${row.events.length === 1 ? "" : "s"}` : "No events assigned"}</p><div class="customer-tags">${row.events.map(e => `<span class="customer-tag">${escape(e.name)}</span>`).join("")}</div></div></div><div class="customer-actions"><button class="secondary-button" data-action="assign" data-id="${escape(row.id)}" type="button">Assign event</button><button class="secondary-button" data-action="password" data-id="${escape(row.id)}" type="button">Change password</button><button class="secondary-button delete-customer" data-action="delete" data-id="${escape(row.id)}" type="button">Delete</button></div></article>`).join("") : `<div class="customer-empty"><strong>${term ? "No matching customers" : "No customers yet"}</strong><p>${term ? "Try another email or event name." : "Add a customer and assign them to an event to get started."}</p></div>`;
 }
 $("search").oninput = render;
 function accountFields() {
@@ -82,31 +64,22 @@ function accountFields() {
   form.elements.email.required = isNew; form.elements.password.required = isNew;
   if (!isNew) { form.elements.password.value = ""; hidePasswords(form); }
 }
-function openAdd() {
-  // Existing accounts are linked from the panel above, so this dialog only creates new accounts.
+function openAdd(id = "") {
   const form = $("customerForm"); form.reset(); hidePasswords(form); formError(form, "");
-  form.elements.account.innerHTML = '<option value="new">Create a new account</option>';
+  form.elements.account.innerHTML = '<option value="new">Create a new account</option>' + state.customers.map(row => `<option value="${escape(row.id)}">${escape(row.email)}</option>`).join("");
   form.elements.event.innerHTML = '<option value="">Select an event</option>' + state.events.map(row => `<option value="${escape(row.id)}">${escape(getEventDisplayTitle(row))}</option>`).join("");
+  if (id) form.elements.account.value = id;
   accountFields(); $("customerDialog").showModal();
-  if (state.eventsError) formError(form, `The event list could not load (${state.eventsError}). Close and reopen this form to try again.`);
-  else if (state.eventsTruncated) formError(form, `Only the first ${state.events.length} events are listed. Use the link panel above for others.`);
 }
 $("addCustomer").onclick = () => openAdd(); $("customerForm").elements.account.onchange = accountFields;
 document.querySelectorAll('[data-close]').forEach(button => button.onclick = () => button.closest('dialog').close());
-$("customerList").onclick = async event => {
+$("customerList").onclick = event => {
   const button = event.target.closest('[data-action]'); if (!button) return;
   state.selected = state.customers.find(row => row.id === button.dataset.id); if (!state.selected) return;
-  if (button.dataset.action === "events") {
-    button.disabled = true; state.selected.error = "";
-    try { await loadAssignments(state.selected); } catch (error) { state.selected.error = `Events could not load: ${errorText(error)}`; }
-    render();
-  }
-  if (button.dataset.action === "link") { $("lookupEmail").value = state.selected.email; $("lookupForm").requestSubmit(); $("linkPanel").scrollIntoView({ block: "start" }); }
+  if (button.dataset.action === "assign") openAdd(state.selected.id);
   if (button.dataset.action === "password") { $("passwordForm").reset(); resetPasswordVisibility(); formError($("passwordForm"), ""); $("passwordFor").textContent = `Set a new password for ${state.selected.email}.`; $("passwordDialog").showModal(); }
   if (button.dataset.action === "delete") { formError($("deleteForm"), ""); $("deleteFor").textContent = state.selected.email; $("deleteDialog").showModal(); }
 };
-$("loadMore").onclick = () => load(true);
-$("retryCustomers").onclick = () => load();
 $("customerForm").onsubmit = async event => {
   event.preventDefault(); const form = event.currentTarget, wedding = state.events.find(row => row.id === form.elements.event.value);
   if (!wedding) { formError(form, "Choose an event."); return; }
@@ -127,7 +100,13 @@ $("customerForm").onsubmit = async event => {
   finally { busy(form, false); }
 };
 async function manageAccount(action, userId, password) {
-  await adminPost(state.services.auth, "/api/customer-management", { action, userId, ...(password ? { password } : {}) }, undefined, { what: action === "delete" ? "Deleting the customer account" : "Changing the password" });
+  const token = await state.services.auth.currentUser.getIdToken();
+  const response = await fetch("/api/customer-management", {
+    method: "POST", headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+    body: JSON.stringify({ action, userId, ...(password ? { password } : {}) }),
+  });
+  let data; try { data = await response.json(); } catch { throw new Error("Customer account management is not available on this preview."); }
+  if (!response.ok) throw new Error(data.error || "The operation could not be completed.");
 }
 function resetPasswordVisibility() {
   document.querySelectorAll("[data-password-toggle]").forEach(button => {

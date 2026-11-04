@@ -11,54 +11,12 @@
       rel="stylesheet"
     />
     <link rel="stylesheet" href="./styles.css?v=20261012-seating-refresh-2" />
-    <link rel="stylesheet" href="./dashboard.css?v=20261104-seating-touch-3" />
+    <link rel="stylesheet" href="./dashboard.css?v=20261028-invitation-sync-retry-1" />
     <link rel="stylesheet" href="./gender-reveal-dashboard.css?v=part2-2" />
     <link rel="stylesheet" href="./password-visibility.css?v=1" />
-  <link rel="stylesheet" href="./skeleton.css?v=1">
-    <!-- modulepreload:start -->
-    <link rel="modulepreload" href="./firebase-config.js" />
-    <link rel="modulepreload" href="./firebase-service-scopes.js" />
-    <link rel="modulepreload" href="./firebase-settings.js" />
-    <link rel="modulepreload" href="./local-firestore-diagnostics.js" />
-    <link rel="modulepreload" href="./customer-audit.js" />
-    <link rel="modulepreload" href="./skeleton.js" />
-    <link rel="modulepreload" href="./action-feedback.js" />
-    <link rel="modulepreload" href="./schedule-editor.js" />
-    <link rel="modulepreload" href="./admin-api.js" />
-    <link rel="modulepreload" href="./account-access.js" />
-    <link rel="modulepreload" href="./seating-transactions.js" />
-    <link rel="modulepreload" href="./dashboard-persistence.js?v=20261028-invitation-sync-retry-1" />
-    <link rel="modulepreload" href="./event-publishing.js?v=20261018-guest-invitation-regressions-2" />
-    <link rel="modulepreload" href="./invitations/shared/invitation-token.js?v=20261018-guest-invitation-regressions-2" />
-    <link rel="modulepreload" href="./guest-edit.js?v=20261018-guest-invitation-regressions-2" />
-    <link rel="modulepreload" href="./customer-access-ui.js?v=20261029-password-visibility" />
-    <link rel="modulepreload" href="./password-visibility.js?v=1" />
-    <link rel="modulepreload" href="./gender-reveal-publication.js" />
-    <link rel="modulepreload" href="./share-link.js" />
-    <link rel="modulepreload" href="./invitations/shared/invitation-token-service.js?v=20261018-guest-invitation-regressions-2" />
-    <link rel="modulepreload" href="./seating-firestore.js" />
-    <link rel="modulepreload" href="./dashboard-access.js" />
-    <link rel="modulepreload" href="./event-utils.js" />
-    <link rel="modulepreload" href="./event-date-time.js" />
-    <link rel="modulepreload" href="./event-settings-state.js" />
-    <link rel="modulepreload" href="./sender-codec.js" />
-    <link rel="modulepreload" href="./seating-utils.js?v=20261018-invitation-seat-map" />
-    <!-- modulepreload:end -->
   </head>
   <body class="dashboard-body">
     <main class="da3wa-shell">
-      <section class="dash-loading" id="dashboardLoading" aria-busy="true" aria-labelledby="dashboardLoadingText">
-        <div class="dash-loading__head"><span class="sk-line sk-line--short"></span><span class="sk-line sk-line--title"></span><span class="sk-line sk-line--mid"></span></div>
-        <div class="dash-loading__cards">
-          <div class="sk-card"><span class="sk-line sk-line--short"></span><span class="sk-line sk-line--title"></span><span class="sk-line"></span></div>
-          <div class="sk-card"><span class="sk-line sk-line--short"></span><span class="sk-line sk-line--title"></span><span class="sk-line"></span></div>
-          <div class="sk-card"><span class="sk-line sk-line--short"></span><span class="sk-line sk-line--title"></span><span class="sk-line"></span></div>
-        </div>
-        <div class="sk-row"><span class="sk sk-row__avatar"></span><span class="sk-row__text"><span class="sk-line sk-line--mid"></span><span class="sk-line sk-line--short"></span></span></div>
-        <div class="sk-row"><span class="sk sk-row__avatar"></span><span class="sk-row__text"><span class="sk-line sk-line--mid"></span><span class="sk-line sk-line--short"></span></span></div>
-        <p class="dash-loading__text" id="dashboardLoadingText" role="status">Loading your event…</p>
-        <p class="dash-loading__slow">This is taking longer than usual. A weak connection can slow it down. <a class="da3wa-button da3wa-button--secondary" href="">Try again</a></p>
-      </section>
       <section class="da3wa-app" id="dashboardApp" hidden>
         <aside class="da3wa-sidebar" id="dashboardSidebar">
           <button class="da3wa-button da3wa-button--secondary da3wa-sidebar-desktop-toggle" type="button" id="desktopSidebarToggleButton" aria-controls="dashboardSidebar" aria-expanded="true">Collapse navigation</button>
@@ -337,5 +295,5 @@
 
     <div class="da3wa-toast-rail" id="toastRail" aria-live="polite" aria-atomic="true"></div>
     <script type="module" src="./dashboard.js?v=20261029-password-visibility"></script>
-  <script type="module" src="./action-feedback.js"></script></body>
+  </body>
 </html>

@@ -26,13 +26,3 @@ test("every clean page address has both its redirect and its rewrite", () => {
   assert.ok(pages.length >= 12);
   for (const source of pages) assert.ok(vercel.redirects.some((r) => r.source === `${source}.html` && r.destination === source), source);
 });
-
-test("server functions install exact locked versions, and package files are not served", async () => {
-  const { readFile } = await import("node:fs/promises");
-  const ignore = await readFile(new URL("../.vercelignore", import.meta.url), "utf8");
-  assert.doesNotMatch(ignore, /^package-lock\.json$/m, "the lockfile is deployed");
-  const pkg = JSON.parse(await readFile(new URL("../package.json", import.meta.url), "utf8"));
-  assert.match(pkg.dependencies["firebase-admin"], /^\d+\.\d+\.\d+$/, "pinned exactly");
-  const vercel = JSON.parse(await readFile(new URL("../vercel.json", import.meta.url), "utf8"));
-  for (const file of ["/package.json", "/package-lock.json"]) assert.ok(vercel.redirects.some((r) => r.source === file && r.destination === "/"), file);
-});

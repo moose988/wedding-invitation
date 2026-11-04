@@ -1,25 +1,20 @@
 AWSTemplateFormatVersion: '2010-09-09'
-Description: Photo Bucket backup bucket shared by all photo buckets. Deploy in the backup region first.
+Description: Photo Bucket compressed-backup bucket for ONE event. Deploy in the backup region first.
 Parameters:
-  Stage:
+  EventId:
     Type: String
-    Default: shared
-    AllowedPattern: '^[a-z0-9-]{3,20}$'
+    AllowedPattern: '^[a-z0-9-]{3,30}$'
 Resources:
-  # Nothing here expires a backup. Copies only go when a guest deletes their own photo, an admin deletes the bucket, or a demo expires.
   BackupBucket:
     Type: AWS::S3::Bucket
-    DeletionPolicy: RetainExceptOnCreate # removed only if its very first creation fails, so a redeploy is not blocked
-    UpdateReplacePolicy: Retain
+    DeletionPolicy: Retain
     Properties:
-      BucketName: !Sub 'pbs-${Stage}-backup-${AWS::AccountId}-${AWS::Region}'
+      BucketName: !Sub 'pb-${EventId}-backup-${AWS::AccountId}-${AWS::Region}'
       PublicAccessBlockConfiguration: { BlockPublicAcls: true, BlockPublicPolicy: true, IgnorePublicAcls: true, RestrictPublicBuckets: true }
       BucketEncryption:
         ServerSideEncryptionConfiguration: [{ ServerSideEncryptionByDefault: { SSEAlgorithm: AES256 } }]
-      VersioningConfiguration: { Status: Enabled }
       LifecycleConfiguration:
-        Rules:
-          - { Id: abort-partial-uploads, Status: Enabled, AbortIncompleteMultipartUpload: { DaysAfterInitiation: 1 } }
+        Rules: [{ Id: abort-partial-uploads, Status: Enabled, AbortIncompleteMultipartUpload: { DaysAfterInitiation: 1 } }]
 Outputs:
   BackupBucketName: { Value: !Ref BackupBucket }
   BackupRegion: { Value: !Ref 'AWS::Region' }

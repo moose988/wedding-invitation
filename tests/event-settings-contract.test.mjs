@@ -39,7 +39,7 @@ test("seating-only accounts do not render invitation schedule or map embed field
   assert.match(settingsPage, /const hideOptionsAndLifecycle = state\.permissions\?\.seatingOnly === true/);
   assert.match(settingsPage, /const hideInvitationScheduleAndMapEmbed = hideOptionsAndLifecycle \|\| genderReveal/);
   assert.match(settingsPage, /\$\{hideInvitationScheduleAndMapEmbed \? "" : `\$\{field\("venueMapEmbedUrl", "Google Maps embed URL"/);
-  assert.match(settingsPage, /\$\{hideInvitationScheduleAndMapEmbed \? "" : `[^`]*\$\{scheduleEditorMarkup\(draft\.schedule/);
+  assert.match(settingsPage, /\$\{hideInvitationScheduleAndMapEmbed \? "" : `[^`]*Invitation schedule \(JSON, optional\)/);
   assert.match(settingsPage, /\$\{hideInvitationScheduleAndMapEmbed \? "" : `<p class="event-settings-timezone">Date and time use the same local time display as the rest of the dashboard/);
   assert.doesNotMatch(dashboard, /girl@gmail\.com/);
 });

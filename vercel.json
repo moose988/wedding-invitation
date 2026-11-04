@@ -1,26 +1,5 @@
 {
-  "crons": [
-    {
-      "path": "/api/demo-cleanup",
-      "schedule": "0 3 * * *"
-    }
-  ],
-  "functions": {
-    "api/demo-cleanup.js": {
-      "maxDuration": 60
-    }
-  },
   "redirects": [
-    {
-      "source": "/package.json",
-      "destination": "/",
-      "permanent": false
-    },
-    {
-      "source": "/package-lock.json",
-      "destination": "/",
-      "permanent": false
-    },
     {
       "source": "/all-events.html",
       "destination": "/all-events",
@@ -39,11 +18,6 @@
     {
       "source": "/customer-login.html",
       "destination": "/customer-login",
-      "permanent": false
-    },
-    {
-      "source": "/clients.html",
-      "destination": "/clients",
       "permanent": false
     },
     {
@@ -105,10 +79,6 @@
       "destination": "/customer-login.html"
     },
     {
-      "source": "/clients",
-      "destination": "/clients.html"
-    },
-    {
       "source": "/dashboard",
       "destination": "/dashboard.html"
     },
@@ -147,7 +117,7 @@
       "headers": [
         {
           "key": "Content-Security-Policy",
-          "value": "default-src 'self'; base-uri 'self'; object-src 'none'; frame-ancestors 'self' https://www.qdsystems.ae; form-action 'self'; script-src 'self' https://www.gstatic.com; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' data: https://fonts.gstatic.com; img-src 'self' data: blob: https://firebasestorage.googleapis.com https://storage.googleapis.com; media-src 'self' data: blob: https://*.s3.eu-north-1.amazonaws.com https://firebasestorage.googleapis.com https://storage.googleapis.com; connect-src 'self' https://*.execute-api.eu-north-1.amazonaws.com https://*.s3.eu-north-1.amazonaws.com https://firestore.googleapis.com https://identitytoolkit.googleapis.com https://securetoken.googleapis.com https://firebaseinstallations.googleapis.com https://firebaseappcheck.googleapis.com https://*.googleapis.com https://*.firebaseapp.com https://*.firebaseio.com wss://*.firebaseio.com https://*.google-analytics.com https://analytics.google.com; frame-src https://www.google.com; worker-src 'self' blob:; upgrade-insecure-requests"
+          "value": "default-src 'self'; base-uri 'self'; object-src 'none'; frame-ancestors 'self' https://www.qdsystems.ae; form-action 'self'; script-src 'self' https://www.gstatic.com; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' data: https://fonts.gstatic.com; img-src 'self' data: blob: https://firebasestorage.googleapis.com https://storage.googleapis.com; media-src 'self' data: blob: https://firebasestorage.googleapis.com https://storage.googleapis.com; connect-src 'self' https://*.execute-api.eu-north-1.amazonaws.com https://*.s3.eu-north-1.amazonaws.com https://firestore.googleapis.com https://identitytoolkit.googleapis.com https://securetoken.googleapis.com https://firebaseinstallations.googleapis.com https://firebaseappcheck.googleapis.com https://*.googleapis.com https://*.firebaseapp.com https://*.firebaseio.com wss://*.firebaseio.com https://*.google-analytics.com https://analytics.google.com; frame-src https://www.google.com; worker-src 'self' blob:; upgrade-insecure-requests"
         },
         {
           "key": "Referrer-Policy",
@@ -196,15 +166,6 @@
     },
     {
       "source": "/customer-events",
-      "headers": [
-        {
-          "key": "Cache-Control",
-          "value": "no-store, max-age=0"
-        }
-      ]
-    },
-    {
-      "source": "/clients",
       "headers": [
         {
           "key": "Cache-Control",

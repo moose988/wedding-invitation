@@ -3,19 +3,6 @@ const table = Array.from({ length: 256 }, (_, n) => { for (let i = 0; i < 8; i++
 function crc32(bytes) { let n = 0xffffffff; for (const byte of bytes) n = table[(n ^ byte) & 255] ^ (n >>> 8); return (n ^ 0xffffffff) >>> 0; }
 function header(size, values) { const a = new Uint8Array(size), view = new DataView(a.buffer); for (const [offset, value, length] of values) length === 4 ? view.setUint32(offset, value, true) : view.setUint16(offset, value, true); return a; }
 export function photoFilename(photo) { return `${photo.source === 'fixture' ? 'demo-' : ''}${photo.id.replace(/[^a-zA-Z0-9_-]/g, '').slice(-80)}.jpg`; }
-// Splits a large gallery into numbered parts that each fit the single-ZIP limits
-// (500 photos and 128 MB, with a small margin for sizes that differ slightly).
-export function splitZipParts(photos, { maxCount = LIMITS.zipCount, maxBytes = LIMITS.zipBytes - 4 * 1024 * 1024 } = {}) {
-  const parts = []; let current = [], bytes = 0;
-  for (const photo of photos) {
-    const size = Number(photo.size) || 0;
-    if (current.length && (current.length >= maxCount || bytes + size > maxBytes)) { parts.push(current); current = []; bytes = 0; }
-    current.push(photo); bytes += size;
-  }
-  if (current.length) parts.push(current);
-  return parts;
-}
-export const zipPartName = (index, total) => total > 1 ? `photo-bucket-photos-part-${index + 1}-of-${total}.zip` : 'photo-bucket-photos.zip';
 export async function makeZip(photos, readBlob, progress = () => {}, signal) {
   if (!photos.length) throw new Error('There are no photos to download.');
   if (photos.length > LIMITS.zipCount || photos.reduce((s, p) => s + p.size, 0) > LIMITS.zipBytes) throw new Error('This gallery is too large for one local ZIP (128 MB / 500 photos). Filter by contributor or download individual photos.');

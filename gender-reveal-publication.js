@@ -1,4 +1,4 @@
-import { publicEventData, projectionEqual } from './event-publishing.js?v=20261018-guest-invitation-regressions-2';
+import { publicEventData, projectionEqual } from './event-publishing.js';
 
 // Synchronize the public invitation from the latest event inside a transaction.
 export async function ensureGenderRevealPublished(api, db, weddingId) {

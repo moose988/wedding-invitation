@@ -11,7 +11,7 @@ import {
   serverTimestamp,
   where,
 } from "./firebase-config.js";
-import { resolveTableName } from "./seating-utils.js?v=20261018-invitation-seat-map";
+import { resolveTableName } from "./seating-utils.js";
 import { getEventDisplayTitle, isCelebrationEvent } from "./event-utils.js";
 import { projectSeatAssignments, mutateSeating } from "./seating-firestore.js";
 

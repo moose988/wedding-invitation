@@ -46,3 +46,15 @@ export function mergeById(previous, fresh, keep = []) {
 }
 
 export const truncationNote = (count) => `Showing the first ${count} events. More exist, so search cannot find the rest.`;
+
+// Keep an existing index in sync without creating a card for a platform admin.
+export function updateAdminEventArchiveStatus(api, db, { eventId, adminUid, status }) {
+  const eventRef = api.doc(db, "weddings", eventId);
+  const cardRef = api.doc(db, "users", adminUid, "weddingAccess", eventId);
+  return api.runTransaction(db, async transaction => {
+    const card = await transaction.get(cardRef);
+    const update = { status, updatedAt: api.serverTimestamp() };
+    transaction.update(eventRef, update);
+    if (card.exists() && card.data().weddingId === eventId) transaction.update(cardRef, update);
+  });
+}

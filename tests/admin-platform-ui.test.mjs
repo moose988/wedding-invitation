@@ -78,6 +78,7 @@ test("admin helpers: 48 hour overdue rule, countdown, per-target results, encodi
 test("demo duration choices and request", async () => {
   assert.deepEqual(adminApi.DEMO_DURATIONS.map(d => d.hours), [6, 12, 24, 48, 72, 168]);
   assert.equal(adminApi.DEFAULT_DEMO_HOURS, 24);
+  assert.equal(adminApi.OVERDUE_HOURS, 48);
   const source = await read("admin-workspace.js");
   assert.match(source, /name="demoHours" required/);
   assert.match(source, /\{ type, name, expiresInHours \}/);
@@ -103,7 +104,9 @@ test("clients page: admin guard, route, no-store, every client write uses intege
   assert.ok(vercel.headers.some(h => h.source === "/clients" && h.headers.some(x => x.key === "Cache-Control" && /no-store/.test(x.value))));
   const js = await read("clients.js");
   assert.match(js, /isPlatformAdmin\(api, state\.services\.db, user\.uid\)/);
-  assert.match(js, /customer-events\.html/);
+  const { CUSTOMER_ADMIN_REDIRECT } = await import("../customer-list.js");
+  assert.equal(CUSTOMER_ADMIN_REDIRECT, "./customer-events.html?message=admin-only");
+  assert.match(js, /location\.replace\(CUSTOMER_ADMIN_REDIRECT\)/);
   assert.doesNotMatch(js, /parseFloat|toFixed|Number\([^)]*price/i);
   assert.match(js, /MAX_QUOTE_LINES/);
 });

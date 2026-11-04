@@ -4,13 +4,14 @@ import { collection, getDocs, limit, orderBy, query, startAfter, where } from ".
 import { createOwnerAdapter } from "./photo-bucket/adapters.js";
 import { ensureGenderRevealPublished } from "./gender-reveal-publication.js";
 import { skeleton } from "./skeleton.js";
+import { confirmAction, copyWithFallback } from "./action-feedback.js";
 import { mountAdminHealth } from "./admin-health.js";
 import { DEFAULT_DEMO_HOURS, DEMO_DURATIONS, DEMO_NOTICE, DEMO_TYPES, adminPost, bucketOverdue, esc, formatCountdown, timeText } from "./admin-api.js";
 
 const $ = id => document.getElementById(id);
 const SECTIONS = ["events", "buckets", "demos"];
 let ctx = null;
-let ticker = null;
+
 
 export function mountAdminWorkspace(context) {
   ctx = context;
@@ -33,9 +34,14 @@ export function mountAdminWorkspace(context) {
   route();
   // Load the bucket list up front so the tab can show overdue and failed-backup counts.
   if (!$("adminBuckets").dataset.ready) { $("adminBuckets").dataset.ready = "1"; buildBuckets(); }
-  ticker = setInterval(() => {
+  const ticker = setInterval(() => {
     document.querySelectorAll("[data-expires]").forEach(node => { node.textContent = formatCountdown(Number(node.dataset.expires)); });
   }, 1000);
+  return () => {
+    clearInterval(ticker);
+    window.removeEventListener("hashchange", route);
+    clearSecret(true);
+  };
 }
 
 const copyText = async (text, button) => {
@@ -48,7 +54,7 @@ const msOf = value => value?.toMillis?.() ?? (typeof value?.seconds === "number"
 const bytesText = bytes => bytes >= 1073741824 ? `${(bytes / 1073741824).toFixed(1)} GB` : `${Math.max(0, Math.round((bytes || 0) / 1048576))} MB`;
 
 /* ---------------------------------------------------------------- Photo Buckets */
-const buckets = { rows: [], loaded: false, backups: new Map(), notes: new Map(), platform: null, platformError: "" };
+const buckets = { rows: [], loaded: false, backups: new Map(), retrying: new Set(), notes: new Map(), platform: null, platformError: "" };
 
 function buildBuckets() {
   const host = $("adminBuckets");
@@ -99,8 +105,8 @@ function renderBuckets() {
     const badges = [overdue ? `<span class="status-badge status-badge--overdue">Overdue: over 48 hours past the event</span>` : "", b.demo ? `<span class="status-badge status-badge--demo">Demo</span>` : "", b.status === "deleting" ? `<span class="status-badge status-badge--deleting">Deleting</span>` : "", b.frozen ? `<span class="status-badge">Frozen</span>` : "", b.paused ? `<span class="status-badge">Paused</span>` : ""].join("");
     const usage = Number.isFinite(b.usedBytes) ? `${bytesText(b.usedBytes)} of ${b.limitGb ?? "?"} GB · ${b.photoCount ?? 0} photos` : "";
     const expiry = b.demo && b.expiresAt ? `<span class="countdown" data-expires="${esc(b.expiresAt)}">${esc(formatCountdown(b.expiresAt))}</span>` : "";
-    return `<article class="wedding-card${overdue ? " wedding-card--overdue" : ""}"><div class="card-head"><div><h3>${esc(b.name || "Untitled bucket")}</h3><span class="category-badge">Photo Bucket</span></div></div><div class="admin-badges">${badges}</div><p class="admin-meta">${esc(b.date || "No date")} · ${esc(b.location || "No location")}</p><p class="admin-meta">${esc(usage)} ${expiry}</p>${b.demo ? "" : backupLine(b.id)}
-      <div class="card-actions admin-actions"><a class="open-button primary-button" href="./photo-bucket-manage.html?bucket=${encodeURIComponent(b.id)}">Manage photos</a><button class="secondary-button" data-bucket-action="customers" data-id="${id}" type="button">Customers</button><button class="secondary-button" data-bucket-action="deleted" data-id="${id}" type="button">Deleted photos</button>${b.demo ? "" : `<button class="secondary-button" data-bucket-action="redrive" data-id="${id}" type="button" ${(buckets.backups.get(b.id)?.failed || 0) + (buckets.backups.get(b.id)?.pending || 0) > 0 ? "" : "disabled"} title="Retries failed backups and any stuck as pending">Retry backups</button>`}<button class="secondary-button danger-text" data-bucket-action="delete" data-id="${id}" type="button">Delete bucket</button></div></article>`;
+    return `<article class="wedding-card${overdue ? " wedding-card--overdue" : ""}"><div class="card-head"><div><h3 dir="auto">${esc(b.name || "Untitled bucket")}</h3><span class="category-badge">Photo Bucket</span></div></div><div class="admin-badges">${badges}</div><p class="admin-meta">${esc(b.date || "No date")} · ${esc(b.location || "No location")}</p><p class="admin-meta">${esc(usage)} ${expiry}</p>${b.demo ? "" : backupLine(b.id)}
+      <div class="card-actions admin-actions"><a class="open-button primary-button" href="./photo-bucket-manage.html?bucket=${encodeURIComponent(b.id)}">Manage photos</a><button class="secondary-button" data-bucket-action="customers" data-id="${id}" type="button">Customers</button><button class="secondary-button" data-bucket-action="deleted" data-id="${id}" type="button">Deleted photos</button>${b.demo ? "" : `<button class="secondary-button" data-bucket-action="redrive" data-id="${id}" type="button" ${buckets.retrying.has(b.id) || !(buckets.backups.get(b.id)?.failed || buckets.backups.get(b.id)?.pending) ? "disabled" : ""} title="Retries failed backups and any stuck as pending">${buckets.retrying.has(b.id) ? "Retrying backups…" : "Retry backups"}</button>`}<button class="secondary-button danger-text" data-bucket-action="delete" data-id="${id}" type="button">Delete bucket</button></div></article>`;
   }).join("");
 }
 
@@ -131,8 +137,7 @@ function paintBucketSummary() {
   const tab = document.querySelector('#workspaceTabs [data-section="buckets"]');
   if (tab) { tab.querySelector(".tab-badge")?.remove(); const n = overdue.length + (failed ? 1 : 0); if (overdue.length || failed) tab.insertAdjacentHTML("beforeend", ` <span class="tab-badge" title="${esc(`${overdue.length} overdue, ${failed} failed backups`)}">${overdue.length ? `${overdue.length} overdue` : ""}${overdue.length && failed ? ", " : ""}${failed ? `${failed} failed backup${failed === 1 ? "" : "s"}` : ""}</span>`); void n; }
 }
-// Backup counts are read four buckets at a time. The API has no platform-wide count yet,
-// per-bucket lines below are read here; the tab total comes from GET /admin/backups.
+// Read the platform total first, then load the per-bucket counts four at a time.
 async function loadBackups() {
   const adapter = await createOwnerAdapter(ctx.user), queue = buckets.rows.filter(b => !b.demo);
   try { buckets.platform = await adapter.platformBackups(); buckets.platformError = ""; } catch (error) { buckets.platform = null; buckets.platformError = error?.message || "network error"; }
@@ -145,14 +150,20 @@ async function loadBackups() {
   }));
 }
 async function redrive(bucket) {
-  buckets.notes.set(bucket.id, "Re-driving…"); renderBuckets();
+  if (buckets.retrying.has(bucket.id)) return;
+  buckets.retrying.add(bucket.id);
+  buckets.notes.set(bucket.id, "Retrying backups…");
+  renderBuckets();
   try {
     const adapter = await createOwnerAdapter(ctx.user); let cursor, queued = 0;
     for (let i = 0; i < 20; i += 1) { const r = await adapter.redriveBackups(bucket.id, cursor ? { cursor } : {}); queued += r.queued || 0; cursor = r.nextCursor; if (!cursor) break; }
     buckets.notes.set(bucket.id, `Queued ${queued} backup${queued === 1 ? "" : "s"}. Check again in a few minutes.`);
     buckets.backups.set(bucket.id, await adapter.backups(bucket.id));
-  } catch (error) { buckets.notes.set(bucket.id, `Re-drive failed: ${error?.message || "network error"}`); }
-  renderBuckets();
+  } catch (error) { buckets.notes.set(bucket.id, `Retry failed: ${error?.message || "network error"}`); }
+  finally {
+    buckets.retrying.delete(bucket.id);
+    renderBuckets();
+  }
 }
 
 function dialogShell(id, html) {
@@ -177,10 +188,10 @@ function openBucketDelete(bucket) {
   });
 }
 
-const RESTORE_NOTES = { BACKUP_NOT_READY: "The backup is still being made. Try again in a few minutes.", ALREADY_RESTORED: "This photo was already restored.", PHOTO_EXISTS: "A photo with this file number already exists.", BUCKET_FULL: "The bucket is full. Increase its size first.", BACKUP_MISSING: "No backup exists for this photo, so it cannot be restored." };
+const RESTORE_NOTES = { BACKUP_NOT_READY: "The backup is still being made. Try again in a few minutes.", PHOTO_EXISTS: "A photo with this file number already exists.", BUCKET_FULL: "The bucket is full. Increase its size first.", BACKUP_MISSING: "No backup exists for this photo, so it cannot be restored." };
 
 async function openDeletedPhotos(bucket) {
-  const dialog = dialogShell("deletedDialog", `<div class="workspace-modal"><header><div><p class="workspace-kicker">Admin only</p><h2>Deleted photos: ${esc(bucket.name)}</h2></div><button class="icon-close" type="button" data-dialog-close aria-label="Close">×</button></header><div class="workspace-modal__body"><p class="admin-note">Restoring puts the photo back using its saved <strong>quality 80 backup copy</strong>, not the original file. It uses storage space again. Photos deleted by guests are permanent and are not listed.</p><p class="workspace-status" role="status" id="deletedStatus">Loading deleted photos…</p><div id="deletedList">${skeleton.rows(3, "Loading deleted photos…")}</div></div><footer><button class="secondary-button" type="button" data-dialog-close>Close</button></footer></div>`);
+  const dialog = dialogShell("deletedDialog", `<div class="workspace-modal"><header><div><p class="workspace-kicker">Admin only</p><h2>Deleted photos: <bdi>${esc(bucket.name)}</bdi></h2></div><button class="icon-close" type="button" data-dialog-close aria-label="Close">×</button></header><div class="workspace-modal__body"><p class="admin-note">Restoring puts the photo back using its saved <strong>quality 80 backup copy</strong>, not the original file. It uses storage space again. Photos deleted by guests are permanent and are not listed.</p><p class="workspace-status" role="status" id="deletedStatus">Loading deleted photos…</p><div id="deletedList">${skeleton.rows(3, "Loading deleted photos…")}</div></div><footer><button class="secondary-button" type="button" data-dialog-close>Close</button></footer></div>`);
   const status = dialog.querySelector("#deletedStatus"), list = dialog.querySelector("#deletedList");
   let records = [];
   const paint = () => {
@@ -188,7 +199,7 @@ async function openDeletedPhotos(bucket) {
     list.innerHTML = records.length ? `<table class="admin-table"><thead><tr><th scope="col">File number</th><th scope="col">Name</th><th scope="col">Deleted</th><th scope="col">By</th><th scope="col"><span class="sr-only">Action</span></th></tr></thead><tbody>${records.map(r => {
       const restored = Boolean(r.restoredAt);
       const note = restored ? `Restored ${esc(timeText(r.restoredAt))}` : r.restorable === false ? esc(r.backupState === "failed" ? "Backup failed" : "Backup not ready yet") : "";
-      return `<tr><th scope="row">${esc(r.photoId)}</th><td>${esc(r.name || "Untitled")}</td><td>${esc(timeText(r.deletedAt))}</td><td>${esc(r.actorRole || "")}</td><td>${note ? `<span class="admin-note">${note}</span>` : ""}<button class="secondary-button" type="button" data-restore="${esc(r.deletedId)}" ${restored || r.restorable === false ? "disabled" : ""} aria-label="Restore photo ${esc(r.photoId)}">Restore</button></td></tr>`;
+      return `<tr><th scope="row">${esc(r.photoId)}</th><td dir="auto">${esc(r.name || "Untitled")}</td><td>${esc(timeText(r.deletedAt))}</td><td>${esc(r.actorRole || "")}</td><td>${note ? `<span class="admin-note">${note}</span>` : ""}<button class="secondary-button" type="button" data-restore="${esc(r.deletedId)}" ${restored || r.restorable === false ? "disabled" : ""} aria-label="Restore photo ${esc(r.photoId)}">Restore</button></td></tr>`;
     }).join("")}</tbody></table>` : "";
   };
   try { records = await (await createOwnerAdapter(ctx.user)).deleted(bucket.id); paint(); }
@@ -196,7 +207,13 @@ async function openDeletedPhotos(bucket) {
   list.addEventListener("click", async click => {
     const button = click.target.closest("[data-restore]"); if (!button) return;
     button.disabled = true; status.textContent = "Restoring…";
-    try { await (await createOwnerAdapter(ctx.user)).restoreDeleted(bucket.id, button.dataset.restore); records = await (await createOwnerAdapter(ctx.user)).deleted(bucket.id); paint(); status.textContent = "Photo restored from its quality 80 backup copy."; }
+    try {
+      const adapter = await createOwnerAdapter(ctx.user);
+      const result = await adapter.restoreDeleted(bucket.id, button.dataset.restore);
+      records = await adapter.deleted(bucket.id);
+      paint();
+      status.textContent = result?.alreadyRestored ? "This photo was already restored." : "Photo restored from its quality 80 backup copy.";
+    }
     catch (error) { button.disabled = false; status.textContent = RESTORE_NOTES[error?.code] || error?.message || "The photo could not be restored."; }
   });
 }
@@ -252,7 +269,17 @@ function showSecret(demo, name) {
     <p class="admin-meta"><strong class="countdown" data-expires="${esc(demo.expiresAt)}">${esc(formatCountdown(demo.expiresAt))}</strong> · access ends ${esc(timeText(demo.expiresAt))}, and the data is removed soon after. ${esc(isBucket ? "This bucket holds 1 GB." : "")} Access ends at the time shown and the data is removed soon after. ${esc(signIn)} The email address cannot receive mail, so password reset will not work.</p>
     <div class="admin-actions"><a class="secondary-button" href="${openLink}">${isBucket ? "Open the bucket" : "Open the dashboard"}</a>${demo.type === "gender_reveal" ? `<button class="secondary-button" type="button" id="demoInvite">Copy invitation link</button>` : ""}<button class="primary-button" type="button" id="secretDone">I have saved the sign-in</button></div><p class="workspace-status" id="secretStatus" role="status"></p></section>`;
   $("demoResult").querySelectorAll("[data-copy]").forEach(button => button.addEventListener("click", () => { shownSecret.copied = true; void copyText($(button.dataset.copy).value, button); }));
-  $("secretDone").addEventListener("click", () => { if (!shownSecret.copied && !window.confirm("You have not copied the sign-in. It cannot be shown again. Close anyway?")) return; clearSecret(); });
+  $("secretDone").addEventListener("click", async ({ currentTarget: button }) => {
+    if (button.disabled || !shownSecret) return;
+    const secret = shownSecret;
+    button.disabled = true;
+    try {
+      if (!secret.copied && !(await confirmAction({ title: "Clear the demo sign-in?", message: "You have not copied the sign-in. It cannot be shown again.", confirmLabel: "Clear sign-in", danger: true }))) return;
+      if (shownSecret === secret) clearSecret();
+    } finally {
+      button.disabled = false;
+    }
+  });
   if (demo.type === "gender_reveal") prepareGenderReveal(demo.eventId);
   $("secretTitle").setAttribute("tabindex", "-1"); $("secretTitle").focus();
 }
@@ -264,8 +291,13 @@ async function prepareGenderReveal(eventId) {
   status.textContent = "Preparing the shared invitation…";
   try { await publish(); status.textContent = "The shared invitation is ready."; } catch { status.textContent = "The invitation needs preparing. Use Copy invitation link to retry."; }
   button?.addEventListener("click", async () => {
-    try { await publish(); await navigator.clipboard.writeText(new URL(`gender-reveal.html?wedding=${encodeURIComponent(eventId)}`, location.href).href); status.textContent = "Invitation link copied."; }
-    catch { status.textContent = "Could not prepare the invitation. Check your access and try again."; }
+    if (button.disabled) return;
+    button.disabled = true;
+    try {
+      await publish();
+      if (await copyWithFallback(new URL(`gender-reveal.html?wedding=${encodeURIComponent(eventId)}`, location.href).href)) status.textContent = "Invitation link copied.";
+    } catch { status.textContent = "Could not prepare the invitation. Check your access and try again."; }
+    finally { button.disabled = false; }
   });
 }
 
@@ -287,7 +319,7 @@ async function loadDemos() {
       ...bucketResult.rows.filter(b => b.demo).map(b => ({ kind: "bucket", id: b.id, name: b.name, type: "photo_bucket", expires: Number(b.expiresAt) || 0 })),
     ].sort((a, b) => a.expires - b.expires);
     status.textContent = (items.length ? `${items.length} active demo${items.length === 1 ? "" : "s"}` : "No demos right now.") + (bucketResult.error ? ` Demo photo buckets could not be listed (${bucketResult.error.message || "network error"}), so this list may be missing some.` : "");
-    list.innerHTML = items.map(i => `<article class="demo-item"><div><strong>${esc(i.name)}</strong><span class="category-badge">${esc(DEMO_TYPES.find(t => t.value === i.type)?.label || i.type || "Event")}</span></div><span class="countdown" data-expires="${esc(i.expires)}">${esc(formatCountdown(i.expires))}</span><a class="secondary-button" href="${i.kind === "bucket" ? `./photo-bucket-manage.html?bucket=${encodeURIComponent(i.id)}` : `./dashboard.html?wedding=${encodeURIComponent(i.id)}`}">Open</a></article>`).join("");
+    list.innerHTML = items.map(i => `<article class="demo-item"><div><strong dir="auto">${esc(i.name)}</strong><span class="category-badge">${esc(DEMO_TYPES.find(t => t.value === i.type)?.label || i.type || "Event")}</span></div><span class="countdown" data-expires="${esc(i.expires)}">${esc(formatCountdown(i.expires))}</span><a class="secondary-button" href="${i.kind === "bucket" ? `./photo-bucket-manage.html?bucket=${encodeURIComponent(i.id)}` : `./dashboard.html?wedding=${encodeURIComponent(i.id)}`}">Open</a></article>`).join("");
   } catch (error) { status.textContent = `Demos could not load (${error?.code || "network error"}). Use Refresh to try again.`; list.innerHTML = ""; }
 }
 

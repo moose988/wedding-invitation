@@ -1,3 +1,4 @@
+import { CUSTOMER_ADMIN_REDIRECT } from "./customer-list.js";
 import * as api from "./firebase-config.js";
 import { isPlatformAdmin, assignCustomer } from "./account-access.js";
 import { getEventDisplayTitle } from "./event-utils.js";
@@ -23,7 +24,7 @@ else {
   api.onAuthStateChanged(state.services.auth, async user => {
     if (!user) { location.replace("./dashboard-login.html?message=session-required"); return; }
     try {
-      if (!await isPlatformAdmin(api, state.services.db, user.uid)) { location.replace("./customer-events.html"); return; }
+      if (!await isPlatformAdmin(api, state.services.db, user.uid)) { location.replace(CUSTOMER_ADMIN_REDIRECT); return; }
       $("userEmail").textContent = user.email || "Planner";
       $("loading").hidden = true; $("workspace").hidden = false;
       void mountAdminHealth(state.services.auth);

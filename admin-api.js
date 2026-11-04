@@ -1,6 +1,6 @@
 // Small helpers for the platform-admin pages. No Firebase import, so they can be
 // tested in Node. Everything that reaches the page as HTML goes through esc().
-export const esc = value => String(value ?? "").replace(/[&<>"'`]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;", "`": "&#096;" })[c]);
+export { escapeHtml as esc } from "./invitations/shared/invitation-utils.js";
 
 export const DEMO_TYPES = Object.freeze([
   { value: "wedding_engagement", label: "Wedding / Engagement", note: "An event with guests, invitations and seating." },
@@ -14,7 +14,6 @@ export const DEMO_DURATIONS = Object.freeze([
 ]);
 export const DEFAULT_DEMO_HOURS = 24;
 export const DEMO_NOTICE = "Demo photo buckets hold 1 GB. Each demo's access ends at the time you choose when you create it, and its data and sign-in account are removed soon after.";
-export const demoDurationLabel = hours => DEMO_DURATIONS.find(d => d.hours === Number(hours))?.label || "";
 export const OVERDUE_HOURS = 48;
 
 // Turns a failed call into a message that says what failed and what to do. The three setup problems

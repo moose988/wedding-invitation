@@ -1,6 +1,7 @@
 .git
 .firebase
 .local-evidence
+.local-buckets
 .playwright-mcp
 node_modules
 functions
@@ -21,3 +22,4 @@ docs
 .claude
 # Licence notices stay deployed.
 !vendor/THIRD-PARTY-NOTICES.md
+!vendor/lamejs-src/README.md

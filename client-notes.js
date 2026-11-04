@@ -30,7 +30,7 @@ export function openNoteComposer({ api, db, user, clientId, clientName = "", not
   let interests = [...(note?.interests || [])];
   d.innerHTML = `<form class="workspace-modal workspace-modal--small" novalidate><header><div><p class="workspace-kicker">${esc(clientName || "Client note")}</p><h2>${note ? "Edit note" : "New note"}</h2></div><button class="icon-close" type="button" data-close aria-label="Close">×</button></header>
     <div class="workspace-modal__body note-form">
-      <label>What did you discuss?<textarea name="text" rows="5" maxlength="5000" required>${esc(note?.text || "")}</textarea></label>
+      <label>What did you discuss?<textarea name="text" dir="auto" rows="5" maxlength="5000" required>${esc(note?.text || "")}</textarea></label>
       <label>Price discussed in AED (optional)<input name="price" inputmode="decimal" autocomplete="off" placeholder="0.00" value="${Number.isInteger(note?.priceFils) ? esc(`${Math.floor(note.priceFils / 100)}.${String(note.priceFils % 100).padStart(2, "0")}`) : ""}" /></label>
       <div class="chips-field"><label for="interestInput">Interests <small>Type and press Enter. Up to ${MAX_INTERESTS}.</small></label><div class="chip-row" id="chipList" aria-live="polite"></div><input id="interestInput" maxlength="40" autocomplete="off" placeholder="For example: Invitation" /><div class="chip-row" id="suggestions" aria-label="Suggested interests"></div></div>
       <label class="check-row"><input type="checkbox" name="pinned" ${note?.pinned ? "checked" : ""} /> Pin this note to the top</label>
@@ -116,7 +116,7 @@ export function mountNotes({ api, db, user, client, host }) {
 
   function confirmDelete(note) {
     const d = dialog();
-    d.innerHTML = `<form class="workspace-modal workspace-modal--small"><header><h2>Delete this note?</h2><button class="icon-close" type="button" data-close aria-label="Close">×</button></header><div class="workspace-modal__body"><p>This note is removed for everyone and cannot be brought back.</p><blockquote class="note-quote">${esc(snippet(note.text, 140))}</blockquote><p class="form-error" role="alert"></p></div><footer><button class="secondary-button" type="button" data-close>Keep note</button><button class="danger-button" type="submit">Delete note</button></footer></form>`;
+    d.innerHTML = `<form class="workspace-modal workspace-modal--small"><header><h2>Delete this note?</h2><button class="icon-close" type="button" data-close aria-label="Close">×</button></header><div class="workspace-modal__body"><p>This note is removed for everyone and cannot be brought back.</p><blockquote class="note-quote" dir="auto">${esc(snippet(note.text, 140))}</blockquote><p class="form-error" role="alert"></p></div><footer><button class="secondary-button" type="button" data-close>Keep note</button><button class="danger-button" type="submit">Delete note</button></footer></form>`;
     $(d, "form").addEventListener("click", e => { if (e.target.closest("[data-close]")) d.close(); });
     $(d, "form").addEventListener("submit", async e => {
       e.preventDefault(); const b = $(d, '[type="submit"]'); b.disabled = true;

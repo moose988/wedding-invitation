@@ -2,6 +2,8 @@
 // Pure helpers, so the order and the markup are easy to test. All text is escaped here.
 import { esc } from "./admin-api.js";
 
+export const CUSTOMER_ADMIN_REDIRECT = "./customer-events.html?message=admin-only";
+
 const DAY = 86_400_000;
 export const startOfToday = (now = Date.now()) => { const d = new Date(now); d.setHours(0, 0, 0, 0); return d.getTime(); };
 
@@ -29,7 +31,7 @@ export function itemCardHtml(item) {
   const action = item.kind === "bucket"
     ? `<a class="primary-button customer-item__action" href="./photo-bucket-manage.html?bucket=${encodeURIComponent(item.id)}">Open photos<span class="sr-only"> for ${name}</span></a>`
     : `<button class="primary-button customer-item__action" data-action="open" data-id="${id}" type="button">${item.seatingOnly ? "Open seating" : "Open event"}<span class="sr-only"> ${name}</span></button>`;
-  return `<article class="customer-item customer-item--${item.kind}"><div class="customer-item__top"><span class="customer-item__type">${esc(item.typeLabel)}</span><span class="customer-item__date">${esc(item.dateText || "Date to be set")}</span></div><h2 class="customer-item__name">${name}</h2>${action}</article>`;
+  return `<article class="customer-item customer-item--${item.kind}"><div class="customer-item__top"><span class="customer-item__type">${esc(item.typeLabel)}</span><span class="customer-item__date">${esc(item.dateText || "Date to be set")}</span></div><h2 class="customer-item__name" dir="auto">${name}</h2>${action}</article>`;
 }
 
 // problems: [{ text, retry }] where retry is a data attribute value for a Try again button.

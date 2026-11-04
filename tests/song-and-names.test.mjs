@@ -15,6 +15,8 @@ test("lamejs is vendored unmodified with its licence notice, not added as a depe
   const notices = await read("vendor/THIRD-PARTY-NOTICES.md");
   assert.match(notices, /lamejs 1\.2\.1/); assert.match(notices, /LGPL-3\.0/); assert.match(notices, /unmodified/i);
   assert.doesNotMatch(await read("package.json"), /lamejs/);
+  const upstreamSource = await readFile(new URL("../vendor/lamejs-src/lame.all.js", import.meta.url));
+  assert.equal(createHash("sha256").update(upstreamSource).digest("hex"), "026bd88846040f357a937cd85821a48492a362eff0812cda734f23fca55fea3b");
   const worker = await read("music-worker.js"); assert.match(worker, /importScripts\("\/vendor\/lame\.min\.js"\)/); assert.match(await read("music-encoder.js"), /new Worker\(workerUrl\)/);
 });
 
@@ -49,7 +51,7 @@ test("admin music UI: three modes, replace, remove, preview, progress; saved as 
   const s = await read("music-settings.js"), d = await read("dashboard.js"), w = await read("weddings.js");
   for (const part of [/Off/, /Default song/, /Custom song/, /data-music-remove/, /data-music-play/, /Replace song/, /<progress/, /accept="audio\/\*"/, /runAction/]) assert.match(s, part);
   assert.match(s, /\{ musicMode, musicVersion, musicName, updatedAt: firebase\.serverTimestamp\(\) \}/);
-  assert.match(s, /state\.version \+= 1; state\.name = songNameFrom/); assert.doesNotMatch(s, /grant\.version/);
+  assert.match(s, /state\.version \+= 1; state\.name = name/); assert.doesNotMatch(s, /grant\.version/);
   assert.match(s, /publicEventData\(event\.data\(\)\)/);
   assert.match(d, /id="musicPanel"/); assert.match(d, /state\.isAdmin === true && !genderReveal/); assert.match(w, /name="musicModeCreate"|musicModeCreate/);
 });

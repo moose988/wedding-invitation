@@ -66,10 +66,6 @@ export function buildLineItems(lines) {
   }));
 }
 
-export function formatQuoteNumber(date = new Date(), sequence = 1) {
-  return `QD-${date.getFullYear()}${String(date.getMonth() + 1).padStart(2, "0")}${String(date.getDate()).padStart(2, "0")}-${String(sequence).padStart(3, "0")}`;
-}
-
 // Plain-English draft for the owner to review. The bracketed parts are
 // deliberately left blank: they are decisions and legal wording that only the
 // owner can supply. Nothing here states a company registration or a legal claim.

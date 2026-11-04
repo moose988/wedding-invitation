@@ -1,3 +1,4 @@
+import { CUSTOMER_ADMIN_REDIRECT } from "./customer-list.js";
 import * as api from "./firebase-config.js";
 import { isPlatformAdmin } from "./account-access.js";
 import { getEventDisplayTitle } from "./event-utils.js";
@@ -22,7 +23,7 @@ else {
   api.onAuthStateChanged(state.services.auth, async user => {
     if (!user) { location.replace("./dashboard-login.html?message=session-required"); return; }
     try {
-      if (!await isPlatformAdmin(api, state.services.db, user.uid)) { location.replace("./customer-events.html"); return; }
+      if (!await isPlatformAdmin(api, state.services.db, user.uid)) { location.replace(CUSTOMER_ADMIN_REDIRECT); return; }
       state.user = user; void mountAdminHealth(state.services.auth); $("userEmail").textContent = user.email || "Admin";
       $("loading").hidden = true; $("workspace").hidden = false;
       await Promise.all([loadClients(true), loadEvents()]);
@@ -58,11 +59,11 @@ function renderList() {
   const rows = state.clients.filter(c => `${c.name} ${c.phone || ""} ${c.email || ""}`.toLowerCase().includes(term));
   $("status").textContent = state.clients.length ? `${rows.length} client${rows.length === 1 ? "" : "s"} shown${state.more ? " · search covers loaded clients only" : ""}` : "";
   $("loadMore").hidden = !state.more;
-  $("clientList").innerHTML = rows.length ? rows.map(c => `<article class="customer-card"><div class="customer-identity"><div class="customer-avatar" aria-hidden="true">${esc(c.name.slice(0, 1).toUpperCase())}</div><div class="customer-info"><h2>${esc(c.name)}</h2><p>${esc([c.phone, c.email].filter(Boolean).join(" · ") || "No contact details")}</p>${noteLine(c.id)}<div class="customer-tags"><span class="customer-tag">${esc(formatAed(c.priceFils))}</span><span class="customer-tag">${(c.linkedEventIds || []).length} linked event${(c.linkedEventIds || []).length === 1 ? "" : "s"}</span></div></div></div><div class="customer-actions"><button class="secondary-button" data-quick-note="${esc(c.id)}" type="button" aria-label="Add a note for ${esc(c.name)}">Add note</button><button class="secondary-button" data-open="${esc(c.id)}" type="button" aria-label="Open ${esc(c.name)}">Open</button></div></article>`).join("")
+  $("clientList").innerHTML = rows.length ? rows.map(c => `<article class="customer-card"><div class="customer-identity"><div class="customer-avatar" aria-hidden="true">${esc(c.name.slice(0, 1).toUpperCase())}</div><div class="customer-info"><h2 dir="auto">${esc(c.name)}</h2><p>${esc([c.phone, c.email].filter(Boolean).join(" · ") || "No contact details")}</p>${noteLine(c.id)}<div class="customer-tags"><span class="customer-tag">${esc(formatAed(c.priceFils))}</span><span class="customer-tag">${(c.linkedEventIds || []).length} linked event${(c.linkedEventIds || []).length === 1 ? "" : "s"}</span></div></div></div><div class="customer-actions"><button class="secondary-button" data-quick-note="${esc(c.id)}" type="button" aria-label="Add a note for ${esc(c.name)}">Add note</button><button class="secondary-button" data-open="${esc(c.id)}" type="button" aria-label="Open ${esc(c.name)}">Open</button></div></article>`).join("")
     : `<div class="customer-empty"><strong>${state.clients.length ? "No matching clients" : "No clients yet"}</strong><p>${state.clients.length ? "Try another name, phone or email." : "Add a client to track their events, price and quotations."}</p></div>`;
 }
 // Latest note and count per row, read four at a time after the list is drawn.
-const noteLine = id => { const m = state.meta.get(id); return !m ? "" : m.error ? "" : `<p class="client-note-line">${m.count ? `<strong>${m.count} note${m.count === 1 ? "" : "s"}</strong> · ${esc(m.latest)}` : "No notes yet"}</p>`; };
+const noteLine = id => { const m = state.meta.get(id); return !m ? "" : m.error ? "" : `<p class="client-note-line">${m.count ? `<strong>${m.count} note${m.count === 1 ? "" : "s"}</strong> · <bdi>${esc(m.latest)}</bdi>` : "No notes yet"}</p>`; };
 async function loadMeta(rows) {
   const queue = rows.filter(c => !state.meta.has(c.id));
   await Promise.all(Array.from({ length: 4 }, async () => {
@@ -128,8 +129,8 @@ async function openClient(id) {
 function renderDetail() {
   const c = state.current, linked = c.linkedEventIds || [];
   const available = state.events.filter(e => !linked.includes(e.id));
-  $("detailBody").innerHTML = `<section class="workspace-hero customer-hero"><div><h1>${esc(c.name)}</h1><p>${esc(formatAed(c.priceFils))} agreed price</p></div><div class="customer-actions"><button class="secondary-button" id="editClient" type="button">Edit client</button><button class="secondary-button delete-customer" id="deleteClient" type="button">Delete</button></div></section>
-    <dl class="client-facts"><div><dt>Phone</dt><dd>${esc(c.phone || "Not set")}</dd></div><div><dt>Email</dt><dd>${esc(c.email || "Not set")}</dd></div><div class="wide"><dt>Notes</dt><dd class="pre">${esc(c.notes || "No notes")}</dd></div></dl>
+  $("detailBody").innerHTML = `<section class="workspace-hero customer-hero"><div><h1 dir="auto">${esc(c.name)}</h1><p>${esc(formatAed(c.priceFils))} agreed price</p></div><div class="customer-actions"><button class="secondary-button" id="editClient" type="button">Edit client</button><button class="secondary-button delete-customer" id="deleteClient" type="button">Delete</button></div></section>
+    <dl class="client-facts"><div><dt>Phone</dt><dd>${esc(c.phone || "Not set")}</dd></div><div><dt>Email</dt><dd>${esc(c.email || "Not set")}</dd></div><div class="wide"><dt>Notes</dt><dd class="pre" dir="auto">${esc(c.notes || "No notes")}</dd></div></dl>
     <section class="admin-card" aria-labelledby="linkedTitle"><h2 id="linkedTitle">Linked events</h2>
       ${linked.length ? `<ul class="chip-list">${linked.map(id => `<li><span>${esc(eventTitle(id))}</span><button type="button" class="text-button" data-unlink="${esc(id)}" aria-label="Unlink ${esc(eventTitle(id))}">Remove</button></li>`).join("")}</ul>` : `<p class="admin-note">No events linked yet.</p>`}
       ${state.eventsError ? `<p class="form-error" role="alert">The event list could not load (${esc(state.eventsError)}). Reload the page to try again.</p>` : ""}${state.eventsTruncated ? `<p class="admin-note">${esc(truncationNote(state.events.length))}</p>` : ""}
@@ -190,7 +191,7 @@ function openQuote(quote) {
   drawLines(); recalc(); $("quoteDialog").showModal();
 }
 function drawLines() {
-  $("lineRows").innerHTML = lines.map((l, i) => `<div class="quote-line" data-line="${i}"><label>Item ${i + 1}<input data-f="description" value="${esc(l.description)}" maxlength="500" aria-describedby="lerr${i}" /></label><label>Qty<input data-f="quantity" inputmode="numeric" value="${esc(l.quantity)}" /></label><label>Unit price (AED)<input data-f="unitPrice" inputmode="decimal" value="${esc(l.unitPrice)}" placeholder="0.00" /></label><output class="line-total" aria-label="Line ${i + 1} total"></output><button class="text-button" type="button" data-remove="${i}" aria-label="Remove item ${i + 1}" ${lines.length === 1 ? "disabled" : ""}>Remove</button><p class="line-error" id="lerr${i}" role="alert"></p></div>`).join("");
+  $("lineRows").innerHTML = lines.map((l, i) => `<div class="quote-line" data-line="${i}"><label>Item ${i + 1}<input data-f="description" dir="auto" value="${esc(l.description)}" maxlength="500" aria-describedby="lerr${i}" /></label><label>Qty<input data-f="quantity" inputmode="numeric" value="${esc(l.quantity)}" /></label><label>Unit price (AED)<input data-f="unitPrice" inputmode="decimal" value="${esc(l.unitPrice)}" placeholder="0.00" /></label><output class="line-total" aria-label="Line ${i + 1} total"></output><button class="text-button" type="button" data-remove="${i}" aria-label="Remove item ${i + 1}" ${lines.length === 1 ? "disabled" : ""}>Remove</button><p class="line-error" id="lerr${i}" role="alert"></p></div>`).join("");
   $("lineCount").textContent = `(${lines.length} of ${MAX_QUOTE_LINES})`;
   $("addLine").disabled = lines.length >= MAX_QUOTE_LINES;
 }

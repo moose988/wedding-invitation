@@ -20,7 +20,7 @@ npm run test:security
 
 ## Firebase Console requirements
 
-1. Confirm the target project uses the Spark plan and Firestore is initialized. Do not initialize or deploy Firebase Hosting for production.
+1. Confirm the target project uses the Blaze plan, has a USD 5 budget alert, and has Firestore initialized. Do not initialize or deploy Firebase Hosting for production.
 2. Enable Email/Password under Authentication → Sign-in method.
    Gender Reveal invitations also require Anonymous Authentication; their named
    Auth instance must remain separate from planner/customer sessions.
@@ -36,23 +36,42 @@ firebase use weddinginvitaion-b4f36
 
 ## Deployment order
 
-Deploy compatible Firestore rules and index configuration first:
+Each live step needs the owner's approval. Complete the temporary AWS proof and tear it down before the shared stack deployment. The owner also confirms Firebase Blaze with a USD 5 budget alert, Vercel Pro, and an AWS paid plan with a budget alert and a Lambda concurrency quota of at least 1,000.
 
-```powershell
-firebase deploy --only firestore:rules,firestore:indexes --project weddinginvitaion-b4f36
-```
+1. Deploy the compatible Firestore rules and indexes first. The frontend needs these rules for its writes.
 
-Then commit and push the tested frontend changes to `main`. The connected Vercel project creates the production deployment automatically. Do not run `firebase deploy --only hosting`, enable billing, or deploy Functions.
+   ```powershell
+   firebase deploy --only firestore:rules,firestore:indexes --project weddinginvitaion-b4f36
+   ```
 
-### Vercel environment for the admin functions
+2. Deploy the shared AWS photo bucket stack. Supply both administrator UIDs, all allowed site origins, an SNS topic with the owner's confirmed email subscription, and an existing packaging bucket in `eu-north-1`. Keep the photo and backup buckets in `eu-north-1`.
 
-Set these in Vercel (Settings, Environment Variables), then redeploy. A missing value does not stop the deploy, so check it with the steps below:
+   ```bash
+   export PACKAGE_BUCKET=your-packaging-bucket
+   backend/deploy.sh "$ADMIN_UIDS" "$SITE_ORIGINS" eu-north-1 eu-north-1 "$ALARM_TOPIC_ARN"
+   ```
 
-- `FIREBASE_SERVICE_ACCOUNT_JSON`: the whole service account JSON file.
-- `PHOTO_BUCKET_API_URL`: the `ApiUrl` printed by `backend/deploy.sh`, with no trailing slash. It must equal `API_URL` in `photo-bucket/config.js`.
-- `CRON_SECRET`: random, at least 32 characters (`openssl rand -hex 32`). Vercel Cron sends it to `/api/demo-cleanup` daily.
-- `DEMO_SERVICE_ADMIN_UID`: an enabled platform admin who is also in the bucket stack's `ADMIN_UIDS`.
-- `FIREBASE_WEB_API_KEY`: the `apiKey` from the site's Firebase config.
+3. Set the following environment variables on the Vercel production project.
+
+   - `FIREBASE_SERVICE_ACCOUNT_JSON` contains the service account JSON.
+   - `PHOTO_BUCKET_API_URL` is the `ApiUrl` from the shared stack, without a trailing slash.
+   - `CRON_SECRET` is a random secret of at least 32 characters. Vercel Cron sends it to `/api/demo-cleanup`.
+   - `DEMO_SERVICE_ADMIN_UID` is an enabled platform admin also included in the stack's `ADMIN_UIDS`.
+   - `FIREBASE_WEB_API_KEY` is the `apiKey` from the site's Firebase config.
+
+4. In the same commit, switch `API_URL` in `photo-bucket/config.js` and the matching test expectation to the shared stack's `ApiUrl`. Merge the verified changes into `main` to trigger the production Vercel deploy.
+
+5. Run `scripts/post-deploy-check.mjs` against the production URL with a platform admin ID token. Resolve all failures, including `/api/admin-health` checks, before continuing.
+
+6. Provision both admins in a private terminal. The script shows generated passwords once. Run the provisioning command without `--apply` first to inspect the proposed changes.
+
+   ```bash
+   node scripts/provision-admins.mjs --project weddinginvitaion-b4f36 --apply --email-shadi "$SHADI_EMAIL" --email-daya "$DAYA_EMAIL"
+   ```
+
+   Verify both accounts, then retire the old test admin after transferring its ownership to one of the new admins. Pass both email flags as above and add `--retire-old-admin test@gmail.com --transfer-to "$SHADI_EMAIL"`. This disables the old account after the transfer. Deletion additionally requires `--delete` and a typed confirmation. Update the shared stack's `ADMIN_UIDS` and redeploy it, then recheck admin health.
+
+Before hosting a paid event, have the quotation terms reviewed and trial invitation, RSVP, photo upload, offline resume, gallery, delete and restore on an iPhone and an Android phone.
 
 ### After every deploy: configuration and exposure check
 

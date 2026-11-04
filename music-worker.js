@@ -4,14 +4,13 @@ importScripts("/vendor/lame.min.js");
 
 self.onmessage = (event) => {
   try {
-    const { channels, sampleRate, kbps = 128 } = event.data;
-    const count = Math.min(2, channels.length);
-    const encoder = new lamejs.Mp3Encoder(count, sampleRate, kbps);
-    const length = channels[0].length, block = 1152 * 20, parts = [];
+    const { samples, sampleRate, kbps = 128 } = event.data;
+    const encoder = new lamejs.Mp3Encoder(1, sampleRate, kbps);
+    const length = samples.length, block = 1152 * 20, parts = [];
     const toInt16 = (float, from, to) => { const out = new Int16Array(to - from); for (let i = from; i < to; i++) { const v = Math.max(-1, Math.min(1, float[i])); out[i - from] = v < 0 ? v * 0x8000 : v * 0x7fff; } return out; };
     for (let from = 0; from < length; from += block) {
       const to = Math.min(length, from + block);
-      const chunk = count === 2 ? encoder.encodeBuffer(toInt16(channels[0], from, to), toInt16(channels[1], from, to)) : encoder.encodeBuffer(toInt16(channels[0], from, to));
+      const chunk = encoder.encodeBuffer(toInt16(samples, from, to));
       if (chunk.length) parts.push(new Int8Array(chunk));
       self.postMessage({ type: "progress", value: to / length });
     }

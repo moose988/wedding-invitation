@@ -13,4 +13,3 @@ export const skeleton = {
   // A block of text lines, for a detail page or a dialog body.
   lines: (n = 4, label = "Loading…") => wrap(label, Array.from({ length: n }, (_, i) => line(i % 3 === 2 ? "sk-line--short" : i % 3 === 1 ? "sk-line--mid" : "")).join("")),
 };
-export const busyNote = (text) => `<p class="sk-busy" role="status">${text}</p>`;

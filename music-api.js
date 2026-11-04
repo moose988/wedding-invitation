@@ -51,9 +51,12 @@ export function putSong(url, headers, blob, onProgress = () => {}) {
   });
 }
 
-// Upload, then commit. Commit is safe to repeat, so a failed commit is retried once before an error is shown.
+// Retry once if the commit may have completed before the response was lost.
 export async function uploadAndCommitSong({ user, eventId, blob, onProgress = () => {} }) {
   const grant = await requestSongUpload(user, eventId, blob.size);
   await putSong(grant.upload.url, grant.upload.headers, blob, onProgress);
-  try { return await commitSong(user, eventId, grant.uploadId); } catch { return commitSong(user, eventId, grant.uploadId); }
+  try { return await commitSong(user, eventId, grant.uploadId); } catch (error) {
+    if (error.status && error.status < 500) throw error;
+    return commitSong(user, eventId, grant.uploadId);
+  }
 }

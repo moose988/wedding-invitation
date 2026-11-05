@@ -1383,7 +1383,9 @@ function showEditorAccessError() {
 function showDashboardBootstrapError(error) {
   revealDashboard();
   const permissionDenied = error?.code === "permission-denied";
-  const customer = state.isAdmin !== true && (state.permissions?.role === "customer" || state.loginSurface === "customer");
+  // Admin status is known before the event is read; the denied event leaves no role behind, so every signed-in
+  // non-admin is sent back to their own list (My events), never to the admin event list.
+  const customer = state.isAdmin === false || (state.isAdmin !== true && (state.permissions?.role === "customer" || state.loginSurface === "customer"));
   const backLabel = customer ? "My events" : "All Events";
   if (permissionDenied && customer) {
     elements.dashboardSidebar.hidden = true;
@@ -3165,6 +3167,7 @@ function renderSeatingPage() {
 
   elements.pageContent.innerHTML = `
     <section class="seating-page">
+      ${seatShortageNotice()}
       <article class="planner-toolbar">
         <div class="planner-status-heading"><p class="da3wa-eyebrow">Seating status</p><span>Live overview of guest and seat progress</span></div>
         <div class="planner-zoom-stats" aria-label="Planner status">
@@ -3264,6 +3267,19 @@ function renderPlannerStatCard(value, label, tone = "") {
   return `<div class="planner-stat-card${tone ? ` planner-stat-card--${tone}` : ""}"><strong>${escapeHtml(String(value))}</strong><span>${escapeHtml(label)}</span></div>`;
 }
 
+// Warn when more people still need a seat than there are free seats, so the couple adds tables before the event.
+function seatShortageNotice() {
+  const needing = state.guests.reduce((sum, guest) => sum + getGuestRemainingSeats(guest), 0);
+  const free = state.tables.reduce((sum, table) => {
+    const capacity = Number(table.seatCount || table.capacity || table.chairs?.length || 0);
+    return sum + Math.max(0, capacity - getTableAssignments(table.id).length);
+  }, 0);
+  if (needing <= free) return "";
+  const people = needing === 1 ? "1 person still needs" : `${needing} people still need`;
+  const seats = free === 1 ? "1 seat is" : `${free} seats are`;
+  return `<p class="seat-shortage-notice" role="status"><strong>Not enough seats.</strong> ${people} a seat, but only ${seats} free. Add a table or more seats.</p>`;
+}
+
 function renderMobileSeatingPage({ seatingStats, sideStats, isSaving }) {
   const editing = state.mobileSeatingMode === "edit";
   const seatedPeople = state.tables.reduce((sum, table) => sum + getTableAssignments(table.id).length, 0);
@@ -3275,9 +3291,10 @@ function renderMobileSeatingPage({ seatingStats, sideStats, isSaving }) {
     const capacity = Number(table.seatCount || table.capacity || table.chairs?.length || 0);
     const available = Math.max(0, capacity - occupied);
     const availabilityClass = available === 0 ? "is-unavailable" : "is-available";
-    return `<article class="mobile-seating-table ${table.id === state.selectedTableId ? "is-selected" : ""}"><div><strong>${escapeHtml(table.name || "Table")}</strong><span>${occupied}/${capacity} seats occupied · <strong class="mobile-seating-availability ${availabilityClass}">${available} available</strong></span></div><button class="da3wa-button da3wa-button--secondary" type="button" data-action="mobile-browse-table" data-table-id="${escapeAttribute(table.id)}">${occupied ? "Manage seats" : "Assign guests"}</button></article>`;
+    return `<article class="mobile-seating-table ${table.id === state.selectedTableId ? "is-selected" : ""}"><div><strong dir="auto">${escapeHtml(table.name || "Table")}</strong><span>${occupied}/${capacity} seats occupied · <strong class="mobile-seating-availability ${availabilityClass}">${available} available</strong></span></div><button class="da3wa-button da3wa-button--secondary" type="button" data-action="mobile-browse-table" data-table-id="${escapeAttribute(table.id)}">${occupied ? "Manage seats" : "Assign guests"}</button></article>`;
   }).join("") : `<div class="mobile-seating-empty"><strong>No tables yet</strong><p>Add tables and venue items to start seating people.</p><button class="da3wa-button da3wa-button--primary" type="button" data-action="mobile-set-seating-mode" data-mode="edit">Edit floor plan</button></div>`;
   elements.pageContent.innerHTML = `<section class="seating-page mobile-seating-page">
+    ${seatShortageNotice()}
     <article class="mobile-seating-progress"><div class="mobile-seating-stat--seated"><strong>${seatedPeople}</strong><span>People seated</span></div><div class="mobile-seating-stat--needs-seats"><strong>${peopleNeedingSeats}</strong><span>People needing seats</span></div><button type="button" data-action="mobile-toggle-seating-summary" aria-expanded="${state.showFullSeatingSummary}">${state.showFullSeatingSummary ? "Hide seating summary" : "View seating summary"}</button>${state.showFullSeatingSummary ? `<div class="mobile-seating-full-stats">${renderPlannerStatCard(state.tables.length,"Tables","table-count")}${renderPlannerStatCard(seatingStats.totalSeats,"Seat capacity","seat-capacity")}${renderPlannerStatCard(seatingStats.total,"Primary guest records","guest-records")}${renderPlannerStatCard(peopleNeedingSeats,"People needing seats","needs-seats")}${renderPlannerStatCard(seatingStats.unassignedGuests,"Parties needing seats","parties-needing-seats")}${eventUsesGuestSides(state.wedding) ? renderPlannerStatCard(`${sideStats.groom.seated}/${sideStats.groom.confirmed}`,"Groom seated","groom") : ""}${eventUsesGuestSides(state.wedding) ? renderPlannerStatCard(`${sideStats.bride.seated}/${sideStats.bride.confirmed}`,"Bride seated","bride") : ""}</div>` : ""}</article>
     <nav class="mobile-seating-modes" aria-label="Seating mode"><button type="button" data-action="mobile-set-seating-mode" data-mode="assign" aria-pressed="${!editing}" class="${!editing ? "is-active" : ""}">Assign seats</button><button type="button" data-action="mobile-set-seating-mode" data-mode="edit" aria-pressed="${editing}" class="${editing ? "is-active" : ""}">Edit floor plan</button></nav>
     ${editing ? `<div class="mobile-seating-edit-banner"><strong>Editing floor plan</strong><span>Select an object, then drag it to move. Drag the background to pan.</span><button class="da3wa-button da3wa-button--primary" type="button" data-action="mobile-set-seating-mode" data-mode="assign">Done editing</button></div>` : ""}
@@ -3546,7 +3563,7 @@ function renderCheckinPage() {
       <div class="checkin-grid">
         <article class="checkin-card">
           <p class="da3wa-eyebrow">Arrival count</p>
-          <h3>Checked in guests</h3>
+          <h3 aria-level="2">Checked in guests</h3>
           <div class="metric-pair">
             <strong>${stats.checkedIn}</strong>
             <span>${stats.notCheckedIn} still expected at the venue.</span>
@@ -3559,14 +3576,14 @@ function renderCheckinPage() {
 
         <article class="checkin-card">
           <p class="da3wa-eyebrow">Secure access</p>
-          <h3>Check-in URL</h3>
+          <h3 aria-level="2">Check-in URL</h3>
           <p>Use the existing Firebase-protected hostess flow. This redesign keeps the current access rules intact.</p>
           <code>${escapeHtml(checkinLink)}</code>
         </article>
 
         <article class="checkin-card">
           <p class="da3wa-eyebrow">Recent check-ins</p>
-          <h3>Latest arrivals</h3>
+          <h3 aria-level="2">Latest arrivals</h3>
           <div class="activity-list">
             ${
               recentCheckins.length
@@ -4419,7 +4436,7 @@ function renderPlannerTable(table) {
           data-table-id="${escapeAttribute(table.id)}"
         >
           <div class="planner-table__label">
-            <strong>${escapeHtml(table.name)}</strong>
+            <strong dir="auto">${escapeHtml(table.name)}</strong>
             <span>${occupied}/${Number(table.seatCount || 0)} seated</span>
           </div>
         </button>
@@ -4560,7 +4577,7 @@ function renderTableInspector(table) {
     <div class="planner-table-summary${compactEdit ? " mobile-object-summary" : ""}">
       <div>
         <span>Table</span>
-        <strong>${escapeHtml(table.name || "Table")}</strong>
+        <strong dir="auto">${escapeHtml(table.name || "Table")}</strong>
       </div>
       <div>
         <span>Occupied</span>
@@ -4668,8 +4685,8 @@ function renderSeatingGuestRow(guest, assignments, tableAssignments, table, seat
   return `
     <div class="seating-guest-row ${guest.id === state.activePartyGuestId ? "is-active" : ""}">
       ${assignments.length
-        ? `<button class="seating-guest-row__locate" type="button" data-action="locate-seating-guest" data-guest-id="${escapeAttribute(guest.id)}" aria-label="Highlight ${escapeAttribute(guest.fullName || "guest")} and assigned seats"><strong>${escapeHtml(guest.fullName || "Guest")}</strong><small>${escapeHtml(locations)}${remaining ? ` · ${remaining} seat${remaining === 1 ? "" : "s"} still needed` : " · Fully seated"}</small></button>`
-        : `<div><strong>${escapeHtml(guest.fullName || "Guest")}</strong><small>No seats assigned · ${remaining} seat${remaining === 1 ? "" : "s"} still needed</small></div>`}
+        ? `<button class="seating-guest-row__locate" type="button" data-action="locate-seating-guest" data-guest-id="${escapeAttribute(guest.id)}" aria-label="Highlight ${escapeAttribute(guest.fullName || "guest")} and assigned seats"><strong dir="auto">${escapeHtml(guest.fullName || "Guest")}</strong><small>${escapeHtml(locations)}${remaining ? ` · ${remaining} seat${remaining === 1 ? "" : "s"} still needed` : " · Fully seated"}</small></button>`
+        : `<div><strong dir="auto">${escapeHtml(guest.fullName || "Guest")}</strong><small>No seats assigned · ${remaining} seat${remaining === 1 ? "" : "s"} still needed</small></div>`}
       <div class="seating-guest-row__actions">
         <button class="guest-quick-button" type="button" data-action="open-seating-for-guest" data-guest-id="${escapeAttribute(guest.id)}" ${!can("canEditSeating") ? 'disabled aria-disabled="true"' : ""}>${assignments.length ? "Manage" : "Assign"}</button>
       </div>
@@ -4762,7 +4779,7 @@ function renderLayoutLibrary() {
       const occupied = getTableAssignments(table.id).length;
       return `
         <button class="planner-table-list__button ${table.id === state.selectedTableId ? "is-selected" : ""}" type="button" data-action="select-table" data-table-id="${escapeAttribute(table.id)}" aria-pressed="${table.id === state.selectedTableId}" aria-label="${escapeAttribute(`${table.name}, ${prettifyShape(table.shape)} table, ${occupied} of ${Number(table.seatCount || 0)} seated`)}">
-          <strong>${escapeHtml(table.name)}</strong>
+          <strong dir="auto">${escapeHtml(table.name)}</strong>
           <small>${escapeHtml(prettifyShape(table.shape))} · ${occupied}/${Number(table.seatCount || 0)} seated</small>
         </button>
       `;
@@ -4816,7 +4833,7 @@ function renderAssignmentLibrary(unassignedGuests) {
               .map(
                 (guest) => `
                   <div class="planner-guest-pill">
-                    <strong>${escapeHtml(guest.fullName)}</strong>
+                    <strong dir="auto">${escapeHtml(guest.fullName)}</strong>
                     <small>${eventUsesGuestSides(state.wedding) ? `${escapeHtml(guest.side || "other")} · ` : ""}${escapeHtml(guest.rsvpStatus || "pending")} · ${escapeHtml(guest.notes || "No notes")}</small>
                   </div>
                 `,
@@ -4853,7 +4870,7 @@ function renderAssignmentControls() {
     <div class="assignment-bar" role="region" aria-label="Active seat assignment">
       <div class="assignment-bar__identity">
         <span>Assigning</span>
-        <strong>${escapeHtml(guest?.fullName || "Guest party")}</strong>
+        <strong dir="auto">${escapeHtml(guest?.fullName || "Guest party")}</strong>
       </div>
       <div class="assignment-bar__counts" aria-label="Assignment progress">
         <span><strong>${required}</strong> required</span>
@@ -4943,7 +4960,7 @@ function renderSeatAssignment(selectedSeat) {
                     data-guest-id="${escapeAttribute(guest.id)}"
                     ${state.activeModalOperation ? 'disabled aria-disabled="true"' : ""}
                   >
-                    <strong>${escapeHtml(guest.fullName)}</strong>
+                    <strong dir="auto">${escapeHtml(guest.fullName)}</strong>
                     <small>${eventUsesGuestSides(state.wedding) ? `${escapeHtml(guest.side || "other")} · ` : ""}${escapeHtml(guest.rsvpStatus || "pending")} · ${existingSeat ? "Move from another seat" : "Assign here"}</small>
                   </button>
                 `;
@@ -4967,7 +4984,7 @@ function plannerStat(label, value) {
 function exportCard(title, description, action, layout) {
   return `
     <article class="export-card export-card--${escapeHtml(layout)}">
-      <h3>${escapeHtml(title)}</h3>
+      <h3 aria-level="2">${escapeHtml(title)}</h3>
       <p>${escapeHtml(description)}</p>
       <div class="export-card__footer">
         ${actionButton("Download", action, !can("canExport"), "primary")}
@@ -6977,7 +6994,7 @@ function renderTableDeleteModal() {
     <div class="da3wa-sheet__header">
       <div>
         <p class="da3wa-eyebrow">Delete table</p>
-        <h2>${escapeHtml(table.name || "Table")}</h2>
+        <h2 dir="auto">${escapeHtml(table.name || "Table")}</h2>
       </div>
       <button class="da3wa-icon-button" type="button" data-close-modal="tableDeleteModal" aria-label="Close delete table modal" ${state.activeModalOperation ? "disabled" : ""}>x</button>
     </div>
@@ -7502,7 +7519,7 @@ function openMobileTableSeatBrowser(tableId) {
 function renderMobileTableSeatBrowser(table) {
   const capacity = Number(table.seatCount || table.capacity || table.chairs?.length || 0);
   const occupied = getTableAssignments(table.id).length;
-  return `<div class="da3wa-sheet__header"><div><p class="da3wa-eyebrow">Table · ${occupied}/${capacity} occupied</p><h2>${escapeHtml(table.name || "Table")}</h2></div><button class="da3wa-icon-button" type="button" data-action="cancel-assignment" aria-label="Close table seats">×</button></div><div class="da3wa-sheet__body"><p class="planner-note">Choose a numbered seat to assign or manage the person already seated there.</p><div class="mobile-seat-browser">${[...table.chairs].sort((a,b)=>Number(a.seatNumber)-Number(b.seatNumber)).map((chair)=>{ const assignment=getChairAssignment(table.id,chair); const guest=assignment?.guestId ? state.guests.find((item)=>item.id===assignment.guestId) : null; return `<button type="button" class="mobile-seat-choice ${assignment ? "is-occupied" : "is-empty"}" data-action="mobile-open-seat" data-table-id="${escapeAttribute(table.id)}" data-chair-id="${escapeAttribute(chair.id)}"><strong>Seat ${escapeHtml(String(chair.seatNumber))}</strong><span>${assignment ? escapeHtml(guest?.fullName || partyMemberLabel(guest, assignment.partyMemberIndex)) : "Available · assign a person"}</span></button>`; }).join("")}</div></div><div class="da3wa-sheet__footer"><button class="da3wa-button da3wa-button--secondary" type="button" data-action="cancel-assignment">Close</button></div>`;
+  return `<div class="da3wa-sheet__header"><div><p class="da3wa-eyebrow">Table · ${occupied}/${capacity} occupied</p><h2 dir="auto">${escapeHtml(table.name || "Table")}</h2></div><button class="da3wa-icon-button" type="button" data-action="cancel-assignment" aria-label="Close table seats">×</button></div><div class="da3wa-sheet__body"><p class="planner-note">Choose a numbered seat to assign or manage the person already seated there.</p><div class="mobile-seat-browser">${[...table.chairs].sort((a,b)=>Number(a.seatNumber)-Number(b.seatNumber)).map((chair)=>{ const assignment=getChairAssignment(table.id,chair); const guest=assignment?.guestId ? state.guests.find((item)=>item.id===assignment.guestId) : null; return `<button type="button" class="mobile-seat-choice ${assignment ? "is-occupied" : "is-empty"}" data-action="mobile-open-seat" data-table-id="${escapeAttribute(table.id)}" data-chair-id="${escapeAttribute(chair.id)}"><strong>Seat ${escapeHtml(String(chair.seatNumber))}</strong><span>${assignment ? escapeHtml(guest?.fullName || partyMemberLabel(guest, assignment.partyMemberIndex)) : "Available · assign a person"}</span></button>`; }).join("")}</div></div><div class="da3wa-sheet__footer"><button class="da3wa-button da3wa-button--secondary" type="button" data-action="cancel-assignment">Close</button></div>`;
 }
 
 function renderAssignmentModal() {
@@ -7544,7 +7561,7 @@ function renderAssignmentModal() {
         guest
           ? `
         <div class="assignment-confirmation">
-          <div class="assignment-confirmation__guest"><span>Guest</span><strong>${escapeHtml(guest.fullName || "Guest")}</strong></div>
+          <div class="assignment-confirmation__guest"><span>Guest</span><strong dir="auto">${escapeHtml(guest.fullName || "Guest")}</strong></div>
           <div class="assignment-confirmation__seat"><span>Selected seat</span><strong>${escapeHtml(seatSummary)}</strong></div>
           <div class="assignment-confirmation__party">
             <div><span>Party size</span><strong>${getPartySize(guest)} ${getPartySize(guest) === 1 ? "person" : "people"}</strong></div>
@@ -7615,7 +7632,7 @@ function renderAssignmentGuestOption(guest) {
   const remaining = Math.max(0, partySize - assignedCount);
   return `
     <button class="assignment-guest-option" type="button" data-action="choose-assignment-guest" data-guest-id="${escapeAttribute(guest.id)}">
-      <strong>${escapeHtml(guest.fullName || "Guest")}</strong>
+      <strong dir="auto">${escapeHtml(guest.fullName || "Guest")}</strong>
       <span>Party of ${partySize}${eventUsesGuestSides(state.wedding) ? ` · ${escapeHtml(guest.side || "Side not set")}` : ""}</span>
       <small>${remaining} seat${remaining === 1 ? "" : "s"} remaining${assignedCount ? ` · ${assignedCount} already seated` : ""}</small>
     </button>
@@ -8047,7 +8064,7 @@ function renderChairDetailsModal(guestId) {
     <div class="da3wa-sheet__header">
       <div>
         <p class="da3wa-eyebrow">Seat details</p>
-        <h2>${escapeHtml(guest.fullName || "Guest")}</h2>
+        <h2 dir="auto">${escapeHtml(guest.fullName || "Guest")}</h2>
       </div>
       <button class="da3wa-icon-button" type="button" data-close-modal="chairDetailsModal" aria-label="Close chair details">x</button>
     </div>
@@ -8118,7 +8135,7 @@ function renderMovePartyModal(guestId) {
     <div class="da3wa-sheet__header">
       <div>
         <p class="da3wa-eyebrow">Move party</p>
-        <h2>${escapeHtml(guest.fullName || "Guest")}</h2>
+        <h2 dir="auto">${escapeHtml(guest.fullName || "Guest")}</h2>
       </div>
       <button class="da3wa-icon-button" type="button" data-close-modal="chairDetailsModal" aria-label="Close move party">x</button>
     </div>
@@ -8137,7 +8154,7 @@ function renderMovePartyModal(guestId) {
               available < partySize || Boolean(state.activeModalOperation);
             return `
             <button class="assignment-guest-option ${disabled ? "is-disabled" : ""}" type="button" data-action="move-party-destination" data-guest-id="${escapeAttribute(guest.id)}" data-table-id="${escapeAttribute(table.id)}" ${disabled ? 'disabled aria-disabled="true"' : ""}>
-              <strong>${escapeHtml(table.name || "Table")}</strong>
+              <strong dir="auto">${escapeHtml(table.name || "Table")}</strong>
               <span>${available} available seat${available === 1 ? "" : "s"} - needs ${partySize}</span>
               <small>${available < partySize ? "Not enough free seats for this party" : "Ready to move the full party here"}</small>
             </button>
@@ -8337,7 +8354,7 @@ function renderSeatUnassignConfirmation(seat, assignment, guest) {
     <div class="da3wa-sheet__header">
       <div>
         <p class="da3wa-eyebrow">Unassign seat</p>
-        <h2>${escapeHtml(guest.fullName || "Guest")}</h2>
+        <h2 dir="auto">${escapeHtml(guest.fullName || "Guest")}</h2>
       </div>
       <button class="da3wa-icon-button" type="button" data-action="cancel-unassign-seat" data-guest-id="${escapeAttribute(guest.id)}" aria-label="Cancel unassign seat">×</button>
     </div>
@@ -9572,7 +9589,7 @@ function renderMissingSeatsModal(blocked, side = "all") {
           .map(
             ({ guest, readiness }) => `
           <div class="chair-detail-row">
-            <strong>${escapeHtml(guest.fullName || "Guest")}</strong>
+            <strong dir="auto">${escapeHtml(guest.fullName || "Guest")}</strong>
             <span>Missing: ${readiness.missing.map((item) => escapeHtml(item.label)).join(", ")}</span>
           </div>
         `,

@@ -11,7 +11,7 @@
       rel="stylesheet"
     />
     <link rel="stylesheet" href="./styles.css?v=20261012-seating-refresh-2" />
-    <link rel="stylesheet" href="./dashboard.css?v=20261106-tap-3" />
+    <link rel="stylesheet" href="./dashboard.css?v=20261106-shortage-1" />
     <link rel="stylesheet" href="./gender-reveal-dashboard.css?v=part2-2" />
     <link rel="stylesheet" href="./password-visibility.css?v=1" />
   <link rel="stylesheet" href="./skeleton.css?v=1">
@@ -300,17 +300,17 @@
             <div class="da3wa-form-grid">
               <label><span>Name / label</span><input class="da3wa-input" name="label" value="Dance Floor" required /></label>
               <label><span>Shape</span><select class="da3wa-input" name="shape"><option value="round">Round</option><option value="rectangle">Rectangle</option></select></label>
-              <label><span id="danceFloorWidthLabel">Diameter</span><input class="da3wa-input" name="width" type="number" min="120" max="700" value="300" required /></label>
-              <label data-dance-floor-height><span>Height</span><input class="da3wa-input" name="height" type="number" min="120" max="700" value="300" required /></label>
-              <label><span>Rotation (degrees)</span><input class="da3wa-input" name="rotation" type="number" min="0" max="360" value="0" /></label>
+              <label class="table-builder-field"><span id="danceFloorWidthLabel">Diameter</span><input class="da3wa-input" name="width" type="number" min="120" max="700" value="300" required /></label>
+              <label class="table-builder-field" data-dance-floor-height><span>Height</span><input class="da3wa-input" name="height" type="number" min="120" max="700" value="300" required /></label>
+              <label class="table-builder-field"><span>Rotation (degrees)</span><input class="da3wa-input" name="rotation" type="number" min="0" max="360" value="0" /></label>
               <label><span>Floor zone</span><input class="da3wa-input" name="floorZone" placeholder="Main ballroom" /></label>
             </div>
           </section>
           <section class="da3wa-form-section">
             <h3>Palette and notes</h3>
             <div class="da3wa-form-grid">
-              <label><span>Fill color</span><input class="da3wa-input da3wa-input--color" name="fillColor" type="color" value="#2F6F64" /></label>
-              <label><span>Border color</span><input class="da3wa-input da3wa-input--color" name="borderColor" type="color" value="#D7B56D" /></label>
+              <label class="table-builder-field"><span>Fill color</span><input class="da3wa-input da3wa-input--color" name="fillColor" type="color" value="#2F6F64" /></label>
+              <label class="table-builder-field"><span>Border color</span><input class="da3wa-input da3wa-input--color" name="borderColor" type="color" value="#D7B56D" /></label>
               <label class="is-full"><span>Notes (optional)</span><textarea class="da3wa-input" name="notes" rows="3"></textarea></label>
             </div>
           </section>

@@ -6015,3 +6015,5 @@ body.is-overview-view .overview-page { width: 100%; max-width: var(--da3wa-conte
   body.dashboard-body .guest-quick-button, body.dashboard-body .da3wa-button[data-action="mobile-browse-table"] { min-height: 44px; }
   .da3wa-icon-button, .da3wa-topbar__menu { min-width: 44px; min-height: 44px; }
 }
+
+.seat-shortage-notice { margin: 0 0 12px; padding: 12px 14px; border: 1px solid #e3b98a; border-radius: 12px; background: #fff4e6; color: #6b3d10; font-size: 14px; line-height: 1.4; }

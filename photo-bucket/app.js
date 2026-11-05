@@ -457,6 +457,7 @@ async function renderPoster() {
     try {
       const { downloadPosterPdf } = await import('./poster-pdf.js');
       await downloadPosterPdf($('.pb-poster'));
+      $('#posterNote').textContent = 'PDF downloaded: photo-bucket-card.pdf (A5). Check your downloads folder.';
     } catch { $('#posterNote').textContent = 'The PDF could not be prepared. Please try again.'; }
     finally { button.disabled = false; button.textContent = 'Download PDF'; }
   });

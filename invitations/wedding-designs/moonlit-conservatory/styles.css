@@ -244,3 +244,6 @@
   .moonlit-invitation *,.moonlit-invitation *::before,.moonlit-invitation *::after { animation:none!important; transition:none!important; scroll-behavior:auto!important; }
 }
 }
+
+/* Touch targets: the top RSVP link and the footer credit stay at least 44 px to tap, without changing their look. */
+.moon-hero-top a, .qd-footer a { display: inline-flex; align-items: center; justify-content: center; min-width: 44px; min-height: 44px; }

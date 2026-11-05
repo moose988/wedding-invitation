@@ -27,3 +27,8 @@ test("export and check-in section headings sit at level 2 under the page title",
   assert.match(s, /<h3 aria-level="2">\$\{escapeHtml\(title\)\}<\/h3>/);
   for (const t of ["Checked in guests", "Check-in URL", "Latest arrivals"]) assert.match(s, new RegExp(`<h3 aria-level="2">${t}</h3>`));
 });
+
+test("a photo bucket can be created with uploader names switched off (the switch is never required)", async () => {
+  const w = await readFile(new URL("../weddings.js", import.meta.url), "utf8");
+  assert.match(w, /input\.required = photoBucket && input\.type !== "checkbox";/);
+});

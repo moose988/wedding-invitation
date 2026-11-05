@@ -590,7 +590,8 @@ function updateCategoryFields() {
   const category = getSelectedEventCategory();
   const photoBucket = category === "photo_bucket";
   const bucketStep = document.getElementById("photoBucketStep");
-  bucketStep?.querySelectorAll("input,select").forEach(input => { input.disabled = !photoBucket; input.required = photoBucket; });
+  // Text fields and the size are required; on/off switches (such as uploader names) are choices, never required.
+  bucketStep?.querySelectorAll("input,select").forEach(input => { input.disabled = !photoBucket; input.required = photoBucket && input.type !== "checkbox"; });
   el.eventInformationStep.querySelectorAll("input,select,textarea").forEach(input => { input.disabled = photoBucket; });
   if (photoBucket) { el.continueEventButton.disabled = false; return; }
   const wedding = category === EVENT_CATEGORIES.WEDDING_ENGAGEMENT;

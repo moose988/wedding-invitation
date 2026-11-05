@@ -13,7 +13,7 @@ import { DEFAULT_TERMS, MAX_QUOTE_LINES, buildLineItems, computeTotals, filsToIn
 
 const $ = id => document.getElementById(id);
 const PAGE = 25;
-const state = { user: null, meta: new Map(), services: null, clients: [], cursor: null, more: false, events: [], current: null, quotes: [], editingQuote: null };
+const state = { user: null, meta: new Map(), services: null, clients: [], cursor: null, more: false, events: [], current: null, quotes: [], editingQuote: null, linkSaving: new Set() };
 const errorText = error => error?.message || error?.code || "Please try again.";
 const setError = (form, text) => { form.querySelector(".form-error").textContent = text; };
 
@@ -127,15 +127,15 @@ async function openClient(id) {
   } catch (error) { $("detailBody").innerHTML = `<p class="workspace-status" role="alert">Quotations could not load: ${esc(errorText(error))}</p>`; }
 }
 function renderDetail() {
-  const c = state.current, linked = c.linkedEventIds || [];
+  const c = state.current, linked = c.linkedEventIds || [], linkBusy = state.linkSaving.has(c.id);
   const available = state.events.filter(e => !linked.includes(e.id));
   $("detailBody").innerHTML = `<section class="workspace-hero customer-hero"><div><h1 dir="auto">${esc(c.name)}</h1><p>${esc(formatAed(c.priceFils))} agreed price</p></div><div class="customer-actions"><button class="secondary-button" id="editClient" type="button">Edit client</button><button class="secondary-button delete-customer" id="deleteClient" type="button">Delete</button></div></section>
     <dl class="client-facts"><div><dt>Phone</dt><dd>${esc(c.phone || "Not set")}</dd></div><div><dt>Email</dt><dd>${esc(c.email || "Not set")}</dd></div><div class="wide"><dt>Notes</dt><dd class="pre" dir="auto">${esc(c.notes || "No notes")}</dd></div></dl>
     <section class="admin-card" aria-labelledby="linkedTitle"><h2 id="linkedTitle">Linked events</h2>
-      ${linked.length ? `<ul class="chip-list">${linked.map(id => `<li><span>${esc(eventTitle(id))}</span><button type="button" class="text-button" data-unlink="${esc(id)}" aria-label="Unlink ${esc(eventTitle(id))}">Remove</button></li>`).join("")}</ul>` : `<p class="admin-note">No events linked yet.</p>`}
+      ${linked.length ? `<ul class="chip-list">${linked.map(id => `<li><span>${esc(eventTitle(id))}</span><button type="button" class="text-button" data-unlink="${esc(id)}" aria-label="Unlink ${esc(eventTitle(id))}" ${linkBusy ? "disabled" : ""}>Remove</button></li>`).join("")}</ul>` : `<p class="admin-note">No events linked yet.</p>`}
       ${state.eventsError ? `<p class="form-error" role="alert">The event list could not load (${esc(state.eventsError)}). Reload the page to try again.</p>` : ""}${state.eventsTruncated ? `<p class="admin-note">${esc(truncationNote(state.events.length))}</p>` : ""}
-      <div class="inline-form"><label>Link an event<select id="linkSelect"><option value="">Choose an event</option>${available.map(e => `<option value="${esc(e.id)}">${esc(e.title)}</option>`).join("")}</select></label><button class="secondary-button" id="linkEvent" type="button" ${linked.length >= 20 ? "disabled" : ""}>Link</button></div>
-      <p class="form-error" id="linkError" role="alert"></p></section>
+      <div class="inline-form"><label>Link an event<select id="linkSelect" ${linkBusy ? "disabled" : ""}><option value="">Choose an event</option>${available.map(e => `<option value="${esc(e.id)}">${esc(e.title)}</option>`).join("")}</select></label><button class="secondary-button" id="linkEvent" type="button" ${linked.length >= 20 || linkBusy ? "disabled" : ""}>Link</button></div>
+      <p class="form-error" id="linkError" role="alert"></p><p id="linkStatus" role="status" aria-live="polite">${linkBusy ? "Updating event links…" : ""}</p></section>
     <div id="notesHost"></div>
     <section class="admin-card" aria-labelledby="quotesTitle"><div class="admin-panel__head"><h2 id="quotesTitle">Quotations</h2><button class="primary-button" id="newQuote" type="button">New quotation</button></div>
       ${state.quotes.length ? `<ul class="quote-list">${state.quotes.map(q => `<li><div><strong>${esc(q.number)}</strong><span class="category-badge">${esc(q.status)}</span><small>${esc(timeText(q.createdAt))}</small></div><strong>${esc(formatAed(q.totals?.totalFils))}</strong><div class="customer-actions"><button class="secondary-button" data-quote-edit="${esc(q.id)}" type="button">Edit</button><button class="secondary-button" data-quote-print="${esc(q.id)}" type="button">Print</button></div></li>`).join("")}</ul>` : `<p class="admin-note">No quotations yet. Create one to print or send to ${esc(c.name)}.</p>`}</section>`;
@@ -143,16 +143,39 @@ function renderDetail() {
   $("editClient").onclick = () => openClientForm(c);
   $("deleteClient").onclick = () => { $("deleteName").textContent = c.name; setError($("deleteForm"), ""); $("deleteDialog").showModal(); };
   $("newQuote").onclick = () => openQuote(null);
-  $("linkEvent").onclick = () => saveLinks([...linked, $("linkSelect").value].filter(Boolean));
+  $("linkEvent").onclick = () => {
+    if (!$("linkSelect").value) { $("linkError").textContent = "Choose an event to link."; return; }
+    void saveLinks([...linked, $("linkSelect").value].filter(Boolean));
+  };
   $("detailBody").querySelectorAll("[data-unlink]").forEach(b => b.onclick = () => saveLinks(linked.filter(id => id !== b.dataset.unlink)));
   $("detailBody").querySelectorAll("[data-quote-edit]").forEach(b => b.onclick = () => openQuote(state.quotes.find(q => q.id === b.dataset.quoteEdit)));
   $("detailBody").querySelectorAll("[data-quote-print]").forEach(b => b.onclick = () => printQuote(quoteView(state.quotes.find(q => q.id === b.dataset.quotePrint))));
 }
 async function saveLinks(ids) {
+  const client = state.current;
+  if (!client || state.linkSaving.has(client.id)) return;
   const error = $("linkError"); error.textContent = "";
   if (ids.length > 20) { error.textContent = "A client can have at most 20 linked events."; return; }
-  try { await api.updateDoc(api.doc(state.services.db, "clients", state.current.id), { linkedEventIds: ids, updatedAt: api.serverTimestamp() }); state.current.linkedEventIds = ids; const row = state.clients.find(c => c.id === state.current.id); if (row) row.linkedEventIds = ids; renderDetail(); }
-  catch (failure) { error.textContent = `Could not update links: ${errorText(failure)}`; }
+  const controls = [...document.querySelectorAll("#linkEvent, #linkSelect, [data-unlink]")];
+  const previous = controls.map(control => control.disabled);
+  state.linkSaving.add(client.id); controls.forEach(control => { control.disabled = true; });
+  $("linkStatus").textContent = "Updating event links…";
+  let failure;
+  try {
+    await api.updateDoc(api.doc(state.services.db, "clients", client.id), { linkedEventIds: ids, updatedAt: api.serverTimestamp() });
+    client.linkedEventIds = ids;
+    const row = state.clients.find(c => c.id === client.id); if (row) row.linkedEventIds = ids;
+  } catch (cause) {
+    failure = cause;
+  } finally {
+    state.linkSaving.delete(client.id);
+    controls.forEach((control, index) => { if (control.isConnected) control.disabled = previous[index]; });
+    if (state.current?.id === client.id) {
+      renderDetail();
+      if (failure) $("linkError").textContent = `Could not update links: ${errorText(failure)}`;
+      else $("linkStatus").textContent = "Event links updated.";
+    }
+  }
 }
 async function deleteAll(collectionRef) {
   for (;;) {

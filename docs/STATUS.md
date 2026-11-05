@@ -24,7 +24,7 @@ Test results on the latest commit: main suite 439 passing, backend 79, security 
 
 ## Still to do
 
-1. **Step 6:** the full 10-step walkthrough (admin, customer and guest) at 1280, 390 and 360 px. In progress: steps 1 to 3 pass. Bug found and fixed: a photo bucket could not be created with uploader names switched off.
+1. **Step 6:** the full 10-step walkthrough (admin, customer and guest) at 1280, 390 and 360 px. In progress: steps 1 to 6 pass. Bugs found and fixed: a photo bucket could not be created with uploader names switched off; uploads used up their retries when venue Wi-Fi was connected but had no internet (they now wait up to about 30 minutes and resume by themselves).
 2. **Step 7:** fill the gaps left in the persona audits: slow and offline networks, the guest security attempts, keyboard-only use, and an accessibility scan.
 3. **Step 8:** dependency audit and Node version alignment.
 4. **Step 9:** a fresh independent review, repeated until a round has no Critical, High or Medium findings.

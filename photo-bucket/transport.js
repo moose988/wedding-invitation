@@ -21,6 +21,8 @@ export const jitteredWait = (attempt, error, { backoff = 1000, cap = 30000, rand
   sleep(Number(error?.retryAfter) > 0 ? Math.min(Number(error.retryAfter), 60) * 1000 : Math.floor(random() * Math.min(cap, backoff * 2 ** (attempt - 1))));
 // Real (not simulated) failures get this many automatic tries, with full jitter between them.
 // Time spent offline is not counted: see waitOnline and the queue below.
+export const NETWORK_WAIT_LIMIT = 120; // network waits per photo, each 5-20 s: roughly 30 minutes
+const networkWaits = new Map();
 export const ONLINE_ATTEMPTS = 10;
 // Resolves when the browser reports it is online again (the online event, or the tab becoming
 // visible while online), with a slow poll as a safety net. Never rejects.
@@ -63,14 +65,20 @@ export function uploadQueue({ adapter, bucketId, changed = () => {}, transport =
         } catch (error) {
           // A dropped connection is not a failed attempt: give the attempt back, pause until the phone is online
           // again (minutes if needed), then try the same photo again. The commit is idempotent (job id = photo id).
-          if (transport.online && globalThis.navigator?.onLine === false) {
+          // Venue Wi-Fi often stays "connected" with no internet, so a request that never reached the server
+          // (error.network) counts the same, up to about 30 minutes of waiting before normal retries resume.
+          const offline = globalThis.navigator?.onLine === false;
+          if (transport.online && (offline || (error.network && (networkWaits.get(job.id) || 0) < NETWORK_WAIT_LIMIT))) {
+            networkWaits.set(job.id, (networkWaits.get(job.id) || 0) + 1);
             job = await adapter.updateJob(bucketId, job.id, { attempts: Math.max(0, job.attempts - 1), state: 'processing', error: '' });
             changed({ ...job, state: 'waiting', error: 'Waiting for a connection…' });
-            await transport.waitOnline();
+            if (offline) await transport.waitOnline();
+            else await (transport.networkWait ? transport.networkWait() : sleep(Math.floor(Math.random() * 15000) + 5000));
             if (stopped) return;
-            await sleep(Math.floor(Math.random() * 3000));
+            await (transport.networkWait ? transport.networkWait() : sleep(Math.floor(Math.random() * 3000)));
             continue;
           }
+          networkWaits.delete(job.id);
           if (error.retryable && job.attempts < maxAttempts) { changed({ ...job, state: 'retrying', error: transport.online ? 'The service is busy. Trying again shortly…' : 'Retrying local processing…' }); await transport.wait(job.attempts, error); continue; }
           const reason = error.retryable ? (transport.online ? 'The upload did not go through after several tries. Tap Retry.' : 'Automatic retries finished. Tap Retry to try local processing again.') : friendlyError(error);
           await adapter.updateJob(bucketId, job.id, { state: 'failed', error: reason }); changed({ ...job, state: 'failed', error: reason }); return;

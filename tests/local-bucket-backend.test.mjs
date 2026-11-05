@@ -26,13 +26,13 @@ test('emulator mode never targets the configured live Photo Bucket API', () => {
   assert.ok(!/\bfetch\(|https?:\/\/(?!\$\{)/.test(backend.replace(/^\/\/.*$/gm, '')), 'the local backend makes no outbound calls');
 });
 
-async function start(dir, admins) {
+async function start(dir, admins, hooks = {}) {
   let origin;
   const server = createServer((req, res) => backend.handle(req, res, new URL(req.url, origin)));
   await new Promise(r => server.listen(0, '127.0.0.1', r));
   origin = `http://127.0.0.1:${server.address().port}`;
   const tokens = { 'admin-token': 'admin-uid', 'customer-token': 'customer-uid' };
-  const backend = await createLocalBucketBackend({ dir, origin, sweepEveryMs: 0, verifyOwner: async t => { if (!tokens[t]) throw new Error('bad'); return tokens[t]; }, listAdminUids: async () => [...admins] });
+  const backend = await createLocalBucketBackend({ dir, origin, sweepEveryMs: 0, verifyOwner: async t => { if (!tokens[t]) throw new Error('bad'); await hooks.verify?.(); return tokens[t]; }, listAdminUids: async () => { await hooks.list?.(); return [...admins]; } });
   const api = async (method, p, { token, body } = {}) => {
     const r = await fetch(`${origin}${API_PREFIX}${p}`, { method, headers: { ...(token ? { authorization: `Bearer ${token}` } : {}), ...(body ? { 'content-type': 'application/json' } : {}) }, body: body && JSON.stringify(body) });
     return { status: r.status, body: r.status === 204 ? null : await r.json() };
@@ -40,6 +40,36 @@ async function start(dir, admins) {
   const storage = (url, init) => fetch(`${origin}${STORAGE_ROUTE}?url=${encodeURIComponent(url)}`, init);
   return { backend, api, storage, origin, close: async () => { await backend.idle(); backend.close(); await new Promise(r => server.close(r)); } };
 }
+
+test('parallel requests cannot temporarily revoke an administrator while loading the admin list', async () => {
+  const dir = await mkdtemp(path.join(tmpdir(), 'pb-local-admin-race-'));
+  const admins = new Set(['admin-uid']), hooks = {};
+  let s, releaseVerify, releaseList;
+  try {
+    s = await start(dir, admins, hooks);
+    const bucket = await s.api('POST', '/owner/create', { token: 'admin-token', body: { name: 'Race test', date: '2027-01-01', location: 'Test', gb: 15 } });
+    assert.equal(bucket.status, 201);
+    let verifyEntered, listEntered;
+    const verifyStarted = new Promise(resolve => { verifyEntered = resolve; });
+    const listStarted = new Promise(resolve => { listEntered = resolve; });
+    const verifyGate = new Promise(resolve => { releaseVerify = resolve; });
+    const listGate = new Promise(resolve => { releaseList = resolve; });
+    hooks.verify = async () => { verifyEntered(); await verifyGate; };
+    const first = s.api('GET', `/b/${bucket.body.id}/backups`, { token: 'admin-token' });
+    await verifyStarted;
+    hooks.list = async () => { listEntered(); await listGate; };
+    const second = s.api('GET', `/b/${bucket.body.id}/backups`, { token: 'admin-token' });
+    await listStarted;
+    releaseVerify();
+    assert.equal((await first).status, 200, 'the first request retains its admin snapshot');
+    releaseList();
+    assert.equal((await second).status, 200);
+  } finally {
+    releaseVerify?.(); releaseList?.();
+    await s?.close();
+    await rm(dir, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 });
+  }
+});
 
 test('admins, customers and guests work end to end locally, and data survives a restart', async () => {
   const dir = await mkdtemp(path.join(tmpdir(), 'pb-local-')), admins = new Set(['admin-uid']);

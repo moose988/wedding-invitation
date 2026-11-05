@@ -9,6 +9,15 @@
       content="A premium bilingual Arabic and English digital event invitation platform."
     />
     <script src="./invitation-early-route.js?v=20261017-prepaint-route-1"></script>
+    <style>
+      html[style*="visibility: hidden"] #invitation-route-loading {
+        display: flex !important; visibility: visible; position: fixed; inset: 0; z-index: 2147483647;
+        align-items: center; justify-content: center; padding: 24px; text-align: center;
+        background: #e9dfcc; color: #243c36; font: 18px/1.5 system-ui, sans-serif;
+      }
+      html[style*="visibility: hidden"] .floral-frame__corner,
+      html[style*="visibility: hidden"] .intro-screen { background-image: none !important; }
+    </style>
     <title>Event Invitation Platform</title>
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
@@ -20,6 +29,7 @@
     <script src="./home-route.js?v=20261019-customer-root-1"></script>
   <link rel="stylesheet" href="./skeleton.css?v=1"></head>
   <body>
+    <div id="invitation-route-loading" role="status" aria-live="polite" hidden>Preparing your invitation…</div>
     <div class="page-shell">
       <div class="ambient ambient-top"></div>
       <div class="ambient ambient-bottom"></div>
@@ -50,12 +60,12 @@
         >
           <span class="envelope-stage" aria-hidden="true">
             <span class="envelope-glow"></span>
-            <img class="envelope-layer envelope-layer--back" src="./images/envelope-back.png" alt="" data-hide-on-error />
-            <img class="envelope-layer envelope-layer--card" src="./images/invitation-card.png" alt="" data-hide-on-error />
-            <img class="envelope-layer envelope-layer--flap" src="./images/envelope-flap.png" alt="" data-hide-on-error />
-            <img class="envelope-layer envelope-layer--front" src="./images/envelope-front.png" alt="" data-hide-on-error />
-            <img class="envelope-layer envelope-layer--flowers" src="./images/envelope-flowers.png" alt="" data-hide-on-error />
-            <img class="envelope-layer envelope-layer--seal" src="./images/wax-seal.png" alt="" data-hide-on-error />
+            <img class="envelope-layer envelope-layer--back" src="data:image/gif;base64,R0lGODlhAQABAAD/ACwAAAAAAQABAAACADs=" data-invitation-src="./images/envelope-back.png" alt="" data-hide-on-error />
+            <img class="envelope-layer envelope-layer--card" src="data:image/gif;base64,R0lGODlhAQABAAD/ACwAAAAAAQABAAACADs=" data-invitation-src="./images/invitation-card.png" alt="" data-hide-on-error />
+            <img class="envelope-layer envelope-layer--flap" src="data:image/gif;base64,R0lGODlhAQABAAD/ACwAAAAAAQABAAACADs=" data-invitation-src="./images/envelope-flap.png" alt="" data-hide-on-error />
+            <img class="envelope-layer envelope-layer--front" src="data:image/gif;base64,R0lGODlhAQABAAD/ACwAAAAAAQABAAACADs=" data-invitation-src="./images/envelope-front.png" alt="" data-hide-on-error />
+            <img class="envelope-layer envelope-layer--flowers" src="data:image/gif;base64,R0lGODlhAQABAAD/ACwAAAAAAQABAAACADs=" data-invitation-src="./images/envelope-flowers.png" alt="" data-hide-on-error />
+            <img class="envelope-layer envelope-layer--seal" src="data:image/gif;base64,R0lGODlhAQABAAD/ACwAAAAAAQABAAACADs=" data-invitation-src="./images/wax-seal.png" alt="" data-hide-on-error />
             <span class="envelope-shimmer"></span>
             <span class="envelope-sparkles"></span>
           </span>
@@ -76,7 +86,7 @@
         hidden
       >
         <span class="music-toggle__record-wrap">
-          <img class="music-toggle__record" src="./images/music-record.png" alt="" />
+          <img class="music-toggle__record" src="data:image/gif;base64,R0lGODlhAQABAAD/ACwAAAAAAQABAAACADs=" data-invitation-src="./images/music-record.png" alt="" />
           <span class="music-toggle__label">Play Music</span>
         </span>
       </button>
@@ -91,7 +101,7 @@
             <div class="hero-backdrop" id="heroBackdrop" aria-hidden="true"></div>
             <img
               class="hero-blossom hero-blossom--top-right"
-              src="./images/landing-blossom-branch.png"
+              src="data:image/gif;base64,R0lGODlhAQABAAD/ACwAAAAAAQABAAACADs=" data-invitation-src="./images/landing-blossom-branch.png"
               alt=""
               aria-hidden="true"
               data-hide-on-error

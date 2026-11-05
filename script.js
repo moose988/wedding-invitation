@@ -307,6 +307,12 @@ function completeIntroSequence() {
 }
 
 function markInvitationReady() {
+  // The root page also routes to event-selected designs. Delay its large
+  // generic artwork until routing has resolved so it cannot starve scripts.
+  document.querySelectorAll("img[data-invitation-src]").forEach((image) => {
+    image.src = image.dataset.invitationSrc;
+    delete image.dataset.invitationSrc;
+  });
   document.documentElement.style.visibility = "";
   state.invitationReady = true;
   if (state.introFinished) revealInvitation();
@@ -425,7 +431,9 @@ async function boot() {
 
   if (weddingId && guestToken) {
     try {
-      const invitationApi = await withTimeout(getInvitationDataApi(), 12000, "The invitation service is taking longer than expected. Please try again.");
+      // Loading the Firebase modules over a slow mobile connection can take
+      // longer than the separate 12-second invitation data request itself.
+      const invitationApi = await withTimeout(getInvitationDataApi(), 30000, "The invitation service is taking longer than expected. Please try again.");
       if (invitationApi.isFirebaseConfigured()) {
         state.mode = "firebase";
         const redirected = await loadFirebaseInvitation(weddingId, guestToken, invitationApi);

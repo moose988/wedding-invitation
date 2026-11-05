@@ -85,8 +85,6 @@ export async function createLocalBucketBackend({ dir, origin, verifyOwner, listA
   if (existsSync(dbFile)) for (const line of readFileSync(dbFile, 'utf8').split('\n').filter(Boolean)) dynamo.put(decodeItem(line));
   const files = diskFiles({ dir, origin, signKey: `${LOCAL_GUEST_SECRET}:objects` }); await files.init();
   const store = createStore({ client: dynamo, table: 'local' });
-  const admins = new Set(), adminUids = { includes: uid => admins.has(uid) };
-  const handler = createHandler({ store, files, secret: LOCAL_GUEST_SECRET, adminUids, verifyOwner, purgePhotoFiles: tombstoneId => purgeTombstone({ store, files, tombstoneId }) });
   const backup = createBackupHandler({ store, files });
   const saveDb = () => atomicWrite(dbFile, dynamo.dump().map(encodeItem).join('\n'));
   // Backups run after the response, like the SQS pipeline; a failure is retried on the next request.
@@ -111,7 +109,8 @@ export async function createLocalBucketBackend({ dir, origin, verifyOwner, listA
 
   async function handleApi(req, res, requestUrl) {
     const body = await readBody(req, 64 * 1024 + 1);
-    admins.clear(); for (const uid of await listAdminUids()) admins.add(uid);
+    const adminUids = await listAdminUids();
+    const handler = createHandler({ store, files, secret: LOCAL_GUEST_SECRET, adminUids, verifyOwner, purgePhotoFiles: tombstoneId => purgeTombstone({ store, files, tombstoneId }) });
     const headers = Object.fromEntries(Object.entries(req.headers).map(([k, v]) => [k.toLowerCase(), String(v)]));
     const reply = await handler({ requestContext: { http: { method: req.method, sourceIp: req.socket.remoteAddress } }, rawPath: requestUrl.pathname.slice(API_PREFIX.length) || '/', queryStringParameters: Object.fromEntries(requestUrl.searchParams), headers, body: body === null ? 'x'.repeat(64 * 1024 + 1) : body.length ? body.toString('utf8') : undefined });
     send(res, reply.statusCode, reply.body, reply.headers);

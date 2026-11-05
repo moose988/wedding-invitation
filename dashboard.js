@@ -1064,9 +1064,9 @@ function bindEvents() {
     updateSidebarState();
     refreshPlannerAfterSidebarChange();
   });
-  elements.guestForm?.addEventListener("submit", saveGuest);
+  elements.guestForm?.addEventListener("submit", (event) => submitDashboardForm(event, saveGuest, "Saving guest…"));
   elements.tableForm?.addEventListener("submit", (event) => submitDashboardForm(event, saveTable, "Saving table…"));
-  elements.danceFloorForm?.addEventListener("submit", saveDanceFloor);
+  elements.danceFloorForm?.addEventListener("submit", (event) => submitDashboardForm(event, saveDanceFloor, "Saving dance floor…"));
   elements.bulkAddForm?.addEventListener("submit", (event) => submitDashboardForm(event, saveBulkGuests, "Adding guests…"));
   elements.bulkAddForm?.entries?.addEventListener(
     "input",

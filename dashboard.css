@@ -3965,10 +3965,11 @@ body.is-seating-view .planner-canvas {
 }
 
 @media (max-width: 360px) {
-  .guest-card { grid-template-columns: minmax(0, 1fr) 42px; gap: 7px; padding: 9px; }
-  .guest-card__actions { grid-template-columns: 42px; }
+  /* 44 px stays the minimum tap size even on the narrowest phones. */
+  .guest-card { grid-template-columns: minmax(0, 1fr) 44px; gap: 7px; padding: 9px; }
+  .guest-card__actions { grid-template-columns: 44px; }
   .guest-card__actions .guest-quick-button,
-  .guest-card__actions .guest-row__menu-toggle { width: 42px; min-width: 42px; height: 42px; min-height: 42px; }
+  .guest-card__actions .guest-row__menu-toggle { width: 44px; min-width: 44px; height: 44px; min-height: 44px; }
 }
 
 @media (max-height: 560px) and (max-width: 900px) {
@@ -6007,4 +6008,10 @@ body.is-overview-view .overview-page { width: 100%; max-width: var(--da3wa-conte
     min-width: 100px;
     padding-inline: 8px 18px;
   }
+}
+
+/* Phones: every tappable control reaches 44 x 44 px (measured with scripts/tap-target-audit.js). */
+@media (max-width: 700px) {
+  body.dashboard-body .guest-quick-button, body.dashboard-body .da3wa-button[data-action="mobile-browse-table"] { min-height: 44px; }
+  .da3wa-icon-button, .da3wa-topbar__menu { min-width: 44px; min-height: 44px; }
 }

@@ -17,7 +17,7 @@ test("All Events hides its full-screen loading placeholder after workspace initi
   assert.match(html, /<title>All Events · QD Events<\/title>/);
   assert.match(html, /<h1>All Events<\/h1>/);
   assert.doesNotMatch(html, /My Events/);
-  assert.match(html, /weddings\.css\?v=20261017-customer-access-2/);
+  assert.match(html, /weddings\.css\?v=20261106-tap-1/);
 });
 
 test("All Events displays six events per page and clamps navigation after filtering", () => {

@@ -298,3 +298,6 @@ body.layla-zaid-invitation.invitation-open #seatingSection .seating-content-outl
 
   body.layla-zaid-invitation .hero-event-line { margin-block: 14px 18px; }
 }
+
+/* The footer credit keeps a 44 px tap area. */
+body.layla-zaid-invitation .qd-footer a { display: inline-flex; align-items: center; justify-content: center; min-height: 44px; min-width: 44px; }

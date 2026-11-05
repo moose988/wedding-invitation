@@ -213,6 +213,10 @@ test("the customer audit trail is append-only, customer-written and administrato
     const missing = auditEntry("customer");
     delete missing.summary;
     await assertFails(put(customer, `${audit}/missing`, missing));
+    const missingCreatedAt = auditEntry("customer");
+    delete missingCreatedAt.createdAt;
+    await assertFails(put(customer, `${audit}/missing-created-at`, missingCreatedAt));
+    await assertFails(put(customer, `${audit}/stale-created-at`, auditEntry("customer", { createdAt: new Date(Date.now() - HOUR) })));
     await assertFails(put(customer, `${audit}/${"x".repeat(65)}`, auditEntry("customer")));
 
     // Only a customer member of this event may write.
@@ -321,7 +325,12 @@ test("clients and quotations are platform-admin only and strictly validated", { 
     const created = (await api.getDoc(api.doc(admin, "clients/c"))).data().createdAt;
     await assertSucceeds(api.updateDoc(api.doc(admin, "clients/c"), { notes: "Updated", updatedAt: now() }));
     await assertFails(api.updateDoc(api.doc(admin, "clients/c"), { createdAt: new Date(0), updatedAt: now() }));
+    // Make the persisted timestamp unambiguously stale before testing an omitted field.
+    // Otherwise the previous write can share request.time in the emulator.
+    await seed(env, db => api.updateDoc(api.doc(db, "clients/c"), { updatedAt: new Date(Date.now() - HOUR) }));
     await assertFails(api.updateDoc(api.doc(admin, "clients/c"), { notes: "No timestamp" }));
+    await assertFails(api.updateDoc(api.doc(admin, "clients/c"), { notes: "Stale timestamp", updatedAt: new Date(Date.now() - HOUR) }));
+    await assertSucceeds(api.updateDoc(api.doc(admin, "clients/c"), { notes: "Fresh timestamp", updatedAt: now() }));
     assert.deepEqual((await api.getDoc(api.doc(admin, "clients/c"))).data().createdAt, created);
 
     const quotes = "clients/c/quotes";
@@ -360,6 +369,10 @@ test("clients and quotations are platform-admin only and strictly validated", { 
     await assertSucceeds(api.updateDoc(api.doc(admin, `${quotes}/q`), { status: "sent", updatedAt: now() }));
     await assertFails(api.updateDoc(api.doc(admin, `${quotes}/q`), { number: "QD-2026-0002", updatedAt: now() }));
     await assertFails(api.updateDoc(api.doc(admin, `${quotes}/q`), { createdAt: new Date(0), updatedAt: now() }));
+    await seed(env, db => api.updateDoc(api.doc(db, `${quotes}/q`), { updatedAt: new Date(Date.now() - HOUR) }));
+    await assertFails(api.updateDoc(api.doc(admin, `${quotes}/q`), { status: "accepted" }));
+    await assertFails(api.updateDoc(api.doc(admin, `${quotes}/q`), { status: "accepted", updatedAt: new Date(Date.now() - HOUR) }));
+    await assertSucceeds(api.updateDoc(api.doc(admin, `${quotes}/q`), { status: "accepted", updatedAt: now() }));
     await assertSucceeds(api.deleteDoc(api.doc(admin, `${quotes}/q`)));
     await assertSucceeds(api.deleteDoc(api.doc(admin, "clients/c")));
   } finally { await env.cleanup(); }
@@ -678,7 +691,10 @@ test("client notes are a platform-admin timeline with an exact, validated shape"
     await assertSucceeds(api.updateDoc(api.doc(second, `${notes}/full`), { priceFils: api.deleteField(), currency: api.deleteField(), updatedAt: now() }));
     await assertFails(api.updateDoc(api.doc(second, `${notes}/full`), { authorUid: "second", updatedAt: now() }));
     await assertFails(api.updateDoc(api.doc(second, `${notes}/full`), { createdAt: new Date(0), updatedAt: now() }));
+    await seed(env, db => api.updateDoc(api.doc(db, `${notes}/full`), { updatedAt: new Date(Date.now() - HOUR) }));
     await assertFails(api.updateDoc(api.doc(second, `${notes}/full`), { text: "No timestamp" }));
+    await assertFails(api.updateDoc(api.doc(second, `${notes}/full`), { text: "Stale timestamp", updatedAt: new Date(Date.now() - HOUR) }));
+    await assertSucceeds(api.updateDoc(api.doc(second, `${notes}/full`), { text: "Edited by the second admin", updatedAt: now() }));
     await assertFails(api.updateDoc(api.doc(second, `${notes}/full`), { priceFils: 5, updatedAt: now() }));
     const stored = (await api.getDoc(api.doc(admin, `${notes}/full`))).data();
     assert.equal(stored.authorUid, "admin");

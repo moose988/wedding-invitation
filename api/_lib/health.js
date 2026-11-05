@@ -47,12 +47,13 @@ export async function runHealthChecks({ env, mode, auth, db, configApiUrl, fetch
 
   const bucketUrl = normalizeUrl(env.PHOTO_BUCKET_API_URL);
   const bucketHost = hostOf(bucketUrl);
-  const httpsOk = bucketHost && (bucketUrl.startsWith('https://') || /^http:\/\/(127\.0\.0\.1|localhost)(:\d+)?$/.test(bucketUrl));
+  const localProxy = local && /^http:\/\/127\.0\.0\.1:\d+\/__photo_bucket_api$/.test(bucketUrl);
+  const validBucketUrl = bucketHost && (bucketUrl.startsWith('https://') || localProxy);
   if (!bucketUrl) add('bucket_api_url', 'fail', 'PHOTO_BUCKET_API_URL is not set, so linking buckets and photo bucket demos fail.', 'Set PHOTO_BUCKET_API_URL in Vercel to the ApiUrl printed by backend/deploy.sh (no trailing slash), then redeploy.');
-  else if (!httpsOk) add('bucket_api_url', 'fail', 'PHOTO_BUCKET_API_URL is not an https URL.', 'Use the https ApiUrl printed by backend/deploy.sh.');
+  else if (!validBucketUrl) add('bucket_api_url', 'fail', 'PHOTO_BUCKET_API_URL is not a supported URL.', local ? 'Restart the preview with npm run dev:emulator.' : 'Use the https ApiUrl printed by backend/deploy.sh.');
   else add('bucket_api_url', 'pass', `PHOTO_BUCKET_API_URL is set (host ${bucketHost}).`);
 
-  if (!httpsOk) add('bucket_api_reachable', 'fail', 'Not checked: PHOTO_BUCKET_API_URL is missing or invalid.', 'Fix PHOTO_BUCKET_API_URL first.');
+  if (!validBucketUrl) add('bucket_api_reachable', 'fail', 'Not checked: PHOTO_BUCKET_API_URL is missing or invalid.', 'Fix PHOTO_BUCKET_API_URL first.');
   else {
     // The bucket API has no health route; its public route for an id that cannot exist
     // must answer with the contract's JSON error.
@@ -68,6 +69,7 @@ export async function runHealthChecks({ env, mode, auth, db, configApiUrl, fetch
 
   const configUrl = normalizeUrl(configApiUrl);
   if (!configUrl) add('bucket_config_match', 'fail', 'photo-bucket/config.js has no API_URL, so photo bucket pages use the browser-only demo.', 'Set API_URL in photo-bucket/config.js to the same ApiUrl and redeploy.');
+  else if (localProxy) add('bucket_config_match', 'pass', 'Local photo bucket pages and admin functions use the emulator proxy.');
   else if (!bucketUrl) add('bucket_config_match', 'fail', `photo-bucket/config.js uses host ${hostOf(configUrl)}, but PHOTO_BUCKET_API_URL is not set.`, 'Set PHOTO_BUCKET_API_URL to the same ApiUrl as photo-bucket/config.js.');
   else if (configUrl !== bucketUrl) add('bucket_config_match', 'fail', `photo-bucket/config.js (host ${hostOf(configUrl)}) and PHOTO_BUCKET_API_URL (host ${bucketHost}) differ, so pages and admin functions use different stacks.`, 'Make both the ApiUrl of the current stack, then redeploy.');
   else add('bucket_config_match', 'pass', 'photo-bucket/config.js and PHOTO_BUCKET_API_URL match.');

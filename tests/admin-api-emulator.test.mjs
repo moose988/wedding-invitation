@@ -151,7 +151,7 @@ for (const type of ['wedding_engagement', 'celebration', 'gender_reveal']) {
     await assert.rejects(getDoc(doc(customer.db, 'demoLedger', demo.demoId)));
     const adminClient = await signIn((await auth.getUser(adminUid)).email, PASSWORD);
     await assert.rejects(getDoc(doc(adminClient.db, 'demoLedger', demo.demoId)), 'even admins have no client path to the ledger');
-    await db.doc(`weddings/${demo.eventId}`).update({ demoExpiresAt: Timestamp.fromMillis(Date.now() - 1000) });
+    await db.doc(`weddings/${demo.eventId}`).update({ demoExpiresAt: Timestamp.fromMillis(Date.now() - HOUR) });
     await assert.rejects(getDoc(ref), 'expired demos are closed by the rules');
   });
 }

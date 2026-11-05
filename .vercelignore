@@ -14,6 +14,7 @@ firebase.json
 # package-lock.json is deployed so the server functions install the exact tested versions;
 # vercel.json redirects it (and package.json) away so neither is served publicly.
 backend
+server
 docs
 # Every Markdown file, including README, SECURITY, RELEASE and ACCESS-WORKFLOW.
 *.md

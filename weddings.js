@@ -297,7 +297,13 @@ async function enrichVisibleStats(items) {
   pending.forEach((w) => { w.statsRequested = true; });
   const generation = state.snapshotGeneration;
   await enrichStats(pending);
-  if (generation === state.snapshotGeneration) render();
+  if (generation === state.snapshotGeneration) {
+    const completed = new Map(pending.map(event => [event.id, event.stats]));
+    state.weddings.forEach(event => {
+      if (completed.has(event.id)) event.stats = completed.get(event.id);
+    });
+    render();
+  }
 }
 
 function replaceRowsById(rows) {
@@ -331,7 +337,10 @@ async function enrichStats(list = state.weddings) {
       const isSharedRsvp = isGenderRevealEvent(wedding);
       const counted = await getCountFromServer(collection(state.services.db, "weddings", wedding.id, isSharedRsvp ? "genderRevealResponses" : "guests"));
       wedding.stats = { total: counted.data().count };
-    } catch (_) { wedding.stats = null; }
+    } catch (error) {
+      console.warn("Event count could not be loaded.", error?.code || "unavailable");
+      wedding.stats = null;
+    }
   }));
 }
 

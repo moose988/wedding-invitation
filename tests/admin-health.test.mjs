@@ -78,6 +78,18 @@ test('local preview mode warns about scheduler settings but fails a missing buck
   assert.equal(result.functions['customer-management'].ok, true);
 });
 
+test('the local preview probes the emulator proxy without accepting it in production', async () => {
+  const proxy = 'http://127.0.0.1:5173/__photo_bucket_api';
+  const inputs = { env: { ...goodEnv, PHOTO_BUCKET_API_URL: proxy }, ...fakes(), configApiUrl: BUCKET };
+  const local = await runHealthChecks({ ...inputs, mode: 'local-emulator', fetchImpl: async url => {
+    assert.match(url, /^http:\/\/127\.0\.0\.1:5173\/__photo_bucket_api\/b\/demo-[0-9]+\/public$/);
+    return new Response(JSON.stringify({ code: 'BUCKET_NOT_FOUND' }), { status: 404 });
+  } });
+  assert.equal(local.ok, true);
+  const production = await runHealthChecks({ ...inputs, mode: 'service-account' });
+  assert.equal(statusOf(production).bucket_api_url, 'fail');
+});
+
 test('health endpoint: GET only, and without a service account it reveals only that', async () => {
   const saved = { ...process.env };
   for (const key of ['FIREBASE_SERVICE_ACCOUNT_JSON', 'QD_LOCAL_ADMIN_EMULATOR']) delete process.env[key];

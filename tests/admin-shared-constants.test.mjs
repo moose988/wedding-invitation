@@ -23,7 +23,7 @@ test('the demo password word list matches the provisioning tool', async () => {
 
 test('static deployments exclude server code and internal files', async () => {
   const ignored = (await source('.vercelignore')).split(/\r?\n/);
-  for (const entry of ['docs', '*.md', '.orchestrate', '.omc', '.claude', '.local-buckets']) assert.ok(ignored.includes(entry), entry);
+  for (const entry of ['server', 'docs', '*.md', '.orchestrate', '.omc', '.claude', '.local-buckets']) assert.ok(ignored.includes(entry), entry);
   const hosting = JSON.parse(await source('firebase.json')).hosting.ignore;
   for (const entry of ['**/.*/**', 'api/**', 'server/**', 'backend/**', '*.md']) assert.ok(hosting.includes(entry), entry);
   const vercel = JSON.parse(await source('vercel.json'));

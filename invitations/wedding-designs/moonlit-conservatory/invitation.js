@@ -38,7 +38,7 @@ globalThis.invitationDesignConfig = {
   },
 };
 
-await import("../../../script.js?v=20261029-template-routing");
+await import("../../../script.js?v=20261019-arabic-schedule-1");
 
 // The shared runtime replaces the document with an accessible error for an
 // incomplete link. Only enhance a successfully mounted invitation shell.

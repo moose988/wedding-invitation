@@ -4,7 +4,7 @@ import { isPlatformAdmin } from "./account-access.js";
 import { getEventDisplayTitle } from "./event-utils.js";
 import { loadAllAdminEvents, truncationNote } from "./admin-events.js";
 import { skeleton } from "./skeleton.js";
-import { runFromEvent } from "./action-feedback.js";
+import { runFromEvent, showToast } from "./action-feedback.js";
 import { mountAdminHealth } from "./admin-health.js";
 import { loadNotesMeta, mountNotes, openNoteComposer } from "./client-notes.js";
 import { esc, timeText } from "./admin-api.js";
@@ -85,6 +85,7 @@ $("backToList").onclick = () => { $("detailView").hidden = true; $("listView").h
 
 /* ---------------------------------------------------------------- client form */
 function openClientForm(client) {
+  $("clientActionStatus").textContent = "";
   const form = $("clientForm"); form.reset(); setError(form, "");
   form.dataset.id = client?.id || ""; $("clientFormTitle").textContent = client ? "Edit client" : "Add client";
   if (client) { form.elements.name.value = client.name; form.elements.phone.value = client.phone || ""; form.elements.email.value = client.email || ""; form.elements.notes.value = client.notes || ""; form.elements.price.value = client.priceFils ? filsToInput(client.priceFils) : ""; }
@@ -93,6 +94,7 @@ function openClientForm(client) {
 $("addClient").onclick = () => openClientForm();
 $("clientForm").onsubmit = async event => {
   event.preventDefault(); const form = event.currentTarget, f = form.elements;
+  const submit = form.querySelector('[type="submit"]'); if (submit.disabled) return;
   const name = f.name.value.trim(), email = f.email.value.trim();
   const priceText = f.price.value.trim(), priceFils = priceText === "" ? 0 : parseAedToFils(priceText);
   if (!name) return setError(form, "Enter the client's name."), f.name.focus();
@@ -100,16 +102,17 @@ $("clientForm").onsubmit = async event => {
   if (email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) return setError(form, "That email address does not look right."), f.email.focus();
   const id = form.dataset.id, existing = state.clients.find(c => c.id === id);
   const data = { name, phone: f.phone.value.trim(), email, notes: f.notes.value.trim(), linkedEventIds: existing?.linkedEventIds || [], priceFils, currency: "AED", updatedAt: api.serverTimestamp() };
-  const submit = form.querySelector('[type="submit"]'); submit.disabled = true; setError(form, "");
+  const originalLabel = submit.textContent; submit.disabled = true; submit.textContent = "Saving…"; setError(form, "");
   try {
     if (id) { await api.updateDoc(api.doc(state.services.db, "clients", id), data); }
     else { const ref = await api.addDoc(api.collection(state.services.db, "clients"), { ...data, createdAt: api.serverTimestamp() }); form.dataset.id = ref.id; }
     $("clientDialog").close();
     await loadClients(true);
     if (state.current && id) await openClient(id);
-    $("status").textContent = "Client saved.";
+    $("clientActionStatus").textContent = "Client saved.";
+    if (state.current && id) showToast("Client saved.", "success");
   } catch (error) { setError(form, `Could not save: ${errorText(error)}`); }
-  finally { submit.disabled = false; }
+  finally { submit.disabled = false; submit.textContent = originalLabel; }
 };
 
 /* --------------------------------------------------------------------- detail */
@@ -187,15 +190,16 @@ async function deleteAll(collectionRef) {
   }
 }
 $("deleteForm").onsubmit = async event => {
-  event.preventDefault(); const form = event.currentTarget, button = form.querySelector('[type="submit"]'); button.disabled = true; setError(form, "");
+  event.preventDefault(); const form = event.currentTarget, button = form.querySelector('[type="submit"]'); if (button.disabled) return;
+  const originalLabel = button.textContent; button.disabled = true; button.textContent = "Deleting…"; setError(form, "");
   try {
     const id = state.current.id;
     // Firestore does not cascade: remove the notes and quotations first, in batches, then the client.
     for (const sub of ["notes", "quotes"]) await deleteAll(api.collection(state.services.db, "clients", id, sub));
     await api.deleteDoc(api.doc(state.services.db, "clients", id));
-    $("deleteDialog").close(); $("backToList").click(); await loadClients(true); $("status").textContent = "Client deleted.";
+    $("deleteDialog").close(); $("backToList").click(); await loadClients(true); $("clientActionStatus").textContent = "Client deleted.";
   } catch (error) { setError(form, `Could not delete: ${errorText(error)} You can try again.`); }
-  finally { button.disabled = false; }
+  finally { button.disabled = false; button.textContent = originalLabel; }
 };
 
 /* ------------------------------------------------------------- quotation builder */
@@ -261,16 +265,17 @@ $("quotePrint").onclick = () => {
   printQuote({ number: state.editingQuote?.number || "DRAFT", client: state.current, lineItems: data.lineItems, totals: data.totals, terms: data.terms, validUntil: data.validUntil ? new Date(`${data.validUntil}T00:00:00`) : null, date: new Date() });
 };
 $("quoteForm").onsubmit = async event => {
-  event.preventDefault(); const data = collectQuote(); if (!data) return;
-  const form = event.currentTarget, button = form.querySelector('[type="submit"]'); button.disabled = true;
+  event.preventDefault(); const form = event.currentTarget, button = form.querySelector('[type="submit"]'); if (button.disabled) return;
+  const data = collectQuote(); if (!data) return;
+  const originalLabel = button.textContent; button.disabled = true; button.textContent = "Saving…";
   const quotes = api.collection(state.services.db, "clients", state.current.id, "quotes");
   const body = { lineItems: data.lineItems, totals: data.totals, status: data.status, currency: "AED", terms: data.terms, validUntil: data.validUntil ? api.Timestamp.fromDate(new Date(`${data.validUntil}T12:00:00`)) : null, updatedAt: api.serverTimestamp() };
   try {
     if (state.editingQuote) await api.updateDoc(api.doc(quotes, state.editingQuote.id), { ...body, number: state.editingQuote.number });
     else await api.addDoc(quotes, { ...body, number: `QD-${new Date().toISOString().slice(0, 10).replaceAll("-", "")}-${Math.random().toString(36).slice(2, 6).toUpperCase()}`, createdAt: api.serverTimestamp() });
-    $("quoteDialog").close(); await openClient(state.current.id);
+    $("quoteDialog").close(); await openClient(state.current.id); showToast("Quotation saved.", "success");
   } catch (error) { setError(form, `Could not save: ${errorText(error)}`); }
-  finally { button.disabled = false; }
+  finally { button.disabled = false; button.textContent = originalLabel; }
 };
 
 /* ----------------------------------------------------------------------- print */

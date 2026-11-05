@@ -94,6 +94,7 @@ test("song conversion uses the streaming worker for MP3 and falls back to Web Au
   const seen = [];
   let supported = true;
   let decoded = 0;
+  useGlobal(t, "document", { createElement: () => ({ duration: 1, set src(value) { queueMicrotask(() => this.onloadedmetadata()); }, removeAttribute() {}, load() {} }) });
   useGlobal(t, "AudioDecoder", class {});
   useGlobal(t, "OfflineAudioContext", class {
     async decodeAudioData() {
@@ -124,6 +125,26 @@ test("song conversion uses the streaming worker for MP3 and falls back to Web Au
     ["/music-worker.js", false],
     ["/music-worker.js", false],
   ]);
+});
+
+test("song conversion refuses limited devices and oversized fallback before decoding", async t => {
+  let decoded = 0;
+  let duration = 11;
+  useGlobal(t, "navigator", { deviceMemory: 4 });
+  useGlobal(t, "matchMedia", () => ({ matches: false }));
+  useGlobal(t, "document", { createElement: () => ({ get duration() { return duration; }, set src(value) { queueMicrotask(() => this.onloadedmetadata()); }, removeAttribute() {}, load() {} }) });
+  useGlobal(t, "OfflineAudioContext", class { decodeAudioData() { decoded++; } });
+  const file = new Blob(["audio"], { type: "audio/wav" });
+  await assert.rejects(convertSongToMp3(file), /Please upload songs from a computer/);
+  assert.equal(decoded, 0);
+  globalThis.navigator.deviceMemory = 8;
+  await assert.rejects(convertSongToMp3(file), /This file is too long to convert here/);
+  assert.equal(decoded, 0);
+  globalThis.matchMedia = query => ({ matches: query.includes("max-width") });
+  await assert.rejects(convertSongToMp3(file), /Please upload songs from a computer/);
+  globalThis.matchMedia = query => ({ matches: query.includes("pointer: coarse") });
+  await assert.rejects(convertSongToMp3(file), /Please upload songs from a computer/);
+  assert.equal(decoded, 0);
 });
 
 test("song upload does not retry a commit rejected by a concurrent writer", async t => {

@@ -65,7 +65,7 @@ export function mountMusicSettings({ host, db, user, wedding, eventId, onChange 
         ${state.preview ? `<audio controls autoplay src="${esc(state.preview)}"></audio>` : ""}
         <div class="admin-actions"><label class="secondary-button music-file">${state.name ? "Replace song" : "Choose a song"}<input type="file" accept="audio/*" data-music-file hidden ${j ? "disabled" : ""} /></label>
           ${state.name ? `<button class="secondary-button" type="button" data-music-play ${j ? "disabled" : ""}>Play current song</button><button class="secondary-button danger-text" type="button" data-music-remove ${j ? "disabled" : ""}>Remove song</button>` : ""}</div>
-        <p class="admin-note">Audio file up to 50 MB and ${MUSIC_LIMITS.maxSeconds / 60} minutes. The customer confirms they hold the rights to any music they provide.</p></div>` : ""}`;
+        <p class="admin-note">Use a computer to upload songs. Supported MP3 files can be up to ${MUSIC_LIMITS.maxSeconds / 60} minutes; other files can be up to 10 seconds. Maximum file size is 50 MB. The customer confirms they hold the rights to any music they provide.</p></div>` : ""}`;
   };
   const error = text => { const node = host.querySelector("[data-music-error]"); if (node) node.textContent = text; };
   const progress = ({ message, value }) => {

@@ -12,6 +12,39 @@ export const checkDuration = seconds => seconds > MUSIC_LIMITS.maxSeconds ? `Tha
 export const songNameFrom = filename => Array.from(String(filename || "Custom song").replace(/\.[A-Za-z0-9]{1,5}$/, "").trim() || "Custom song").slice(0, 80).join("");
 
 const SAMPLE_RATE = 44_100;
+const FALLBACK_MAX_SECONDS = 10;
+
+function isLimitedDevice() {
+  const memory = globalThis.navigator?.deviceMemory;
+  return (typeof memory === "number" && memory <= 4)
+    || globalThis.matchMedia?.("(hover: none) and (pointer: coarse)").matches === true
+    || globalThis.matchMedia?.("(max-width: 767px)").matches === true;
+}
+
+async function checkFallbackDuration(file, signal) {
+  signal?.throwIfAborted();
+  const url = URL.createObjectURL(file);
+  const audio = document.createElement("audio");
+  try {
+    await new Promise((resolve, reject) => {
+      const timeout = setTimeout(() => reject(new Error("Could not read the song duration. Try another file.")), 10000);
+      const finish = callback => value => { clearTimeout(timeout); signal?.removeEventListener("abort", abort); callback(value); };
+      const abort = () => finish(reject)(signal.reason ?? new DOMException("Song conversion cancelled", "AbortError"));
+      audio.onloadedmetadata = finish(resolve);
+      audio.onerror = finish(() => reject(new Error("Could not read the song duration. Try another file.")));
+      signal?.addEventListener("abort", abort, { once: true });
+      audio.preload = "metadata";
+      audio.src = url;
+    });
+    if (!Number.isFinite(audio.duration) || audio.duration <= 0 || audio.duration > FALLBACK_MAX_SECONDS) {
+      throw new Error("This file is too long to convert here. Try a shorter file or an MP3.");
+    }
+  } finally {
+    audio.removeAttribute("src");
+    audio.load();
+    URL.revokeObjectURL(url);
+  }
+}
 
 export async function decodeAudio(file, { signal } = {}) {
   signal?.throwIfAborted();
@@ -78,9 +111,11 @@ export function encodeMp3(samples, { workerUrl = "/music-worker.js", ...options 
 }
 
 export async function convertSongToMp3(file, options) {
+  if (isLimitedDevice()) throw new Error("Please upload songs from a computer");
   if (/^audio\/(?:mpeg|mp3)$/i.test(file.type) && typeof globalThis.AudioDecoder === "function") {
     const output = await convertInWorker("/music-stream-worker.js", file, options);
     if (output) return output;
   }
+  await checkFallbackDuration(file, options?.signal);
   return encodeMp3(await decodeAudio(file, options), options);
 }

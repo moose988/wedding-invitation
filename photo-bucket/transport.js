@@ -78,7 +78,6 @@ export function uploadQueue({ adapter, bucketId, changed = () => {}, transport =
             await (transport.networkWait ? transport.networkWait() : sleep(Math.floor(Math.random() * 3000)));
             continue;
           }
-          networkWaits.delete(job.id);
           if (error.retryable && job.attempts < maxAttempts) { changed({ ...job, state: 'retrying', error: transport.online ? 'The service is busy. Trying again shortly…' : 'Retrying local processing…' }); await transport.wait(job.attempts, error); continue; }
           const reason = error.retryable ? (transport.online ? 'The upload did not go through after several tries. Tap Retry.' : 'Automatic retries finished. Tap Retry to try local processing again.') : friendlyError(error);
           await adapter.updateJob(bucketId, job.id, { state: 'failed', error: reason }); changed({ ...job, state: 'failed', error: reason }); return;
@@ -86,7 +85,8 @@ export function uploadQueue({ adapter, bucketId, changed = () => {}, transport =
       }
       if (!stopped) { await adapter.updateJob(bucketId, job.id, { state: 'failed', error: 'Automatic retries finished. Tap Retry to try again.' }); changed({ ...job, state: 'failed' }); }
     } catch (error) { changed({ ...job, state: 'failed', error: friendlyError(error) }); }
-    finally { running.delete(job.id); if (!stopped) void pump(); }
+    // The wait allowance covers the whole automatic run of a photo; a manual Retry starts a fresh one.
+    finally { networkWaits.delete(job.id); running.delete(job.id); if (!stopped) void pump(); }
   }
   async function pump() {
     if (stopped || pumping) return; pumping = true;

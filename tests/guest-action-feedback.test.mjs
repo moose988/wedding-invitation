@@ -57,8 +57,9 @@ test("restore is idempotent for an already restored photo and still reports othe
 
 
 
-test("network errors while the browser is online use the finite upload retry budget", async () => {
-  const { uploadQueue } = await import("../photo-bucket/transport.js");
+test("network errors while the browser is online wait for a while, then use the finite upload retry budget", async () => {
+  const { uploadQueue, NETWORK_WAIT_LIMIT } = await import("../photo-bucket/transport.js");
+  let networkWaits = 0;
   let job = { id: "one", attempts: 0, state: "queued" };
   const error = Object.assign(new Error("Connection failed"), { network: true, retryable: true });
   const adapter = {
@@ -72,7 +73,8 @@ test("network errors while the browser is online use the finite upload retry bud
     maxAttempts: 2, online: true,
     run: async () => ({}),
     wait: async () => {},
-    waitOnline: async () => { assert.fail("An online connection should use the retry budget"); },
+    networkWait: async () => { networkWaits++; },
+    waitOnline: async () => { assert.fail("An online connection should not wait for the online event"); },
   };
   let resolveFailed;
   const failed = new Promise(resolve => { resolveFailed = resolve; });
@@ -84,6 +86,8 @@ test("network errors while the browser is online use the finite upload retry bud
   queue.stop();
   assert.equal(outcome.attempts, 2);
   assert.match(outcome.error, /Tap Retry/);
+  // Two network waits per held attempt (the pause, then the jitter before retrying).
+  assert.equal(networkWaits, NETWORK_WAIT_LIMIT * 2);
 });
 
 

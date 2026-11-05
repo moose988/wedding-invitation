@@ -52,17 +52,17 @@ export function openNoteComposer({ api, db, user, clientId, clientName = "", not
     const s = e.target.closest("[data-suggest]"); if (s) { interests = addInterest(interests, s.dataset.suggest); paint(); }
   });
   form.addEventListener("submit", async event => {
-    event.preventDefault(); commit();
+    event.preventDefault(); const save = $(form, '[type="submit"]'); if (save.disabled) return; commit();
     const f = form.elements, built = buildNoteData({ text: f.text.value, priceText: f.price.value, interests, pinned: f.pinned.checked, authorUid: note?.authorUid || user.uid, authorName: note?.authorName || authorName(user) });
     if (!built.ok) { error.textContent = Object.values(built.errors)[0]; (built.errors.text ? f.text : f.price).focus(); return; }
-    const save = $(form, '[type="submit"]'); save.disabled = true; error.textContent = "";
+    const originalLabel = save.textContent; save.disabled = true; save.textContent = "Saving…"; error.textContent = "";
     try {
       const stamp = api.serverTimestamp();
       if (note) await api.setDoc(api.doc(notesRef(api, db, clientId), note.id), { ...built.data, createdAt: note.createdAt, updatedAt: stamp });
       else { const ref = await api.addDoc(notesRef(api, db, clientId), { ...built.data, createdAt: stamp, updatedAt: stamp }); note = { id: ref.id }; }
       d.close(); onSaved(note.id);
     } catch (failure) { error.textContent = `The note could not be saved: ${failure?.message || failure?.code || "try again"}.`; }
-    finally { save.disabled = false; }
+    finally { save.disabled = false; save.textContent = originalLabel; }
   });
   paint(); d.showModal(); $(form, "textarea").focus();
 }
@@ -119,9 +119,9 @@ export function mountNotes({ api, db, user, client, host }) {
     d.innerHTML = `<form class="workspace-modal workspace-modal--small"><header><h2>Delete this note?</h2><button class="icon-close" type="button" data-close aria-label="Close">×</button></header><div class="workspace-modal__body"><p>This note is removed for everyone and cannot be brought back.</p><blockquote class="note-quote" dir="auto">${esc(snippet(note.text, 140))}</blockquote><p class="form-error" role="alert"></p></div><footer><button class="secondary-button" type="button" data-close>Keep note</button><button class="danger-button" type="submit">Delete note</button></footer></form>`;
     $(d, "form").addEventListener("click", e => { if (e.target.closest("[data-close]")) d.close(); });
     $(d, "form").addEventListener("submit", async e => {
-      e.preventDefault(); const b = $(d, '[type="submit"]'); b.disabled = true;
+      e.preventDefault(); const b = $(d, '[type="submit"]'); if (b.disabled) return; b.disabled = true; b.textContent = "Deleting…";
       try { await api.deleteDoc(api.doc(notesRef(api, db, client.id), note.id)); d.close(); await load(true); }
-      catch (error) { $(d, ".form-error").textContent = `Could not delete: ${error?.message || "try again"}.`; b.disabled = false; }
+      catch (error) { $(d, ".form-error").textContent = `Could not delete: ${error?.message || "try again"}.`; b.disabled = false; b.textContent = "Delete note"; }
     });
     d.showModal();
   }

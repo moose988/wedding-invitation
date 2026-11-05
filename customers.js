@@ -56,7 +56,11 @@ async function loadEventList() {
     const { rows, truncated } = await loadAdminEventsShared(api, state.services.db);
     state.events = rows.filter(e => e.deleting !== true).map(e => ({ id: e.id, ...e })).sort((a, b) => getEventDisplayTitle(a).localeCompare(getEventDisplayTitle(b)));
     state.eventsLoaded = true; state.eventsTruncated = truncated;
-  } catch (error) { state.eventsError = errorText(error); }
+    if ($("customerDialog").open) populateCustomerEvents();
+  } catch (error) {
+    state.eventsError = errorText(error);
+    if ($("customerDialog").open) formError($("customerForm"), `The event list could not load (${state.eventsError}). Close and reopen this form to try again.`);
+  }
 }
 async function loadAssignments(customer) {
   const { db } = state.services;
@@ -87,10 +91,15 @@ function openAdd() {
   // Existing accounts are linked from the panel above, so this dialog only creates new accounts.
   const form = $("customerForm"); form.reset(); hidePasswords(form); formError(form, "");
   form.elements.account.innerHTML = '<option value="new">Create a new account</option>';
-  form.elements.event.innerHTML = '<option value="">Select an event</option>' + state.events.map(row => `<option value="${escape(row.id)}">${escape(getEventDisplayTitle(row))}</option>`).join("");
+  populateCustomerEvents();
   accountFields(); $("customerDialog").showModal();
   if (state.eventsError) formError(form, `The event list could not load (${state.eventsError}). Close and reopen this form to try again.`);
   else if (state.eventsTruncated) formError(form, `Only the first ${state.events.length} events are listed. Use the link panel above for others.`);
+}
+function populateCustomerEvents() {
+  const select = $("customerForm").elements.event, selected = select.value;
+  select.innerHTML = '<option value="">Select an event</option>' + state.events.map(row => `<option value="${escape(row.id)}">${escape(getEventDisplayTitle(row))}</option>`).join("");
+  select.value = selected;
 }
 $("addCustomer").onclick = () => openAdd(); $("customerForm").elements.account.onchange = accountFields;
 document.querySelectorAll('[data-close]').forEach(button => button.onclick = () => button.closest('dialog').close());
@@ -110,6 +119,7 @@ $("loadMore").onclick = () => load(true);
 $("retryCustomers").onclick = () => load();
 $("customerForm").onsubmit = async event => {
   event.preventDefault(); const form = event.currentTarget, wedding = state.events.find(row => row.id === form.elements.event.value);
+  if (form.querySelector('[type="submit"]').disabled) return;
   if (!wedding) { formError(form, "Choose an event."); return; }
   busy(form, true); formError(form, ""); let customer;
   try {

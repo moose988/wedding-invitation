@@ -147,7 +147,7 @@ document.querySelectorAll("[data-password-toggle]").forEach(button => button.add
   button.setAttribute("aria-label", `${showing ? "Hide" : "Show"} ${input.name === "password" ? "new password" : "confirmation password"}`);
 }));
 $("passwordForm").onsubmit = async event => {
-  event.preventDefault(); const form = event.currentTarget; formError(form, "");
+  event.preventDefault(); const form = event.currentTarget; if (form.querySelector('[type="submit"]').disabled) return; formError(form, "");
   if (form.elements.password.value !== form.elements.confirmPassword.value) {
     formError(form, "Passwords do not match. Please try again.");
     form.elements.confirmPassword.focus();
@@ -158,7 +158,7 @@ $("passwordForm").onsubmit = async event => {
   catch (error) { formError(form, errorText(error)); } finally { busy(form, false); }
 };
 $("deleteForm").onsubmit = async event => {
-  event.preventDefault(); const form = event.currentTarget; busy(form, true); formError(form, "");
+  event.preventDefault(); const form = event.currentTarget; if (form.querySelector('[type="submit"]').disabled) return; busy(form, true); formError(form, "");
   try { const email = state.selected.email; await manageAccount("delete", state.selected.id); $("deleteDialog").close(); await load(); $("status").textContent = `${email} was deleted.`; }
   catch (error) { formError(form, `${errorText(error)} If deletion was interrupted, retry it.`); } finally { busy(form, false); }
 };

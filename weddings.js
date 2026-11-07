@@ -1,6 +1,6 @@
 import { collection, deleteDoc, doc, getCountFromServer, getDoc, getDocs, initFirebase, isFirebaseConfigured, limit, onAuthStateChanged, query, serverTimestamp, setDoc, signOut, startAfter, updateDoc, writeBatch } from "./firebase-config.js";
 import * as accountApi from "./firebase-config.js";
-import { isPlatformAdmin, redeemCustomerGrants } from "./account-access.js";
+import { isPlatformAdmin, redeemCustomerGrants, removeEventCustomerGrants } from "./account-access.js";
 import { EVENT_CATEGORIES, eventUsesGuestSides, getEventCategory, getEventDisplayTitle, isCelebrationEvent, isGenderRevealEvent } from "./event-utils.js";
 import { eventDateTimeParts, localDateTimeToIso } from "./event-date-time.js";
 import { paginateRows, sortEventsDraftsLast } from "./workspace-pagination.js";
@@ -806,6 +806,8 @@ async function deleteWedding(event) {
     for (const capability of senderCapabilities.docs) {
       await deleteEventCollectionPath(["weddings", weddingId, "senderCapabilities", capability.id, "recipients"]);
     }
+
+    await removeEventCustomerGrants(accountApi, state.services.db, weddingId);
 
     const childCollections = [
       "seatingAccess", "tables", "guests", "seatingGuests", "checkinGuests",

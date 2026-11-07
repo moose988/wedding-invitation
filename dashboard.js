@@ -31,7 +31,7 @@ import { bindScheduleEditor, scheduleEditorMarkup } from "./schedule-editor.js";
 import { isPlatformAdmin } from "./account-access.js";
 import { persistCanonicalSeatDiff as persistCanonicalSeatDiffWithApi } from "./seating-transactions.js";
 import { createDashboardPersistence } from "./dashboard-persistence.js?v=20261028-invitation-sync-retry-1";
-import { commitGuestEdit, guestFormPatch, normalizeDigits, normalizeGuestPhone, parseBulkGuestEntries, saveFailureMessage } from "./guest-edit.js?v=20261018-guest-invitation-regressions-2";
+import { commitBulkGuestRsvp, commitGuestCheckin, commitGuestEdit, guestFormPatch, normalizeDigits, normalizeGuestPhone, parseBulkGuestEntries, saveFailureMessage } from "./guest-edit.js?v=20261018-guest-invitation-regressions-2";
 import { projectionEqual } from "./event-publishing.js?v=20261018-guest-invitation-regressions-2";
 import { mountCustomerAccess } from "./customer-access-ui.js?v=20261029-password-visibility";
 import { ensureGenderRevealPublished } from "./gender-reveal-publication.js";
@@ -6274,26 +6274,12 @@ async function updateBulkRsvp(status) {
   }
 
   try {
-    const chunkSize = 100;
-    for (let index = 0; index < ids.length; index += chunkSize) {
-      const batch = writeBatch(state.services.db);
-      ids.slice(index, index + chunkSize).forEach((guestId) => {
-        batch.update(
-          doc(
-            state.services.db,
-            "weddings",
-            state.weddingId,
-            "guests",
-            guestId,
-          ),
-          {
-            rsvpStatus: status,
-            updatedAt: serverTimestamp(),
-          },
-        );
-      });
-      await batch.commit();
-    }
+    const persistence = getDashboardPersistence();
+    await commitBulkGuestRsvp({
+      api: { ...accountApi, runTransaction: persistence.runTransaction },
+      db: state.services.db, weddingId: state.weddingId, guestIds: ids, status,
+      isCurrent: persistence.isCurrent,
+    });
     auditCustomerAction("guests_rsvp_updated", "guest", "", `RSVP set to ${status} for selected guests`);
     showToast("Selected guests updated.", "success");
   } catch (error) {
@@ -6657,7 +6643,10 @@ async function updateGuest(guestId, payload) {
 }
 
 async function persistGuestAndInvitation(guestId, payload) {
-  if (!can("canEditGuests")) return nativeUpdateDoc(doc(state.services.db, "weddings", state.weddingId, "guests", guestId), payload);
+  if (!can("canEditGuests")) return commitGuestCheckin({
+    api: accountApi, db: state.services.db, weddingId: state.weddingId, guestId,
+    checkedIn: payload.checkedIn, checkedInAt: payload.checkedInAt,
+  });
   const persistence = getDashboardPersistence();
   const result = await commitGuestEdit({
     api: { ...accountApi, runTransaction: persistence.runTransaction },

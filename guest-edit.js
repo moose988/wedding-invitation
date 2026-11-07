@@ -111,7 +111,7 @@ export async function commitGuestEdit({ api, db, weddingId, guestId, patch, isCu
     if (changed.some((key) => ["fullName", "side", "additionalGuests", "rsvpStatus"].includes(key))) {
       transaction.set(api.doc(db, "weddings", weddingId, "seatingGuests", guestId), { ...seatingGuestData(updated), updatedAt: api.serverTimestamp() });
     }
-    if (changed.some((key) => ["fullName", "phone", "side", "rsvpStatus", "tableId", "tableName", "seatNumber"].includes(key))) {
+    if (changed.some((key) => ["fullName", "phone", "side", "rsvpStatus", "tableId", "tableName", "seatNumber", "checkedIn", "checkedInAt"].includes(key))) {
       transaction.set(api.doc(db, "weddings", weddingId, "checkinGuests", guestId), { ...checkinGuestData(guestId, updated), updatedAt: api.serverTimestamp() });
     }
     return { guest: { ...updated, id: guestId }, changed, committed: true };
@@ -125,4 +125,20 @@ export function saveFailureMessage(error, { committed = false } = {}) {
       : ["unavailable", "deadline-exceeded", "network-request-failed"].includes(code) ? "The service could not be reached. Check your connection before retrying."
         : error?.message || "The save could not be completed.";
   return committed ? `Guest saved. Invitation refresh is pending. ${reason}` : `${reason} Your draft is still here.`;
+}
+
+// Check-in-only accounts cannot read the private guest document.
+export async function commitGuestCheckin({ api, db, weddingId, guestId, checkedIn, checkedInAt }) {
+  const patch = { checkedIn, checkedInAt, updatedAt: api.serverTimestamp() };
+  const batch = api.writeBatch(db);
+  for (const collection of ["guests", "checkinGuests"]) batch.update(api.doc(db, "weddings", weddingId, collection, guestId), patch);
+  await batch.commit();
+}
+
+// Each guest and its mirrors commit together from a fresh read; keep concurrency bounded.
+export async function commitBulkGuestRsvp({ guestIds, status, ...options }) {
+  for (let index = 0; index < guestIds.length; index += 5) {
+    await Promise.all(guestIds.slice(index, index + 5).map(guestId =>
+      commitGuestEdit({ ...options, guestId, patch: { rsvpStatus: status } })));
+  }
 }

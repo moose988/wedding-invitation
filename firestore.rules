@@ -264,7 +264,7 @@ service cloud.firestore {
         && exists(grant) && get(grant).data.email == data.email
         && get(grant).data.weddingId == weddingId && get(grant).data.role == "customer"
         && !existsAfter(grant) && validDashboardMembership(data, userId) && validCustomerProfile(data)
-        && eventDemoOpen(weddingId);
+        && eventAvailable(weddingId);
     }
 
     function isCustomerEventDetailsUpdate(weddingId) {
@@ -2055,14 +2055,14 @@ service cloud.firestore {
     }
 
     match /customerGrants/{grantId} {
-      allow get, list: if isPlatformAdmin() || (isSignedIn() && request.auth.token.get("email_verified", false) == true
+      allow get, list: if isPlatformAdmin() || isEventDeletingOwner(resource.data.weddingId) || (isSignedIn() && request.auth.token.get("email_verified", false) == true
         && resource.data.email == request.auth.token.email.lower());
       allow create, update: if isPlatformAdmin()
         && request.resource.data.keys().hasOnly(["email", "weddingId", "role", "updatedAt"])
         && request.resource.data.role == "customer" && request.resource.data.email is string
         && request.resource.data.email == request.resource.data.email.lower()
         && eventAvailable(request.resource.data.weddingId) && request.resource.data.updatedAt == request.time;
-      allow delete: if isPlatformAdmin() || (isSignedIn() && request.auth.token.get("email_verified", false) == true
+      allow delete: if isPlatformAdmin() || isEventDeletingOwner(resource.data.weddingId) || (isSignedIn() && request.auth.token.get("email_verified", false) == true
         && resource.data.email == request.auth.token.email.lower()
         && existsAfter(/databases/$(database)/documents/weddings/$(resource.data.weddingId)/dashboardUsers/$(request.auth.uid))
         && validCustomerProfile(getAfter(/databases/$(database)/documents/weddings/$(resource.data.weddingId)/dashboardUsers/$(request.auth.uid)).data));

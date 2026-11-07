@@ -6,7 +6,7 @@
     "dev": "node scripts/dev-server.mjs",
     "dev:emulator": "node scripts/dev-server.mjs --emulator",
     "test": "node --test",
-    "test:security": "firebase emulators:exec --only firestore --project demo-wedding-security \"node --test tests/event-settings-firestore.test.mjs tests/firestore-security.test.mjs tests/customer-access-firestore.test.mjs tests/customer-seating-batch-firestore.test.mjs tests/regressions-firestore.test.mjs tests/admin-platform-firestore.test.mjs tests/customer-isolation-firestore.test.mjs\"",
+    "test:security": "firebase emulators:exec --only firestore --project demo-wedding-security \"node --test tests/event-settings-firestore.test.mjs tests/firestore-security.test.mjs tests/customer-access-firestore.test.mjs tests/customer-seating-batch-firestore.test.mjs tests/regressions-firestore.test.mjs tests/admin-platform-firestore.test.mjs tests/customer-isolation-firestore.test.mjs tests/guest-consistency-firestore.test.mjs\"",
     "test:gender-reveal": "firebase emulators:exec --only auth,firestore --project demo-wedding-security \"node --test tests/gender-reveal-security.test.mjs\"",
     "test:provision": "firebase emulators:exec --only auth,firestore --project demo-wedding-security \"node --test tests/provision-admins.test.mjs\"",
     "seed:local": "node scripts/seed-local-access.mjs",

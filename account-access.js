@@ -75,3 +75,15 @@ export async function redeemCustomerGrants(api, db, user) {
   }
   return grants.size;
 }
+
+// Called after invalidating the event, before deleting its parent document.
+export async function removeEventCustomerGrants(api, db, weddingId) {
+  while (true) {
+    const rows = await api.getDocs(api.query(api.collection(db, "customerGrants"),
+      api.where("weddingId", "==", weddingId), api.limit(400)));
+    if (rows.empty) return;
+    const batch = api.writeBatch(db);
+    rows.docs.forEach(row => batch.delete(row.ref));
+    await batch.commit();
+  }
+}

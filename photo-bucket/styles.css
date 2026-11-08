@@ -233,8 +233,16 @@
 .pb[data-theme="gender_reveal"] { --guest-theme:url('./assets/gender-reveal-background.jpg'); }
 /* Portrait phones get a taller crop so the balloons, toys and teddy are not cut off at the sides. */
 @media (max-aspect-ratio: 3/4) { .pb[data-theme="gender_reveal"] { --guest-theme:url('./assets/gender-reveal-background-phone.jpg'); } }
+.pb[data-theme="baby_shower"] { --guest-theme:url('./assets/baby-shower-background.jpg'); }
 .pb[data-theme] .pb-hero::before,.pb[data-theme] .pb-hero::after { display:none; }
 .pb[data-theme] .pb-state,.pb[data-theme] .pb-section-head { background:#fffdf8eb; border-radius:10px; }
+.pb .pb-poster--baby-shower { background:#f7efe3 url('./assets/baby-shower-background.jpg') center/100% 100% no-repeat; color:#4a3a36; -webkit-print-color-adjust:exact; print-color-adjust:exact; }
+.pb .pb-poster--baby-shower .pb-floral { display:none; }
+.pb .pb-poster--baby-shower #posterQr { padding:0; border:0; background:transparent; }
+.pb .pb-poster--baby-shower h1 { font-family:"Palatino Linotype",Palatino,serif; font-weight:400; font-style:italic; letter-spacing:-.04em; }
+.pb .pb-poster--baby-shower h2 { font-family:"Palatino Linotype",Palatino,serif; font-weight:400; }
+.pb .pb-poster--baby-shower .pb-kicker, .pb .pb-poster--baby-shower .pb-event-meta, .pb .pb-poster--baby-shower .pb-subtle, .pb .pb-poster--baby-shower .pb-poster-demo, .pb .pb-poster--baby-shower .pb-card-meta { color:#5b4740; letter-spacing:.12em; }
+.pb .pb-poster--baby-shower .pb-card-instructions { color:#2e2420; text-shadow:0 0 5px #fbf4ea, 0 0 9px #fbf4ea; }
 .pb .pb-poster--gender-reveal { background:#fdf6ee url('./assets/gender-reveal-background.jpg') center/100% 100% no-repeat; color:#4b3640; -webkit-print-color-adjust:exact; print-color-adjust:exact; }
 .pb .pb-poster--gender-reveal .pb-floral { display:none; }
 .pb .pb-poster--gender-reveal #posterQr { padding:0; border:0; background:transparent; }

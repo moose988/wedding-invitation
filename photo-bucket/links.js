@@ -1,6 +1,6 @@
 import { createShareUrl } from '../share-link.js';
 // Guest page and A5 card themes: [stored value, admin label, card class]. Only admins choose one.
-export const THEMES = [['olive', 'Olive garden', 'olive'], ['garden', 'Wedding garden', 'wedding'], ['memories', 'Wedding memories', 'memories'], ['twilight', 'Twilight romance', 'twilight'], ['gender_reveal', 'Gender reveal', 'gender-reveal']];
+export const THEMES = [['olive', 'Olive garden', 'olive'], ['garden', 'Wedding garden', 'wedding'], ['memories', 'Wedding memories', 'memories'], ['twilight', 'Twilight romance', 'twilight'], ['gender_reveal', 'Gender reveal', 'gender-reveal'], ['baby_shower', 'Baby shower', 'baby-shower']];
 export const themeOf = bucket => THEMES.some(([value]) => value === bucket?.theme) ? bucket.theme : 'olive';
 export function details(input) {
   const name = String(input?.name || '').trim();

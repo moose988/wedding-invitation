@@ -14,7 +14,8 @@ const photoFor = (a, meta) => (a.role === 'guest' ? publicPhoto : a.isAdmin || n
 const deletedView = d => ({ deletedId: d.deletedId, photoId: d.id, name: d.name, contributorId: d.contributorId, actorUid: d.actorUid, actorRole: d.actorRole, deletedAt: d.deletedAt, size: d.size, createdAt: d.createdAt, backupState: d.backupState, restorable: d.backupState === 'done' && !d.restoredAt, restoredAt: d.restoredAt ?? null, restoredBy: d.restoredBy ?? null, earlier: d.earlier || [] });
 // A backup finishing after the owner's delete then hides the original. Restore waits out that one function run (120 s).
 const LATE_BACKUP_MS = 130 * 1000;
-const publicMeta = m => ({ id: m.bucketId, name: m.name, date: m.date, location: m.location, showUploaderNames: namesShown(m), paused: Boolean(m.paused), demo: Boolean(m.demo), expiresAt: m.expiresAt ?? null, createdAt: m.createdAt, updatedAt: m.updatedAt });
+const validTheme = value => ["olive", "garden", "memories", "twilight"].includes(value);
+const publicMeta = m => ({ theme: m.theme ?? "olive", id: m.bucketId, name: m.name, date: m.date, location: m.location, showUploaderNames: namesShown(m), paused: Boolean(m.paused), demo: Boolean(m.demo), expiresAt: m.expiresAt ?? null, createdAt: m.createdAt, updatedAt: m.updatedAt });
 const PAUSED_MESSAGE = 'This photo collection is paused until the event. Please check back later.';
 const uploadId = value => { if (!/^[a-f0-9]{32}$/.test(value || '')) throw new HttpError(400, 'Invalid upload.', 'INVALID_UPLOAD'); return value; };
 const photoId = value => { if (!validId(value)) throw new HttpError(400, 'Invalid photo.', 'INVALID_PHOTO_ID'); return value; };
@@ -194,12 +195,13 @@ export function createHandler({ store, files, purgePhotoFiles, verifyOwner, secr
     if (body.demo !== undefined && typeof body.demo !== 'boolean') throw new HttpError(400, 'demo must be true or false.', 'INVALID_REQUEST');
     if (demo ? body.gb !== undefined && body.gb !== DEMO_SIZE_GB : !isAllowedSize(body.gb)) throw new HttpError(400, demo ? `Demo buckets are fixed at ${DEMO_SIZE_GB} GB.` : `Choose a size from ${BUCKET_SIZES_GB.join(', ')} GB.`, 'INVALID_SIZE');
     if (body.expiresInHours !== undefined && (!demo || !DEMO_EXPIRY_HOURS.includes(body.expiresInHours))) throw new HttpError(400, demo ? `Choose a demo lifetime from ${DEMO_EXPIRY_HOURS.join(', ')} hours.` : 'Only demo buckets expire.', 'INVALID_EXPIRY');
+    if (body.theme !== undefined && !validTheme(body.theme)) throw new HttpError(400, "Invalid theme.", "INVALID_REQUEST");
     if (body.showUploaderNames !== undefined && typeof body.showUploaderNames !== 'boolean') throw new HttpError(400, 'showUploaderNames must be true or false.', 'INVALID_REQUEST');
     if (body.owners !== undefined && !Array.isArray(body.owners)) throw new HttpError(400, 'owners must be a list of account ids.', 'INVALID_OWNER');
     const owners = [...new Set(body.owners || [])];
     if (owners.length > LIMITS.maxOwners || !owners.every(validUid)) throw new HttpError(400, 'owners must be a list of account ids.', 'INVALID_OWNER');
     const gb = demo ? DEMO_SIZE_GB : body.gb;
-    const meta = { bucketId: newBucketId(demo), ...details, owners, createdBy: a.uid, demo, ...(demo ? { expiresAt: stamp + (body.expiresInHours ?? DEFAULT_DEMO_EXPIRY_HOURS) * 3600000 } : {}), showUploaderNames: body.showUploaderNames !== false, limitGb: gb, limitBytes: bytesForGb(gb), shards: demo ? DEMO_SHARDS : SHARDS, status: 'active', paused: false, frozen: false, createdAt: stamp, updatedAt: stamp };
+    const meta = { bucketId: newBucketId(demo), ...details, theme: body.theme ?? "olive", owners, createdBy: a.uid, demo, ...(demo ? { expiresAt: stamp + (body.expiresInHours ?? DEFAULT_DEMO_EXPIRY_HOURS) * 3600000 } : {}), showUploaderNames: body.showUploaderNames !== false, limitGb: gb, limitBytes: bytesForGb(gb), shards: demo ? DEMO_SHARDS : SHARDS, status: 'active', paused: false, frozen: false, createdAt: stamp, updatedAt: stamp };
     await store.createBucket(meta);
     return reply(201, await view(a, meta, { usedBytes: 0, photoCount: 0, backupBytes: 0 }));
   }
@@ -218,6 +220,7 @@ export function createHandler({ store, files, purgePhotoFiles, verifyOwner, secr
     if (method === 'PATCH' && rest === '') {
       needHost(a);
       const extra = {};
+      if (body.theme !== undefined) { if (!validTheme(body.theme)) throw new HttpError(400, "Invalid theme.", "INVALID_REQUEST"); extra.theme = body.theme; }
       if (body.showUploaderNames !== undefined) {
         needAdmin(a); // customers cannot reveal or hide who took which photo
         if (typeof body.showUploaderNames !== 'boolean') throw new HttpError(400, 'showUploaderNames must be true or false.', 'INVALID_REQUEST');

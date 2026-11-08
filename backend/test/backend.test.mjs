@@ -1303,3 +1303,14 @@ test('only admins can move a bucket date, so customers cannot clear the overdue 
   assert.equal((await h.call('PATCH', `/b/${id}`, { token: 'admin-token', body: { date: '2026-02-01' } })).status, 200);
   assert.equal((await h.call('GET', `/b/${id}`, { token: 'admin-token' })).body.date, '2026-02-01');
 });
+
+test('themes validate on create and update and are public', async () => {
+  const h = harness(); const made = await h.createBucket(); const id = made.body.id;
+  assert.equal(made.body.theme, 'olive');
+  assert.equal((await h.createBucket({ theme: 'bad' })).status, 400);
+  for (const theme of ['olive', 'garden', 'memories', 'twilight']) {
+    assert.equal((await h.call('PATCH', `/b/${id}`, { token:'customer-token', body:{ theme } })).body.theme, theme);
+    assert.equal((await h.call('GET', `/b/${id}/public`)).body.theme, theme);
+  }
+  assert.equal((await h.call('PATCH', `/b/${id}`, { token:'customer-token', body:{ theme:'bad' } })).status, 400);
+});

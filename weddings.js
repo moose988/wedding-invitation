@@ -712,7 +712,7 @@ async function saveWedding(event) {
     const status = document.getElementById("photoBucketCreateError"); status.textContent = "";
     try {
       const f = el.weddingForm.elements;
-      const bucket = await (await createOwnerAdapter(state.user)).create({ name: f.bucketName.value, date: f.bucketDate.value, location: f.bucketLocation.value, gb: bucketGb(), showUploaderNames: f.bucketShowNames.checked });
+      const bucket = await (await createOwnerAdapter(state.user)).create({ name: f.bucketName.value, date: f.bucketDate.value, location: f.bucketLocation.value, gb: bucketGb(), theme: f.bucketTheme.value, showUploaderNames: f.bucketShowNames.checked });
       location.href = `./photo-bucket-manage.html?bucket=${encodeURIComponent(bucket.id)}`;
     } catch (error) { status.textContent = error.name === "QuotaExceededError" ? "This browser is out of storage. Free some space and try again." : error.message; }
     finally { el.saveWeddingButton.disabled = false; }

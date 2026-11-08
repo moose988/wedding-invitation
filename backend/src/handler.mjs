@@ -14,7 +14,7 @@ const photoFor = (a, meta) => (a.role === 'guest' ? publicPhoto : a.isAdmin || n
 const deletedView = d => ({ deletedId: d.deletedId, photoId: d.id, name: d.name, contributorId: d.contributorId, actorUid: d.actorUid, actorRole: d.actorRole, deletedAt: d.deletedAt, size: d.size, createdAt: d.createdAt, backupState: d.backupState, restorable: d.backupState === 'done' && !d.restoredAt, restoredAt: d.restoredAt ?? null, restoredBy: d.restoredBy ?? null, earlier: d.earlier || [] });
 // A backup finishing after the owner's delete then hides the original. Restore waits out that one function run (120 s).
 const LATE_BACKUP_MS = 130 * 1000;
-const validTheme = value => ["olive", "garden", "memories", "twilight"].includes(value);
+const validTheme = value => ["olive", "garden", "memories", "twilight", "gender_reveal"].includes(value);
 const publicMeta = m => ({ theme: m.theme ?? "olive", id: m.bucketId, name: m.name, date: m.date, location: m.location, showUploaderNames: namesShown(m), paused: Boolean(m.paused), demo: Boolean(m.demo), expiresAt: m.expiresAt ?? null, createdAt: m.createdAt, updatedAt: m.updatedAt });
 const PAUSED_MESSAGE = 'This photo collection is paused until the event. Please check back later.';
 const uploadId = value => { if (!/^[a-f0-9]{32}$/.test(value || '')) throw new HttpError(400, 'Invalid upload.', 'INVALID_UPLOAD'); return value; };

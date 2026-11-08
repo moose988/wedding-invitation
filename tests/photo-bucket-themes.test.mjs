@@ -53,3 +53,11 @@ test('the main guest button takes each theme colour, and themes without one keep
   for (const value of ['garden', 'twilight', 'gender_reveal', 'baby_shower']) assert.match(styles, new RegExp(`\\.pb\\[data-theme="${value}"\\] \\{ --ink:#`), `${value} has its own colours`);
   for (const value of ['olive', 'memories']) assert.doesNotMatch(styles, new RegExp(`\\.pb\\[data-theme="${value}"\\] \\{ --ink:`));
 });
+
+test('on a themed guest page the upload panel is frosted glass, not a pop-up style card', () => {
+  const rule = styles.match(/\.pb\[data-theme\] \.pb-upload \{([^}]*)\}/)[1];
+  assert.match(rule, /box-shadow:none/);
+  assert.match(rule, /border-color:transparent/);
+  assert.match(rule, /backdrop-filter:blur\(/);
+  assert.match(rule, /background:color-mix\(in srgb, var\(--white\) \d+%, transparent\)/);
+});

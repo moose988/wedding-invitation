@@ -249,7 +249,9 @@
 .admin-banner button { min-height: 44px; }
 .music-create { display: grid; gap: 8px; margin: 0; padding: 12px; border: 1px solid var(--line); border-radius: 12px; }
 .music-create legend { padding: 0 6px; font-weight: 800; }
-.music-create__option, .music-create__file { display: flex; align-items: center; gap: 10px; min-height: 44px; }
-.music-create__file { flex-wrap: wrap; } .music-create__file[hidden] { display: none; }
-.pb-create-switch { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; min-height: 44px; }
+/* .form-grid prefix: the general ".form-grid label" (grid) and ".form-grid input" (full width) rules would otherwise win. */
+.form-grid .music-create__option, .form-grid .music-create__file { display: flex; align-items: center; gap: 10px; min-height: 44px; }
+.form-grid .music-create__file { flex-wrap: wrap; } .form-grid .music-create__file[hidden] { display: none; }
+.form-grid .pb-create-switch { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; min-height: 44px; }
+.form-grid .music-create__option input, .form-grid .pb-create-switch input { width: auto; min-width: 20px; min-height: 20px; margin: 0; }
 .pb-create-switch small { flex-basis: 100%; color: var(--muted); font-weight: 500; }

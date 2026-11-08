@@ -68,7 +68,7 @@ test('429 with a long Retry-After is surfaced, not slept on', async () => {
 test('create sends gb and owners (demos are made by the admin API), and list follows cursors', async () => {
   let calls = stub(() => reply(201, { id: 'b-1' }));
   await ownerAdapterApi(user).create({ name: 'N', date: '2027-04-18', location: 'L', gb: '25', owners: ['u1'] });
-  assert.deepEqual(JSON.parse(calls[0].init.body), { name: 'N', date: '2027-04-18', location: 'L', showUploaderNames: true, gb: 25, owners: ['u1'] });
+  assert.deepEqual(JSON.parse(calls[0].init.body), { name: 'N', date: '2027-04-18', location: 'L', showUploaderNames: true, cardShowsDetails: false, guestShowsDetails: true, gb: 25, owners: ['u1'] });
   calls = stub(n => n === 1 ? reply(200, { items: [], nextCursor: 'c1' }) : n === 2 ? reply(200, { items: [{ id: 'b-1' }], nextCursor: 'c2' }) : reply(200, { items: [{ id: 'b-2' }], nextCursor: null }));
   assert.deepEqual((await ownerAdapterApi(user).list()).map(b => b.id), ['b-1', 'b-2']);
   assert.match(calls[1].url, /cursor=c1/);

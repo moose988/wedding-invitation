@@ -1316,3 +1316,26 @@ test('themes validate on create and update and are public', async () => {
   assert.equal((await h.call('GET', `/b/${id}/public`)).body.theme, 'gender_reveal'); // the last theme an admin set
   assert.equal((await h.call('PATCH', `/b/${id}`, { token:'admin-token', body:{ theme:'bad' } })).status, 400);
 });
+
+test('date and place on the printed card: off by default, admins only, and returned to customers', async () => {
+  const h = harness(); const made = await h.createBucket(); const id = made.body.id;
+  assert.equal(made.body.cardShowsDetails, false);
+  assert.equal((await h.createBucket({ cardShowsDetails: 'yes' })).status, 400);
+  assert.equal((await h.createBucket({ cardShowsDetails: true })).body.cardShowsDetails, true);
+  assert.equal((await h.call('PATCH', `/b/${id}`, { token: 'customer-token', body: { cardShowsDetails: true } })).status, 403);
+  assert.equal((await h.call('GET', `/b/${id}`, { token: 'customer-token' })).body.cardShowsDetails, false);
+  assert.equal((await h.call('PATCH', `/b/${id}`, { token: 'admin-token', body: { cardShowsDetails: true } })).body.cardShowsDetails, true);
+  assert.equal((await h.call('GET', `/b/${id}`, { token: 'customer-token' })).body.cardShowsDetails, true);
+  assert.equal((await h.call('PATCH', `/b/${id}`, { token: 'admin-token', body: { cardShowsDetails: 1 } })).status, 400);
+});
+
+test('date and place on the guest page: on by default and for older buckets, admins only, and sent to guests', async () => {
+  const h = harness(); const made = await h.createBucket(); const id = made.body.id;
+  assert.equal(made.body.guestShowsDetails, true);
+  assert.equal((await h.call('GET', `/b/${id}/public`)).body.guestShowsDetails, true);
+  assert.equal((await h.createBucket({ guestShowsDetails: 'no' })).status, 400);
+  assert.equal((await h.createBucket({ guestShowsDetails: false })).body.guestShowsDetails, false);
+  assert.equal((await h.call('PATCH', `/b/${id}`, { token: 'customer-token', body: { guestShowsDetails: false } })).status, 403);
+  assert.equal((await h.call('PATCH', `/b/${id}`, { token: 'admin-token', body: { guestShowsDetails: false } })).body.guestShowsDetails, false);
+  assert.equal((await h.call('GET', `/b/${id}/public`)).body.guestShowsDetails, false);
+});

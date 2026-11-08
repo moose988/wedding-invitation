@@ -98,7 +98,7 @@ async function thumbnailFor(token, bucketId, photo) {
 const PAGE_SIZE = 100;
 const pageOf = (api, bucketId, cursor, order = 'newest') => api('GET', `/b/${validId(bucketId)}/photos`, { query: { limit: PAGE_SIZE, order: order === 'oldest' ? 'oldest' : 'newest', ...(cursor ? { cursor } : {}) } }).then(r => Array.isArray(r) ? { items: r, nextCursor: null } : { items: r.items || [], nextCursor: r.nextCursor || null, ...(Number.isInteger(r.total) ? { total: r.total } : {}) });
 const allOf = (api, bucketId, contributor) => allPages(cursor => api('GET', `/b/${validId(bucketId)}/photos`, { query: { limit: 200, ...(contributor ? { contributor } : {}), ...cursor } }));
-const publicBucket = info => ({ id: info.id, ...details(info), paused: Boolean(info.paused), showUploaderNames: info.showUploaderNames === true });
+const publicBucket = info => ({ id: info.id, ...details(info), paused: Boolean(info.paused), showUploaderNames: info.showUploaderNames === true, guestShowsDetails: info.guestShowsDetails !== false });
 
 export function ownerAdapterApi(user) {
   const token = () => user.getIdToken();
@@ -106,7 +106,7 @@ export function ownerAdapterApi(user) {
   return {
     // Admin only. The server makes the id and validates gb (15, 20, ... 50). Demos are made by /api/admin-demos, not here.
     create(input) {
-      const body = { ...details(input), showUploaderNames: input?.showUploaderNames !== false, gb: Number(input?.gb), ...(Array.isArray(input?.owners) && input.owners.length ? { owners: input.owners } : {}) };
+      const body = { ...details(input), showUploaderNames: input?.showUploaderNames !== false, cardShowsDetails: input?.cardShowsDetails === true, guestShowsDetails: input?.guestShowsDetails !== false, gb: Number(input?.gb), ...(Array.isArray(input?.owners) && input.owners.length ? { owners: input.owners } : {}) };
       return api('POST', '/owner/create', { body });
     },
     list: () => allPages(cursor => api('GET', '/owner/list', { query: { limit: 50, ...cursor } })),
@@ -129,7 +129,7 @@ export function ownerAdapterApi(user) {
       }
     },
     get: bucketId => api('GET', `/b/${validId(bucketId)}`),
-    update: (bucketId, input) => api('PATCH', `/b/${validId(bucketId)}`, { body: { ...details(input), ...(typeof input?.showUploaderNames === 'boolean' ? { showUploaderNames: input.showUploaderNames } : {}) } }),
+    update: (bucketId, input) => api('PATCH', `/b/${validId(bucketId)}`, { body: { ...details(input), ...(typeof input?.showUploaderNames === 'boolean' ? { showUploaderNames: input.showUploaderNames } : {}), ...(typeof input?.cardShowsDetails === 'boolean' ? { cardShowsDetails: input.cardShowsDetails } : {}), ...(typeof input?.guestShowsDetails === 'boolean' ? { guestShowsDetails: input.guestShowsDetails } : {}) } }),
     // Main admin only (the server refuses anyone else): pause or resume the whole event.
     setFrozen: (bucketId, frozen) => api('POST', `/b/${validId(bucketId)}/freeze`, { body: { frozen: Boolean(frozen) } }),
     setPaused: (bucketId, paused) => api('POST', `/b/${validId(bucketId)}/pause`, { body: { paused: Boolean(paused) } }),

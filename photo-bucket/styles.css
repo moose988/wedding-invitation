@@ -208,13 +208,19 @@
 .pb .pb-poster--twilight .pb-kicker, .pb .pb-poster--twilight .pb-event-meta, .pb .pb-poster--twilight .pb-subtle, .pb .pb-poster--twilight .pb-poster-demo { color:#51404a; }
 .pb .pb-poster--twilight .pb-poster-scan, .pb .pb-poster--twilight .pb-subtle, .pb .pb-poster--twilight .pb-poster-demo { background:#fffaf1e8; padding:2px 8px; border-radius:4px; }
 
+.pb .pb-card-meta { display:flex; flex-wrap:wrap; justify-content:center; gap:3px 14px; margin:0 0 18px; font-size:12px; line-height:1.45; color:#37433d; }
+.pb .pb-card-meta span { display:inline-block; }
+.pb .pb-card-meta[hidden] { display:none; }
 .pb .pb-card-instructions { margin-top:14px; text-align:center; color:#303c36; }
 .pb .pb-card-instructions .pb-poster-scan { margin:0; padding:0; background:none; font-size:20px; line-height:1.25; }
 .pb .pb-card-note { margin:4px 0 0; font-size:11px; line-height:1.35; }
-@media(max-width:540px) { .pb .pb-card-instructions { margin-top:9px; }.pb .pb-card-instructions .pb-poster-scan { font-size:16px; }.pb .pb-card-note { font-size:9px; margin-top:3px; } }
+@media(max-width:540px) { .pb .pb-card-meta { font-size:10px; gap:2px 9px; margin-bottom:12px; }.pb .pb-card-instructions { margin-top:9px; }.pb .pb-card-instructions .pb-poster-scan { font-size:16px; }.pb .pb-card-note { font-size:9px; margin-top:3px; } }
 @media print { .pb .pb-card-instructions .pb-poster-scan { margin:0!important; } }
 .pb .pb-poster--twilight .pb-card-instructions { background:#fffaf1ee; border-radius:5px; padding:5px 10px; }
 
+.pb .pb-card-meta > span { display:inline-flex; align-items:center; gap:4px; }
+.pb .pb-card-icon { width:13px; height:13px; flex:0 0 13px; line-height:0; }
+.pb .pb-card-icon svg { width:100%; height:100%; }
 .pb .pb-poster--twilight .pb-card-instructions { background:none; padding:0; border-radius:0; color:#21121c; text-shadow:0 0 4px #fffdf7,0 0 7px #fffdf7,0 0 12px #fffdf7; }
 .pb .pb-poster--twilight .pb-card-note { color:#21121c; font-weight:600; }
 .pb .pb-poster--olive .pb-card-instructions, .pb .pb-poster--wedding .pb-card-instructions, .pb .pb-poster--memories .pb-card-instructions { color:#202c27; text-shadow:0 0 5px #fffdf8, 0 0 9px #fffdf8; }

@@ -32,10 +32,18 @@ test('details keep a valid theme, refuse an unknown one, and older buckets fall 
   assert.equal(themeOf({ theme: 'gender_reveal' }), 'gender_reveal');
 });
 
-test('the A5 card shows the event name but not the date or place, since it stands at the venue', async () => {
+test('the A5 card hides the date and place unless an admin switches them on', async () => {
   const app = await read('photo-bucket/app.js');
   const start = app.indexOf('async function renderPoster()');
   const poster = app.slice(start, app.indexOf('`;', start)); // the card's markup only
-  assert.match(poster, /<h2>\$\{h\(bucket\.name\)\}<\/h2>/);
-  assert.doesNotMatch(poster, /bucket\.location|bucket\.date|dateLabel/);
+  assert.match(poster, /<h2>\$\{h\(bucket\.name\)\}<\/h2><div class="pb-card-meta" id="cardMeta"\$\{bucket\.cardShowsDetails \? '' : ' hidden'\}>/);
+  assert.match(poster, /\$\{bucket\.canAdmin \? `<label>Card design.*id="posterDetails".*` : ''\}/, 'only admins get the switch');
+  assert.match(styles, /\.pb \.pb-card-meta\[hidden\] \{ display:none; \}/);
+});
+
+test('guests see the date and place unless an admin switched them off; hosts always see them', async () => {
+  const app = await read('photo-bucket/app.js');
+  assert.match(app, /const meta = \(\) => !owner && bucket\.guestShowsDetails === false \? '' :/);
+  assert.match(allEvents, /name="bucketGuestDetails" checked/);
+  assert.match(allEvents, /name="bucketCardDetails" \/>/);
 });

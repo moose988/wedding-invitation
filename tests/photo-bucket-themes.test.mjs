@@ -31,3 +31,11 @@ test('details keep a valid theme, refuse an unknown one, and older buckets fall 
   assert.equal(themeOf({ theme: 'neon' }), 'olive');
   assert.equal(themeOf({ theme: 'gender_reveal' }), 'gender_reveal');
 });
+
+test('the A5 card shows the event name but not the date or place, since it stands at the venue', async () => {
+  const app = await read('photo-bucket/app.js');
+  const start = app.indexOf('async function renderPoster()');
+  const poster = app.slice(start, app.indexOf('`;', start)); // the card's markup only
+  assert.match(poster, /<h2>\$\{h\(bucket\.name\)\}<\/h2>/);
+  assert.doesNotMatch(poster, /bucket\.location|bucket\.date|dateLabel/);
+});

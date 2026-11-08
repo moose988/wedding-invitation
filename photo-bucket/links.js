@@ -5,7 +5,9 @@ export function details(input) {
   const location = String(input?.location || '').trim();
   if (!name || name.length > 100 || !location || location.length > 160 || /[\u0000-\u001f]/.test(name + location)) throw new Error('Enter an event name (up to 100 characters) and location (up to 160 characters).');
   if (!/^\d{4}-\d{2}-\d{2}$/.test(date) || !Number.isFinite(Date.parse(date)) || new Date(date).toISOString().slice(0, 10) !== date) throw new Error('Choose a valid event date.');
-  return { name, date, location };
+  const theme = input?.theme;
+  if (theme !== undefined && !["olive", "garden", "memories", "twilight"].includes(theme)) throw new Error("Choose a valid theme.");
+  return { name, date, location, ...(theme !== undefined ? { theme } : {}) };
 }
 export function validId(id) {
   if (!/^[a-zA-Z0-9_-]{1,80}$/.test(id || '')) throw new Error('This photo link is incomplete or invalid. Ask your host for a new link.');

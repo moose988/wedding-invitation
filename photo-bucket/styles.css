@@ -223,3 +223,11 @@
 .pb .pb-poster--twilight .pb-card-instructions { background:none; padding:0; border-radius:0; color:#21121c; text-shadow:0 0 4px #fffdf7,0 0 7px #fffdf7,0 0 12px #fffdf7; }
 .pb .pb-poster--twilight .pb-card-note { color:#21121c; font-weight:600; }
 .pb .pb-poster--olive .pb-card-instructions, .pb .pb-poster--wedding .pb-card-instructions, .pb .pb-poster--memories .pb-card-instructions { color:#202c27; text-shadow:0 0 5px #fffdf8, 0 0 9px #fffdf8; }
+.pb[data-theme] { min-height:100vh; background:#f8f5ee; }
+.pb[data-theme]::before { content:""; position:fixed; inset:0; z-index:-1; pointer-events:none; background:var(--guest-theme) center / cover no-repeat; }
+.pb[data-theme="olive"] { --guest-theme:url('./assets/wedding-olive-background.png'); }
+.pb[data-theme="garden"] { --guest-theme:url('./assets/wedding-garden-background.png'); }
+.pb[data-theme="memories"] { --guest-theme:url('./assets/wedding-memories-background.png'); }
+.pb[data-theme="twilight"] { --guest-theme:url('./assets/wedding-twilight-background.png'); }
+.pb[data-theme] .pb-hero::before,.pb[data-theme] .pb-hero::after { display:none; }
+.pb[data-theme] .pb-state,.pb[data-theme] .pb-section-head { background:#fffdf8eb; border-radius:10px; }

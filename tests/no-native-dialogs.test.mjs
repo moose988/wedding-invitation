@@ -2,9 +2,10 @@ import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
 import { readFileSync } from "node:fs";
 import path from "node:path";
+import { fileURLToPath } from "node:url";
 import test from "node:test";
 
-const root = new URL("..", import.meta.url).pathname;
+const root = fileURLToPath(new URL("..", import.meta.url));
 const files = execFileSync("git", ["ls-files", "*.js", "*.html", "*.mjs"], { cwd: root, encoding: "utf8" }).split("\n")
   .filter((f) => f && !/^(vendor|tests|backend|api|scripts|functions|server)\//.test(f));
 

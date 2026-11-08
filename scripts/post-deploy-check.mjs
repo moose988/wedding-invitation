@@ -42,7 +42,7 @@ async function listFiles(dir, limit) {
 
 // Paths that exist in the repository but must not be downloadable from the site.
 export async function privatePaths() {
-  const paths = ['server/demo-accounts.js', 'server/customer-management.js'];
+  const paths = ['server/demo-accounts.js', 'server/customer-management.js', '.orchestrate/README.md'];
   for (const dir of PRIVATE_DIRS) paths.push(...await listFiles(dir, 5));
   const rootMarkdown = (await readdir(root)).filter((name) => name.endsWith('.md'));
   return [...new Set([...paths, ...rootMarkdown])];

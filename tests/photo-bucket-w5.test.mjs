@@ -4,7 +4,7 @@ import { readFile } from 'node:fs/promises';
 import { BUCKET_SIZES_GB, DEFAULT_BUCKET_GB, estimateLabel, estimatePhotos } from '../photo-bucket/sizes.js';
 import * as backendSizes from '../backend/src/sizes.mjs';
 
-const read = f => readFile(new URL(`../${f}`, import.meta.url), 'utf8');
+const read = f => readFile(new URL(`../${f}`, import.meta.url), 'utf8').then(source => source.replace(/\r\n/g, '\n'));
 const [dashboard, allEvents, weddings, config] = await Promise.all(['dashboard.js', 'all-events.html', 'weddings.js', 'photo-bucket/config.js'].map(read));
 
 test('frontend size list and estimate mirror backend/src/sizes.mjs', () => {

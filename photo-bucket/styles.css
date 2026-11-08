@@ -242,10 +242,14 @@
 .pb[data-theme="baby_shower"] { --ink:#5a463f; --muted:#7a6a62; --gold:#c39a7a; --line:#ead9ca; --wash:#f7ece4; --white:#fffaf4; --accent:#e9cbc3; --accent-line:#dcb5ab; --accent-ink:#4a3631; --accent-hover:#e2bab0; }
 /* On a themed guest page the upload panel is frosted glass over the picture, not a solid card that reads as a pop-up.
    The blur keeps the text readable over busy flowers; browsers without color-mix keep a lighter solid panel. */
-.pb[data-theme] .pb-upload { background:#fffdf899; background:color-mix(in srgb, var(--white) 52%, transparent); border-color:transparent; box-shadow:none; -webkit-backdrop-filter:blur(10px) saturate(1.1); backdrop-filter:blur(10px) saturate(1.1); }
-.pb[data-theme] .pb-upload-actions button:not(.pb-primary), .pb[data-theme] .pb-name-field input { background:color-mix(in srgb, var(--white) 82%, transparent); }
+.pb[data-theme] .pb-upload { background:#fffdf866; background:color-mix(in srgb, var(--white) 32%, transparent); border-color:transparent; box-shadow:none; padding:20px 18px; -webkit-backdrop-filter:blur(14px) saturate(1.15); backdrop-filter:blur(14px) saturate(1.15); }
+.pb[data-theme] .pb-upload h2 { font-size:1.5rem; }
+.pb[data-theme] .pb-upload-actions button:not(.pb-primary), .pb[data-theme] .pb-name-field input { background:color-mix(in srgb, var(--white) 62%, transparent); }
 .pb[data-theme] .pb-hero::before,.pb[data-theme] .pb-hero::after { display:none; }
-.pb[data-theme] .pb-state,.pb[data-theme] .pb-section-head { background:#fffdf8b3; background:color-mix(in srgb, var(--white) 58%, transparent); border-radius:10px; border-color:transparent; -webkit-backdrop-filter:blur(8px); backdrop-filter:blur(8px); }
+.pb[data-theme] .pb-state { background:#fffdf880; background:color-mix(in srgb, var(--white) 40%, transparent); border-radius:10px; border-color:transparent; -webkit-backdrop-filter:blur(12px); backdrop-filter:blur(12px); }
+/* The gallery heading sits on the picture like the event title, with a soft glow instead of a strip behind it. */
+.pb[data-theme] .pb-section-head h2 { font-size:1.5rem; text-shadow:0 0 6px var(--white), 0 0 12px var(--white); }
+.pb[data-theme] .pb-section-head .pb-count { text-shadow:0 0 6px var(--white), 0 0 10px var(--white); }
 .pb .pb-poster--baby-shower { background:#f7efe3 url('./assets/baby-shower-background.jpg') center/100% 100% no-repeat; color:#4a3a36; -webkit-print-color-adjust:exact; print-color-adjust:exact; }
 .pb .pb-poster--baby-shower .pb-floral { display:none; }
 .pb .pb-poster--baby-shower #posterQr { padding:0; border:0; background:transparent; }

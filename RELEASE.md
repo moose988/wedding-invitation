@@ -75,6 +75,22 @@ Before hosting a paid event, have the quotation terms reviewed and trial invitat
 
 ### After every deploy: configuration and exposure check
 
+When required secrets are Production-only, an ordinary branch preview will return
+`503 NOT_CONFIGURED`. Validate a staged production build using the existing
+Production configuration instead of broadening secret access to every preview:
+
+```sh
+vercel deploy --prod --skip-domain --yes
+vercel curl /api/admin-health --deployment https://<staged-deployment> --yes
+```
+
+First link the checkout to the intended Vercel project and team. `--skip-domain`
+keeps the live aliases unchanged. An unauthenticated `401` confirms the function
+loads its configuration; it does not replace the authenticated health check below.
+After validation and the authorized merge, promote the verified deployment with
+`vercel promote https://<staged-deployment> --yes`, then repeat the checks on the
+live custom domain. Record any unavailable checks explicitly in the release report.
+
 1. Sign in to the live dashboard as a platform admin.
 2. Open the browser's network tab and copy the `Authorization: Bearer ...` value from any `/api/` request. This is an ID token, valid for about an hour.
 3. In a terminal, load the token without echoing it or saving it to shell history, then run the check:

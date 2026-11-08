@@ -100,7 +100,12 @@ async function run(action) {
     const results = response.results || [];
     out.innerHTML = `<p class="workspace-status" role="status"><strong>${response.succeeded} succeeded, ${response.failed} failed.</strong> ${response.failed ? "Failed items stay ticked so you can try again." : ""}</p><table class="admin-table"><thead><tr><th scope="col">Item</th><th scope="col">Type</th><th scope="col">Result</th></tr></thead><tbody>${results.map(r => `<tr><th scope="row">${esc(labelFor(r.kind, r.id))}</th><td>${r.kind === "bucket" ? "Photo bucket" : "Event"}</td><td class="${r.ok ? "result-ok" : "result-fail"}">${r.ok ? "OK: " : "Failed: "}${esc(describeTargetResult(r))}${targetRetryable(r) ? " (can retry)" : ""}${r.warning ? " (customer list not updated)" : ""}</td></tr>`).join("")}</tbody></table>`;
     for (const r of results) if (r.ok) selected.delete(`${r.kind}:${r.id}`);
+    if (response.succeeded) document.dispatchEvent(new CustomEvent("customer-access-changed", { detail: { uid: customer.uid } }));
     drawEvents(); drawBuckets();
   } catch (error) { out.innerHTML = `<p class="form-error" role="alert">${esc(error.message)} Nothing was changed on the page; check the customer before trying again.</p>`; }
-  finally { busy = false; sync(); }
+  finally {
+    busy = false; sync();
+    // Linked items are unticked, so the buttons can stay disabled with nothing selected; the click spinner must still stop.
+    for (const id of ["doLink", "doUnlink"]) $(id).classList.remove("is-busy", "is-auto-busy");
+  }
 }

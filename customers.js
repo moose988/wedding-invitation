@@ -8,6 +8,7 @@ import { runFromEvent } from "./action-feedback.js";
 import { mountAdminHealth } from "./admin-health.js";
 import { loadAdminEventsShared } from "./admin-events.js";
 import { mountCustomerLink } from "./customer-link.js";
+import { createOwnerAdapter } from "./photo-bucket/adapters.js";
 import { bindPasswordVisibility, hidePasswords } from "./password-visibility.js?v=1";
 bindPasswordVisibility(document);
 
@@ -28,6 +29,7 @@ else {
       $("userEmail").textContent = user.email || "Planner";
       $("loading").hidden = true; $("workspace").hidden = false;
       void mountAdminHealth(state.services.auth);
+      state.user = user;
       mountCustomerLink({ services: state.services, user });
       await load();
     } catch (error) { $("loading").textContent = `Workspace could not load: ${errorText(error)}`; $("status").textContent = `Could not load customers: ${errorText(error)}`; }
@@ -72,13 +74,25 @@ async function loadAssignments(customer) {
     return { id: entry.id, name: known ? getEventDisplayTitle(known) : getEventDisplayTitle(entry.data()) };
   }));
   customer.events = assignments.filter(Boolean);
+  // Photo buckets are linked on the photo service, not in Firestore, so ask it which buckets this account owns.
+  try {
+    const buckets = await (await createOwnerAdapter(state.user)).list({ uid: customer.userId || customer.id });
+    customer.buckets = buckets.filter(b => b.status !== "deleting" && (b.owners || []).includes(customer.userId || customer.id)).map(b => ({ id: b.id, name: b.name || b.id }));
+    customer.bucketError = "";
+  } catch (error) { customer.buckets = []; customer.bucketError = `Photo buckets could not load: ${errorText(error)}`; }
+}
+const plural = (n, word) => `${n} ${word}${n === 1 ? "" : "s"}`;
+function accessSummary(row) {
+  if (!row.events) return "Open to see assigned events and photo buckets";
+  const parts = [row.events.length && plural(row.events.length, "event"), row.buckets?.length && plural(row.buckets.length, "photo bucket")].filter(Boolean);
+  return parts.length ? `Assigned to ${parts.join(" and ")}` : "No events or photo buckets assigned";
 }
 function render() {
   const term = $("search").value.trim().toLowerCase();
-  const rows = state.customers.filter(row => [row.email, ...(row.events || []).map(e => e.name)].some(value => value.toLowerCase().includes(term)));
+  const rows = state.customers.filter(row => [row.email, ...(row.events || []).map(e => e.name), ...(row.buckets || []).map(b => b.name)].some(value => value.toLowerCase().includes(term)));
   $("status").textContent = `${rows.length} customer${rows.length === 1 ? "" : "s"} shown${state.more ? ". Search covers the customers loaded so far." : ""}`;
   $("loadMore").hidden = !state.more;
-  $("customerList").innerHTML = rows.length ? rows.map(row => `<article class="customer-card"><div class="customer-identity"><div class="customer-avatar" aria-hidden="true">${escape(row.email.slice(0,1).toUpperCase())}</div><div class="customer-info"><h2>${escape(row.email)}</h2><p>${row.events ? (row.events.length ? `Assigned to ${row.events.length} event${row.events.length === 1 ? "" : "s"}` : "No events assigned") : "Open to see assigned events"}</p><div class="customer-tags">${(row.events || []).map(e => `<span class="customer-tag">${escape(e.name)}</span>`).join("")}</div>${row.error ? `<p class="form-error" role="alert">${escape(row.error)}</p>` : ""}</div></div><div class="customer-actions"><button class="secondary-button" data-action="events" data-id="${escape(row.id)}" type="button">${row.events ? "Refresh events" : "Show events"}</button><button class="secondary-button" data-action="link" data-id="${escape(row.id)}" type="button">Link or unlink</button><button class="secondary-button" data-action="password" data-id="${escape(row.id)}" type="button">Change password</button><button class="secondary-button delete-customer" data-action="delete" data-id="${escape(row.id)}" type="button">Delete</button></div></article>`).join("") : `<div class="customer-empty"><strong>${term ? "No matching customers" : "No customers yet"}</strong><p>${term ? "Try another email or event name." : "Add a customer to get started, then link them to events above."}</p></div>`;
+  $("customerList").innerHTML = rows.length ? rows.map(row => `<article class="customer-card"><div class="customer-identity"><div class="customer-avatar" aria-hidden="true">${escape(row.email.slice(0,1).toUpperCase())}</div><div class="customer-info"><h2>${escape(row.email)}</h2><p>${escape(accessSummary(row))}</p><div class="customer-tags">${(row.events || []).map(e => `<span class="customer-tag">${escape(e.name)}</span>`).join("")}${(row.buckets || []).map(b => `<span class="customer-tag customer-tag--bucket">Photos · ${escape(b.name)}</span>`).join("")}</div>${[row.error, row.bucketError].filter(Boolean).map(text => `<p class="form-error" role="alert">${escape(text)}</p>`).join("")}</div></div><div class="customer-actions"><button class="secondary-button" data-action="events" data-id="${escape(row.id)}" type="button">${row.events ? "Refresh access" : "Show access"}</button><button class="secondary-button" data-action="link" data-id="${escape(row.id)}" type="button">Link or unlink</button><button class="secondary-button" data-action="password" data-id="${escape(row.id)}" type="button">Change password</button><button class="secondary-button delete-customer" data-action="delete" data-id="${escape(row.id)}" type="button">Delete</button></div></article>`).join("") : `<div class="customer-empty"><strong>${term ? "No matching customers" : "No customers yet"}</strong><p>${term ? "Try another email or event name." : "Add a customer to get started, then link them to events above."}</p></div>`;
 }
 $("search").oninput = render;
 function accountFields() {
@@ -115,6 +129,13 @@ $("customerList").onclick = async event => {
   if (button.dataset.action === "password") { $("passwordForm").reset(); resetPasswordVisibility(); formError($("passwordForm"), ""); $("passwordFor").textContent = `Set a new password for ${state.selected.email}.`; $("passwordDialog").showModal(); }
   if (button.dataset.action === "delete") { formError($("deleteForm"), ""); $("deleteFor").textContent = state.selected.email; $("deleteDialog").showModal(); }
 };
+// After the link panel links or unlinks, refresh that customer's card if it is open, so the change shows at once.
+document.addEventListener("customer-access-changed", async event => {
+  const row = state.customers.find(c => (c.userId || c.id) === event.detail?.uid);
+  if (!row?.events) return;
+  try { row.error = ""; await loadAssignments(row); } catch (error) { row.error = `Events could not load: ${errorText(error)}`; }
+  render();
+});
 $("loadMore").onclick = () => load(true);
 $("retryCustomers").onclick = () => load();
 $("customerForm").onsubmit = async event => {

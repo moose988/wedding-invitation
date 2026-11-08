@@ -109,7 +109,8 @@ export function ownerAdapterApi(user) {
       const body = { ...details(input), showUploaderNames: input?.showUploaderNames !== false, cardShowsDetails: input?.cardShowsDetails === true, guestShowsDetails: input?.guestShowsDetails !== false, gb: Number(input?.gb), ...(Array.isArray(input?.owners) && input.owners.length ? { owners: input.owners } : {}) };
       return api('POST', '/owner/create', { body });
     },
-    list: () => allPages(cursor => api('GET', '/owner/list', { query: { limit: 50, ...cursor } })),
+    // Admins may pass { uid } to list the buckets another account owns.
+    list: ({ uid } = {}) => allPages(cursor => api('GET', '/owner/list', { query: { limit: 50, ...(uid ? { uid } : {}), ...cursor } })),
     setSize: (bucketId, gb) => api('PUT', `/b/${validId(bucketId)}/size`, { body: { gb: Number(gb) } }),
     addOwner: (bucketId, uid) => api('POST', `/b/${validId(bucketId)}/owners`, { body: { uid } }),
     removeOwner: (bucketId, uid) => api('DELETE', `/b/${validId(bucketId)}/owners/${encodeURIComponent(uid)}`),

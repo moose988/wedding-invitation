@@ -11,8 +11,8 @@
 .pb button,.pb .pb-button { min-height:48px;border:1px solid var(--line);border-radius:9px;padding:11px 17px;background:var(--white);color:var(--ink);font-size:14px;font-weight:600;cursor:pointer;text-decoration:none;text-align:center;display:inline-flex;align-items:center;justify-content:center;gap:9px; }
 .pb button:hover,.pb .pb-button:hover { background:var(--wash);border-color:var(--gold); }
 .pb button:disabled { cursor:wait;opacity:.6; }
-.pb .pb-primary { background:var(--ink);color:#fffdf6;border-color:var(--ink); }
-.pb .pb-primary:hover { background:#365648; }
+.pb .pb-primary { background:var(--accent,var(--ink));color:var(--accent-ink,#fffdf6);border-color:var(--accent-line,var(--ink)); }
+.pb .pb-primary:hover { background:var(--accent-hover,#365648); }
 .pb .pb-danger { color:#993e32; }
 .pb :focus-visible { outline:3px solid #a47b32;outline-offset:4px; }
 .pb input:not([type=range]),.pb select { width:100%;max-width:100%;border:1px solid var(--line);background:#fffef9;border-radius:7px;padding:12px;color:var(--ink);font-size:16px;min-height:48px; }
@@ -234,6 +234,12 @@
 /* Portrait phones get a taller crop so the balloons, toys and teddy are not cut off at the sides. */
 @media (max-aspect-ratio: 3/4) { .pb[data-theme="gender_reveal"] { --guest-theme:url('./assets/gender-reveal-background-phone.jpg'); } }
 .pb[data-theme="baby_shower"] { --guest-theme:url('./assets/baby-shower-background.jpg'); }
+/* Guest page colours per theme, so buttons and panels match the background. Olive and Wedding memories keep the default green.
+   Every pair here is at least 4.5:1 contrast. --accent is the main button; a gradient accent needs its own --accent-line. */
+.pb[data-theme="garden"] { --ink:#594147; --gold:#a07a6c; --line:#e6d4cc; --wash:#f6ece6; --white:#fffbf7; --accent-hover:#6e525a; }
+.pb[data-theme="twilight"] { --ink:#4a3242; --gold:#9c7a8c; --line:#e3d3db; --wash:#f4ebef; --white:#fffbf8; --accent-hover:#5f4356; }
+.pb[data-theme="gender_reveal"] { --ink:#4b3a48; --muted:#6f6070; --gold:#c49aa9; --line:#ecd5de; --wash:#f8eef3; --white:#fffbfa; --accent:linear-gradient(135deg,#f5cfd9,#cfe1f4); --accent-line:#e4c6d3; --accent-ink:#3d2f3b; --accent-hover:linear-gradient(135deg,#f0c1ce,#bfd6f0); }
+.pb[data-theme="baby_shower"] { --ink:#5a463f; --muted:#7a6a62; --gold:#c39a7a; --line:#ead9ca; --wash:#f7ece4; --white:#fffaf4; --accent:#e9cbc3; --accent-line:#dcb5ab; --accent-ink:#4a3631; --accent-hover:#e2bab0; }
 .pb[data-theme] .pb-hero::before,.pb[data-theme] .pb-hero::after { display:none; }
 .pb[data-theme] .pb-state,.pb[data-theme] .pb-section-head { background:#fffdf8eb; border-radius:10px; }
 .pb .pb-poster--baby-shower { background:#f7efe3 url('./assets/baby-shower-background.jpg') center/100% 100% no-repeat; color:#4a3a36; -webkit-print-color-adjust:exact; print-color-adjust:exact; }

@@ -47,3 +47,9 @@ test('guests see the date and place unless an admin switched them off; hosts alw
   assert.match(allEvents, /name="bucketGuestDetails" checked/);
   assert.match(allEvents, /name="bucketCardDetails" \/>/);
 });
+
+test('the main guest button takes each theme colour, and themes without one keep the default green', () => {
+  assert.match(styles, /\.pb \.pb-primary \{ background:var\(--accent,var\(--ink\)\);color:var\(--accent-ink,#fffdf6\);border-color:var\(--accent-line,var\(--ink\)\); \}/);
+  for (const value of ['garden', 'twilight', 'gender_reveal', 'baby_shower']) assert.match(styles, new RegExp(`\\.pb\\[data-theme="${value}"\\] \\{ --ink:#`), `${value} has its own colours`);
+  for (const value of ['olive', 'memories']) assert.doesNotMatch(styles, new RegExp(`\\.pb\\[data-theme="${value}"\\] \\{ --ink:`));
+});

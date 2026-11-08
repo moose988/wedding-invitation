@@ -220,7 +220,7 @@ export function createHandler({ store, files, purgePhotoFiles, verifyOwner, secr
     if (method === 'PATCH' && rest === '') {
       needHost(a);
       const extra = {};
-      if (body.theme !== undefined) { if (!validTheme(body.theme)) throw new HttpError(400, "Invalid theme.", "INVALID_REQUEST"); extra.theme = body.theme; }
+      if (body.theme !== undefined) { needAdmin(a); if (!validTheme(body.theme)) throw new HttpError(400, "Invalid theme.", "INVALID_REQUEST"); extra.theme = body.theme; }
       if (body.showUploaderNames !== undefined) {
         needAdmin(a); // customers cannot reveal or hide who took which photo
         if (typeof body.showUploaderNames !== 'boolean') throw new HttpError(400, 'showUploaderNames must be true or false.', 'INVALID_REQUEST');

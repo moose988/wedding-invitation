@@ -23,15 +23,15 @@ function redirectFor(href) {
   return destination;
 }
 
-test("plain root and index entry open customer login before invitation content paints", () => {
-  assert.equal(redirectFor("https://events.qdsystems.ae/"), "./customer-login.html");
-  assert.equal(redirectFor("https://events.qdsystems.ae/index.html"), "./customer-login.html");
+test("plain root and index entry open the QD Events product page before invitation content paints", () => {
+  assert.equal(redirectFor("https://events.qdsystems.ae/"), "https://www.qdsystems.ae/event-management");
+  assert.equal(redirectFor("https://events.qdsystems.ae/index.html"), "https://www.qdsystems.ae/event-management");
 });
 
-test("root login redirect keeps unrelated login or campaign parameters intact", () => {
+test("root product redirect keeps unrelated campaign parameters intact", () => {
   assert.equal(
     redirectFor("https://events.qdsystems.ae/?message=signed-out&utm_source=qd#continue"),
-    "./customer-login.html?message=signed-out&utm_source=qd#continue",
+    "https://www.qdsystems.ae/event-management?message=signed-out&utm_source=qd#continue",
   );
 });
 

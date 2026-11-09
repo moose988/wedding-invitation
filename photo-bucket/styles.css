@@ -44,6 +44,8 @@
 .pb svg { width:22px;height:22px;fill:none;stroke:currentColor;stroke-width:1.4;stroke-linecap:round;stroke-linejoin:round;flex-shrink:0; }
 .pb-upload-actions svg { width:26px;height:26px; }
 .pb-footnote { color:#707368;font-size:11px;text-align:center;margin:15px 0 0; }
+.pb-powered-by { margin-top:36px;padding:16px 0 0;border-top:1px solid var(--line);color:var(--ink);font-size:12px;text-align:center;text-shadow:0 0 6px var(--white),0 0 12px var(--white); }
+.pb-powered-by a { font-weight:600;text-underline-offset:3px; }
 .pb-file-guidance { display:grid;gap:3px;margin-top:18px;font-size:12px;line-height:1.5; }
 .pb-notice { margin:18px 0;padding:12px 16px;background:#eee7d8;border:1px solid #d6c9ae;border-radius:9px;font-size:13px; }
 .pb-error { color:#8b342d;font-size:13px;overflow-wrap:anywhere; }

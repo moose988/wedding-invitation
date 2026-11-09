@@ -10,5 +10,5 @@ const hasInvitationContext =
   invitationHashKeys.some((key) => fragment.has(key));
 
 if (isHomePath && !hasInvitationContext && query.get("demo") !== "1") {
-  window.location.replace(`./customer-login.html${window.location.search}${window.location.hash}`);
+  window.location.replace(`https://www.qdsystems.ae/event-management${window.location.search}${window.location.hash}`);
 }

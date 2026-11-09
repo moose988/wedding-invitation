@@ -55,7 +55,7 @@ test("sample route reads current public event only and never resolves a guest to
   assert.match(script, /state\.sampleMode \|\| state\.mode !== "firebase"/);
   assert.match(html, /id="samplePreviewBanner" hidden/);
   assert.match(router, /invitationQueryKeys = \["wedding", "guest", "recipient", "sample"\]/);
-  assert.match(router, /window\.location\.replace\(`\.\/customer-login\.html/);
+  assert.match(router, /window\.location\.replace\(`https:\/\/www\.qdsystems\.ae\/event-management/);
 });
 
 test("sample RSVP uses fictional in-memory state and never writes to Firebase or demo storage", async () => {

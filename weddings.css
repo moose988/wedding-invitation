@@ -260,3 +260,11 @@
 .backup-summary { display: grid; grid-template-columns: max-content 1fr; gap: 6px 14px; margin: 12px 0; padding: 12px 14px; border: 1px solid var(--line); border-radius: 12px; }
 .backup-summary dt { color: var(--muted); } .backup-summary dd { margin: 0; font-weight: 700; overflow-wrap: anywhere; }
 .backup-warning { margin: 12px 0; padding: 10px 12px; border-radius: 12px; background: #fff6e5; color: #6b4300; }
+/* People with access dialog. */
+.access-list { display: grid; gap: 8px; margin: 10px 0 18px; padding: 0; list-style: none; }
+.access-list li { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 10px 12px; border: 1px solid var(--line); border-radius: 12px; }
+.access-list li > div { display: grid; gap: 2px; min-width: 0; } .access-list strong { overflow-wrap: anywhere; } .access-list small { color: var(--muted); }
+.access-role { justify-self: start; padding: 2px 8px; border-radius: 999px; background: #eef2ee; font-size: 12px; font-weight: 800; }
+.access-role--owner { background: #e4efe9; color: var(--green); } .access-role--customer { background: #e9eefb; color: #2b4a8f; }
+.access-add { display: grid; gap: 10px; padding-top: 14px; border-top: 1px solid var(--line); } .access-add h3 { margin: 0; }
+#weddingForm > header #eventAccessButton { margin-left: auto; margin-right: 10px; }

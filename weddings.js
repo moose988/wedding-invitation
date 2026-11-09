@@ -16,7 +16,7 @@ import { dateLabel } from "./photo-bucket/links.js";
 import { BUCKET_SIZES_GB, DEFAULT_BUCKET_GB, estimateLabel } from "./photo-bucket/sizes.js";
 
 const state = { services: null, user: null, weddings: [], workspaceLoaded: false, canSeeSampleInvitation: false, isAdmin: false, roleResolved: false, filter: "all", currentPage: 1, pageSize: 6, editId: "", deleteId: "", workspaceTimer: null, unsubscribeAuth: null, initialized: false, snapshotGeneration: 0, workspaceRequest: 0 };
-const el = Object.fromEntries(["workspace","loadingState","userEmail","signOutButton","createWeddingButton","sampleInvitationPanel","workspaceControls","sampleInvitationUrl","searchInput","sortSelect","filterRow","workspaceStatus","retryLoadButton","weddingGrid","paginationControls","paginationStatus","restoreEventButton","emptyState","weddingDialog","weddingForm","formKicker","formTitle","formError","saveWeddingButton","categoryStep","eventFeaturesStep","eventTemplateStep","eventInformationStep","continueEventButton","continueFeaturesButton","continueTemplateButton","backEventButton","deleteDialog","deleteForm","deletePhrase","deleteConfirmation","deleteError"].map((id) => [id, document.getElementById(id)]));
+const el = Object.fromEntries(["workspace","loadingState","userEmail","signOutButton","createWeddingButton","sampleInvitationPanel","workspaceControls","sampleInvitationUrl","searchInput","sortSelect","filterRow","workspaceStatus","retryLoadButton","weddingGrid","paginationControls","paginationStatus","restoreEventButton","eventAccessButton","emptyState","weddingDialog","weddingForm","formKicker","formTitle","formError","saveWeddingButton","categoryStep","eventFeaturesStep","eventTemplateStep","eventInformationStep","continueEventButton","continueFeaturesButton","continueTemplateButton","backEventButton","deleteDialog","deleteForm","deletePhrase","deleteConfirmation","deleteError"].map((id) => [id, document.getElementById(id)]));
 
 init();
 function init() {
@@ -40,6 +40,7 @@ function init() {
   });
   window.addEventListener("pagehide", () => { state.signingOut = true; state.workspaceRequest += 1; clearTimeout(state.workspaceTimer); state.unsubscribeAuth?.(); state.unsubscribeAccess?.(); }, { once: true });
   el.createWeddingButton.addEventListener("click", () => openForm());
+  el.eventAccessButton?.addEventListener("click", (event) => runFromEvent(event, () => { const wedding = state.weddings.find((row) => row.id === state.editId); if (state.isAdmin && wedding) return openEventAccessFor(wedding); }, { what: "Opening the access list" }));
   el.restoreEventButton?.addEventListener("click", (event) => runFromEvent(event, () => { if (state.isAdmin) return openEventRestore(null); }, { what: "Opening the restore" }));
   el.retryLoadButton.addEventListener("click", () => watchWorkspace());
   el.sampleInvitationUrl.value = sampleInvitationUrl();
@@ -416,7 +417,7 @@ function card(w) {
   const isOwner = w.isOwner === true && w.seatingOnly !== true;
   const eventId = esc(w.id);
   const eventStatus = ["draft", "upcoming", "active", "completed", "archived"].includes(w.status) ? w.status : "draft";
-  const ownerActions = isOwner ? `<button data-action="edit" data-id="${eventId}" type="button">Edit details</button><button data-action="duplicate" data-id="${eventId}" type="button">Duplicate setup</button><button data-action="archive" data-id="${eventId}" type="button">${w.status === "archived" ? "Restore event" : "Archive event"}</button>${state.isAdmin ? `<button data-action="customers" data-id="${eventId}" type="button">Manage customers</button><button data-action="audit" data-id="${eventId}" type="button">Customer activity log</button><button data-action="backup" data-id="${eventId}" type="button">Download backup</button><button data-action="restore-backup" data-id="${eventId}" type="button">Restore from backup</button>` : ""}<button class="menu-delete" data-action="delete" data-id="${eventId}" type="button">Delete event</button>` : `<p class="action-menu__notice">Only the event owner can manage this event.</p>`;
+  const ownerActions = isOwner ? `<button data-action="edit" data-id="${eventId}" type="button">Edit details</button><button data-action="duplicate" data-id="${eventId}" type="button">Duplicate setup</button><button data-action="archive" data-id="${eventId}" type="button">${w.status === "archived" ? "Restore event" : "Archive event"}</button>${state.isAdmin ? `<button data-action="customers" data-id="${eventId}" type="button">Manage customers</button><button data-action="audit" data-id="${eventId}" type="button">Customer activity log</button><button data-action="access" data-id="${eventId}" type="button">People with access</button><button data-action="backup" data-id="${eventId}" type="button">Download backup</button><button data-action="restore-backup" data-id="${eventId}" type="button">Restore from backup</button>` : ""}<button class="menu-delete" data-action="delete" data-id="${eventId}" type="button">Delete event</button>` : `<p class="action-menu__notice">Only the event owner can manage this event.</p>`;
   const title = getEventDisplayTitle(w);
   const category = isGenderRevealEvent(w) ? "حفل الكشف عن جنس المولود" : isCelebrationEvent(w) ? "Celebration" : "Wedding / Engagement";
   const cardMenu = isOwner ? `<div class="menu-wrap"><button class="card-menu-toggle" data-action="menu" data-id="${eventId}" type="button" aria-label="More actions for ${esc(title)}" aria-expanded="false" aria-controls="menu-${eventId}">⋯</button><div class="action-menu" id="menu-${eventId}" hidden>${ownerActions}</div></div>` : "";
@@ -502,8 +503,12 @@ async function handleCardActionUnsafe(event) {
   if (button.dataset.action === "delete") openDelete(wedding);
   if (button.dataset.action === "customers") location.href = `./customers.html?event=${encodeURIComponent(wedding.id)}`;
   if (button.dataset.action === "audit") { try { (await import("./admin-workspace.js")).openEventAudit(wedding, { db: state.services.db, title: getEventDisplayTitle(wedding) }); } catch (error) { console.error(error); flash("The activity log could not open."); } }
+  if (button.dataset.action === "access" && state.isAdmin) { closeActionMenus(); await openEventAccessFor(wedding); }
   if (button.dataset.action === "backup" && state.isAdmin) { closeActionMenus(); await (await import("./event-backup-ui.js")).downloadBackupFor(wedding, { auth: state.services.auth, flash }); }
   if (button.dataset.action === "restore-backup" && state.isAdmin) { closeActionMenus(); await openEventRestore(wedding); }
+}
+async function openEventAccessFor(wedding) {
+  (await import("./event-access-ui.js")).openEventAccess({ wedding, services: state.services, flash });
 }
 // wedding is the card the restore was opened from, or null for the page button that can also bring back a deleted event.
 async function openEventRestore(wedding) {
@@ -579,6 +584,7 @@ function openForm(wedding) {
   el.weddingForm.querySelector('[value="photo_bucket"]').closest("label").hidden = Boolean(wedding);
   el.formError.textContent = "";
   el.formKicker.textContent = wedding ? "Event details" : "New event";
+  if (el.eventAccessButton) el.eventAccessButton.hidden = !wedding;
   el.formTitle.textContent = wedding ? "Edit event" : "Create an event";
   el.saveWeddingButton.textContent = wedding ? "Save changes" : "Create event";
   el.categoryStep.hidden = false;

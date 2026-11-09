@@ -1,0 +1,49 @@
+/* The Access section. One look on every page it appears on (photo bucket page, event dashboard,
+   All Events), modelled on the photo bucket page's "Edit details" panel. Every rule is scoped
+   to .access-section and sets its own values, so each page's base styles cannot change it. */
+.access-section { --ax-paper:#fffdf8; --ax-ink:#273f35; --ax-muted:#6d7166; --ax-line:#ded5c4; --ax-wash:#eceee4; --ax-gold:#9b8155; --ax-green:#1f5c4d; --ax-danger:#a9443d;
+  display:block; box-sizing:border-box; margin:24px 0 0; padding:22px 24px; border:1px solid var(--ax-line); border-radius:14px; background:var(--ax-paper); color:var(--ax-ink); font:15px/1.6 'Segoe UI',Arial,sans-serif; text-align:left; }
+.access-section *, .access-section *::before, .access-section *::after { box-sizing:border-box; }
+.access-section [hidden] { display:none !important; }
+.access-section > summary { min-height:44px; display:list-item; padding:0; color:var(--ax-ink); font:400 1.35rem/44px Georgia,'Times New Roman',serif; cursor:pointer; }
+.access-section > summary:focus-visible { outline:2px solid var(--ax-gold); outline-offset:4px; border-radius:6px; }
+.access-section .access-section__body { display:grid; gap:14px; padding-top:14px; }
+.access-section.access-section--bare { margin:0; padding:0; border:0; background:transparent; }
+.access-section.access-section--bare > summary { display:none; }
+.access-section.access-section--bare .access-section__body { padding-top:0; }
+.access-section .ax-note { margin:0; color:var(--ax-muted); font-size:14px; }
+.access-section .ax-status { margin:0; min-height:1.4em; color:var(--ax-ink); font-size:14px; font-weight:600; }
+.access-section .ax-error { margin:0; color:var(--ax-danger); font-size:14px; font-weight:600; }
+.access-section .ax-error:empty, .access-section .ax-status:empty { display:none; }
+/* About four people, then the list scrolls, so Add user stays in view. */
+.access-section .ax-list { display:grid; gap:8px; max-height:264px; margin:0; padding:0; overflow:auto; list-style:none; }
+.access-section .ax-list li { display:flex; align-items:center; justify-content:space-between; gap:12px; margin:0; padding:10px 12px; border:1px solid var(--ax-line); border-radius:10px; background:#fff; }
+.access-section .ax-list li.ax-empty { color:var(--ax-muted); }
+.access-section .ax-list li > div { display:grid; gap:3px; min-width:0; }
+.access-section .ax-list strong { font-size:15px; font-weight:600; overflow-wrap:anywhere; }
+.access-section .ax-role { justify-self:start; padding:1px 9px; border-radius:999px; background:var(--ax-wash); color:var(--ax-ink); font-size:12px; font-weight:700; }
+.access-section .ax-role.ax-role--owner { background:#e4efe9; color:var(--ax-green); }
+.access-section .ax-role.ax-role--customer { background:#e9eefb; color:#2b4a8f; }
+.access-section .ax-button { display:inline-flex; align-items:center; justify-content:center; gap:6px; width:auto; min-height:48px; margin:0; padding:11px 17px; border:1px solid var(--ax-line); border-radius:9px; background:#fff; color:var(--ax-ink); font:600 14px/1.3 'Segoe UI',Arial,sans-serif; text-align:center; cursor:pointer; box-shadow:none; }
+.access-section .ax-button:hover { background:var(--ax-wash); border-color:var(--ax-gold); }
+.access-section .ax-button:disabled { opacity:.55; cursor:not-allowed; }
+.access-section .ax-button.ax-button--wide { width:100%; }
+.access-section .ax-button.ax-button--primary { border-color:var(--ax-green); background:var(--ax-green); color:#fff; }
+.access-section .ax-button.ax-button--primary:hover { background:#17463c; }
+.access-section .ax-link { min-height:44px; width:auto; margin:0; padding:0 8px; border:0; border-radius:8px; background:transparent; color:var(--ax-ink); font:600 14px/1.3 'Segoe UI',Arial,sans-serif; text-decoration:underline; cursor:pointer; box-shadow:none; }
+.access-section .ax-link:hover { background:var(--ax-wash); }
+.access-section .ax-link.ax-link--danger { color:var(--ax-danger); }
+.access-section .ax-choice { display:grid; gap:8px; }
+.access-section .ax-choice .ax-button { display:grid; justify-items:start; gap:2px; text-align:left; }
+.access-section .ax-choice small { color:var(--ax-muted); font-weight:400; }
+.access-section .ax-choice .ax-link { justify-self:start; }
+.access-section .ax-form { display:grid; gap:14px; margin:0; padding:0; }
+.access-section .ax-form label { display:grid; gap:6px; margin:0; color:var(--ax-ink); font:600 14px/1.4 'Segoe UI',Arial,sans-serif; }
+.access-section .ax-form input { width:100%; min-height:48px; margin:0; padding:10px 12px; border:1px solid var(--ax-line); border-radius:9px; background:#fff; color:var(--ax-ink); font:400 15px/1.4 'Segoe UI',Arial,sans-serif; }
+.access-section .ax-form input:focus-visible, .access-section .ax-button:focus-visible, .access-section .ax-link:focus-visible, .access-section .ax-result:focus-visible { outline:2px solid var(--ax-gold); outline-offset:2px; }
+.access-section .ax-actions { display:flex; align-items:center; justify-content:space-between; gap:10px; }
+.access-section .ax-results { display:grid; gap:6px; max-height:216px; overflow:auto; }
+.access-section .ax-result { display:block; width:100%; min-height:44px; margin:0; padding:9px 12px; border:1px solid var(--ax-line); border-radius:9px; background:#fff; color:var(--ax-ink); font:400 15px/1.4 'Segoe UI',Arial,sans-serif; text-align:left; overflow-wrap:anywhere; cursor:pointer; box-shadow:none; }
+.access-section .ax-result:hover { border-color:var(--ax-gold); background:var(--ax-wash); }
+.access-section .ax-result.is-chosen { border-color:var(--ax-green); background:#e4efe9; font-weight:600; }
+@media (max-width:480px) { .access-section { padding:18px 16px; } .access-section .ax-actions { flex-wrap:wrap; } .access-section .ax-actions .ax-button { flex:1 1 100%; } }

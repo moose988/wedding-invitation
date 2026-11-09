@@ -27,18 +27,17 @@ export function cleanEmail(value) {
   return EMAIL.test(email) && email.length <= 254 ? email : "";
 }
 
-// Users from the directory who could still be added: not already a member, with an email, by email.
-export function existingChoices(directory, rows) {
-  const members = new Set(rows.map((row) => row.id));
-  return directory.filter((row) => row.email && !members.has(row.id)).sort((a, b) => a.email.localeCompare(b.email));
+// A photo bucket's owners. The bucket service stores account ids only; `accounts` carries the email found for each.
+export function bucketRows(accounts) {
+  return accounts
+    .map((account) => ({ id: account.uid, email: account.email || "", kind: "customer", label: account.exists === false ? "Account no longer exists" : "Customer", removable: true }))
+    .sort((a, b) => a.email.localeCompare(b.email) || a.id.localeCompare(b.id));
 }
 
-// The users whose email contains what was typed, best matches first: emails that start with it, then the rest.
-export function searchChoices(choices, term, max = 8) {
-  const text = String(term || "").trim().toLowerCase();
-  const matches = text ? choices.filter((row) => row.email.toLowerCase().includes(text)) : choices;
-  const ranked = text ? [...matches].sort((a, b) => (b.email.toLowerCase().startsWith(text) - a.email.toLowerCase().startsWith(text)) || a.email.localeCompare(b.email)) : matches;
-  return { shown: ranked.slice(0, max), more: Math.max(0, ranked.length - max) };
+// Search results without the people who already have access.
+export function withoutMembers(results, rows) {
+  const members = new Set(rows.map((row) => row.id));
+  return results.filter((row) => row.email && !members.has(row.uid));
 }
 
 // What to do after looking an email up, so the dialog only has to follow it.

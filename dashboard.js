@@ -33,7 +33,6 @@ import { persistCanonicalSeatDiff as persistCanonicalSeatDiffWithApi } from "./s
 import { createDashboardPersistence } from "./dashboard-persistence.js?v=20261028-invitation-sync-retry-1";
 import { commitBulkGuestRsvp, commitGuestCheckin, commitGuestEdit, guestFormPatch, normalizeDigits, normalizeGuestPhone, parseBulkGuestEntries, saveFailureMessage } from "./guest-edit.js?v=20261018-guest-invitation-regressions-2";
 import { projectionEqual } from "./event-publishing.js?v=20261018-guest-invitation-regressions-2";
-import { mountCustomerAccess } from "./customer-access-ui.js?v=20261029-password-visibility";
 import { ensureGenderRevealPublished } from "./gender-reveal-publication.js";
 import { createShareUrl } from "./share-link.js";
 // export.js loads on demand when someone exports.
@@ -4082,7 +4081,7 @@ function renderEventSettingsPage() {
       </section>
       `}
 
-      ${isWeddingOwner() ? '<section class="event-settings-section share-card" id="customerAccessPanel"></section>' : ""}
+      ${isWeddingOwner() ? '<div id="customerAccessPanel"></div>' : ""}
       ${state.isAdmin === true && !genderReveal && !hideOptionsAndLifecycle ? '<section class="event-settings-section share-card" id="musicPanel"></section>' : ""}
       <form class="event-settings-section share-card" id="eventSettingsForm" novalidate>
         <header class="event-settings-section__header">
@@ -4123,7 +4122,7 @@ function renderEventSettingsPage() {
   if (isWeddingOwner()) {
     const placeholder = document.getElementById("customerAccessPanel");
     if (previousCustomerPanel) placeholder.replaceWith(previousCustomerPanel);
-    else void mountCustomerAccess(placeholder, { db: state.services.db, weddingId: state.weddingId, wedding: state.wedding });
+    else void import("./access-section.js").then(({ mountAccessSection }) => { if (placeholder.isConnected) mountAccessSection(placeholder, { auth: state.services.auth, target: { kind: "event", id: state.weddingId }, title: getEventDisplayTitle(state.wedding) }); }).catch((error) => { console.error("Access section failed to load", error?.name); placeholder.textContent = "The access section could not load. Reload the page."; });
   }
   updateEventSettingsFormState();
   const eventSettingsForm = document.getElementById("eventSettingsForm");

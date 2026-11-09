@@ -110,3 +110,80 @@ export async function manageCustomerAccess({ auth, db, token, action, userId, ta
   const failed = results.filter((row) => !row.ok).length;
   return { ok: failed === 0, action, userId, succeeded: results.length - failed, failed, results };
 }
+
+/* ------------------------------------------------- Access section (one event or bucket) */
+// These serve the Access section shown on event cards, the event dashboard and the photo
+// bucket page. That section has no database connection of its own on the bucket page, so
+// everything it shows comes from here. All of it is for platform administrators only.
+const MAX_UIDS = 50;
+const SEARCH_RESULTS = 8;
+const normalEmail = (email) => {
+  const value = typeof email === 'string' ? email.trim().toLowerCase() : '';
+  if (!EMAIL.test(value) || value.length > 254) throw new AdminError(400, 'INVALID_EMAIL', 'Enter a valid email address.');
+  return value;
+};
+
+// Everyone who can open an event, with the fields the page needs to name their role, plus pending invitations.
+export async function listEventAccess({ auth, db, token, eventId }) {
+  await requireAdmin(auth, db, token);
+  if (!validEventId(eventId)) throw new AdminError(400, 'INVALID_EVENT', 'Invalid event.');
+  const eventRef = db.doc(`weddings/${eventId}`);
+  const [event, members, grants] = await Promise.all([eventRef.get(), eventRef.collection('dashboardUsers').get(), db.collection('customerGrants').where('weddingId', '==', eventId).get()]);
+  if (!event.exists) throw new AdminError(404, 'EVENT_NOT_FOUND', 'This event no longer exists.');
+  const pick = (data) => ({ email: typeof data.email === 'string' ? data.email : '', role: typeof data.role === 'string' ? data.role : '', seatingOnly: data.seatingOnly === true, canCheckIn: data.canCheckIn === true, canViewDashboard: data.canViewDashboard === true, allowedSide: typeof data.allowedSide === 'string' ? data.allowedSide : 'all' });
+  return {
+    ownerUserId: event.data().ownerUserId || '',
+    members: members.docs.map((row) => ({ id: row.id, ...pick(row.data()) })),
+    invited: grants.docs.map((row) => ({ id: row.id, email: typeof row.data().email === 'string' ? row.data().email : '' })),
+  };
+}
+
+// Emails for account ids, for a photo bucket's owner list (the bucket service stores ids only).
+export async function resolveAccounts({ auth, db, token, uids }) {
+  await requireAdmin(auth, db, token);
+  if (!Array.isArray(uids) || uids.length > MAX_UIDS || !uids.every(validEventId)) throw new AdminError(400, 'INVALID_USER', 'Invalid account list.');
+  const unique = [...new Set(uids)];
+  if (!unique.length) return { accounts: [] };
+  const found = new Map((await auth.getUsers(unique.map((uid) => ({ uid })))).users.map((user) => [user.uid, user.email || '']));
+  return { accounts: unique.map((uid) => ({ uid, email: found.get(uid) || '', exists: found.has(uid) })) };
+}
+
+// Customers whose email starts with what was typed. One small indexed query, however many customers there are.
+export async function searchCustomers({ auth, db, token, term }) {
+  await requireAdmin(auth, db, token);
+  const text = typeof term === 'string' ? term.trim().toLowerCase() : '';
+  if (text.length > 254 || /[\u0000-\u001f]/.test(text)) throw new AdminError(400, 'INVALID_SEARCH', 'Invalid search.');
+  let query = db.collection('customerDirectory').orderBy('email').limit(SEARCH_RESULTS + 1);
+  if (text) query = query.startAt(text).endAt(`${text}\uf8ff`);
+  const rows = (await query.get()).docs;
+  return { results: rows.slice(0, SEARCH_RESULTS).map((row) => ({ uid: row.id, email: row.data().email || '' })), more: rows.length > SEARCH_RESULTS };
+}
+
+// A new sign-in account for a customer, made here with the service account so the page never
+// uses the public sign-up call. The caller links it to an event or bucket afterwards.
+export async function createCustomerAccount({ auth, db, token, email, password }) {
+  await requireAdmin(auth, db, token);
+  const normalized = normalEmail(email);
+  if (typeof password !== 'string' || password.length < 8 || password.length > 128) throw new AdminError(400, 'INVALID_PASSWORD', 'Use a password between 8 and 128 characters.');
+  let user;
+  try { user = await auth.createUser({ email: normalized, password, emailVerified: false }); }
+  catch (error) {
+    if (error.code === 'auth/email-already-exists') throw new AdminError(409, 'EMAIL_EXISTS', 'This email already has an account.');
+    if (error.code === 'auth/invalid-email') throw new AdminError(400, 'INVALID_EMAIL', 'Enter a valid email address.');
+    if (error.code === 'auth/invalid-password') throw new AdminError(400, 'INVALID_PASSWORD', 'Use a longer password.');
+    throw error;
+  }
+  await db.doc(`customerDirectory/${user.uid}`).set({ userId: user.uid, email: normalized, updatedAt: FieldValue.serverTimestamp() });
+  return { uid: user.uid, email: normalized };
+}
+
+// Withdraws an invitation that was never taken up. The grant must belong to the named event.
+export async function cancelEventInvite({ auth, db, token, eventId, grantId }) {
+  await requireAdmin(auth, db, token);
+  if (!validEventId(eventId) || typeof grantId !== 'string' || !grantId || grantId.length > 600 || grantId.includes('/')) throw new AdminError(400, 'INVALID_INVITE', 'Invalid invitation.');
+  const ref = db.doc(`customerGrants/${grantId}`);
+  const grant = await ref.get();
+  if (grant.exists && grant.data().weddingId !== eventId) throw new AdminError(400, 'INVALID_INVITE', 'Invalid invitation.');
+  await ref.delete();
+  return { ok: true };
+}

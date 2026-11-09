@@ -54,7 +54,7 @@ test("seating is enabled for old events, persists per event, and gates seating U
   assert.match(dashboard, /button\.dataset\.navView === "seating"\) button\.hidden = !isSeatingEnabled\(\)/);
   assert.match(dashboard, /nextUrl\.searchParams\.delete\("view"\)/);
   assert.doesNotMatch(dashboard, /renderSeatingAccessCard|seatingAccountPermissionForm|repair-event-projections/);
-  assert.match(dashboard, /mountCustomerAccess\(/);
+  assert.match(dashboard, /mountAccessSection\(/);
   assert.match(rootInvitation, /!invitationSeatingEnabled\(state\.wedding\)/);
   assert.match(rootInvitation, /elements\.seatingSection\.hidden = true/);
   assert.match(aliInvitation, /invitationSeatingEnabled\(wedding\)/);

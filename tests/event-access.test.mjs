@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
-import { MIN_NEW_PASSWORD, accessRows, cleanEmail, describeMember, existingChoices, linkOutcome, nextStepFor, searchChoices } from '../event-access.js';
+import { MIN_NEW_PASSWORD, accessRows, cleanEmail, describeMember, bucketRows, linkOutcome, nextStepFor, withoutMembers } from '../event-access.js';
 
 const read = (name) => readFileSync(new URL(`../${name}`, import.meta.url), 'utf8').replace(/\r\n/g, '\n');
 
@@ -55,37 +55,52 @@ test('server results become one plain sentence', () => {
   assert.equal(linkOutcome(null, 'link').ok, false);
 });
 
-test('the existing-user list leaves out people who already have access', () => {
+test('search results leave out people who already have access', () => {
   const rows = accessRows([{ id: 'cust-1', email: 'amal@example.test', role: 'customer' }], 'owner-1');
-  const directory = [{ id: 'cust-2', email: 'zed@example.test' }, { id: 'cust-1', email: 'amal@example.test' }, { id: 'cust-3', email: 'badr@example.test' }, { id: 'no-email', email: '' }];
-  assert.deepEqual(existingChoices(directory, rows).map((row) => row.email), ['badr@example.test', 'zed@example.test']);
+  const results = [{ uid: 'cust-2', email: 'zed@example.test' }, { uid: 'cust-1', email: 'amal@example.test' }, { uid: 'no-email', email: '' }];
+  assert.deepEqual(withoutMembers(results, rows), [{ uid: 'cust-2', email: 'zed@example.test' }]);
 });
 
-test('typing part of an email narrows a long user list to a few results', () => {
-  const choices = Array.from({ length: 150 }, (_, index) => ({ id: `u${index}`, email: `guest${String(index).padStart(3, '0')}@example.test` })).concat([{ id: 'amal', email: 'amal.h@planner.test' }, { id: 'sam', email: 'sam@amal-events.test' }]);
-  const empty = searchChoices(choices, '');
-  assert.equal(empty.shown.length, 8);
-  assert.equal(empty.more, 144);
-  assert.deepEqual(searchChoices(choices, '  AMAL ').shown.map((row) => row.id), ['amal', 'sam'], 'emails that start with the text come first; case and spaces are ignored');
-  assert.equal(searchChoices(choices, 'guest14').shown[0].email, 'guest140@example.test');
-  assert.equal(searchChoices(choices, 'guest14').shown.length, 8);
-  assert.equal(searchChoices(choices, 'guest14').more, 2);
-  assert.deepEqual(searchChoices(choices, 'guest007').shown.map((row) => row.id), ['u7']);
-  assert.deepEqual(searchChoices(choices, 'nobody'), { shown: [], more: 0 });
+test('a photo bucket lists its owners by email, and every one can be removed', () => {
+  const rows = bucketRows([{ uid: 'u2', email: 'zed@example.test', exists: true }, { uid: 'u1', email: 'amal@example.test', exists: true }, { uid: 'gone', email: '', exists: false }]);
+  assert.deepEqual(rows.map((row) => row.id), ['gone', 'u1', 'u2']);
+  assert.ok(rows.every((row) => row.removable && row.kind === 'customer'));
+  assert.equal(rows[0].label, 'Account no longer exists');
+  assert.deepEqual(bucketRows([]), []);
 });
 
-test('the Access tab is on the card for administrators only and changes access through the server', () => {
+test('one Access section serves event cards, the event dashboard and the photo bucket page', () => {
+  const section = read('access-section.js');
+  assert.match(section, /<details class="access-section/, 'a collapsible panel, like Edit details');
+  assert.match(section, /<summary>Access<\/summary>/);
+  for (const label of ['+ Add user', 'Add existing user', 'Create new user', 'Find a user']) assert.ok(section.includes(label), label);
+  assert.doesNotMatch(section, /<select/, 'the user picker is a search box, not a long drop-down');
+  assert.doesNotMatch(section, /firebase-config|firestore|getDocs|setDoc|writeBatch|createUserWithEmailAndPassword|createIsolatedCustomer/, 'no database or public sign-up call: everything goes through the admin API');
+  assert.match(section, /action: "unlink", userId: row\.id, targets: \[target\]/);
+  assert.match(section, /action: "link", userId: account\.userId, targets: \[target\]/);
+  assert.match(section, /action: "create", email, password/);
+  assert.match(section, /confirmAction\(\{ title: "Remove access\?"/);
+  // Everything from the server reaches the page through esc().
+  for (const value of ['row.email', 'row.label', 'row.id', 'row.uid', 'failed']) assert.ok(section.includes(`esc(${value}`), `${value} is escaped`);
+  // Every style rule is scoped, so no page's own styles are touched.
+  const css = read('access-section.css').replace(/\/\*[\s\S]*?\*\//g, '');
+  for (const rule of css.match(/[^{}]+(?=\{)/g).map((selector) => selector.trim()).filter((selector) => selector && !selector.startsWith('@'))) {
+    for (const part of rule.split(',')) assert.match(part.trim(), /^\.access-section/, `unscoped rule: ${part.trim()}`);
+  }
+
   const page = read('weddings.js');
   assert.match(page, /state\.isAdmin && w\.seatingOnly !== true && !w\.cleanupPending \? `<div class="card-admin-links"><button class="secondary-button access-tab" data-action="access"/, 'the tab sits in the admin-only row of the card');
   assert.match(page, /dataset\.action === "access" && state\.isAdmin/);
   assert.doesNotMatch(read('customer-events.html') + read('customer-list.js'), /data-action="access"/);
-  const panel = read('event-access-ui.js');
-  for (const label of ['+ Add user', 'Add existing user', 'Create new user', 'Find a user']) assert.ok(panel.includes(label), label);
-  assert.match(panel, /action: "unlink", userId: row\.id, targets: \[\{ kind: "event", id: wedding\.id \}\]/);
-  assert.match(panel, /action: "link", userId: account\.userId, targets: \[\{ kind: "event", id: wedding\.id \}\]/);
-  assert.doesNotMatch(panel, /assignCustomer|removeCustomer|writeBatch|setDoc/, 'memberships are never written from this panel');
-  assert.match(panel, /confirmAction\(\{ title: "Remove access\?"/);
-  // Everything from the database reaches the page through esc().
-  assert.doesNotMatch(panel, /<select/, 'the user picker is a search box, not a long drop-down');
-  for (const value of ['row.email', 'row.label', 'row.id', 'row.data().email', 'title']) assert.ok(panel.includes(`esc(${value}`), `${value} is escaped`);
+  assert.match(read('event-access-ui.js'), /mountAccessSection\(/);
+  assert.match(read('dashboard.js'), /isWeddingOwner\(\) \? '<div id="customerAccessPanel"><\/div>' : ""/, 'the dashboard shows it to administrators only');
+  assert.match(read('photo-bucket/app.js'), /online && bucket\.canAdmin \? '<div id="accessSection"><\/div>' : ''/, 'the bucket page shows it to administrators only');
+});
+
+test('the new server actions all check for an administrator first', () => {
+  const lib = read('api/_lib/customer-access.js');
+  for (const name of ['listEventAccess', 'resolveAccounts', 'searchCustomers', 'createCustomerAccount', 'cancelEventInvite']) {
+    const body = lib.slice(lib.indexOf(`export async function ${name}(`));
+    assert.match(body.slice(0, 200), /\{\n  await requireAdmin\(auth, db, token\);/, `${name} checks the caller before anything else`);
+  }
 });

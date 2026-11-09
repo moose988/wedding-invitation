@@ -91,7 +91,7 @@ test("limited dashboard links are guarded and the owner control writes only even
   assert.match(access, /export function customerMembership/);
   assert.match(access, /canEditGuests: true, canEditSeating: true/);
   assert.match(access, /canEditEventDetails: true, canViewEventSettings: true, canExport: true/);
-  assert.match(dashboard, /mountCustomerAccess/);
+  assert.match(dashboard, /mountAccessSection/);
   assert.doesNotMatch(dashboard, /saveLimitedDashboardAccount/);
   assert.match(rules, /"canViewEventSettings", "canExport", "allowedViews"/);
   assert.match(rules, /data\.allowedViews\.hasOnly\(\["overview", "guestSummary", "guests", "seating", "share", "exports", "checkin", "settings"\]\)/);

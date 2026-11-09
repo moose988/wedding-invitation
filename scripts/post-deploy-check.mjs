@@ -10,7 +10,7 @@ import path from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
-const FUNCTIONS = ['admin-health', 'admin-demos', 'admin-customer-access', 'customer-management', 'demo-cleanup'];
+const FUNCTIONS = ['admin-health', 'admin-demos', 'admin-customer-access', 'admin-event-backup', 'customer-management', 'demo-cleanup'];
 const PRIVATE_DIRS = ['server', 'api/_lib', 'backend', 'docs', '.orchestrate'];
 
 // connect-src matching as browsers do for host sources: exact scheme+host, or *.suffix.

@@ -8,6 +8,9 @@
   "functions": {
     "api/demo-cleanup.js": {
       "maxDuration": 60
+    },
+    "api/admin-event-backup.js": {
+      "maxDuration": 60
     }
   },
   "redirects": [

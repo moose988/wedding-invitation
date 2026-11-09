@@ -98,8 +98,8 @@ async function proxyPhotoBucket(req, res, requestUrl) {
 async function localApi(req, res, name) {
   const file = path.join(root, "api", `${name}.js`);
   try { await access(file, constants.R_OK); } catch { return send(res, 404, "Not Found"); }
-  const chunks = []; let size = 0;
-  for await (const chunk of req) { size += chunk.length; if (size > 65536) return send(res, 413, "Payload Too Large"); chunks.push(chunk); }
+  const chunks = []; let size = 0; // 4.5 MB is Vercel's own request limit
+  for await (const chunk of req) { size += chunk.length; if (size > 4_500_000) return send(res, 413, "Payload Too Large"); chunks.push(chunk); }
   const text = Buffer.concat(chunks).toString("utf8");
   let body = {}, invalid = false;
   if (text) { try { body = JSON.parse(text); } catch { invalid = true; } }

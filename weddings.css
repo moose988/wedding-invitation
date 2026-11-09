@@ -260,11 +260,23 @@
 .backup-summary { display: grid; grid-template-columns: max-content 1fr; gap: 6px 14px; margin: 12px 0; padding: 12px 14px; border: 1px solid var(--line); border-radius: 12px; }
 .backup-summary dt { color: var(--muted); } .backup-summary dd { margin: 0; font-weight: 700; overflow-wrap: anywhere; }
 .backup-warning { margin: 12px 0; padding: 10px 12px; border-radius: 12px; background: #fff6e5; color: #6b4300; }
-/* People with access dialog. */
-.access-list { display: grid; gap: 8px; margin: 10px 0 18px; padding: 0; list-style: none; }
-.access-list li { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 10px 12px; border: 1px solid var(--line); border-radius: 12px; }
-.access-list li > div { display: grid; gap: 2px; min-width: 0; } .access-list strong { overflow-wrap: anywhere; } .access-list small { color: var(--muted); }
-.access-role { justify-self: start; padding: 2px 8px; border-radius: 999px; background: #eef2ee; font-size: 12px; font-weight: 800; }
+/* Access panel that opens under an event card's Access button. */
+.access-panel { position: absolute; z-index: 30; display: grid; gap: 10px; padding: 14px; border: 1px solid var(--line); border-radius: 16px; background: #fffdf8; box-shadow: 0 18px 40px rgba(20, 40, 30, .18); }
+.access-panel > header { display: flex; align-items: center; justify-content: space-between; gap: 10px; } .access-panel h3 { margin: 0; font-size: 17px; }
+.access-panel__event { margin: -6px 0 0; color: var(--muted); font-size: 13px; overflow-wrap: anywhere; }
+.access-panel [hidden] { display: none !important; }
+.access-list { display: grid; gap: 6px; max-height: 232px; margin: 0; padding: 0; overflow: auto; list-style: none; } /* about four people, then it scrolls, so Add user stays in view */
+.access-list li { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 8px 10px; border: 1px solid var(--line); border-radius: 10px; background: white; }
+.access-list li > div { display: grid; gap: 3px; min-width: 0; } .access-list strong { font-size: 14px; overflow-wrap: anywhere; }
+.access-list .text-button { min-height: 44px; padding: 0 8px; }
+.access-role { justify-self: start; padding: 1px 8px; border-radius: 999px; background: #eef2ee; font-size: 11px; font-weight: 800; }
 .access-role--owner { background: #e4efe9; color: var(--green); } .access-role--customer { background: #e9eefb; color: #2b4a8f; }
-.access-add { display: grid; gap: 10px; padding-top: 14px; border-top: 1px solid var(--line); } .access-add h3 { margin: 0; }
-#weddingForm > header #eventAccessButton { margin-left: auto; margin-right: 10px; }
+.access-panel__add { width: 100%; }
+.access-choice { display: grid; gap: 8px; } .access-choice .secondary-button { display: grid; gap: 2px; text-align: left; } .access-choice small { color: var(--muted); font-weight: 500; }
+.access-form { display: grid; gap: 10px; } .access-form label { display: grid; gap: 4px; font-weight: 700; font-size: 13px; }
+.access-form input, .access-form select { width: 100%; min-height: 44px; padding: 8px 10px; border: 1px solid var(--line); border-radius: 10px; background: white; font: inherit; }
+.access-form__actions { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+.access-results { display: grid; gap: 4px; max-height: 200px; overflow: auto; } .access-results p { margin: 0; }
+.access-result { min-height: 44px; padding: 8px 10px; border: 1px solid var(--line); border-radius: 10px; background: white; text-align: left; font: inherit; overflow-wrap: anywhere; cursor: pointer; }
+.access-result:hover { border-color: var(--green); } .access-result.is-chosen { border-color: var(--green); background: #e4efe9; font-weight: 800; }
+.access-tab[aria-expanded="true"] { border-color: var(--green); color: var(--green); }

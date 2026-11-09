@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
-import { MIN_NEW_PASSWORD, accessRows, cleanEmail, describeMember, linkOutcome, nextStepFor } from '../event-access.js';
+import { MIN_NEW_PASSWORD, accessRows, cleanEmail, describeMember, existingChoices, linkOutcome, nextStepFor, searchChoices } from '../event-access.js';
 
 const read = (name) => readFileSync(new URL(`../${name}`, import.meta.url), 'utf8').replace(/\r\n/g, '\n');
 
@@ -55,18 +55,37 @@ test('server results become one plain sentence', () => {
   assert.equal(linkOutcome(null, 'link').ok, false);
 });
 
-test('the access dialog is offered to administrators only and changes access through the server', () => {
+test('the existing-user list leaves out people who already have access', () => {
+  const rows = accessRows([{ id: 'cust-1', email: 'amal@example.test', role: 'customer' }], 'owner-1');
+  const directory = [{ id: 'cust-2', email: 'zed@example.test' }, { id: 'cust-1', email: 'amal@example.test' }, { id: 'cust-3', email: 'badr@example.test' }, { id: 'no-email', email: '' }];
+  assert.deepEqual(existingChoices(directory, rows).map((row) => row.email), ['badr@example.test', 'zed@example.test']);
+});
+
+test('typing part of an email narrows a long user list to a few results', () => {
+  const choices = Array.from({ length: 150 }, (_, index) => ({ id: `u${index}`, email: `guest${String(index).padStart(3, '0')}@example.test` })).concat([{ id: 'amal', email: 'amal.h@planner.test' }, { id: 'sam', email: 'sam@amal-events.test' }]);
+  const empty = searchChoices(choices, '');
+  assert.equal(empty.shown.length, 8);
+  assert.equal(empty.more, 144);
+  assert.deepEqual(searchChoices(choices, '  AMAL ').shown.map((row) => row.id), ['amal', 'sam'], 'emails that start with the text come first; case and spaces are ignored');
+  assert.equal(searchChoices(choices, 'guest14').shown[0].email, 'guest140@example.test');
+  assert.equal(searchChoices(choices, 'guest14').shown.length, 8);
+  assert.equal(searchChoices(choices, 'guest14').more, 2);
+  assert.deepEqual(searchChoices(choices, 'guest007').shown.map((row) => row.id), ['u7']);
+  assert.deepEqual(searchChoices(choices, 'nobody'), { shown: [], more: 0 });
+});
+
+test('the Access tab is on the card for administrators only and changes access through the server', () => {
   const page = read('weddings.js');
-  assert.match(page, /\$\{state\.isAdmin \? `[^`]*data-action="access"[^`]*` : ""\}/, 'the menu button sits inside the admin-only part');
+  assert.match(page, /state\.isAdmin && w\.seatingOnly !== true && !w\.cleanupPending \? `<div class="card-admin-links"><button class="secondary-button access-tab" data-action="access"/, 'the tab sits in the admin-only row of the card');
   assert.match(page, /dataset\.action === "access" && state\.isAdmin/);
-  assert.match(page, /eventAccessButton\.hidden = !wedding/, 'the button in the details dialog shows only for an existing event');
-  assert.match(read('all-events.html'), /id="eventAccessButton" type="button" hidden/);
-  assert.doesNotMatch(read('customer-events.html'), /eventAccessButton/);
-  const dialog = read('event-access-ui.js');
-  assert.match(dialog, /action: "unlink", userId: row\.id, targets: \[\{ kind: "event", id: wedding\.id \}\]/);
-  assert.match(dialog, /action: "link", userId: account\.userId, targets: \[\{ kind: "event", id: wedding\.id \}\]/);
-  assert.doesNotMatch(dialog, /assignCustomer|removeCustomer|writeBatch|setDoc/, 'memberships are never written from this dialog');
-  assert.match(dialog, /confirmAction\(\{ title: "Remove access\?"/);
+  assert.doesNotMatch(read('customer-events.html') + read('customer-list.js'), /data-action="access"/);
+  const panel = read('event-access-ui.js');
+  for (const label of ['+ Add user', 'Add existing user', 'Create new user', 'Find a user']) assert.ok(panel.includes(label), label);
+  assert.match(panel, /action: "unlink", userId: row\.id, targets: \[\{ kind: "event", id: wedding\.id \}\]/);
+  assert.match(panel, /action: "link", userId: account\.userId, targets: \[\{ kind: "event", id: wedding\.id \}\]/);
+  assert.doesNotMatch(panel, /assignCustomer|removeCustomer|writeBatch|setDoc/, 'memberships are never written from this panel');
+  assert.match(panel, /confirmAction\(\{ title: "Remove access\?"/);
   // Everything from the database reaches the page through esc().
-  for (const value of ['row.email', 'row.label', 'row.note', 'row.id', 'row.data().email', 'title']) assert.ok(dialog.includes(`esc(${value}`), `${value} is escaped`);
+  assert.doesNotMatch(panel, /<select/, 'the user picker is a search box, not a long drop-down');
+  for (const value of ['row.email', 'row.label', 'row.id', 'row.data().email', 'title']) assert.ok(panel.includes(`esc(${value}`), `${value} is escaped`);
 });

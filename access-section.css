@@ -46,4 +46,11 @@
 .access-section .ax-result { display:block; width:100%; min-height:44px; margin:0; padding:9px 12px; border:1px solid var(--ax-line); border-radius:9px; background:#fff; color:var(--ax-ink); font:400 15px/1.4 'Segoe UI',Arial,sans-serif; text-align:left; overflow-wrap:anywhere; cursor:pointer; box-shadow:none; }
 .access-section .ax-result:hover { border-color:var(--ax-gold); background:var(--ax-wash); }
 .access-section .ax-result.is-chosen { border-color:var(--ax-green); background:#e4efe9; font-weight:600; }
+/* Usage and cost: a label and a figure per row. */
+.access-section .ux-list { display:grid; gap:8px; margin:0; padding:0; }
+.access-section .ux-row { display:flex; align-items:baseline; justify-content:space-between; gap:14px; margin:0; padding:10px 12px; border:1px solid var(--ax-line); border-radius:10px; background:#fff; }
+.access-section .ux-row dt { margin:0; color:var(--ax-ink); font-weight:400; }
+.access-section .ux-row dd { display:grid; justify-items:end; margin:0; color:var(--ax-ink); font-weight:600; text-align:right; }
+.access-section .ux-row small { color:var(--ax-muted); font-size:12px; font-weight:400; }
+.access-section .access-section__body > .ax-link { justify-self:start; }
 @media (max-width:480px) { .access-section { padding:18px 16px; } .access-section .ax-actions { flex-wrap:wrap; } .access-section .ax-actions .ax-button { flex:1 1 100%; } }

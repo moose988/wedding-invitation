@@ -4065,6 +4065,7 @@ function renderEventSettingsPage() {
   const textareaField = (name, label) => `<label class="event-settings-field is-full"><span>${label}</span><textarea class="da3wa-input" name="${name}" rows="4" maxlength="1000" data-event-setting-field ${canEditDetails ? "" : "disabled aria-disabled=\"true\""}>${escapeHtml(draft[name] || "")}</textarea><small class="event-setting-error" role="alert">${escapeHtml(errors[name] || "")}</small></label>`;
 
   const previousCustomerPanel = document.getElementById("customerAccessPanel");
+  const previousUsagePanel = document.getElementById("eventUsagePanel");
   elements.pageContent.innerHTML = `
     <section class="event-settings-page">
       ${hideOptionsAndLifecycle || genderReveal ? "" : `
@@ -4081,7 +4082,7 @@ function renderEventSettingsPage() {
       </section>
       `}
 
-      ${isWeddingOwner() ? '<div id="customerAccessPanel"></div>' : ""}
+      ${isWeddingOwner() ? '<div id="customerAccessPanel"></div><div id="eventUsagePanel"></div>' : ""}
       ${state.isAdmin === true && !genderReveal && !hideOptionsAndLifecycle ? '<section class="event-settings-section share-card" id="musicPanel"></section>' : ""}
       <form class="event-settings-section share-card" id="eventSettingsForm" novalidate>
         <header class="event-settings-section__header">
@@ -4123,6 +4124,9 @@ function renderEventSettingsPage() {
     const placeholder = document.getElementById("customerAccessPanel");
     if (previousCustomerPanel) placeholder.replaceWith(previousCustomerPanel);
     else void import("./access-section.js").then(({ mountAccessSection }) => { if (placeholder.isConnected) mountAccessSection(placeholder, { auth: state.services.auth, target: { kind: "event", id: state.weddingId }, title: getEventDisplayTitle(state.wedding) }); }).catch((error) => { console.error("Access section failed to load", error?.name); placeholder.textContent = "The access section could not load. Reload the page."; });
+    const usageHost = document.getElementById("eventUsagePanel");
+    if (previousUsagePanel) usageHost.replaceWith(previousUsagePanel);
+    else void import("./usage-section.js").then(({ mountUsageSection }) => { if (usageHost.isConnected) mountUsageSection(usageHost, { auth: state.services.auth, target: { kind: "event", id: state.weddingId } }); }).catch((error) => { console.error("Usage section failed to load", error?.name); });
   }
   updateEventSettingsFormState();
   const eventSettingsForm = document.getElementById("eventSettingsForm");

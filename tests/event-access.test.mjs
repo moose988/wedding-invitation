@@ -93,8 +93,8 @@ test('one Access section serves event cards, the event dashboard and the photo b
   assert.match(page, /dataset\.action === "access" && state\.isAdmin/);
   assert.doesNotMatch(read('customer-events.html') + read('customer-list.js'), /data-action="access"/);
   assert.match(read('event-access-ui.js'), /mountAccessSection\(/);
-  assert.match(read('dashboard.js'), /isWeddingOwner\(\) \? '<div id="customerAccessPanel"><\/div>' : ""/, 'the dashboard shows it to administrators only');
-  assert.match(read('photo-bucket/app.js'), /online && bucket\.canAdmin \? '<div id="accessSection"><\/div>' : ''/, 'the bucket page shows it to administrators only');
+  assert.match(read('dashboard.js'), /isWeddingOwner\(\) \? '<div id="customerAccessPanel"><\/div>/, 'the dashboard shows it to administrators only');
+  assert.match(read('photo-bucket/app.js'), /online && bucket\.canAdmin \? '<div id="accessSection"><\/div>/, 'the bucket page shows it to administrators only');
 });
 
 test('the new server actions all check for an administrator first', () => {

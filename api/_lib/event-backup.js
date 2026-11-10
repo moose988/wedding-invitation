@@ -227,3 +227,21 @@ export async function finishEventRestore({ auth, db, token, eventId, event, card
   await ref.create(data);
   return { ok: true, eventId, ownerChanged, restored: Object.values(expected).reduce((sum, count) => sum + count, 0) + 1 };
 }
+
+/* --------------------------------------------------------------------- usage */
+
+// How many records an event holds, per section, for the "Usage and cost" panel. Each count is
+// one aggregation query (billed as one read per 1,000 records), so this stays cheap for any size.
+export async function eventUsage({ auth, db, token, eventId }) {
+  await requireAdmin(auth, db, token);
+  const ref = eventRef(db, eventId);
+  const snapshot = await ref.get();
+  if (!snapshot.exists) throw new AdminError(404, 'EVENT_NOT_FOUND', 'This event no longer exists.');
+  const event = snapshot.data();
+  const collections = await ref.listCollections();
+  const counts = await Promise.all(collections.map(async (collection) => [collection.id, (await collection.count().get()).data().count]));
+  return {
+    eventId, eventCategory: event.eventCategory || 'wedding_engagement', seatingEnabled: event.seatingEnabled !== false,
+    customSong: event.musicMode === 'custom', counts: Object.fromEntries(counts.sort(([a], [b]) => a.localeCompare(b))),
+  };
+}

@@ -1,5 +1,5 @@
 import { AdminError, bearerFrom, readBody, sendError } from './_lib/admin-common.js';
-import { beginEventRestore, exportEventPage, finishEventRestore, startEventExport, writeEventRestorePage } from './_lib/event-backup.js';
+import { beginEventRestore, eventUsage, exportEventPage, finishEventRestore, startEventExport, writeEventRestorePage } from './_lib/event-backup.js';
 import { adminServices } from './_lib/firebase-admin-app.js';
 
 // Platform administrators only. Download: export-start, then export-page per section.
@@ -12,6 +12,7 @@ export default async function handler(req, res) {
     const { action, eventId, path, cursor, docs, event, cards, grants, expected } = readBody(req);
     const { auth, db } = adminServices();
     const base = { auth, db, token, eventId };
+    if (action === 'usage') return res.status(200).json(await eventUsage(base));
     if (action === 'export-start') return res.status(200).json(await startEventExport(base));
     if (action === 'export-page') return res.status(200).json(await exportEventPage({ ...base, path, cursor: cursor ?? null }));
     if (action === 'restore-begin') return res.status(200).json(await beginEventRestore(base));

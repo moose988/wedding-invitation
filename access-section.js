@@ -11,7 +11,8 @@ const STYLE_ID = "accessSectionStyles";
 // An account created here is kept for a retry if linking fails, so a second try never creates another one.
 const created = new Map();
 
-function ensureStyles() {
+// Also used by usage-section.js, which shares this look.
+export function ensureSectionStyles() {
   if (document.getElementById(STYLE_ID)) return;
   const link = document.createElement("link");
   link.id = STYLE_ID; link.rel = "stylesheet"; link.href = new URL("./access-section.css?v=1", import.meta.url).href;
@@ -21,7 +22,7 @@ function ensureStyles() {
 // target is { kind: "event" | "bucket", id }. For a bucket, getOwners() returns its current owner ids.
 // `bare` drops the collapsible heading, for places that already have their own (the card panel).
 export function mountAccessSection(host, { auth, target, title, getOwners = null, open = false, bare = false, flash = () => {} }) {
-  ensureStyles();
+  ensureSectionStyles();
   const what = target.kind === "bucket" ? "photo bucket" : "event";
   host.innerHTML = `<details class="access-section${bare ? " access-section--bare" : ""}"${open || bare ? " open" : ""}><summary>Access</summary><div class="access-section__body"><p class="ax-note">People who can open this ${what}.</p><ul class="ax-list" data-list><li class="ax-empty">Open to load…</li></ul><div data-add></div><p class="ax-status" role="status" data-status></p></div></details>`;
   const details = host.querySelector("details"), list = host.querySelector("[data-list]"), add = host.querySelector("[data-add]"), status = host.querySelector("[data-status]");

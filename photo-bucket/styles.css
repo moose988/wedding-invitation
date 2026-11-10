@@ -177,8 +177,10 @@
 @media (max-width: 540px) { .pb-brand .pb-wordmark { order: 3; } .pb-brand .pb-demo { margin-inline-start: auto; } .pb-shell, .pb-hero { overflow-wrap: anywhere; } .pb-gallery-toolbar button, .pb-gallery-toolbar select, .pb-gallery-toolbar label { min-height: 44px; } }
 .pb-name-field { display: grid; gap: 6px; margin: 12px 0; font-size: 14px; font-weight: 600; }
 .pb-name-field input { min-height: 44px; padding: 0 12px; border: 1px solid var(--line); border-radius: 10px; font: inherit; }
-.pb-switch { display: flex; align-items: center; gap: 10px; min-height: 44px; font-size: 14px; }
-.pb-switch input { width: 22px; height: 22px; }
+/* The general .pb label and .pb input rules are more specific than a single class, so these name the element too.
+   Without that, each tick box was drawn 48px tall and full width, stacked above its label. */
+.pb label.pb-switch { display: flex; align-items: center; gap: 10px; min-height: 44px; font-size: 14px; }
+.pb label.pb-switch input[type=checkbox] { flex: 0 0 auto; width: 22px; height: 22px; min-height: 0; padding: 0; accent-color: var(--ink); }
 
 .pb .pb-poster--wedding { background:#faf5eb url('./assets/wedding-garden-background.png') center/100% 100% no-repeat; color:#514047; -webkit-print-color-adjust:exact; print-color-adjust:exact; }
 .pb .pb-poster--wedding .pb-floral { display:none; }

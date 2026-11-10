@@ -84,9 +84,9 @@ export function openRestoreDialog({ auth, wedding = null, eventExists, onDone = 
       });
       busy = false; dialog.close();
       const note = result.ownerChanged ? " The original owner is no longer an admin, so you are now its owner." : "";
+      await onDone(backup.eventId); // redraws the list, which resets the page's status line, so the message goes after it
       flash(`Event restored from the backup taken ${when(backup.exportedAt)}.${note}`);
       showToast("Event restored.", "success");
-      await onDone(backup.eventId);
     } catch (failure) {
       busy = false; go.disabled = false; form.elements.file.disabled = false; closers.forEach((button) => { button.disabled = false; });
       status.textContent = "";

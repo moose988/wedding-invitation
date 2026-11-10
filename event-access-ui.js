@@ -16,6 +16,7 @@ export function toggleEventAccess({ anchor, wedding, services, flash = () => {} 
   panel.className = "access-panel";
   panel.setAttribute("role", "dialog");
   panel.setAttribute("aria-label", `Access to ${title}`);
+  panel.tabIndex = -1; // focusable by script, so keyboard and screen reader users land in the panel when it opens
   panel.innerHTML = `<header><h3>Access</h3><button class="icon-close" type="button" data-access-close aria-label="Close">×</button></header><p class="access-panel__event"><bdi>${esc(title)}</bdi></p><div data-access-host></div>`;
   document.body.append(panel);
   // The card is redrawn when the list refreshes, so the button is looked up again each time.
@@ -40,6 +41,7 @@ export function toggleEventAccess({ anchor, wedding, services, flash = () => {} 
   panel.querySelector("[data-access-close]").addEventListener("click", close);
   anchor.setAttribute("aria-expanded", "true");
   place();
+  panel.focus({ preventScroll: true });
   mountAccessSection(panel.querySelector("[data-access-host]"), { auth: services.auth, target: { kind: "event", id: wedding.id }, title, bare: true, flash });
   return panel;
 }

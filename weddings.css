@@ -265,3 +265,5 @@
 .access-panel > header { display: flex; align-items: center; justify-content: space-between; gap: 10px; } .access-panel h3 { margin: 0; font: 400 1.35rem Georgia, 'Times New Roman', serif; }
 .access-panel__event { margin: -6px 0 0; color: var(--muted); font-size: 13px; overflow-wrap: anywhere; }
 .access-tab[aria-expanded="true"] { border-color: var(--green); color: var(--green); }
+.access-panel:focus { outline: none; } .access-panel:focus-visible { outline: 2px solid var(--green); outline-offset: 2px; }
+@media (max-width: 640px) { .workspace-hero__actions { width: 100%; } .workspace-hero__actions > * { flex: 1 1 100%; } }

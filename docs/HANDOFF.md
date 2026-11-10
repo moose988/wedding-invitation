@@ -101,12 +101,27 @@ Counts when this was written: 477 unit, 24 security, 27 admin API, 6 backup, 4 a
 - The dashboard loads every response at once (`dashboard.js`, the `genderRevealResponses` listener). Add paging or a limit to that list. This needs no rules change.
 - If you think a limit in `firestore.rules` is also needed, write up the proposal and ask the owner before doing it.
 
-**Task 6. Trial on a Vercel preview, only with the owner's yes.**
+**Task 6. Cache to save Firestore reads.**
+
+The project is on the free plan, with a daily read allowance shared by every event. The aim is to make repeat page opens cost far fewer reads. The trade-off is that a cached page can show data that is a few minutes old, so agree the acceptable delay with the owner for each page before changing it.
+
+- Measure first. On the emulator, count the reads for one open of: a guest invitation, the event dashboard, the check-in page, and All Events as admin. Write the numbers down. Repeat after each change so the saving is a measured figure, not a guess. The Usage and cost section's estimates (`event-usage.js`) are a starting point, not a measurement.
+- Guest invitation (`invitations/shared/invitation-live.js`). This is the page opened most often, and this task is the one exception to the "do not touch guest pages" rule. It keeps live listeners on the hall layout, the venue objects and the schedule, which rarely change. Options to propose to the owner:
+  - Read those three once per open instead of listening, and keep the result in the browser for a short time (for example 10 minutes), so a guest who reopens the link reads nothing new for them.
+  - Keep the live listener only on the guest's own invitation document, so an RSVP or a seat change still shows straight away.
+  - Do not change what the page shows or the link format. Get the owner's yes before editing this file, and try it on a real phone on a slow connection.
+- Event dashboard (`dashboard.js`). It listens to every guest, table, seat assignment, seat marker and invitation secret. Look at turning on Firestore's local cache (`persistentLocalCache` in `firebase-config.js`), so reopening the dashboard soon after reads only what changed. Check it against the existing "one named app per tab, session persistence" design in `SECURITY.md`: cached guest data stays on the device, so it must be cleared on sign-out and must never be shared between accounts on one browser.
+- Admin All Events (`admin-events.js`). The event list is already kept for 60 seconds. Consider keeping it for the tab's lifetime with a Refresh button, since it reads every event.
+- Do not cache anything that decides access (memberships, admin records, invitation tokens). Those must always be read fresh.
+- Do not solve this by merging documents or changing `firestore.rules`. If you believe that is needed, write up the proposal and ask the owner.
+- Add tests for each change, and state in your report how stale each page can now be.
+
+**Task 7. Trial on a Vercel preview, only with the owner's yes.**
 - Open the Vercel preview for the branch and run `scripts/post-deploy-check.mjs` against it.
 - Previews have no server secrets configured, so the admin functions answer "not configured" there. Tell the owner; they decide whether to add preview secrets.
 - Try backup and restore on one demo event only. Restore makes an event unavailable while it runs, so never try it on a real event.
 
-**Task 7. Hand back to the owner.**
+**Task 8. Hand back to the owner.**
 - Summarise what changed, what was tested and how, and what is still not verified.
 - The owner decides whether to merge into `main`. No Firestore rules deploy is needed for the work already on this branch, because the rules did not change.
 

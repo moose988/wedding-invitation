@@ -2,7 +2,7 @@
    All Events), modelled on the photo bucket page's "Edit details" panel. Every rule is scoped
    to .access-section and sets its own values, so each page's base styles cannot change it. */
 .access-section { --ax-paper:#fffdf8; --ax-ink:#273f35; --ax-muted:#6d7166; --ax-line:#ded5c4; --ax-wash:#eceee4; --ax-gold:#9b8155; --ax-green:#1f5c4d; --ax-danger:#a9443d;
-  display:block; box-sizing:border-box; margin:24px 0 0; padding:22px 24px; border:1px solid var(--ax-line); border-radius:14px; background:var(--ax-paper); color:var(--ax-ink); font:15px/1.6 'Segoe UI',Arial,sans-serif; text-align:left; }
+  display:block; box-sizing:border-box; margin:24px 0 0; padding:24px; border:1px solid var(--ax-line); border-radius:15px; background:var(--ax-paper); color:var(--ax-ink); font:15px/1.6 'Segoe UI',Arial,sans-serif; text-align:left; }
 .access-section *, .access-section *::before, .access-section *::after { box-sizing:border-box; }
 .access-section [hidden] { display:none !important; }
 .access-section > summary { min-height:44px; display:list-item; padding:0; color:var(--ax-ink); font:400 1.35rem/44px Georgia,'Times New Roman',serif; cursor:pointer; }

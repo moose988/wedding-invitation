@@ -11,6 +11,7 @@
     "test:provision": "firebase emulators:exec --only auth,firestore --project demo-wedding-security \"node --test tests/provision-admins.test.mjs\"",
     "seed:local": "node scripts/seed-local-access.mjs",
     "test:event-backup": "firebase emulators:exec --only auth,firestore --project demo-wedding-security \"node --test tests/event-backup-emulator.test.mjs\"",
+    "test:access": "firebase emulators:exec --only auth,firestore --project demo-wedding-security \"node --test tests/access-section-emulator.test.mjs\"",
     "test:admin-api": "firebase emulators:exec --only auth,firestore --project demo-wedding-security \"node --test tests/admin-api-emulator.test.mjs\""
   },
   "devDependencies": {

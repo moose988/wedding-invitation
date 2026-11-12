@@ -1,7 +1,7 @@
 const root = "./invitations/wedding-designs/moonlit-conservatory/assets/";
 globalThis.invitationDesignConfig = {
   languageStorageKey: "moonlit-conservatory-language",
-  finishAt: 4.8,
+  finishAt: 5.8,
   chairArtwork: `${root}chair.svg`,
   rtl: true,
   requireReady: true,
@@ -148,5 +148,28 @@ document.querySelector(".skip-link").addEventListener("click", event => {
 // Stop scroll animation for keyboard navigation; focus reaches its target at once.
 document.addEventListener("keydown", () => body.classList.add("keyboard-navigation"));
 document.addEventListener("pointerdown", () => body.classList.remove("keyboard-navigation"));
-window.addEventListener("pagehide", () => { observer?.disconnect(); opened.disconnect(); actionObserver?.disconnect(); namesObserver.disconnect(); }, { once: true });
+// Details background film. It loads only when the section is close, plays
+// only while visible, and stays a still poster for reduced motion or Save-Data.
+const detailsVideo = document.getElementById("detailsBackdropVideo");
+const saveData = navigator.connection?.saveData === true;
+let detailsObserver = null;
+if (detailsVideo && "IntersectionObserver" in window) {
+  const source = detailsVideo.querySelector("source[data-src]");
+  const canPlay = () => !reduced.matches && !saveData && !document.hidden && body.classList.contains("invitation-open");
+  let visible = false;
+  const sync = () => {
+    if (visible && canPlay()) {
+      if (source && !source.src) { source.src = source.dataset.src; detailsVideo.load(); }
+      detailsVideo.play()?.catch(() => {});
+    } else if (!detailsVideo.paused) {
+      detailsVideo.pause();
+    }
+  };
+  detailsObserver = new IntersectionObserver(entries => { visible = entries.some(entry => entry.isIntersecting); sync(); }, { rootMargin: "200px 0px" });
+  detailsObserver.observe(document.getElementById("detailsSection"));
+  reduced.addEventListener("change", sync);
+  document.addEventListener("visibilitychange", sync);
+  new MutationObserver(sync).observe(body, { attributes: true, attributeFilter: ["class"] });
+}
+window.addEventListener("pagehide", () => { detailsObserver?.disconnect(); observer?.disconnect(); opened.disconnect(); actionObserver?.disconnect(); namesObserver.disconnect(); }, { once: true });
 }

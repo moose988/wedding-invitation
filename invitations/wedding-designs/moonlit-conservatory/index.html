@@ -11,7 +11,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Amiri:wght@400;700&family=Cormorant+Garamond:ital,wght@0,300;0,400;0,500;1,300;1,400;1,500&family=Jost:wght@300;400;500&family=Noto+Naskh+Arabic:wght@400;500;600&family=Pinyon+Script&display=swap" rel="stylesheet" />
-  <link rel="stylesheet" href="./invitations/wedding-designs/moonlit-conservatory/styles.css?v=20261112-elevated-1" />
+  <link rel="stylesheet" href="./invitations/wedding-designs/moonlit-conservatory/styles.css?v=20261112-film-1" />
 </head>
 <body class="moonlit-invitation" data-guest-experience="bilingual" data-invitation-template="moonlit-conservatory">
   <!-- Reusable hand-drawn ornaments. Paths use pathLength="1" so CSS can draw them in. -->
@@ -66,7 +66,7 @@
 
   <section class="envelope-intro" id="introScreen" aria-label="Open your invitation">
     <div class="envelope-intro__stage" id="envelopeStage">
-      <img class="envelope-intro__poster" src="./invitations/wedding-designs/moonlit-conservatory/assets/opening.webp" alt="Moonlight through the glass doors of a candlelit conservatory" width="1024" height="1536" fetchpriority="high" />
+      <img class="envelope-intro__poster" src="./invitations/wedding-designs/moonlit-conservatory/assets/opening.webp" alt="Moonlight through the glass doors of a candlelit conservatory" width="720" height="1280" fetchpriority="high" />
       <video class="envelope-intro__video" id="openingVideo" playsinline webkit-playsinline muted preload="none" poster="./invitations/wedding-designs/moonlit-conservatory/assets/opening.webp" aria-label="A journey into the moonlit conservatory">
         <source src="./invitations/wedding-designs/moonlit-conservatory/assets/opening.mp4" type="video/mp4" />
       </video>
@@ -120,7 +120,13 @@
       <div class="hero-countdown" id="countdownGrid" aria-label="Time until the wedding"></div>
     </div></section>
 
-    <section class="section details-section reveal" id="detailsSection"><div class="section-frame details-composition">
+    <section class="section details-section reveal" id="detailsSection">
+      <div class="details-backdrop" aria-hidden="true">
+        <video class="details-backdrop__video" id="detailsBackdropVideo" muted loop playsinline webkit-playsinline disablepictureinpicture disableremoteplayback preload="none" poster="./invitations/wedding-designs/moonlit-conservatory/assets/details-loop.webp" tabindex="-1">
+          <source data-src="./invitations/wedding-designs/moonlit-conservatory/assets/details-loop.mp4" type="video/mp4" />
+        </video>
+      </div>
+      <div class="section-frame details-composition">
       <figure class="venue-picture">
         <span class="venue-picture__outline" aria-hidden="true"></span>
         <img class="venue-illustration" src="./invitations/wedding-designs/moonlit-conservatory/assets/table.webp" width="1024" height="1536" alt="A candlelit dinner table, silver cutlery and olive branches" loading="lazy" />
@@ -165,6 +171,6 @@
   <nav class="sticky-actions" id="stickyActions" aria-label="Quick event actions" hidden></nav>
   <div class="toast-rail" id="toastRail" aria-live="polite" aria-atomic="true"></div>
   <noscript><p class="no-script">Please enable JavaScript to open this personal invitation. يرجى تفعيل جافاسكريبت لفتح الدعوة.</p></noscript>
-  <script type="module" src="./invitations/wedding-designs/moonlit-conservatory/invitation.js?v=20261112-elevated-1"></script>
+  <script type="module" src="./invitations/wedding-designs/moonlit-conservatory/invitation.js?v=20261112-film-1"></script>
 </body>
 </html>

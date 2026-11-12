@@ -167,6 +167,12 @@
 .moonlit-invitation .countdown-card__label { font:500 10.5px/1.2 var(--body); letter-spacing:.24em; text-transform:uppercase; color:var(--mist); }
 
 /* ---------- Details ---------- */
+/* Details background film: a quiet, looping moonlit conservatory behind the copy.
+   The poster is the same scene, so nothing changes when motion is unavailable. */
+.moonlit-invitation .details-section { isolation:isolate; overflow:clip; }
+.moonlit-invitation .details-backdrop { position:absolute; inset:0; z-index:-1; overflow:hidden; pointer-events:none; }
+.moonlit-invitation .details-backdrop__video { width:100%; height:100%; object-fit:cover; object-position:50% 45%; opacity:.6; }
+.moonlit-invitation .details-backdrop::after { content:""; position:absolute; inset:0; background:radial-gradient(75% 65% at 50% 50%,#08141a40 0%,#08141ab3 72%,#08141a 100%),linear-gradient(180deg,#08141a 0%,#08141a00 18%,#08141a00 82%,#08141a 100%); }
 .moonlit-invitation .details-composition { display:grid; grid-template-columns:.9fr 1fr; gap:9%; align-items:center; }
 .moonlit-invitation .venue-picture { position:relative; padding:0 18px 18px 0; }
 .moonlit-invitation .venue-picture img { position:relative; width:100%; aspect-ratio:4/5; object-fit:cover; border-radius:999px 999px 6px 6px; box-shadow:0 40px 80px -40px #000; }

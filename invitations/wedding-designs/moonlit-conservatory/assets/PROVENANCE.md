@@ -10,12 +10,14 @@ retained by the guest runtime.
 
 | File | Role | Source |
 |---|---|---|
-| opening.webp | Opening-screen picture and video poster | Original generated architectural photograph |
+| opening.webp | Opening-screen picture and video poster | First frame of the Higgsfield opening film (12 Nov 2026) |
 | garden.webp | Hero and closing picture | Original generated architectural photograph |
 | table.webp | Details-page supporting picture | Original generated editorial photograph |
 | botanical.webp | Schedule decorative artwork | Original generated engraved botanical illustration |
 | thumbnail.webp | Separate event-picker thumbnail | Optimized landscape crop of the new garden picture |
-| opening.mp4 | Actual five-second opening film | FFmpeg camera move + dissolve between opening and garden |
+| opening.mp4 | Six-second opening film: the doors open and the camera glides to the moon | Higgsfield Seedance 2.0 image-to-video from the original opening picture (12 Nov 2026) |
+| details-loop.mp4 | Eight-second looping background behind the details section | Higgsfield Seedance 2.0, start and end frame both the garden picture, locked camera (12 Nov 2026) |
+| details-loop.webp | Poster for the details background | First frame of details-loop.mp4 |
 | moon.svg | Moon illustration and favicon | Original hand-authored vector |
 | chair.svg | Personalized guest-chair artwork | Original hand-authored vector |
 
@@ -74,3 +76,34 @@ The MP4 uses gentle image motion and a one-second dissolve; its first frame
 matches the opening artwork and its final scene continues into the hero garden.
 H.264, yuv420p, 720×1080, 30 fps, no embedded audio, and fast-start metadata
 support mobile playback. The separate wedding-audio control owns music.
+
+## Higgsfield films (12 November 2026)
+
+Both films were generated with Higgsfield Seedance 2.0 (720p, std, no audio)
+from this template's own pictures, then re-encoded with FFmpeg: H.264 High,
+yuv420p, 24 fps, no audio track, fast-start. The opening film is 720×1280 and
+the template ends it at 5.8 s (`finishAt`). The details loop is 1280×720; the
+same picture is its first and last frame, so it loops without a jump. It loads
+only near the details section, plays only while visible, and stays a still
+poster for reduced motion and Save-Data.
+
+### Opening film prompt (start frame: opening picture, 9:16, 6 s)
+
+Cinematic night opening shot. The two tall bronze-framed glass conservatory
+doors slowly swing open inward, revealing the moonlit botanical conservatory.
+The camera then glides smoothly forward through the doorway along the long
+reflecting pool, between silver olive trees and white jasmine, toward the
+pearly full moon. Candle flames flicker softly on wet dark limestone, gentle
+ripples on the water, a few fireflies drift. Deep midnight blue-green and
+silver with warm gold candlelight. Elegant, slow, dreamy luxury wedding
+atmosphere, steady camera, no people, no text.
+
+### Details loop prompt (start and end frame: garden picture, 16:9, 8 s)
+
+Locked-off static camera, no camera movement. A calm living photograph of a
+moonlit glass conservatory at night: candle flames flicker gently, soft ripples
+shimmer across the reflecting pool and the moon's reflection, white jasmine and
+olive leaves sway slightly in a light breeze, thin mist drifts low over the
+water, a few tiny golden fireflies float. Deep midnight teal and silver with
+warm gold candlelight. Subtle, slow, seamless ambient loop for a website
+background. No people, no text.

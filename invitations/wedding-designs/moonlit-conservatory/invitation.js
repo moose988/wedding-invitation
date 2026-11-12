@@ -4,6 +4,7 @@ globalThis.invitationDesignConfig = {
   finishAt: 5.8,
   chairArtwork: `${root}chair.svg`,
   rtl: true,
+  keylessMapPreview: true,
   requireReady: true,
   prefillSavedRsvp: true,
   skipOpening: () => matchMedia("(prefers-reduced-motion: reduce)").matches,
@@ -38,7 +39,7 @@ globalThis.invitationDesignConfig = {
   },
 };
 
-await import("../../../script.js?v=20261019-arabic-schedule-1");
+await import("../../../script.js?v=20261112-keyless-map-1");
 
 // The shared runtime replaces the document with an accessible error for an
 // incomplete link. Only enhance a successfully mounted invitation shell.
@@ -80,11 +81,19 @@ for (let index = 0; index < (compact ? 10 : 16); index += 1) {
   fly.style.cssText = `--x:${random(2, 96)}%;--y:${random(20, 96)}%;--s:${random(3, 6).toFixed(1)}px;--d:${random(10, 20).toFixed(1)}s;--delay:${random(-20, 0).toFixed(1)}s;--dx:${random(-60, 60).toFixed(0)}px;--dy:${random(-80, -20).toFixed(0)}px`;
   fx.append(fly);
 }
-for (let index = 0; index < (compact ? 7 : 12); index += 1) {
-  const petal = document.createElement("span");
-  petal.className = "moon-petal";
-  petal.style.cssText = `--x:${random(0, 100)}%;--s:${random(8, 15).toFixed(1)}px;--d:${random(16, 28).toFixed(1)}s;--delay:${random(-28, 0).toFixed(1)}s;--sway:${random(-90, 90).toFixed(0)}px`;
-  fx.append(petal);
+// Drifting wedding keepsakes (rings, bridal heels, flutes, bouquets, hearts)
+// instead of leaves. Line drawings from the page's own sprite.
+const keepsakes = ["kp-diamond-ring", "kp-heel", "kp-flutes", "kp-heart", "kp-bouquet", "kp-rings"];
+const svgNS = "http://www.w3.org/2000/svg";
+for (let index = 0; index < (compact ? 8 : 14); index += 1) {
+  const item = document.createElementNS(svgNS, "svg");
+  item.setAttribute("class", "moon-keepsake");
+  item.setAttribute("viewBox", "0 0 48 48");
+  const use = document.createElementNS(svgNS, "use");
+  use.setAttribute("href", `#${keepsakes[index % keepsakes.length]}`);
+  item.append(use);
+  item.style.cssText = `--x:${random(2, 94)}%;--s:${random(compact ? 20 : 24, compact ? 30 : 38).toFixed(0)}px;--d:${random(22, 36).toFixed(1)}s;--delay:${random(-36, 0).toFixed(1)}s;--sway:${random(-80, 80).toFixed(0)}px;--tilt:${random(-28, 28).toFixed(0)}deg`;
+  fx.append(item);
 }
 const shooting = document.createElement("span");
 shooting.className = "moon-shooting";
@@ -154,12 +163,14 @@ const detailsVideo = document.getElementById("detailsBackdropVideo");
 const saveData = navigator.connection?.saveData === true;
 let detailsObserver = null;
 if (detailsVideo && "IntersectionObserver" in window) {
-  const source = detailsVideo.querySelector("source[data-src]");
+  const sources = [...detailsVideo.querySelectorAll("source[data-src]")];
+  // Phones get the portrait loop and its matching poster.
+  if (matchMedia("(max-width: 760px)").matches) detailsVideo.poster = `${root}details-loop-portrait.webp`;
   const canPlay = () => !reduced.matches && !saveData && !document.hidden && body.classList.contains("invitation-open");
   let visible = false;
   const sync = () => {
     if (visible && canPlay()) {
-      if (source && !source.src) { source.src = source.dataset.src; detailsVideo.load(); }
+      if (sources.length && !sources[0].src) { sources.forEach(item => { item.src = item.dataset.src; }); detailsVideo.load(); }
       detailsVideo.play()?.catch(() => {});
     } else if (!detailsVideo.paused) {
       detailsVideo.pause();

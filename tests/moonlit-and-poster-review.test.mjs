@@ -8,7 +8,7 @@ test("Moonlit keeps the opening picture first and its small links tappable", asy
   const html = await read("invitations/wedding-designs/moonlit-conservatory/index.html");
   assert.doesNotMatch(html, /<script(?![^>]*\bsrc=)[^>]*>/, "no inline scripts");
   assert.doesNotMatch(html, /\son[a-z]+=/i, "no inline event handlers");
-  assert.match(html, /garden\.webp"[^>]*fetchpriority="low"/, "the garden picture does not compete with the opening picture");
+  assert.match(html, /hero-drawing\.webp"[^>]*fetchpriority="low"/, "the hero drawing does not compete with the opening picture");
   assert.match(html, /<video[^>]*preload="none"[^>]*poster=/, "the opening film only loads when played");
   const css = await read("invitations/wedding-designs/moonlit-conservatory/styles.css");
   assert.match(css, /\.moon-hero-top a, \.qd-footer a \{[^}]*min-width: 44px;[^}]*min-height: 44px;/);

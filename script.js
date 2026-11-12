@@ -2,7 +2,7 @@ import { escapeHtml, hideFailedInvitationImages } from "./invitations/shared/inv
 import { runFromEvent } from "./action-feedback.js";
 import { DEFAULT_SONG, SONG_URL_MAX_AGE_MS, musicKey, musicModeOf, resolveMusic } from "./invitation-music.js";
 import { invitationRefreshIsCurrent, invitationRsvpStorageKey, invitationRsvpView } from "./invitations/shared/rsvp-state.js";
-import { buildSatelliteMapEmbedUrl } from "./invitations/shared/map-embed.js";
+import { buildSatelliteMapEmbedUrl, buildKeylessMapEmbedUrl } from "./invitations/shared/map-embed.js?v=20261112-keyless-1";
 import { buildInvitationCalendar } from "./invitations/shared/calendar.js";
 import { renderQrCode } from "./qr.js?v=20261017-qr-module-fix";
 import { createIntroSequence } from "./intro-sequence.js?v=20261028-finish-at-1";
@@ -1008,7 +1008,7 @@ function renderLocationMap() {
   const venue = String(laylaValue(wedding.venueEn || wedding.venueName, wedding.venueAr || wedding.venueNameAr) || "").trim();
   const address = String(laylaValue(wedding.locationEn, wedding.locationAr) || "").trim();
   const directions = safeMapsLink(wedding.mapsUrl) || (venue ? `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent([venue, address].filter(Boolean).join(", "))}` : "");
-  const iframeUrl = buildSatelliteMapEmbedUrl(wedding, window.GOOGLE_MAPS_EMBED_API_KEY);
+  const iframeUrl = buildSatelliteMapEmbedUrl(wedding, window.GOOGLE_MAPS_EMBED_API_KEY) || (invitationDesign.keylessMapPreview ? buildKeylessMapEmbedUrl(wedding) : "");
   const label = isLaylaInvitation() ? laylaText("openInMaps") : "Open in Maps";
   const unavailable = isLaylaInvitation() ? laylaText("mapUnavailable") : "Satellite preview is unavailable. Open directions for this venue.";
   const mapTitle = isLaylaInvitation() ? `${laylaText("mapTitle")} ${venue}` : `Satellite map preview for ${venue}`;

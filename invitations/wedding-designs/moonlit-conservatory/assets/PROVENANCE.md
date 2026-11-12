@@ -107,3 +107,20 @@ olive leaves sway slightly in a light breeze, thin mist drifts low over the
 water, a few tiny golden fireflies float. Deep midnight teal and silver with
 warm gold candlelight. Subtle, slow, seamless ambient loop for a website
 background. No people, no text.
+
+## Gold-ink drawings and phone loop (12 November 2026)
+
+The photographs on the page were replaced with original drawings made with
+Higgsfield GPT Image 2.6 (2k, medium), converted to WebP:
+
+| File | Role |
+|---|---|
+| hero-drawing.webp | Hero background: gold line engraving of a glass conservatory facade under the moon |
+| venue-drawing.webp | Details picture: glasshouse arch with rings on a ribbon, candles and bridal heels |
+| closing-drawing.webp | Closing medallion: bride and groom dancing under a crescent moon |
+| details-loop-portrait.mp4 / .webp | Phone version of the details background (Seedance 2.0, start and end frame the opening picture, 9:16, 8 s) |
+
+The falling leaves in the sky were replaced by hand-authored line icons in the
+page sprite (diamond ring, ring pair, bridal heel, champagne flutes, bouquet,
+heart), and the schedule's olive branch by a bouquet drawing. `garden.webp` and
+`table.webp` are no longer used on the page and are kept for reference.

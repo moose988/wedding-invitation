@@ -24,3 +24,15 @@ export function buildSatelliteMapEmbedUrl(wedding, apiKey) {
   });
   return `https://www.google.com/maps/embed/v1/place?${parameters}`;
 }
+
+// Keyless Google Maps embed for designs that opt in (invitationDesign.keylessMapPreview).
+// Used only when no API key or saved /maps/embed URL is available. Returns "" when
+// there is nothing to search for. Hostname and path are fixed; only q/z/t vary.
+export function buildKeylessMapEmbedUrl(wedding) {
+  const venue = String(wedding?.venueEn || wedding?.venueName || "").trim();
+  const query = String(wedding?.venueMapQuery || [venue, wedding?.locationEn].filter(Boolean).join(", ")).trim();
+  const placeId = String(wedding?.venuePlaceId || "").trim();
+  if (!query && !placeId) return "";
+  const parameters = new URLSearchParams({ q: placeId ? `place_id:${placeId}` : query, z: "15", t: "m", output: "embed" });
+  return `https://www.google.com/maps?${parameters}`;
+}

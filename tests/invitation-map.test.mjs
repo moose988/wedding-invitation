@@ -30,3 +30,12 @@ test("event map embeds reject non-Google hosts and non-embed URLs", () => {
   assert.equal(buildSatelliteMapEmbedUrl({ venueEn: "Venue", venueMapEmbedUrl: "https://example.com/maps/embed?pb=abc" }, ""), "");
   assert.equal(buildSatelliteMapEmbedUrl({ venueEn: "Venue", venueMapEmbedUrl: "https://www.google.com/maps?q=Venue" }, ""), "");
 });
+
+test("keyless map preview searches the venue on google.com only", async () => {
+  const { buildKeylessMapEmbedUrl } = await import("../invitations/shared/map-embed.js");
+  const url = new URL(buildKeylessMapEmbedUrl({ venueEn: "The Glasshouse", locationEn: "Dubai" }));
+  assert.equal(url.origin + url.pathname, "https://www.google.com/maps");
+  assert.equal(url.searchParams.get("q"), "The Glasshouse, Dubai");
+  assert.equal(url.searchParams.get("output"), "embed");
+  assert.equal(buildKeylessMapEmbedUrl({}), "");
+});

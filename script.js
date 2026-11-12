@@ -417,7 +417,16 @@ async function boot() {
     // live event, guest record, seating map, or RSVP token.
     state.mode = "sample";
     state.wedding = normaliseWedding({ ...demoWedding, id: weddingId });
+    if (invitationDesign.sampleSeatingPreview) {
+      const previewPositions = [{ x: 20, y: 28 }, { x: 80, y: 28 }, { x: 20, y: 72 }, { x: 80, y: 72 }];
+      state.tables = demoTables.map((table, tableIndex) => ({ ...table, ...previewPositions[tableIndex], chairs: Array.from({ length: table.capacity }, (_, index) => ({ id: `${table.id}-${index + 1}`, seatNumber: index + 1 })) }));
+      state.guest = { fullName: sampleRsvpGuestName, additionalGuests: 1, seatingAssignments: [
+        { personKey: "main", tableId: "table-a", chairId: "table-a-1", seatNumber: 1 },
+        { personKey: "guest-1", tableId: "table-a", chairId: "table-a-2", seatNumber: 2 },
+      ] };
+    }
     state.hallObjects = hydrateHallObjects(state.wedding.hallObjects);
+    if (invitationDesign.sampleSeatingPreview) state.hallObjects = state.hallObjects.map(item => item.type === "dance-floor" ? { ...item, y: 50 } : item);
     populateInvitation();
     setupCountdown();
     markInvitationReady();
@@ -1255,7 +1264,8 @@ function renderDemoRsvp(mount, { sample = false } = {}) {
 }
 
 function renderSeatSection() {
-  if (state.sampleMode || state.mode !== "firebase" || !state.guest || !invitationSeatingEnabled(state.wedding)) {
+  const preview = state.sampleMode && invitationDesign.sampleSeatingPreview;
+  if ((!preview && (state.sampleMode || state.mode !== "firebase")) || !state.guest || !invitationSeatingEnabled(state.wedding)) {
     elements.seatingSection.hidden = true;
     return;
   }
@@ -1486,7 +1496,7 @@ function renderSeatingMap(tables, assignments = [], selectedTarget = null) {
     .join("")}
       </div>
     </div>
-    ${isLaylaInvitation() ? (assignments.length ? "" : `<p class="seat-plan-caption" role="status">${laylaText("seatsPending")}</p>`) : `<p class="seat-plan-caption" role="status">${assignments.length ? `<span class="seat-plan-caption__swatch" aria-hidden="true"></span>Your party’s seats are marked in gold; other chairs are shown for context.` : "Your seats have not been assigned yet."}</p>`}
+    ${state.sampleMode && invitationDesign.sampleSeatingPreview ? "" : isLaylaInvitation() ? (assignments.length ? "" : `<p class="seat-plan-caption" role="status">${laylaText("seatsPending")}</p>`) : `<p class="seat-plan-caption" role="status">${assignments.length ? `<span class="seat-plan-caption__swatch" aria-hidden="true"></span>Your party’s seats are marked in gold; other chairs are shown for context.` : "Your seats have not been assigned yet."}</p>`}
   `;
   if (selectedTarget) {
     map.dataset.selectedPersonKey = selectedTarget.personKey || "";
@@ -1655,7 +1665,15 @@ function bindSeatPlanInteractions() {
     return;
   }
   let transformFrame = 0;
+  const constrainPan = () => {
+    const bounds = getInvitationPlanBounds(1100, 900);
+    const scale = state.seatPlanTransform.scale;
+    const clampAxis = (value, size, min, max) => clamp(value, size * .2 - max * scale, size * .8 - min * scale);
+    state.seatPlanTransform.x = clampAxis(state.seatPlanTransform.x, viewport.clientWidth, bounds.minX, bounds.maxX);
+    state.seatPlanTransform.y = clampAxis(state.seatPlanTransform.y, viewport.clientHeight, bounds.minY, bounds.maxY);
+  };
   const applyTransform = () => {
+    constrainPan();
     if (transformFrame) return;
     transformFrame = requestAnimationFrame(() => {
       canvas.style.transform = `translate3d(${state.seatPlanTransform.x}px, ${state.seatPlanTransform.y}px, 0) scale(${state.seatPlanTransform.scale})`;
@@ -1765,6 +1783,7 @@ function bindSeatPlanInteractions() {
           const centerY = (viewport.clientHeight / 2 - state.seatPlanTransform.y) / scale;
           state.seatPlanTransform.x = Math.round(viewport.clientWidth / 2 - centerX * scale);
           state.seatPlanTransform.y = Math.round(viewport.clientHeight / 2 - centerY * scale);
+          constrainPan();
           canvas.style.transform = `translate3d(${state.seatPlanTransform.x}px, ${state.seatPlanTransform.y}px, 0) scale(${scale})`;
         }
       });
@@ -2054,7 +2073,7 @@ function bindBaseEvents() {
     }
 
     if (event.target.closest("[data-scroll-details]")) {
-      const detailsTarget = isLaylaInvitation()
+      const detailsTarget = invitationDesign.detailsScrollTarget ? document.getElementById(invitationDesign.detailsScrollTarget) : isLaylaInvitation()
         ? document.querySelector("#countdownSection .section-frame")
         : document.getElementById("detailsSection");
       detailsTarget?.scrollIntoView({ behavior: invitationDesign.scrollBehavior?.() || "smooth", block: "start" });

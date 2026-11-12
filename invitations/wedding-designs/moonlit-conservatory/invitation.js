@@ -1,4 +1,6 @@
 const root = "./invitations/wedding-designs/moonlit-conservatory/assets/";
+if ("scrollRestoration" in history) history.scrollRestoration = "manual";
+window.scrollTo({ top: 0, left: 0, behavior: "instant" });
 globalThis.invitationDesignConfig = {
   languageStorageKey: "moonlit-conservatory-language",
   finishAt: 5.8,
@@ -7,17 +9,23 @@ globalThis.invitationDesignConfig = {
   keylessMapPreview: true,
   requireReady: true,
   prefillSavedRsvp: true,
+  sampleSeatingPreview: true,
+  detailsScrollTarget: "detailsSection",
   skipOpening: () => matchMedia("(prefers-reduced-motion: reduce)").matches,
   scrollBehavior: () => matchMedia("(prefers-reduced-motion: reduce)").matches || document.body.classList.contains("keyboard-navigation") ? "instant" : "smooth",
   copy: {
-    heroKicker: { en: "Together, under the stars", ar: "معاً، تحت النجوم" },
-    openInvitation: { en: "Enter the celebration", ar: "ادخلوا إلى الاحتفال" },
-    introCaption: { en: "A little moonlight. A lifetime of love.", ar: "قليل من ضوء القمر، وعمر من الحب." },
+    heroKicker: { en: "A celebration of love", ar: "احتفالٌ بالحب" },
+    openInvitation: { en: "Open invitation", ar: "افتحوا الدعوة" },
+    introCaption: { en: "A night to celebrate love.", ar: "ليلة نحتفل فيها بالحب." },
     videoLabel: { en: "A journey into the moonlit conservatory", ar: "رحلة إلى الحديقة في ضوء القمر" },
     countdownHeading: { en: "Every moment, a little closer.", ar: "كل لحظة، نقترب أكثر." },
     detailsHeading: { en: "Meet us in the moonlight.", ar: "نلتقي في ضوء القمر." },
     scheduleHeading: { en: "The evening unfolds.", ar: "فصول أمسيتنا." },
     seatingHeading: { en: "Your place in our story.", ar: "مكانكم في حكايتنا." },
+    sampleSeating: { en: "A sample seating plan for your celebration.", ar: "نموذج لخطة الجلوس في احتفالكم." },
+    introRetry: { en: "Still loading. Tap to retry.", ar: "ما زال التحميل جارياً. اضغطوا لإعادة المحاولة." },
+    introBlocked: { en: "The animation could not start. Tap to retry.", ar: "تعذّر بدء الحركة. اضغطوا لإعادة المحاولة." },
+    introError: { en: "The animation is unavailable. Tap to retry.", ar: "الحركة غير متاحة. اضغطوا لإعادة المحاولة." },
     rsvpHeading: { en: "The night needs you.", ar: "بحضوركم تكتمل ليلتنا." },
     attendanceDeclined: { en: "You'll be missed.", ar: "سنفتقد حضوركم." },
     closing: { en: "With you, under the stars.", ar: "بكم تضيء ليلتنا." },
@@ -26,7 +34,7 @@ globalThis.invitationDesignConfig = {
   },
   // Fictional preview only. Live contexts replace these fields in the shared runtime.
   demoWedding: {
-    coupleName: "Nour & Adam", brideName: "Nour", groomName: "Adam", brideNameAr: "نور", groomNameAr: "آدم",
+    coupleName: "Sara & Adam", brideName: "Sara", groomName: "Adam", brideNameAr: "سارة", groomNameAr: "آدم",
     subtitleEn: "Together with our families, we invite you to celebrate our wedding.",
     subtitleAr: "بمشاركة أهلنا، ندعوكم للاحتفال بزفافنا.",
     invitationMessageEn: "An evening of warm embraces, familiar faces, and a beautiful beginning. We would love you to be part of it.",
@@ -39,11 +47,39 @@ globalThis.invitationDesignConfig = {
   },
 };
 
-await import("../../../script.js?v=20261112-keyless-map-1");
+await import("../../../script.js?v=20261112-moonlit-update-2");
 
 // The shared runtime replaces the document with an accessible error for an
 // incomplete link. Only enhance a successfully mounted invitation shell.
 if (document.getElementById("introScreen") && document.getElementById("siteContent")) {
+const eveningArt = document.querySelector(".botanical-art");
+if (eveningArt) {
+  const shoes = document.createElement("img");
+  shoes.src = `${root}bridal-shoes.png`;
+  shoes.alt = "";
+  shoes.loading = "lazy";
+  eveningArt.replaceChildren(shoes);
+  document.getElementById("countdownGrid")?.after(eveningArt);
+}
+// Small decorative keepsakes mark the transitions without adding content for screen readers.
+const bouquet = document.createElement("div");
+bouquet.className = "moon-section-ornament moon-section-ornament--bouquet";
+bouquet.setAttribute("aria-hidden", "true");
+const bouquetImage = document.createElement("img");
+bouquetImage.src = `${root}bridal-bouquet.png`;
+bouquetImage.alt = "";
+bouquetImage.loading = "lazy";
+bouquet.append(bouquetImage);
+document.getElementById("detailsSection").after(bouquet);
+for (const [selector, symbol] of [["#rsvpSection", "kp-flutes"], [".closing-section", "kp-heart"]]) {
+  const section = document.querySelector(selector);
+  if (!section) continue;
+  const ornament = document.createElement("div");
+  ornament.className = "moon-section-ornament moon-section-ornament--line";
+  ornament.setAttribute("aria-hidden", "true");
+  ornament.innerHTML = `<svg viewBox="0 0 48 48"><use href="#${symbol}"></use></svg>`;
+  section.prepend(ornament);
+}
 // Local review only: lets automated layout inspection start beyond the cover.
 if (["127.0.0.1", "localhost"].includes(location.hostname) && new URLSearchParams(location.search).get("review") === "1") {
   document.getElementById("skipOpening").click();
@@ -56,6 +92,7 @@ let focused = false;
 const settleCover = () => {
   if (!body.classList.contains("invitation-open") || focused) return;
   focused = true;
+  window.scrollTo({ top: 0, left: 0, behavior: "instant" });
   // The dismissed cover must leave both the tab order and accessibility tree.
   intro.inert = true;
   intro.setAttribute("aria-hidden", "true");
@@ -143,6 +180,18 @@ function observeSections() {
 }
 observeSections();
 reduced.addEventListener("change", observeSections);
+const scheduleMount = document.getElementById("scheduleMount");
+const scheduleObserver = "IntersectionObserver" in window ? new IntersectionObserver(entries => {
+  entries.forEach(entry => {
+    if (!entry.isIntersecting) return;
+    entry.target.classList.add("moon-schedule-arrival");
+    scheduleObserver.unobserve(entry.target);
+  });
+}, { threshold: .18 }) : null;
+const observeSchedule = () => scheduleMount?.querySelectorAll(".schedule-item:not(.moon-schedule-arrival)").forEach(item => scheduleObserver?.observe(item));
+const scheduleChanges = new MutationObserver(observeSchedule);
+if (scheduleMount) scheduleChanges.observe(scheduleMount, { childList: true });
+observeSchedule();
 const actionObserver = "IntersectionObserver" in window ? new IntersectionObserver(entries => {
   for (const entry of entries) {
     body.classList.toggle(entry.target.id === "rsvpSection" ? "moon-rsvp-visible" : "hero-actions-visible", entry.isIntersecting);
@@ -177,10 +226,10 @@ if (detailsVideo && "IntersectionObserver" in window) {
     }
   };
   detailsObserver = new IntersectionObserver(entries => { visible = entries.some(entry => entry.isIntersecting); sync(); }, { rootMargin: "200px 0px" });
-  detailsObserver.observe(document.getElementById("detailsSection"));
+  detailsObserver.observe(document.getElementById("heroSection"));
   reduced.addEventListener("change", sync);
   document.addEventListener("visibilitychange", sync);
   new MutationObserver(sync).observe(body, { attributes: true, attributeFilter: ["class"] });
 }
-window.addEventListener("pagehide", () => { detailsObserver?.disconnect(); observer?.disconnect(); opened.disconnect(); actionObserver?.disconnect(); namesObserver.disconnect(); }, { once: true });
+window.addEventListener("pagehide", () => { detailsObserver?.disconnect(); observer?.disconnect(); scheduleObserver?.disconnect(); scheduleChanges.disconnect(); opened.disconnect(); actionObserver?.disconnect(); namesObserver.disconnect(); }, { once: true });
 }

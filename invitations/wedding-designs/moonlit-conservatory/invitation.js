@@ -65,21 +65,72 @@ const opened = new MutationObserver(settleCover);
 opened.observe(body, { attributes: true, attributeFilter: ["class"] });
 settleCover();
 
-// A short, once-only entrance for each content group; all content is visible
-// without this enhancement. No scroll handlers or continuous rendering loops.
+// Decorative night sky: stars, fireflies, falling jasmine petals and a rare
+// shooting star. Pure CSS animation of transform/opacity, behind the content.
+const sky = document.createElement("div");
+sky.className = "moon-sky";
+sky.setAttribute("aria-hidden", "true");
+const random = (min, max) => min + Math.random() * (max - min);
+const fx = document.createElement("div");
+fx.className = "moon-sky__fx";
+const compact = matchMedia("(max-width: 760px)").matches;
+for (let index = 0; index < (compact ? 10 : 16); index += 1) {
+  const fly = document.createElement("span");
+  fly.className = "moon-firefly";
+  fly.style.cssText = `--x:${random(2, 96)}%;--y:${random(20, 96)}%;--s:${random(3, 6).toFixed(1)}px;--d:${random(10, 20).toFixed(1)}s;--delay:${random(-20, 0).toFixed(1)}s;--dx:${random(-60, 60).toFixed(0)}px;--dy:${random(-80, -20).toFixed(0)}px`;
+  fx.append(fly);
+}
+for (let index = 0; index < (compact ? 7 : 12); index += 1) {
+  const petal = document.createElement("span");
+  petal.className = "moon-petal";
+  petal.style.cssText = `--x:${random(0, 100)}%;--s:${random(8, 15).toFixed(1)}px;--d:${random(16, 28).toFixed(1)}s;--delay:${random(-28, 0).toFixed(1)}s;--sway:${random(-90, 90).toFixed(0)}px`;
+  fx.append(petal);
+}
+const shooting = document.createElement("span");
+shooting.className = "moon-shooting";
+fx.append(shooting);
+const stars = document.createElement("div");
+stars.className = "moon-sky__stars";
+sky.append(stars, fx);
+body.prepend(sky);
+// Hidden tabs do not need to animate the sky.
+document.addEventListener("visibilitychange", () => { sky.style.visibility = document.hidden ? "hidden" : ""; });
+
+// Stack the couple's names with a calligraphic ampersand. The shared runtime
+// rewrites these nodes on every refresh or language change, so re-apply then.
+const ornamentNames = (node) => {
+  if (!node || node.querySelector(".moon-name")) return;
+  const text = node.textContent.trim();
+  const parts = text.split(/\s+(&|و)\s+/);
+  if (parts.length !== 3 || !parts[0] || !parts[2]) return;
+  const make = (className, value) => { const span = document.createElement("span"); span.className = className; span.textContent = value; return span; };
+  const amp = make("moon-amp", parts[1]);
+  amp.setAttribute("aria-hidden", "true");
+  const label = make("moon-sr", ` ${parts[1] === "&" ? "and" : "و"} `);
+  label.style.cssText = "position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0)";
+  node.replaceChildren(make("moon-name", parts[0]), amp, label, make("moon-name", parts[2]));
+};
+const nameNodes = ["heroEnglishNames", "heroArabicNames"].map(id => document.getElementById(id));
+const namesObserver = new MutationObserver(() => nameNodes.forEach(ornamentNames));
+nameNodes.forEach(node => { if (node) { ornamentNames(node); namesObserver.observe(node, { childList: true, characterData: true, subtree: true }); } });
+
+// A once-only entrance for each content group. Content is only hidden before
+// its entrance when the browser can actually run it (moon-motion).
 let observer;
 function observeSections() {
   observer?.disconnect();
   document.querySelectorAll(".moon-arrival").forEach(node => node.classList.remove("moon-arrival"));
-  if (reduced.matches || !("IntersectionObserver" in window)) return;
+  const canAnimate = !reduced.matches && "IntersectionObserver" in window;
+  body.classList.toggle("moon-motion", canAnimate);
+  if (!canAnimate) return;
   observer = new IntersectionObserver(entries => {
     entries.forEach(entry => {
       if (!entry.isIntersecting || !body.classList.contains("invitation-open")) return;
       entry.target.classList.add("moon-arrival");
       observer.unobserve(entry.target);
     });
-  }, { threshold: .12 });
-  document.querySelectorAll(".section-frame").forEach(node => observer.observe(node));
+  }, { threshold: .12, rootMargin: "0px 0px -6% 0px" });
+  document.querySelectorAll(".section-frame, .qd-footer").forEach(node => observer.observe(node));
 }
 observeSections();
 reduced.addEventListener("change", observeSections);
@@ -97,5 +148,5 @@ document.querySelector(".skip-link").addEventListener("click", event => {
 // Stop scroll animation for keyboard navigation; focus reaches its target at once.
 document.addEventListener("keydown", () => body.classList.add("keyboard-navigation"));
 document.addEventListener("pointerdown", () => body.classList.remove("keyboard-navigation"));
-window.addEventListener("pagehide", () => { observer?.disconnect(); opened.disconnect(); actionObserver?.disconnect(); }, { once: true });
+window.addEventListener("pagehide", () => { observer?.disconnect(); opened.disconnect(); actionObserver?.disconnect(); namesObserver.disconnect(); }, { once: true });
 }

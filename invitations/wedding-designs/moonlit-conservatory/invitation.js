@@ -7,7 +7,7 @@ globalThis.invitationDesignConfig = {
   chairArtwork: `${root}chair.svg`,
   rtl: true,
   keylessMapPreview: true,
-  detailsLayout: "sheet",
+  detailLines: true,
   requireReady: true,
   prefillSavedRsvp: true,
   sampleSeatingPreview: true,
@@ -48,7 +48,7 @@ globalThis.invitationDesignConfig = {
   },
 };
 
-await import("../../../script.js?v=20261112-insert-1");
+await import("../../../script.js?v=20261112-refine-1");
 
 // The shared runtime replaces the document with an accessible error for an
 // incomplete link. Only enhance a successfully mounted invitation shell.
@@ -56,17 +56,18 @@ if (document.getElementById("introScreen") && document.getElementById("siteConte
 const eveningArt = document.querySelector(".botanical-art");
 if (eveningArt) {
   const shoes = document.createElement("img");
-  shoes.src = `${root}bridal-shoes.png`;
+  shoes.src = `${root}bridal-shoes.webp`;
   shoes.alt = "";
   shoes.loading = "lazy";
   eveningArt.replaceChildren(shoes);
+  document.getElementById("countdownGrid")?.after(eveningArt);
 }
 // Small decorative keepsakes mark the transitions without adding content for screen readers.
 const bouquet = document.createElement("div");
 bouquet.className = "moon-section-ornament moon-section-ornament--bouquet";
 bouquet.setAttribute("aria-hidden", "true");
 const bouquetImage = document.createElement("img");
-bouquetImage.src = `${root}bridal-bouquet.png`;
+bouquetImage.src = `${root}bridal-bouquet.webp`;
 bouquetImage.alt = "";
 bouquetImage.loading = "lazy";
 bouquet.append(bouquetImage);

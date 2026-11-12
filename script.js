@@ -870,26 +870,18 @@ function renderDetails() {
     detailCards.push({ icon: icons.venue, title: "Hall", en: hall });
   }
 
-  const mount = document.getElementById("detailsGrid");
-  if (isLaylaInvitation() && invitationDesign.detailsLayout === "sheet") {
-    // Printed-insert layout: every fact visible at once, no tabs.
+  if (isLaylaInvitation() && invitationDesign.detailLines) {
+    // Designs that opt in show each fact as stacked lines (weekday / date / time).
     const arabic = state.laylaLanguage === "ar";
     const fullDate = arabic ? formatArabicDate(wedding.eventDateISO) : formatDate(wedding.eventDateISO);
-    const [weekday, ...dateRest] = String(fullDate || "").split(/[,،]\s*/);
-    const dateLine = dateRest.length ? dateRest.join(", ") : fullDate;
+    const [weekday, ...rest] = String(fullDate || "").split(/[,،]\s*/);
     const time = arabic ? (wedding.timeAr || eventTimeFromDate(wedding, "ar")) : (wedding.timeEn || eventTimeFromDate(wedding));
-    const venue = laylaValue(wedding.venueEn || wedding.venueName, wedding.venueAr || wedding.venueNameAr);
-    const place = [hall ? `${laylaText("hall")}: ${hall}` : "", laylaValue(wedding.locationEn || wedding.location, wedding.locationAr || wedding.location)].filter(Boolean).join(arabic ? "، " : ", ");
-    const row = (label, value, className) => value ? `<div class="detail-sheet__row ${className}"><dt class="visually-hidden">${escapeHtml(label)}</dt><dd>${escapeHtml(value)}</dd></div>` : "";
-    mount.innerHTML = `<dl class="detail-sheet" lang="${arabic ? "ar" : "en"}" dir="${arabic ? "rtl" : "ltr"}">
-      ${row(laylaText("dateTime"), dateRest.length ? weekday : "", "detail-sheet__weekday")}
-      ${row(laylaText("dateTime"), dateLine, "detail-sheet__date")}
-      ${row(laylaText("dateTime"), time, "detail-sheet__time")}
-      <div class="detail-sheet__rule" aria-hidden="true"></div>
-      ${row(laylaText("venue"), venue, "detail-sheet__venue")}
-      ${row(laylaText("location"), place, "detail-sheet__place")}
-    </dl>`;
-  } else if (isLaylaInvitation()) {
+    detailCards[0].lines = (rest.length ? [weekday, rest.join(", "), time] : [fullDate, time]).filter(Boolean);
+    const hallLine = hall ? `${laylaText("hall")}: ${hall}` : "";
+    detailCards[1].lines = [laylaValue(wedding.venueEn || wedding.venueName, wedding.venueAr || wedding.venueNameAr), hallLine].filter(Boolean);
+  }
+  const mount = document.getElementById("detailsGrid");
+  if (isLaylaInvitation()) {
     state.detailItems = detailCards.slice(0, 3).map((detail, index) => ({ ...detail, key: ["date", "venue", "location"][index] }));
     if (!state.detailItems.some((detail) => detail.key === state.activeDetailTab)) state.activeDetailTab = "date";
     mount.innerHTML = `
@@ -924,7 +916,11 @@ function renderActiveLaylaDetail() {
   panel.querySelector(".detail-card__icon").innerHTML = detail.icon;
   panel.querySelector(".detail-card__title").textContent = detail.title;
   const value = panel.querySelector(".detail-card__english");
-  value.textContent = detail.en;
+  if (Array.isArray(detail.lines) && detail.lines.length > 1) {
+    value.innerHTML = detail.lines.map((line, index) => `<span class="detail-card__line detail-card__line--${index}">${escapeHtml(line)}</span>`).join("");
+  } else {
+    value.textContent = detail.en;
+  }
   value.classList.toggle("rtl-copy", state.laylaLanguage === "ar");
   value.lang = state.laylaLanguage;
   value.dir = state.laylaLanguage === "ar" ? "rtl" : "ltr";

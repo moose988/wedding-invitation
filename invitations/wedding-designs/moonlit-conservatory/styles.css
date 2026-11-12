@@ -618,77 +618,78 @@
   .moonlit-invitation .music-toggle.moon-record { width:58px; height:58px; right:max(14px,env(safe-area-inset-right)); }
 }
 
-/* ================= Details: the printed insert =================
-   One cool pearl card, the kind tucked inside a wedding envelope.
-   Ink and a single foil line on paper; everything around it stays quiet. */
-.moonlit-invitation .details-section { --paper:#e4e7df; --paper-2:#d9ddd3; --ink:#13302f; --ink-soft:#4d6461; --foil:#9a7a3e; background:transparent; }
-.moonlit-invitation .visually-hidden { position:absolute!important; width:1px; height:1px; margin:-1px; padding:0; overflow:hidden; clip:rect(0 0 0 0); white-space:nowrap; border:0; }
-.moonlit-invitation .details-section .details-composition { display:grid; grid-template-columns:minmax(0,1fr) minmax(360px,480px); align-items:center; gap:clamp(48px,7vw,104px); max-width:1080px; margin-inline:auto; }
-.moonlit-invitation .details-intro { display:grid; gap:34px; align-content:center; }
-.moonlit-invitation .details-intro h2 { margin:0; font-size:clamp(46px,6vw,84px); line-height:.98; letter-spacing:-.015em; color:#f2ede1; }
+/* ================= Details refinements (12 Nov 2026) =================
+   One gold, one box family (18px radius, 1px gold line), calmer selection,
+   readable labels, even rhythm. */
+.moonlit-invitation .details-section { --d-radius:18px; --d-line:#d9bf8659; --d-gold:#e3cd98; --d-gap-1:20px; --d-gap-2:32px; --d-gap-3:48px; }
 
-/* Countdown: one quiet line, numbers in the display serif */
-.moonlit-invitation .details-intro .hero-countdown { display:flex; flex-wrap:wrap; gap:6px 22px; padding:0; margin:0; border:0; background:none; box-shadow:none; }
-.moonlit-invitation .details-intro .countdown-card { display:inline-flex; align-items:baseline; gap:7px; padding:0; border:0; background:none; box-shadow:none; animation:none; }
-.moonlit-invitation .details-intro .countdown-card + .countdown-card { border:0; }
-.moonlit-invitation .details-intro .countdown-card__value { font:400 32px/1 var(--display); font-variant-numeric:lining-nums tabular-nums; color:#efe6cf; animation:none; }
-.moonlit-invitation .details-intro .countdown-card__label { font:italic 400 17px/1 var(--display); letter-spacing:0; text-transform:lowercase; color:#9fb1ac; }
+/* 8 + 11. Countdown: one soft gold, faint glow, dividers that fade out */
+.moonlit-invitation .details-copy .hero-countdown { margin:0 0 var(--d-gap-2); padding:20px 4px; border-block:0; background:none; }
+.moonlit-invitation .details-copy .hero-countdown::before,.moonlit-invitation .details-copy .hero-countdown::after { content:""; position:absolute; inset-inline:0; height:1px; background:linear-gradient(90deg,transparent,#d9bf8680 20%,#d9bf8680 80%,transparent); }
+.moonlit-invitation .details-copy .hero-countdown::before { top:0; }
+.moonlit-invitation .details-copy .hero-countdown::after { bottom:0; }
+.moonlit-invitation .details-copy .countdown-card + .countdown-card { border-inline-start:1px solid; border-image:linear-gradient(180deg,transparent,#d9bf8666,transparent) 1; }
+.moonlit-invitation .details-copy .countdown-card__value { color:var(--d-gold); text-shadow:0 0 22px #d9bf8633; }
+/* 2. Labels readable */
+.moonlit-invitation .details-copy .countdown-card__label { font-size:12px; letter-spacing:.12em; color:#c9d3cd; }
 
-/* The card */
-.moonlit-invitation .moon-insert { position:relative; padding:46px clamp(24px,4vw,44px) 34px; color:var(--ink); text-align:center; background:radial-gradient(130% 90% at 50% 0%,#eef0ea 0%,var(--paper) 55%,var(--paper-2) 100%); border-radius:4px; box-shadow:0 1px 0 #ffffff80 inset,0 40px 70px -34px #000e,0 12px 24px -18px #000a; transform:rotate(-.6deg); }
-.moonlit-invitation .moon-insert::before { content:""; position:absolute; inset:10px; border:1px solid color-mix(in srgb,var(--foil) 45%,transparent); border-radius:2px; pointer-events:none; }
-.moonlit-invitation .moon-insert__crest { display:block; width:58px; height:35px; margin:0 auto 22px; fill:none; stroke:var(--foil); stroke-width:1.6; }
-.moonlit-invitation .moon-insert__crest * { stroke:var(--foil); }
+/* 9 + 10. Rhythm; shoes become a small accent */
+.moonlit-invitation .details-copy .section-heading { margin-bottom:var(--d-gap-2); }
+.moonlit-invitation .details-copy h2 { margin-bottom:0; }
+.moonlit-invitation .details-copy > .botanical-art { width:min(150px,44%); margin:0 auto var(--d-gap-2); }
 
-.moonlit-invitation .moon-insert .detail-sheet { display:grid; margin:0; }
-.moonlit-invitation .moon-insert .detail-sheet dd { margin:0; }
-.moonlit-invitation .moon-insert .detail-sheet__weekday dd { font:italic 400 21px/1.2 var(--display); color:var(--ink-soft); }
-.moonlit-invitation .moon-insert .detail-sheet__date dd { margin-top:4px; font:400 clamp(36px,4.2vw,48px)/1.02 var(--display); letter-spacing:-.01em; font-variant-numeric:oldstyle-nums; color:var(--ink); text-wrap:balance; }
-.moonlit-invitation .moon-insert .detail-sheet__time dd { margin-top:8px; font:italic 400 21px/1.2 var(--display); color:var(--ink-soft); }
-.moonlit-invitation .moon-insert .detail-sheet__rule { width:44px; height:1px; margin:28px auto; background:var(--foil); }
-.moonlit-invitation .moon-insert .detail-sheet__venue dd { font:400 clamp(30px,3.4vw,40px)/1.05 var(--display); color:var(--ink); text-wrap:balance; }
-.moonlit-invitation .moon-insert .detail-sheet__place dd { margin-top:10px; font:400 15px/1.55 var(--body); letter-spacing:.01em; color:var(--ink-soft); text-wrap:balance; }
+/* 5 + 6 + 3. Tabs: same family, quiet selection, real line icons */
+.moonlit-invitation .detail-tabs { gap:10px; margin:0; }
+.moonlit-invitation .detail-tab { position:relative; min-height:88px; gap:10px; border:1px solid var(--d-line); border-radius:var(--d-radius); background:#0e2329; color:#c9d3cd; font:500 13px/1.2 var(--body); letter-spacing:.08em; transform:none; box-shadow:none; transition:background-color 220ms var(--ease),border-color 220ms var(--ease),color 220ms var(--ease); }
+.moonlit-invitation .detail-tab::before { content:""; width:24px; height:24px; background:var(--d-gold); -webkit-mask:var(--icon) center/contain no-repeat; mask:var(--icon) center/contain no-repeat; font:inherit; }
+.moonlit-invitation .detail-tab[data-detail-tab="date"] { --icon:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='1.4' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M15.5 3.5a8.5 8.5 0 1 0 5 13.4A7 7 0 0 1 15.5 3.5z'/%3E%3Cpath d='M18.5 5.5l.5 1.2 1.2.5-1.2.5-.5 1.2-.5-1.2-1.2-.5 1.2-.5z'/%3E%3C/svg%3E"); }
+.moonlit-invitation .detail-tab[data-detail-tab="venue"] { --icon:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='1.4' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M4 21V10a8 8 0 0 1 16 0v11'/%3E%3Cpath d='M8 21v-9a4 4 0 0 1 8 0v9M12 2v6M3 21h18M4 13h4M16 13h4'/%3E%3C/svg%3E"); }
+.moonlit-invitation .detail-tab[data-detail-tab="location"] { --icon:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='1.4' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M12 21s-6.5-6.2-6.5-11.2a6.5 6.5 0 0 1 13 0C18.5 14.8 12 21 12 21z'/%3E%3Ccircle cx='12' cy='9.8' r='2.4'/%3E%3C/svg%3E"); }
+.moonlit-invitation .detail-tab[data-detail-tab]::before { content:""; }
+.moonlit-invitation .detail-tab[aria-selected=true] { background:#d9bf8614; border-color:#d9bf86b3; color:#f4ecd8; box-shadow:none; transform:none; }
+.moonlit-invitation .detail-tab[aria-selected=true]::after { content:""; position:absolute; bottom:-1px; left:28%; right:28%; height:2px; border-radius:2px; background:var(--gold-grad); }
+.moonlit-invitation .detail-tab[aria-selected=true]::before { background:var(--d-gold); }
+.moonlit-invitation .detail-tab:hover { border-color:#d9bf8699; }
+.moonlit-invitation .detail-tab:active { transform:scale(.97); }
+.moonlit-invitation .detail-tab:focus-visible { outline:2px solid var(--gold-2); outline-offset:3px; }
 
-/* Map set into the paper like a small engraved plate */
-.moonlit-invitation .moon-insert #venueMapPreviewMount { margin-top:30px; }
-.moonlit-invitation .moon-insert .venue-map-card { display:grid; gap:18px; justify-items:center; padding:0; border:0; background:none; box-shadow:none; }
-.moonlit-invitation .moon-insert .venue-map-frame { width:100%; margin:0; padding:5px; border:1px solid color-mix(in srgb,var(--foil) 55%,transparent); border-radius:2px; background:#f3f4ef; box-shadow:none; }
-.moonlit-invitation .moon-insert .venue-map-frame::before,.moonlit-invitation .moon-insert .venue-map-frame::after,.moonlit-invitation .moon-insert .venue-map-corner { display:none; }
-.moonlit-invitation .moon-insert .venue-map-preview { min-height:190px; margin:0; border:0; border-radius:0; background:#dfe2da; box-shadow:none; }
-.moonlit-invitation .moon-insert .venue-map-preview::before,.moonlit-invitation .moon-insert .venue-map-preview::after { display:none; }
-.moonlit-invitation .moon-insert .venue-map-preview iframe { height:210px; filter:grayscale(.8) sepia(.18) contrast(.96) brightness(1.03); }
-.moonlit-invitation .moon-insert .venue-map-preview > p { color:var(--ink-soft); font:italic 400 17px/1.4 var(--display); }
+/* 5 + 7. The card: same family, stacked lines */
+.moonlit-invitation .details-copy .detail-card { min-height:0; margin-block:var(--d-gap-1) 0; padding:26px 26px; border:1px solid var(--d-line); border-radius:var(--d-radius); background:linear-gradient(180deg,#10282e,#0c1f24); backdrop-filter:none; -webkit-backdrop-filter:none; box-shadow:none; }
+.moonlit-invitation .details-copy .detail-card__icon { border-color:var(--d-line); color:var(--d-gold); }
+.moonlit-invitation .details-copy .detail-card h3 { font-size:12px; letter-spacing:.18em; color:var(--d-gold); margin-bottom:8px; }
+.moonlit-invitation .details-copy .detail-card p { display:grid; gap:2px; }
+.moonlit-invitation .detail-card__line { display:block; }
+.moonlit-invitation .detail-card__line--0 { font:italic 400 18px/1.3 var(--display); color:#b9c7c1; }
+.moonlit-invitation .detail-card__line--1 { font:400 clamp(26px,2.6vw,32px)/1.15 var(--display); color:var(--pearl); }
+.moonlit-invitation .detail-card__line--2 { font:italic 400 18px/1.3 var(--display); color:#b9c7c1; margin-top:2px; }
+.moonlit-invitation [aria-labelledby="detailTab-venue"] .detail-card__line--0 { font:400 clamp(26px,2.6vw,32px)/1.15 var(--display); font-style:normal; color:var(--pearl); }
+.moonlit-invitation [aria-labelledby="detailTab-venue"] .detail-card__line--1 { font:400 15px/1.5 var(--body); color:#b9c7c1; }
 
-/* Actions read as ink on paper, not as gold pills */
-.moonlit-invitation .moon-insert .luxury-button,.moonlit-invitation .moon-insert .detail-card__action { min-height:44px; padding:10px 4px; border:0; border-radius:0; background:none; box-shadow:none; color:var(--ink); font:500 15px/1.2 var(--body); letter-spacing:.01em; text-transform:none; text-decoration:none; display:inline-flex; align-items:center; gap:8px; }
-.moonlit-invitation .moon-insert .luxury-button > span:not(.moon-button-arrow),.moonlit-invitation .moon-insert button.luxury-button { text-decoration:underline; text-decoration-color:var(--foil); text-decoration-thickness:1px; text-underline-offset:6px; }
-.moonlit-invitation .moon-insert .luxury-button::before,.moonlit-invitation .moon-insert .luxury-button::after { display:none; }
-.moonlit-invitation .moon-insert .luxury-button:hover { color:#000; transform:none; }
-.moonlit-invitation .moon-insert .luxury-button:hover > span:not(.moon-button-arrow) { text-decoration-thickness:2px; }
-.moonlit-invitation .moon-insert .luxury-button:focus-visible { outline:2px solid var(--ink); outline-offset:4px; }
-.moonlit-invitation .moon-insert .moon-button-arrow { color:var(--foil); text-decoration:none; }
-.moonlit-invitation .moon-insert .venue-actions { justify-content:center; gap:4px 26px; margin-top:14px; }
-.moonlit-invitation .moon-insert .venue-actions:empty { display:none; }
+/* 5 + 4. Map: same family, no sparkle corners, quiet placeholder */
+.moonlit-invitation .details-copy .venue-map-frame { margin:var(--d-gap-1) 0 0; padding:6px; border:1px solid var(--d-line); border-radius:var(--d-radius); background:#0e2329; box-shadow:none; }
+.moonlit-invitation .details-copy .venue-map-frame::before,.moonlit-invitation .details-copy .venue-map-frame::after,.moonlit-invitation .details-copy .venue-map-corner { display:none; }
+.moonlit-invitation .details-copy .venue-map-frame .venue-map-preview { min-height:220px; border:0; border-radius:calc(var(--d-radius) - 6px); background:#122b31; }
+.moonlit-invitation .details-copy .venue-map-preview--pending { background:linear-gradient(100deg,#122b31 30%,#18363c 50%,#122b31 70%) 0 0/300% 100%; animation:moon-map-wait 1.8s ease-in-out infinite; }
+@keyframes moon-map-wait { from { background-position:100% 0; } to { background-position:0 0; } }
+.moonlit-invitation .details-copy .venue-map-preview > p { font:italic 400 17px/1.4 var(--display); color:#a9b9b3; }
+.moonlit-invitation .details-copy .venue-map-frame:has(.venue-map-preview--fallback) { padding:0; border-style:dashed; }
+.moonlit-invitation .details-copy .venue-map-frame:has(.venue-map-preview--fallback) .venue-map-preview { min-height:0; background:none; }
+.moonlit-invitation .details-copy .venue-map-preview iframe { height:240px; filter:saturate(.75) contrast(1.04); }
 
-/* Arabic keeps its own faces */
-.moonlit-invitation.layla-arabic .moon-insert .detail-sheet dd { font-family:'Amiri',serif; font-variant-numeric:normal; }
-.moonlit-invitation.layla-arabic .moon-insert .detail-sheet__place dd,.moonlit-invitation.layla-arabic .moon-insert .luxury-button { font-family:'Noto Naskh Arabic',serif; }
-.moonlit-invitation.layla-arabic .details-intro .countdown-card__label { font-family:'Noto Naskh Arabic',serif; font-style:normal; font-size:14px; }
+/* 12. Maps button lines up with the frame */
+.moonlit-invitation .details-copy .venue-map-card { display:grid; gap:var(--d-gap-1); }
+.moonlit-invitation .details-copy .venue-map-card > .luxury-button,.moonlit-invitation .details-copy .venue-actions .luxury-button { border-radius:var(--d-radius); }
 
 @media (max-width:760px) {
-  .moonlit-invitation .details-section .details-composition { grid-template-columns:1fr; gap:38px; padding-inline:18px; }
-  .moonlit-invitation .details-intro { justify-items:center; text-align:center; gap:22px; }
-  .moonlit-invitation .details-intro h2 { font-size:clamp(42px,12vw,54px); }
-  .moonlit-invitation .details-intro .hero-countdown { justify-content:center; gap:4px 16px; }
-  .moonlit-invitation .details-intro .countdown-card__value { font-size:27px; }
-  .moonlit-invitation .details-intro .countdown-card__label { font-size:15px; }
-  .moonlit-invitation .details-intro .countdown-card:nth-child(4) { display:none; }
-  .moonlit-invitation .moon-insert { padding:40px 22px 26px; transform:none; }
-  .moonlit-invitation .moon-insert .detail-sheet__date dd { font-size:clamp(32px,9.4vw,40px); }
-  .moonlit-invitation .moon-insert .detail-sheet__venue dd { font-size:clamp(28px,8vw,34px); }
-  .moonlit-invitation .moon-insert .venue-map-preview iframe { height:180px; }
+  .moonlit-invitation .details-copy .countdown-card__label { font-size:11.5px; letter-spacing:.1em; }
+  .moonlit-invitation .detail-tab { min-height:80px; font-size:12.5px; letter-spacing:.06em; padding-inline:4px; }
+  .moonlit-invitation .details-copy .detail-card { padding:22px 20px; }
+  .moonlit-invitation .details-copy .detail-card__line--1 { font-size:26px; }
+  .moonlit-invitation .details-copy .venue-map-card > .luxury-button { width:100%; justify-content:center; }
+  .moonlit-invitation .details-copy .venue-map-preview iframe { height:200px; }
+  .moonlit-invitation .details-copy > .botanical-art { width:min(130px,40%); margin-bottom:var(--d-gap-2); }
 }
-@media (prefers-reduced-motion:reduce) { .moonlit-invitation .moon-insert { transform:none; } }
+@media (prefers-reduced-motion:reduce) { .moonlit-invitation .details-copy .venue-map-preview--pending { animation:none; } }
 
 }
 

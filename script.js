@@ -871,7 +871,25 @@ function renderDetails() {
   }
 
   const mount = document.getElementById("detailsGrid");
-  if (isLaylaInvitation()) {
+  if (isLaylaInvitation() && invitationDesign.detailsLayout === "sheet") {
+    // Printed-insert layout: every fact visible at once, no tabs.
+    const arabic = state.laylaLanguage === "ar";
+    const fullDate = arabic ? formatArabicDate(wedding.eventDateISO) : formatDate(wedding.eventDateISO);
+    const [weekday, ...dateRest] = String(fullDate || "").split(/[,،]\s*/);
+    const dateLine = dateRest.length ? dateRest.join(", ") : fullDate;
+    const time = arabic ? (wedding.timeAr || eventTimeFromDate(wedding, "ar")) : (wedding.timeEn || eventTimeFromDate(wedding));
+    const venue = laylaValue(wedding.venueEn || wedding.venueName, wedding.venueAr || wedding.venueNameAr);
+    const place = [hall ? `${laylaText("hall")}: ${hall}` : "", laylaValue(wedding.locationEn || wedding.location, wedding.locationAr || wedding.location)].filter(Boolean).join(arabic ? "، " : ", ");
+    const row = (label, value, className) => value ? `<div class="detail-sheet__row ${className}"><dt class="visually-hidden">${escapeHtml(label)}</dt><dd>${escapeHtml(value)}</dd></div>` : "";
+    mount.innerHTML = `<dl class="detail-sheet" lang="${arabic ? "ar" : "en"}" dir="${arabic ? "rtl" : "ltr"}">
+      ${row(laylaText("dateTime"), dateRest.length ? weekday : "", "detail-sheet__weekday")}
+      ${row(laylaText("dateTime"), dateLine, "detail-sheet__date")}
+      ${row(laylaText("dateTime"), time, "detail-sheet__time")}
+      <div class="detail-sheet__rule" aria-hidden="true"></div>
+      ${row(laylaText("venue"), venue, "detail-sheet__venue")}
+      ${row(laylaText("location"), place, "detail-sheet__place")}
+    </dl>`;
+  } else if (isLaylaInvitation()) {
     state.detailItems = detailCards.slice(0, 3).map((detail, index) => ({ ...detail, key: ["date", "venue", "location"][index] }));
     if (!state.detailItems.some((detail) => detail.key === state.activeDetailTab)) state.activeDetailTab = "date";
     mount.innerHTML = `

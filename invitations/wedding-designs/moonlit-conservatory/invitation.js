@@ -7,6 +7,7 @@ globalThis.invitationDesignConfig = {
   chairArtwork: `${root}chair.svg`,
   rtl: true,
   keylessMapPreview: true,
+  detailsLayout: "sheet",
   requireReady: true,
   prefillSavedRsvp: true,
   sampleSeatingPreview: true,
@@ -47,7 +48,7 @@ globalThis.invitationDesignConfig = {
   },
 };
 
-await import("../../../script.js?v=20261112-moonlit-update-2");
+await import("../../../script.js?v=20261112-insert-1");
 
 // The shared runtime replaces the document with an accessible error for an
 // incomplete link. Only enhance a successfully mounted invitation shell.
@@ -59,7 +60,6 @@ if (eveningArt) {
   shoes.alt = "";
   shoes.loading = "lazy";
   eveningArt.replaceChildren(shoes);
-  document.getElementById("countdownGrid")?.after(eveningArt);
 }
 // Small decorative keepsakes mark the transitions without adding content for screen readers.
 const bouquet = document.createElement("div");

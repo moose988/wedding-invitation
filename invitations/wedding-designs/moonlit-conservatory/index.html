@@ -11,7 +11,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Amiri:wght@400;700&family=Cormorant+Garamond:ital,wght@0,300;0,400;0,500;1,300;1,400;1,500&family=Jost:wght@300;400;500&family=Noto+Naskh+Arabic:wght@400;500;600&family=Pinyon+Script&display=swap" rel="stylesheet" />
-  <link rel="stylesheet" href="./invitations/wedding-designs/moonlit-conservatory/styles.css?v=20261112-moonlit-update-2" />
+  <link rel="stylesheet" href="./invitations/wedding-designs/moonlit-conservatory/styles.css?v=20261112-insert-1" />
 </head>
 <body class="moonlit-invitation" data-guest-experience="bilingual" data-invitation-template="moonlit-conservatory">
   <!-- Reusable hand-drawn ornaments. Paths use pathLength="1" so CSS can draw them in. -->
@@ -135,12 +135,18 @@
 
     <section class="section details-section reveal" id="detailsSection">
       <div class="section-frame details-composition">
-      <figure class="venue-picture">
-        <span class="venue-picture__outline" aria-hidden="true"></span>
-        <img class="venue-illustration" src="./invitations/wedding-designs/moonlit-conservatory/assets/wedding-table-transparent.png" alt="A candlelit wedding table for two beneath the moon, framed by jasmine" loading="lazy" decoding="async" />
-      </figure>
-      <div class="details-copy"><div class="section-heading"><svg class="orn orn-sprig section-sprig" viewBox="0 0 320 40" aria-hidden="true"><use href="#orn-sprig" /></svg><h2 data-layla-text="detailsHeading">Meet us<br>in the moonlight.</h2></div><div class="hero-countdown" id="countdownGrid" aria-label="Time until the wedding"></div><div id="detailsGrid"></div><div class="venue-actions" id="venueActions"><a class="luxury-button luxury-button--primary" id="openMapsLink" target="_blank" rel="noopener noreferrer" hidden><span data-layla-text="openInMaps">Open in Maps</span><span class="moon-button-arrow" aria-hidden="true">↗</span></a><button class="luxury-button luxury-button--secondary" type="button" data-calendar-download data-layla-text="calendar">Add to Calendar</button></div><div id="venueMapPreviewMount"></div></div>
-    </div></section>
+        <header class="details-intro">
+          <h2 data-layla-text="detailsHeading">Meet us<br>in the moonlight.</h2>
+          <div class="hero-countdown" id="countdownGrid" aria-label="Time until the wedding"></div>
+        </header>
+        <article class="moon-insert">
+          <svg class="moon-insert__crest" viewBox="0 0 120 72" aria-hidden="true"><use href="#orn-rings" /></svg>
+          <div id="detailsGrid"></div>
+          <div id="venueMapPreviewMount"></div>
+          <div class="venue-actions" id="venueActions"><a class="luxury-button luxury-button--primary" id="openMapsLink" target="_blank" rel="noopener noreferrer" hidden><span data-layla-text="openInMaps">Open in Maps</span><span class="moon-button-arrow" aria-hidden="true">↗</span></a><button class="luxury-button luxury-button--secondary" type="button" data-calendar-download data-layla-text="calendar">Add to Calendar</button></div>
+        </article>
+      </div>
+    </section>
 
 
     <section class="section schedule-section reveal" id="scheduleSection" hidden><div class="section-frame evening-composition"><div class="evening-title"><svg class="orn orn-sprig section-sprig" viewBox="0 0 320 40" aria-hidden="true"><use href="#orn-sprig" /></svg><h2 data-layla-text="scheduleHeading">The evening<br>unfolds.</h2><div class="botanical-art" aria-hidden="true"><svg class="orn orn-branch" viewBox="0 0 140 220"><use href="#orn-bouquet" /></svg><svg class="botanical-flower botanical-flower--1" viewBox="0 0 48 48"><use href="#kp-heart" /></svg><svg class="botanical-flower botanical-flower--2" viewBox="0 0 24 24"><use href="#orn-sparkle" /></svg><svg class="botanical-flower botanical-flower--3" viewBox="0 0 48 48"><use href="#kp-diamond-ring" /></svg></div></div><div class="evening-programme"><ol class="schedule-timeline" id="scheduleMount"></ol><div id="scheduleActions"></div></div></div></section>
@@ -176,6 +182,6 @@
   <nav class="sticky-actions" id="stickyActions" aria-label="Quick event actions" hidden></nav>
   <div class="toast-rail" id="toastRail" aria-live="polite" aria-atomic="true"></div>
   <noscript><p class="no-script">Please enable JavaScript to open this personal invitation. يرجى تفعيل جافاسكريبت لفتح الدعوة.</p></noscript>
-  <script type="module" src="./invitations/wedding-designs/moonlit-conservatory/invitation.js?v=20261112-moonlit-update-2"></script>
+  <script type="module" src="./invitations/wedding-designs/moonlit-conservatory/invitation.js?v=20261112-insert-1"></script>
 </body>
 </html>

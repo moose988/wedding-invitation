@@ -428,9 +428,12 @@
   .shiraa-invitation .section { padding:90px 20px; }
   .shiraa-invitation h2 { font-size:clamp(38px,11vw,52px); }
   .shiraa-invitation .sh-kicker { font-size:10px; letter-spacing:.24em; gap:10px; }
-  .shiraa-invitation .hero-composition { padding-top:calc(86px + env(safe-area-inset-top)); gap:12px; }
-  .shiraa-invitation .hero-names { font-size:clamp(56px,16.5vw,78px); }
-  .shiraa-invitation .hero-subtitle { font-size:19px; max-width:26ch; }
+  /* Names stay in the sky above the couple; the line of copy drops to just above the date. */
+  .shiraa-invitation .hero-composition { align-self:stretch; grid-template-rows:auto auto 1fr; padding-top:calc(70px + env(safe-area-inset-top)); gap:6px; }
+  .shiraa-invitation .hero-names { font-size:clamp(46px,13.4vw,62px); line-height:.9; }
+  .shiraa-invitation .sh-joint { margin:.02em 0; }
+  .shiraa-invitation .hero-subtitle { align-self:end; margin-bottom:18px; font-size:18px; max-width:27ch; }
+  .shiraa-invitation .hero-backdrop::after { background:radial-gradient(90% 26% at 50% 14%,#1c0d21b0 0%,#1c0d2140 70%,transparent 100%),linear-gradient(180deg,#1c0d21a0 0%,transparent 30%,transparent 50%,#2a153099 66%,#2a1530e6 84%,#2a1530 100%); }
   .shiraa-invitation .hero-event-line { font-size:11px; letter-spacing:.18em; row-gap:10px; }
   .shiraa-invitation .hero-event-line span:first-child { flex-basis:100%; justify-content:center; font:italic 500 26px/1.2 var(--serif); letter-spacing:0; text-transform:none; }
   .shiraa-invitation .hero-event-line span:nth-child(2)::before { display:none; }

@@ -35,6 +35,7 @@ import { commitBulkGuestRsvp, commitGuestCheckin, commitGuestEdit, guestFormPatc
 import { projectionEqual } from "./event-publishing.js?v=20261018-guest-invitation-regressions-2";
 import { mountCustomerAccess } from "./customer-access-ui.js?v=20261029-password-visibility";
 import { ensureGenderRevealPublished } from "./gender-reveal-publication.js";
+import { genderRevealInvitationUrl } from "./invitations/gender-reveal-designs/registry.js";
 import { createShareUrl } from "./share-link.js";
 // export.js loads on demand when someone exports.
 import { buildInvitationProjection, generateInvitationToken, isValidInvitationToken } from "./invitations/shared/invitation-token.js?v=20261018-guest-invitation-regressions-2";
@@ -2884,7 +2885,7 @@ function renderGenderRevealOverviewPage() {
     ["Predicted boy", `${stats.boy} · ${stats.boyPercent}%`, "gr-stat--boy"],
     ["Predicted girl", `${stats.girl} · ${stats.girlPercent}%`, "gr-stat--girl"],
   ].map(([label, value, tone]) => `<article class="gr-stat ${tone}"><span>${label}</span><strong>${value}</strong></article>`).join("");
-  const invitationLink = new URL(`gender-reveal.html?wedding=${encodeURIComponent(state.weddingId)}`, window.location.href).toString();
+  const invitationLink = genderRevealInvitationUrl(state.weddingId, state.wedding?.genderRevealTemplate, window.location.href);
   elements.pageContent.innerHTML = `
     <section class="gr-dashboard">
       <header class="gr-dashboard-hero">
@@ -5402,7 +5403,7 @@ async function handleAction(action, dataset, event = null) {
       if (isGenderRevealEvent(state.wedding)) {
         try {
           await ensureGenderRevealPublished(accountApi, state.services.db, state.weddingId);
-          await copyText(new URL(`gender-reveal.html?wedding=${encodeURIComponent(state.weddingId)}`, window.location.href).toString());
+          await copyText(genderRevealInvitationUrl(state.weddingId, state.wedding?.genderRevealTemplate, window.location.href));
         } catch (error) { console.error("Could not prepare gender reveal invitation", error); showToast("Could not prepare the invitation. Please ask the event owner to check access and try again.", "error"); }
       }
       return;

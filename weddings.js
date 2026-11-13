@@ -6,6 +6,7 @@ import { eventDateTimeParts, localDateTimeToIso } from "./event-date-time.js";
 import { paginateRows, sortEventsDraftsLast } from "./workspace-pagination.js";
 import { loadAllAdminEvents, mergeById, truncationNote, updateAdminEventArchiveStatus } from "./admin-events.js";
 import { ensureGenderRevealPublished } from "./gender-reveal-publication.js";
+import { genderRevealInvitationUrl } from "./invitations/gender-reveal-designs/registry.js";
 import { createOwnerAdapter, online as bucketsOnline } from "./photo-bucket/adapters.js";
 import { renderLocalBuckets } from "./photo-bucket/workspace.js";
 import { skeleton } from "./skeleton.js";
@@ -485,7 +486,7 @@ async function handleCardActionUnsafe(event) {
   if (button.dataset.action === "copy-shared") {
     try {
       await ensureGenderRevealPublished(accountApi, state.services.db, wedding.id);
-      if (await copyWithFallback(new URL(`gender-reveal.html?wedding=${encodeURIComponent(wedding.id)}`, location.href).href)) flash("Shared event invitation link copied.");
+      if (await copyWithFallback(genderRevealInvitationUrl(wedding.id, wedding.genderRevealTemplate, location.href))) flash("Shared event invitation link copied.");
     } catch (error) { console.error("Could not prepare gender reveal invitation", error); flash("Could not prepare the invitation. Please check your access and try again."); }
   }
   if (button.dataset.action === "edit") {

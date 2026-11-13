@@ -1,0 +1,228 @@
+<!doctype html>
+<html lang="en" dir="ltr">
+  <head>
+    <base href="../../../" />
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <meta name="theme-color" content="#cfe0ee" />
+    <meta name="referrer" content="no-referrer" />
+    <title>Gender Reveal Party</title>
+    <link rel="icon" href="./invitations/gender-reveal-designs/petit-nuage/assets/balloon.svg" type="image/svg+xml" />
+    <link rel="preload" as="image" href="./invitations/gender-reveal-designs/petit-nuage/assets/cover.webp" fetchpriority="high" />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,300..600;1,9..144,300..500&family=Manrope:wght@400;500;600;700&family=El+Messiri:wght@500;600&family=Tajawal:wght@400;500;700&display=swap" rel="stylesheet" />
+    <link rel="stylesheet" href="./invitations/gender-reveal-designs/petit-nuage/styles.css?v=20261114-1" />
+  </head>
+  <body class="pn-page pn-cover-active">
+    <div class="pn-app" id="genderRevealApp" aria-busy="true">
+      <p class="pn-sample" id="sampleBanner" hidden data-copy="sample">Sample invitation</p>
+      <header class="pn-topbar">
+        <div class="pn-language" role="group" aria-label="Invitation language">
+          <button type="button" data-language="en" aria-pressed="true">EN</button>
+          <button type="button" data-language="ar" lang="ar" aria-pressed="false">ع</button>
+        </div>
+      </header>
+
+      <button class="pn-music" type="button" id="musicToggle" aria-label="Play event music" aria-controls="eventMusic" aria-pressed="false" data-state="paused" hidden>
+        <svg class="pn-music__ring" viewBox="0 0 64 64" aria-hidden="true" focusable="false"><circle cx="32" cy="32" r="29" /></svg>
+        <svg class="pn-music__icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+          <path class="pn-music__play" d="M9 6.8a.9.9 0 0 1 1.36-.77l7.2 4.43a.9.9 0 0 1 0 1.54l-7.2 4.43A.9.9 0 0 1 9 15.66z" />
+          <path class="pn-music__pause" d="M8 6.5h2.8v11H8zm5.2 0H16v11h-2.8z" />
+        </svg>
+      </button>
+      <span class="pn-sr-only" id="musicStatus" role="status" aria-live="polite"></span>
+
+      <!-- Opening: one illustrated sky with a pearl balloon. Hold it until it pops; the film starts on the very same frame. -->
+      <section class="pn-cover" id="cover" aria-labelledby="coverQuestion">
+        <div class="pn-stage" id="stage">
+          <img class="pn-stage__art" id="coverArtwork" src="./invitations/gender-reveal-designs/petit-nuage/assets/cover.webp" width="1152" height="2048" alt="" fetchpriority="high" decoding="async" />
+          <video class="pn-stage__film" id="openingVideo" playsinline webkit-playsinline muted preload="none" disablepictureinpicture disableremoteplayback tabindex="-1" poster="./invitations/gender-reveal-designs/petit-nuage/assets/cover.webp" aria-label="The pearl balloon bursts into pink and blue confetti"></video>
+        </div>
+        <div class="pn-cover__wash" aria-hidden="true"></div>
+
+        <div class="pn-cover__head">
+          <p class="pn-eyebrow" data-copy="coverEyebrow">A little celebration is on the way</p>
+          <h1 class="pn-question" id="coverQuestion">
+            <span class="pn-question__boy" data-copy="boy">Boy</span>
+            <span class="pn-question__or" data-copy="or">or</span>
+            <span class="pn-question__girl" data-copy="girl">Girl</span><span class="pn-question__mark" aria-hidden="true">?</span>
+          </h1>
+          <p class="pn-cover__title" id="coverEventTitle">Gender Reveal Party</p>
+        </div>
+
+        <button class="pn-pop" id="openInvitation" type="button" disabled aria-describedby="popHint">
+          <svg class="pn-pop__ring" viewBox="0 0 120 120" aria-hidden="true" focusable="false">
+            <circle class="pn-pop__track" cx="60" cy="60" r="54" />
+            <circle class="pn-pop__charge" cx="60" cy="60" r="54" pathLength="100" />
+          </svg>
+          <span class="pn-sr-only" data-copy="openInvitation">Open invitation</span>
+        </button>
+
+        <div class="pn-cover__foot">
+          <p class="pn-hint" id="popHint"><span class="pn-hint__dot" aria-hidden="true"></span><span data-copy="popHint">Press &amp; hold the balloon until it pops</span></p>
+          <p class="pn-cover__message" id="coverMessage">A little surprise is on the way…</p>
+          <button class="pn-link" type="button" id="tapOpen" data-copy="tapOpen">or tap here to open</button>
+          <p class="pn-status" id="pageStatus" role="status" aria-live="polite" data-copy="loading">Loading invitation…</p>
+        </div>
+
+        <div class="pn-opening-tools" id="openingTools" hidden>
+          <button class="pn-chip" id="skipOpening" type="button"><span data-copy="skip">Skip</span><span aria-hidden="true">→</span></button>
+          <button class="pn-chip" id="retryOpening" type="button" hidden><span data-copy="retryOpening">Retry video</span><span aria-hidden="true">↻</span></button>
+          <p class="pn-sr-only" id="openingStatus" role="status" aria-live="polite"></p>
+        </div>
+      </section>
+
+      <canvas class="pn-confetti" id="confetti" aria-hidden="true"></canvas>
+
+      <main class="pn-invitation" id="invitationContent" hidden inert>
+        <div class="pn-sky" aria-hidden="true">
+          <span class="pn-cloud pn-cloud--1"></span><span class="pn-cloud pn-cloud--2"></span><span class="pn-cloud pn-cloud--3"></span><span class="pn-cloud pn-cloud--4"></span><span class="pn-cloud pn-cloud--5"></span>
+        </div>
+
+        <section class="pn-hero" aria-labelledby="eventTitle">
+          <div class="pn-balloons" aria-hidden="true">
+            <span class="pn-balloon pn-balloon--blue"></span><span class="pn-balloon pn-balloon--pink"></span><span class="pn-balloon pn-balloon--pearl"></span><span class="pn-balloon pn-balloon--blue pn-balloon--small"></span><span class="pn-balloon pn-balloon--pink pn-balloon--small"></span>
+          </div>
+          <img class="pn-hero__baby" src="./invitations/gender-reveal-designs/petit-nuage/assets/baby.webp" width="799" height="595" alt="" decoding="async" />
+          <div class="pn-hero__copy">
+            <p class="pn-eyebrow" data-copy="youAreInvited">You are invited</p>
+            <h2 class="pn-hero__title" id="eventTitle"></h2>
+            <p class="pn-hero__message" id="eventMessage"></p>
+            <p class="pn-notice" id="closedNotice" role="status" hidden data-copy="closed">Responses are not open for this event.</p>
+            <p class="pn-notice pn-notice--soft" id="mediaNotice" role="status" hidden></p>
+          </div>
+        </section>
+
+        <section class="pn-when" aria-label="Date and place">
+          <article class="pn-ticket pn-ticket--when">
+            <span class="pn-ticket__tag" data-copy="when">When</span>
+            <p class="pn-ticket__day" id="eventDay"></p>
+            <p class="pn-ticket__date" id="eventDate"></p>
+            <p class="pn-ticket__time" id="eventTime"></p>
+            <ol class="pn-countdown" id="countdown" aria-label="Countdown">
+              <li><strong data-unit="days">0</strong><span data-copy="days">Days</span></li>
+              <li><strong data-unit="hours">0</strong><span data-copy="hours">Hours</span></li>
+              <li><strong data-unit="minutes">0</strong><span data-copy="minutes">Min</span></li>
+              <li><strong data-unit="seconds">0</strong><span data-copy="seconds">Sec</span></li>
+            </ol>
+          </article>
+          <article class="pn-ticket pn-ticket--where" id="whereCard" hidden>
+            <span class="pn-ticket__tag" data-copy="where">Where</span>
+            <p class="pn-ticket__venue" id="eventVenue"></p>
+            <p class="pn-ticket__place" id="eventPlace"></p>
+            <a class="pn-button pn-button--ghost" id="mapsLink" href="#" target="_blank" rel="noopener noreferrer" hidden><span data-copy="directions">Get directions</span><span aria-hidden="true">↗</span></a>
+          </article>
+        </section>
+
+        <section class="pn-things" aria-labelledby="thingsTitle">
+          <header class="pn-heading">
+            <p class="pn-eyebrow" data-copy="thingsEyebrow">Getting ready for you</p>
+            <h2 id="thingsTitle" data-copy="thingsTitle">All the little things</h2>
+          </header>
+          <div class="pn-collage">
+            <figure class="pn-tile pn-tile--bottle" data-drift="-.05"><img src="./invitations/gender-reveal-designs/petit-nuage/assets/bottle.webp" width="377" height="692" alt="" loading="lazy" decoding="async" /><figcaption data-copy="capBottle">Warm milk at 3 a.m.</figcaption></figure>
+            <figure class="pn-tile pn-tile--booties" data-drift=".04"><img src="./invitations/gender-reveal-designs/petit-nuage/assets/booties.webp" width="720" height="549" alt="" loading="lazy" decoding="async" /><figcaption data-copy="capBooties">Tiny first steps</figcaption></figure>
+            <figure class="pn-tile pn-tile--quote" data-drift=".02"><blockquote><p data-copy="quote">Every little thing about you is already loved.</p></blockquote></figure>
+            <figure class="pn-tile pn-tile--bunny" data-drift="-.03"><img src="./invitations/gender-reveal-designs/petit-nuage/assets/bunny.webp" width="653" height="690" alt="" loading="lazy" decoding="async" /><figcaption data-copy="capBunny">A first best friend</figcaption></figure>
+            <figure class="pn-tile pn-tile--rattle" data-drift=".06"><img src="./invitations/gender-reveal-designs/petit-nuage/assets/rattle.webp" width="436" height="670" alt="" loading="lazy" decoding="async" /><figcaption data-copy="capRattle">Shake, giggle, repeat</figcaption></figure>
+            <figure class="pn-tile pn-tile--pram" data-drift="-.04"><img src="./invitations/gender-reveal-designs/petit-nuage/assets/pram.webp" width="720" height="675" alt="" loading="lazy" decoding="async" /><figcaption data-copy="capPram">Slow strolls by the sea</figcaption></figure>
+            <figure class="pn-tile pn-tile--mobile" data-drift=".03"><img src="./invitations/gender-reveal-designs/petit-nuage/assets/mobile.webp" width="561" height="703" alt="" loading="lazy" decoding="async" /><figcaption data-copy="capMobile">Lullabies and stars</figcaption></figure>
+            <figure class="pn-tile pn-tile--horse" data-drift="-.05"><img src="./invitations/gender-reveal-designs/petit-nuage/assets/horse.webp" width="720" height="666" alt="" loading="lazy" decoding="async" /><figcaption data-copy="capHorse">Big adventures ahead</figcaption></figure>
+            <figure class="pn-tile pn-tile--pacifier" data-drift=".05"><img src="./invitations/gender-reveal-designs/petit-nuage/assets/pacifier.webp" width="640" height="678" alt="" loading="lazy" decoding="async" /><figcaption data-copy="capPacifier">Sweet dreams</figcaption></figure>
+          </div>
+        </section>
+
+        <section class="pn-vote" id="responseFormSection" aria-labelledby="formTitle" hidden>
+          <header class="pn-heading">
+            <p class="pn-eyebrow" data-copy="kindlyReply">Kindly reply</p>
+            <h2 id="formTitle" data-copy="formTitle">Team Blue or Team Pink?</h2>
+            <p class="pn-heading__intro" data-copy="formIntro">Tell us if you can come, and cast your guess.</p>
+          </header>
+          <form class="pn-form" id="responseForm" novalidate>
+            <fieldset class="pn-teams">
+              <legend data-copy="prediction">What is your prediction?</legend>
+              <label class="pn-team pn-team--boy">
+                <input type="radio" name="prediction" value="boy" required />
+                <span class="pn-team__card">
+                  <img src="./invitations/gender-reveal-designs/petit-nuage/assets/team-boy.webp" width="661" height="720" alt="" loading="lazy" decoding="async" />
+                  <span class="pn-team__label"><small data-copy="team">Team</small><strong data-copy="boy">Boy</strong></span>
+                  <span class="pn-team__check" aria-hidden="true"></span>
+                </span>
+              </label>
+              <label class="pn-team pn-team--girl">
+                <input type="radio" name="prediction" value="girl" required />
+                <span class="pn-team__card">
+                  <img src="./invitations/gender-reveal-designs/petit-nuage/assets/team-girl.webp" width="678" height="720" alt="" loading="lazy" decoding="async" />
+                  <span class="pn-team__label"><small data-copy="team">Team</small><strong data-copy="girl">Girl</strong></span>
+                  <span class="pn-team__check" aria-hidden="true"></span>
+                </span>
+              </label>
+              <small class="pn-error" id="predictionError" role="alert"></small>
+            </fieldset>
+
+            <label class="pn-field" for="fullName">
+              <span data-copy="fullName">Full name</span>
+              <input id="fullName" name="fullName" type="text" maxlength="120" autocomplete="name" required aria-describedby="fullNameError" />
+              <small class="pn-error" id="fullNameError" role="alert"></small>
+            </label>
+
+            <fieldset class="pn-attend">
+              <legend data-copy="attendance">Will you attend?</legend>
+              <div class="pn-segment">
+                <label><input type="radio" name="attendance" value="attending" required /><span data-copy="attending">Attending</span></label>
+                <label><input type="radio" name="attendance" value="not_attending" required /><span data-copy="notAttending">Not attending</span></label>
+              </div>
+              <small class="pn-error" id="attendanceError" role="alert"></small>
+            </fieldset>
+
+            <label class="pn-field" for="message">
+              <span><span data-copy="message">Message to the parents</span> <em data-copy="optional">Optional</em></span>
+              <textarea id="message" name="message" maxlength="1000" rows="4" aria-describedby="messageHint"></textarea>
+              <small class="pn-hint-text" id="messageHint" data-copy="messageHint">Up to 1,000 characters.</small>
+              <small class="pn-error" id="messageError" role="alert"></small>
+            </label>
+
+            <button class="pn-button pn-button--primary" type="submit" id="submitResponse"><span data-copy="submit">Send my guess</span></button>
+            <p class="pn-form-status" id="formStatus" role="status" aria-live="polite"></p>
+          </form>
+        </section>
+
+        <section class="pn-thanks" id="thankYou" aria-labelledby="thankYouTitle" hidden tabindex="-1">
+          <p class="pn-eyebrow" data-copy="saved">Response saved</p>
+          <h2 id="thankYouTitle" data-copy="thankYou">Thank you for your guess!</h2>
+          <p class="pn-thanks__body" data-copy="thankYouBody">Your kind wishes mean so much to the parents.</p>
+          <section class="pn-results" id="results" aria-labelledby="resultsTitle" hidden>
+            <h3 id="resultsTitle" data-copy="resultsTitle">The guesses so far</h3>
+            <div class="pn-bottles">
+              <div class="pn-bottle pn-bottle--boy" id="boyBar" role="progressbar" aria-label="Boy predictions" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0">
+                <span class="pn-bottle__teat" aria-hidden="true"></span><span class="pn-bottle__collar" aria-hidden="true"></span>
+                <span class="pn-bottle__body" aria-hidden="true"><span class="pn-bottle__milk" id="boyFill"></span><span class="pn-bottle__ticks"></span></span>
+                <strong class="pn-bottle__percent" id="boyPercent">0%</strong>
+                <span class="pn-bottle__label"><span data-copy="boy">Boy</span> · <span id="boyResult">0</span></span>
+              </div>
+              <div class="pn-bottle pn-bottle--girl" id="girlBar" role="progressbar" aria-label="Girl predictions" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0">
+                <span class="pn-bottle__teat" aria-hidden="true"></span><span class="pn-bottle__collar" aria-hidden="true"></span>
+                <span class="pn-bottle__body" aria-hidden="true"><span class="pn-bottle__milk" id="girlFill"></span><span class="pn-bottle__ticks"></span></span>
+                <strong class="pn-bottle__percent" id="girlPercent">0%</strong>
+                <span class="pn-bottle__label"><span data-copy="girl">Girl</span> · <span id="girlResult">0</span></span>
+              </div>
+            </div>
+            <p class="pn-results__total" id="resultTotal"></p>
+          </section>
+          <p class="pn-form-status is-error" id="resultsStatus" role="status" aria-live="polite" hidden></p>
+        </section>
+
+        <footer class="pn-closing">
+          <img class="pn-closing__mobile" src="./invitations/gender-reveal-designs/petit-nuage/assets/mobile.webp" width="561" height="703" alt="" loading="lazy" decoding="async" />
+          <p class="pn-closing__line" data-copy="closing">Whoever you are, little one, you are already so loved.</p>
+          <p class="pn-closing__ar" lang="ar" dir="rtl">مرحبًا بك يا صغيرنا قبل أن نلقاك</p>
+          <p class="pn-credit"><span data-copy="madeBy">Made by</span> <a href="https://qdsystems.ae" target="_blank" rel="noopener noreferrer">QD Systems</a></p>
+        </footer>
+      </main>
+
+      <audio id="eventMusic" preload="none" loop></audio>
+    </div>
+    <script type="module" src="./invitations/gender-reveal-designs/petit-nuage/invitation.js?v=20261114-1"></script>
+  </body>
+</html>

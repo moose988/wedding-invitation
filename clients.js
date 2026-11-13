@@ -141,7 +141,7 @@ function renderDetail() {
       <p class="form-error" id="linkError" role="alert"></p><p id="linkStatus" role="status" aria-live="polite">${linkBusy ? "Updating event links…" : ""}</p></section>
     <div id="notesHost"></div>
     <section class="admin-card" aria-labelledby="quotesTitle"><div class="admin-panel__head"><h2 id="quotesTitle">Quotations</h2><button class="primary-button" id="newQuote" type="button">New quotation</button></div>
-      ${state.quotes.length ? `<ul class="quote-list">${state.quotes.map(q => `<li><div><strong>${esc(q.number)}</strong><span class="category-badge">${esc(q.status)}</span><small>${esc(timeText(q.createdAt))}</small></div><strong>${esc(formatAed(q.totals?.totalFils))}</strong><div class="customer-actions"><button class="secondary-button" data-quote-edit="${esc(q.id)}" type="button">Edit</button><button class="secondary-button" data-quote-print="${esc(q.id)}" type="button">Print</button></div></li>`).join("")}</ul>` : `<p class="admin-note">No quotations yet. Create one to print or send to ${esc(c.name)}.</p>`}</section>`;
+      ${state.quotes.length ? `<ul class="quote-list">${state.quotes.map(q => `<li><div><strong>${esc(q.number)}</strong><span class="category-badge">${esc(q.status)}</span><small>${esc(timeText(q.createdAt))}</small></div><strong>${esc(formatAed(q.totals?.totalFils))}</strong><div class="customer-actions"><button class="secondary-button" data-quote-edit="${esc(q.id)}" type="button">Edit</button><button class="secondary-button" data-quote-print="${esc(q.id)}" type="button">Print</button><button class="secondary-button" data-quote-download="${esc(q.id)}" type="button">Download PDF</button></div></li>`).join("")}</ul>` : `<p class="admin-note">No quotations yet. Create one to print or send to ${esc(c.name)}.</p>`}</section>`;
   mountNotes({ api, db: state.services.db, user: state.user, client: c, host: $("notesHost") });
   $("editClient").onclick = () => openClientForm(c);
   $("deleteClient").onclick = () => { $("deleteName").textContent = c.name; setError($("deleteForm"), ""); $("deleteDialog").showModal(); };
@@ -153,6 +153,13 @@ function renderDetail() {
   $("detailBody").querySelectorAll("[data-unlink]").forEach(b => b.onclick = () => saveLinks(linked.filter(id => id !== b.dataset.unlink)));
   $("detailBody").querySelectorAll("[data-quote-edit]").forEach(b => b.onclick = () => openQuote(state.quotes.find(q => q.id === b.dataset.quoteEdit)));
   $("detailBody").querySelectorAll("[data-quote-print]").forEach(b => b.onclick = () => printQuote(quoteView(state.quotes.find(q => q.id === b.dataset.quotePrint))));
+  $("detailBody").querySelectorAll("[data-quote-download]").forEach(button => {
+    button.onclick = event => runFromEvent(event, async () => {
+      const view = quoteView(state.quotes.find(q => q.id === button.dataset.quoteDownload));
+      const { downloadQuotePdf } = await import("./quote-pdf.js");
+      await downloadQuotePdf(view);
+    }, { busyLabel: "Preparing PDF…", what: "Downloading the quotation PDF", markSuccess: false });
+  });
 }
 async function saveLinks(ids) {
   const client = state.current;

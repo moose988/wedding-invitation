@@ -39,8 +39,6 @@ const copy = {
     coverEyebrow: "A little celebration is on the way", boy: "Boy", girl: "Girl", or: "or", team: "Team", defaultMessage: "A little surprise is on the way…",
     openInvitation: "Open invitation", popHint: "Press & hold the balloon until it pops", popHolding: "Keep holding…", tapOpen: "or tap here to open",
     youAreInvited: "You are invited", when: "When", where: "Where", directions: "Get directions", days: "Days", hours: "Hours", minutes: "Min", seconds: "Sec", celebrating: "It's party time!",
-    thingsEyebrow: "Getting ready for you", thingsTitle: "All the little things",
-    capBottle: "Warm milk at 3 a.m.", capBooties: "Tiny first steps", capBunny: "A first best friend", capRattle: "Shake, giggle, repeat", capPram: "Slow strolls by the sea", capMobile: "Lullabies and stars", capHorse: "Big adventures ahead", capPacifier: "Sweet dreams",
     quote: "Every little thing about you is already loved.",
     kindlyReply: "Kindly reply", formTitle: "Team Blue or Team Pink?", formIntro: "Tell us if you can come, and cast your guess. One reply per browser, please.",
     fullName: "Full name", attendance: "Will you attend?", attending: "Attending", notAttending: "Not attending",
@@ -59,8 +57,6 @@ const copy = {
     coverEyebrow: "احتفال صغير يقترب", boy: "ولد", girl: "بنت", or: "أم", team: "فريق", defaultMessage: "مفاجأة جميلة بانتظارنا…",
     openInvitation: "افتح الدعوة", popHint: "اضغط مطولًا على البالون حتى ينفجر", popHolding: "استمر بالضغط…", tapOpen: "أو اضغط هنا لفتح الدعوة",
     youAreInvited: "أنتم مدعوون", when: "الموعد", where: "المكان", directions: "الاتجاهات", days: "يوم", hours: "ساعة", minutes: "دقيقة", seconds: "ثانية", celebrating: "حان وقت الاحتفال!",
-    thingsEyebrow: "نستعد لاستقبالك", thingsTitle: "كل الأشياء الصغيرة",
-    capBottle: "حليب دافئ في منتصف الليل", capBooties: "أولى الخطوات الصغيرة", capBunny: "أول صديق", capRattle: "هزّة وضحكة", capPram: "نزهات هادئة على البحر", capMobile: "تهويدات ونجوم", capHorse: "مغامرات كبيرة تنتظرك", capPacifier: "أحلام سعيدة",
     quote: "كل شيء صغير فيك محبوب منذ الآن.",
     kindlyReply: "يرجى الرد", formTitle: "الفريق الأزرق أم الوردي؟", formIntro: "أخبرنا إن كنت ستحضر وشاركنا توقعك. ردّ واحد من كل متصفح.",
     fullName: "الاسم الكامل", attendance: "هل ستحضر؟", attending: "سأحضر", notAttending: "لن أحضر",
@@ -528,7 +524,7 @@ function finishOpening(noticeKey = "") {
 /* ---------- Details motion ---------- */
 
 function setupScenery() {
-  const revealables = document.querySelectorAll(".pn-ticket, .pn-heading, .pn-tile, .pn-form > *, .pn-teams, .pn-closing > *");
+  const revealables = document.querySelectorAll(".pn-ticket, .pn-heading, .pn-interlude > *, .pn-form > *, .pn-teams, .pn-closing > *");
   revealables.forEach((node, index) => { node.classList.add("pn-rise"); node.style.setProperty("--rise-delay", `${(index % 4) * 70}ms`); });
   if (!("IntersectionObserver" in window) || reducedMotion()) { revealables.forEach((node) => node.classList.add("is-in")); return; }
   const observer = new IntersectionObserver((entries) => {

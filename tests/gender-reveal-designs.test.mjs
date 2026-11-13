@@ -28,7 +28,7 @@ test("Petit Nuage keeps the shared guest flow and ships its own assets", async (
   for (const name of ["attendance", "prediction"]) assert.match(html, new RegExp(`name="${name}"`));
   assert.match(html, /QD Systems/);
   assert.doesNotMatch(html, /<script(?![^>]*\bsrc=)/, "inline scripts are blocked by the site CSP");
-  for (const asset of ["cover.webp", "opening.mp4", "baby.webp", "bottle.webp", "booties.webp", "bunny.webp", "rattle.webp", "pram.webp", "mobile.webp", "horse.webp", "pacifier.webp", "team-boy.webp", "team-girl.webp", "thumbnail.webp", "balloon.svg"]) {
+  for (const asset of ["cover.webp", "opening.mp4", "baby.webp", "bottle.webp", "booties.webp", "mobile.webp", "team-boy.webp", "team-girl.webp", "thumbnail.webp", "balloon.svg"]) {
     await readFile(new URL(`../invitations/gender-reveal-designs/petit-nuage/assets/${asset}`, import.meta.url));
   }
 });

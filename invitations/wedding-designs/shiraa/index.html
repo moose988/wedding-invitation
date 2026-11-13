@@ -1,0 +1,190 @@
+<!doctype html>
+<html lang="en" dir="ltr">
+<head>
+  <base href="../../../" />
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <meta name="theme-color" content="#2a1530" />
+  <meta name="description" content="A personal invitation to a wedding evening by the sea." />
+  <title>Shiraa · Wedding Invitation</title>
+  <link rel="icon" type="image/svg+xml" href="./invitations/wedding-designs/shiraa/assets/sail.svg" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Bodoni+Moda:ital,opsz,wght@0,6..96,400;0,6..96,500;1,6..96,400&family=Cormorant+Garamond:ital,wght@0,500;1,400;1,500&family=Jost:wght@400;500;600&family=Aref+Ruqaa:wght@400;700&family=Tajawal:wght@400;500;700&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="./invitations/wedding-designs/shiraa/styles.css?v=20261113-1" />
+</head>
+<body class="shiraa-invitation" data-guest-experience="bilingual" data-invitation-template="shiraa">
+  <a class="skip-link" href="#siteContent">Skip to invitation</a>
+  <div class="sh-language" id="laylaLanguageToggle" role="group" aria-label="Invitation language">
+    <button type="button" data-language="en" aria-pressed="true" lang="en">EN</button>
+    <button type="button" data-language="ar" aria-pressed="false" lang="ar">ع</button>
+  </div>
+  <aside class="sample-preview-banner" id="samplePreviewBanner" hidden><span data-layla-text="sampleInvitation">Sample invitation</span></aside>
+
+  <!-- Opening: the bride's veil covers the screen. The guest lifts it with an
+       upward swipe (the hem follows the finger), and the film plays: the couple
+       on the boardwalk, the sail lighting up behind them. The still under the
+       veil is the film's first frame. -->
+  <section class="envelope-intro" id="introScreen" aria-label="Open your invitation">
+    <div class="envelope-intro__stage" id="envelopeStage">
+      <div class="sh-scene">
+        <img class="envelope-intro__poster" src="./invitations/wedding-designs/shiraa/assets/opening.webp" alt="A bride and groom on a boardwalk by the sea, a sail-shaped hotel behind them at sunset" width="720" height="1280" fetchpriority="high" />
+        <video class="envelope-intro__video" id="openingVideo" playsinline webkit-playsinline muted preload="none" poster="./invitations/wedding-designs/shiraa/assets/opening.webp" aria-label="The couple turn to each other on the boardwalk as the sail lights up for the evening">
+          <source src="./invitations/wedding-designs/shiraa/assets/opening.mp4" type="video/mp4" />
+        </video>
+      </div>
+      <div class="sh-veil" id="shVeil" aria-hidden="true">
+        <span class="sh-veil__tulle"></span>
+        <span class="sh-veil__sheen"></span>
+        <span class="sh-veil__hem"><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i></span>
+        <div class="sh-veil__copy">
+          <span class="sh-monogram" id="shMonogram"></span>
+          <p class="sh-kicker" data-layla-language="en">You are invited</p><p class="sh-kicker" data-layla-language="ar" lang="ar" hidden>أنتم مدعوّون</p>
+          <p class="sh-veil__names" id="shVeilNames"></p>
+          <div class="sh-veil__cue">
+            <span class="sh-cue-arrow" aria-hidden="true"><i></i><i></i></span>
+            <h2 data-layla-language="en">Lift the <em>veil</em></h2><h2 data-layla-language="ar" lang="ar" hidden>ارفعوا <em>الطرحة</em></h2>
+            <p data-layla-language="en">Swipe up</p><p data-layla-language="ar" lang="ar" hidden>اسحبوا للأعلى</p>
+          </div>
+        </div>
+      </div>
+      <button class="sh-open-link" id="openInvitation" type="button"><span id="openInvitationLabelPrimary" data-layla-text="openInvitation">Or tap to open</span><span id="introRetryLabel"></span></button>
+    </div>
+    <p class="envelope-intro__status" id="introStatus" role="status" aria-live="polite" hidden></p>
+    <button class="envelope-intro__skip" id="skipOpening" type="button" data-layla-text="skip">Skip</button>
+  </section>
+
+  <!-- Music: a pearl inside a turning gold ring. -->
+  <button class="music-toggle sh-music" id="musicToggle" type="button" aria-label="Play event music" aria-pressed="false" data-state="paused" hidden>
+    <span class="sh-music__ring" aria-hidden="true"></span>
+    <span class="sh-music__pearl" aria-hidden="true"></span>
+    <span class="sh-music__bars" aria-hidden="true"><i></i><i></i><i></i></span>
+    <span class="music-toggle__label" hidden></span>
+  </button>
+  <audio id="weddingAudio" preload="none" loop><source src="./music/wedding.mp3" type="audio/mpeg" /></audio>
+
+  <main class="site-content" id="siteContent" inert tabindex="-1">
+    <section class="hero section" id="heroSection">
+      <div class="hero-backdrop" aria-hidden="true">
+        <video class="sh-hero-film" id="shHeroFilm" muted loop playsinline webkit-playsinline disablepictureinpicture disableremoteplayback preload="none" tabindex="-1" poster="./invitations/wedding-designs/shiraa/assets/hero.webp">
+          <source data-src="./invitations/wedding-designs/shiraa/assets/hero-loop-portrait.mp4" media="(max-width: 760px)" type="video/mp4" />
+          <source data-src="./invitations/wedding-designs/shiraa/assets/hero-loop.mp4" type="video/mp4" />
+        </video>
+      </div>
+      <div class="sh-glints" aria-hidden="true"><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i></div>
+      <div class="hero-composition">
+        <p class="sh-kicker" data-layla-text="heroKicker">Together with their families</p>
+        <h1 class="hero-names"><span id="heroEnglishNames" data-layla-language="en"></span><span id="heroArabicNames" data-layla-language="ar" lang="ar" hidden></span></h1>
+        <p class="hero-subtitle" id="heroSubtitleEnglish" data-layla-language="en"></p><p class="hero-subtitle" id="heroSubtitleArabic" data-layla-language="ar" lang="ar" hidden></p>
+      </div>
+      <div class="hero-bottom">
+        <p class="hero-event-line" id="heroEventLine"></p>
+        <button class="luxury-button luxury-button--primary" type="button" data-scroll-details><span data-layla-text="viewDetails">Join us</span><span class="sh-arrow" aria-hidden="true">↓</span></button>
+      </div>
+    </section>
+
+    <section class="section details-section reveal" id="detailsSection">
+      <span class="sh-scroll sh-scroll--top" aria-hidden="true"></span>
+      <div class="section-frame details-composition">
+        <div class="details-copy">
+          <div class="section-heading">
+            <p class="sh-kicker" data-layla-language="en">When &amp; where</p><p class="sh-kicker" data-layla-language="ar" lang="ar" hidden>الموعد والمكان</p>
+            <h2 data-layla-language="en">By the sea,<br><em>as the sail lights up.</em></h2><h2 data-layla-language="ar" lang="ar" hidden>على شاطئ البحر،<br><em>حين يضيء الشراع.</em></h2>
+            <p class="sh-message" id="invitationMessageEnglish" data-layla-language="en"></p><p class="sh-message" id="invitationMessageArabic" data-layla-language="ar" lang="ar" hidden></p>
+          </div>
+          <div class="hero-countdown" id="countdownGrid" aria-label="Time until the wedding"></div>
+        </div>
+        <div class="sh-satin">
+          <figure class="sh-satin__photo"><img src="./invitations/wedding-designs/shiraa/assets/couple-detail.webp" width="880" height="1100" alt="The groom's hand in a black bisht with gold trim, holding the bride's hand with an emerald ring" loading="lazy" decoding="async" /></figure>
+          <div class="sh-satin__card">
+            <div id="detailsGrid"></div>
+            <div class="venue-actions" id="venueActions"><a class="luxury-button luxury-button--primary" id="openMapsLink" target="_blank" rel="noopener noreferrer" hidden><span data-layla-text="openInMaps">Open in Maps</span><span class="sh-arrow" aria-hidden="true">↗</span></a><button class="luxury-button luxury-button--secondary" type="button" data-calendar-download data-layla-text="calendar">Add to Calendar</button></div>
+          </div>
+          <div id="venueMapPreviewMount"></div>
+        </div>
+      </div>
+    </section>
+
+    <!-- The collage: the things of the evening, each in its own frame and colour. -->
+    <section class="section atelier-section reveal" id="atelierSection" aria-labelledby="atelierTitle">
+      <div class="section-frame">
+        <div class="atelier-heading">
+          <p class="sh-kicker" data-layla-language="en">The little things</p><p class="sh-kicker" data-layla-language="ar" lang="ar" hidden>التفاصيل الصغيرة</p>
+          <h2 id="atelierTitle" data-layla-language="en">Chosen with love,<br><em>one by one.</em></h2><h2 data-layla-language="ar" lang="ar" hidden>اخترناها بحبّ،<br><em>واحدةً واحدة.</em></h2>
+        </div>
+        <div class="sh-collage">
+          <figure class="sh-tile sh-tile--gown"><img src="./invitations/wedding-designs/shiraa/assets/gown.webp" width="880" height="1320" alt="The layered ivory train of a bridal gown on a marble floor" loading="lazy" decoding="async" /><figcaption><span data-layla-language="en">The gown</span><span data-layla-language="ar" lang="ar" hidden>الفستان</span></figcaption></figure>
+          <figure class="sh-tile sh-tile--heels"><img src="./invitations/wedding-designs/shiraa/assets/heels.webp" width="880" height="1100" alt="Crystal-embellished ivory bridal heels on satin with white rose petals" loading="lazy" decoding="async" /><figcaption><span data-layla-language="en">Her heels</span><span data-layla-language="ar" lang="ar" hidden>كعبها</span></figcaption></figure>
+          <figure class="sh-tile sh-tile--bisht"><img src="./invitations/wedding-designs/shiraa/assets/bisht.webp" width="1320" height="880" alt="The hand-stitched gold zari edge of a black bisht" loading="lazy" decoding="async" /><figcaption><span data-layla-language="en">His bisht</span><span data-layla-language="ar" lang="ar" hidden>بشته</span></figcaption></figure>
+          <figure class="sh-tile sh-tile--emerald"><img src="./invitations/wedding-designs/shiraa/assets/emeralds.webp" width="880" height="880" alt="An emerald and diamond jewellery set in an open velvet box" loading="lazy" decoding="async" /><figcaption><span data-layla-language="en">The shabka</span><span data-layla-language="ar" lang="ar" hidden>الشبكة</span></figcaption></figure>
+          <figure class="sh-tile sh-tile--roses"><img src="./invitations/wedding-designs/shiraa/assets/roses.webp" width="880" height="880" alt="A bridal bouquet of white roses and orchids tied with ivory silk" loading="lazy" decoding="async" /><figcaption><span data-layla-language="en">Her bouquet</span><span data-layla-language="ar" lang="ar" hidden>باقتها</span></figcaption></figure>
+          <figure class="sh-tile sh-tile--oud"><img src="./invitations/wedding-designs/shiraa/assets/oud.webp" width="880" height="1100" alt="A crystal perfume bottle and oud chips on a gold tray" loading="lazy" decoding="async" /><figcaption><span data-layla-language="en">Oud &amp; perfume</span><span data-layla-language="ar" lang="ar" hidden>العود والعطر</span></figcaption></figure>
+          <figure class="sh-tile sh-tile--cake"><img src="./invitations/wedding-designs/shiraa/assets/cake.webp" width="880" height="1100" alt="A tall ivory wedding cake with sugar roses and gold leaf" loading="lazy" decoding="async" /><figcaption><span data-layla-language="en">The cake</span><span data-layla-language="ar" lang="ar" hidden>الكعكة</span></figcaption></figure>
+          <figure class="sh-tile sh-tile--ghutra"><img src="./invitations/wedding-designs/shiraa/assets/ghutra.webp" width="1320" height="880" alt="A folded white ghutra and black agal beside a gold-capped oud bottle" loading="lazy" decoding="async" /><figcaption><span data-layla-language="en">His ghutra</span><span data-layla-language="ar" lang="ar" hidden>غترته</span></figcaption></figure>
+          <blockquote class="sh-tile sh-tile--quote"><p lang="ar">وَجَعَلَ بَيْنَكُم مَّوَدَّةً وَرَحْمَةً</p><footer data-layla-language="en">And He placed between you affection and mercy.</footer><footer data-layla-language="ar" lang="ar" hidden>سورة الروم · ٢١</footer></blockquote>
+        </div>
+      </div>
+    </section>
+
+    <section class="section schedule-section reveal" id="scheduleSection" hidden>
+      <div class="section-frame evening-composition">
+        <div class="evening-title">
+          <p class="sh-kicker" data-layla-language="en">The evening</p><p class="sh-kicker" data-layla-language="ar" lang="ar" hidden>البرنامج</p>
+          <h2 data-layla-text="scheduleHeading">From the zaffa to the last song.</h2>
+          <figure class="sh-arch"><img src="./invitations/wedding-designs/shiraa/assets/ballroom.webp" width="880" height="1100" alt="A ballroom aisle under crystal chandeliers, white flowers along a gold-patterned carpet" loading="lazy" decoding="async" /></figure>
+        </div>
+        <div class="evening-programme"><ol class="schedule-timeline" id="scheduleMount"></ol><div id="scheduleActions"></div></div>
+      </div>
+    </section>
+
+    <section class="section" id="guestSpotlightSection" hidden><div class="section-frame"><h2 id="guestGreetingTitle"></h2><p id="guestGreetingArabic" lang="ar"></p><p id="guestGreetingEnglish"></p></div></section>
+
+    <section class="section seating-section reveal" id="seatingSection" hidden>
+      <div class="section-frame">
+        <div class="seating-heading">
+          <div><p class="sh-kicker" data-layla-language="en">Seating</p><p class="sh-kicker" data-layla-language="ar" lang="ar" hidden>الجلوس</p><h2 data-layla-language="en">Your place<br><em>in the ballroom.</em></h2><h2 data-layla-language="ar" lang="ar" hidden>مكانكم<br><em>في القاعة.</em></h2></div>
+          <p data-layla-language="en">Choose a name to find its seat.</p><p data-layla-language="ar" lang="ar" hidden>اختاروا اسماً لمعرفة مقعده.</p>
+        </div>
+        <div id="seatDetailsMount"></div>
+        <div class="seating-map-shell"><div class="seating-map" id="seatingMap"></div></div>
+      </div>
+    </section>
+
+    <section class="section rsvp-section reveal" id="rsvpSection" aria-labelledby="rsvpTitle">
+      <div class="section-frame rsvp-composition">
+        <div class="rsvp-heading">
+          <p class="sh-kicker" data-layla-language="en">Kindly reply</p><p class="sh-kicker" data-layla-language="ar" lang="ar" hidden>نرجو الرد</p>
+          <h2 id="rsvpTitle" data-layla-text="rsvpHeading">Will you be with us?</h2>
+          <p data-layla-language="en">Your reply sets a place for you by the sea.</p><p data-layla-language="ar" lang="ar" hidden>بردّكم نحجز لكم مكاناً على البحر.</p>
+          <figure class="sh-oval"><img src="./invitations/wedding-designs/shiraa/assets/roses.webp" width="880" height="880" alt="" loading="lazy" decoding="async" /></figure>
+        </div>
+        <div class="rsvp-card">
+          <span class="sh-ribbon" aria-hidden="true"><i></i></span>
+          <div id="rsvpMount"></div>
+        </div>
+      </div>
+    </section>
+
+    <section class="section pass-section reveal" id="qrPassSection" hidden>
+      <div class="section-frame pass-composition">
+        <div class="section-heading"><p class="sh-kicker" data-layla-language="en">At the door</p><p class="sh-kicker" data-layla-language="ar" lang="ar" hidden>عند الوصول</p><h2 data-layla-text="passHeading">Your pass for the night.</h2><p data-layla-language="en">Show this at the ballroom door.</p><p data-layla-language="ar" lang="ar" hidden>أظهروا هذه البطاقة عند باب القاعة.</p></div>
+        <div class="sh-pass"><div class="qr-pass" id="qrPassMount"></div></div>
+      </div>
+    </section>
+
+    <section class="section closing-section reveal">
+      <div class="section-frame closing-card">
+        <span class="sh-garland" aria-hidden="true"></span>
+        <p class="sh-blessing" lang="ar">بارك الله لكما وبارك عليكما</p>
+        <p class="sh-blessing-en" data-layla-language="en">May God bless you both, and bless your life together.</p>
+        <p class="sh-closing" id="closingEnglish" data-layla-language="en"></p><p class="sh-closing" id="closingArabic" data-layla-language="ar" lang="ar" hidden></p>
+      </div>
+    </section>
+    <footer class="qd-footer"><span class="sh-footer-mark" aria-hidden="true"></span><p class="qd-footer__credit"><span data-layla-text="madeBy">Made by</span> <a href="https://qdsystems.ae/" target="_blank" rel="noopener noreferrer">QDsystems</a></p></footer>
+  </main>
+  <nav class="sticky-actions" id="stickyActions" aria-label="Quick event actions" hidden></nav>
+  <div class="toast-rail" id="toastRail" aria-live="polite" aria-atomic="true"></div>
+  <noscript><p class="no-script">Please enable JavaScript to open this personal invitation. يرجى تفعيل جافاسكريبت لفتح الدعوة.</p></noscript>
+  <script type="module" src="./invitations/wedding-designs/shiraa/invitation.js?v=20261113-1"></script>
+</body>
+</html>

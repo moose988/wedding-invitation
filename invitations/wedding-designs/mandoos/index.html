@@ -1,0 +1,183 @@
+<!doctype html>
+<html lang="en" dir="ltr">
+<head>
+  <base href="../../../" />
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <meta name="theme-color" content="#082a21" />
+  <meta name="description" content="A personal invitation to a wedding evening, kept in the bride's mandoos." />
+  <title>Mandoos · Wedding Invitation</title>
+  <link rel="icon" type="image/svg+xml" href="./invitations/wedding-designs/mandoos/assets/pearl.svg" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Marcellus&family=Newsreader:ital,opsz,wght@0,6..72,400;1,6..72,300;1,6..72,400&family=Figtree:wght@400;500;600&family=El+Messiri:wght@400;500;600&family=Almarai:wght@400;700&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="./invitations/wedding-designs/mandoos/styles.css?v=20261113-1" />
+</head>
+<body class="mandoos-invitation" data-guest-experience="bilingual" data-invitation-template="mandoos">
+  <svg class="md-sprite" aria-hidden="true" focusable="false" xmlns="http://www.w3.org/2000/svg">
+    <!-- The talli lozenge: the template's one repeated mark. -->
+    <symbol id="md-lozenge" viewBox="0 0 40 40"><path d="M20 2l18 18-18 18L2 20z" /><path d="M20 10l10 10-10 10-10-10z" /><circle cx="20" cy="20" r="2.4" /></symbol>
+    <symbol id="md-key" viewBox="0 0 48 48"><circle cx="15" cy="24" r="8" /><circle cx="15" cy="24" r="3" /><path d="M23 24h21M37 24v6M42 24v4" /></symbol>
+  </svg>
+
+  <a class="skip-link" href="#siteContent">Skip to invitation</a>
+  <div class="md-language" id="laylaLanguageToggle" role="group" aria-label="Invitation language">
+    <button type="button" data-language="en" aria-pressed="true" lang="en">EN</button>
+    <button type="button" data-language="ar" aria-pressed="false" lang="ar">ع</button>
+  </div>
+  <aside class="sample-preview-banner" id="samplePreviewBanner" hidden><span data-layla-text="sampleInvitation">Sample invitation</span></aside>
+
+  <!-- Opening: the bride's mandoos. The guest traces the string of pearls
+       around its brass lock; when the string is complete the key turns and
+       the film opens the chest. The still is the film's first frame. -->
+  <section class="envelope-intro" id="introScreen" aria-label="Open your invitation">
+    <div class="envelope-intro__stage" id="envelopeStage">
+      <div class="md-scene" id="mdScene">
+        <img class="envelope-intro__poster" src="./invitations/wedding-designs/mandoos/assets/opening.webp" alt="A teak mandoos chest studded with brass, resting on emerald velvet with pearls and jasmine" width="720" height="1280" fetchpriority="high" />
+        <video class="envelope-intro__video" id="openingVideo" playsinline webkit-playsinline muted preload="none" poster="./invitations/wedding-designs/mandoos/assets/opening.webp" aria-label="The mandoos opens onto pearls, gold and emerald velvet">
+          <source src="./invitations/wedding-designs/mandoos/assets/opening.mp4" type="video/mp4" />
+        </video>
+        <div class="md-lock" id="mdLock" aria-hidden="true">
+          <svg class="md-lock__thread" viewBox="0 0 100 100"><circle class="md-lock__track" cx="50" cy="50" r="46" pathLength="1" /><circle class="md-lock__progress" id="mdLockProgress" cx="50" cy="50" r="46" pathLength="1" /></svg>
+          <div class="md-lock__pearls" id="mdLockPearls"></div>
+          <span class="md-lock__hint"><span></span></span>
+          <span class="md-lock__glow"></span>
+        </div>
+      </div>
+      <div class="md-cover-copy" id="mdCoverCopy">
+        <p class="md-kicker" data-layla-language="en">From the bride's mandoos</p><p class="md-kicker" data-layla-language="ar" lang="ar" hidden>من مندوس العروس</p>
+        <h2 data-layla-language="en">Turn the key</h2><h2 data-layla-language="ar" lang="ar" hidden>أديروا المفتاح</h2>
+        <p class="md-cover-copy__hint" data-layla-language="en">Trace the string of pearls around the lock</p><p class="md-cover-copy__hint" data-layla-language="ar" lang="ar" hidden>مرّروا إصبعكم حول عقد اللؤلؤ</p>
+      </div>
+      <button class="md-open-link" id="openInvitation" type="button"><span id="openInvitationLabelPrimary" data-layla-text="openInvitation">Or tap to open</span><span id="introRetryLabel"></span></button>
+    </div>
+    <p class="envelope-intro__status" id="introStatus" role="status" aria-live="polite" hidden></p>
+    <button class="envelope-intro__skip" id="skipOpening" type="button" data-layla-text="skip">Skip</button>
+  </section>
+
+  <!-- Music: a single dana pearl; it glows and sends out ripples while the song plays. -->
+  <button class="music-toggle md-music" id="musicToggle" type="button" aria-label="Play event music" aria-pressed="false" data-state="paused" hidden>
+    <span class="md-music__ripple" aria-hidden="true"></span><span class="md-music__ripple" aria-hidden="true"></span>
+    <span class="md-music__pearl" aria-hidden="true"><i></i></span>
+    <span class="md-music__label" aria-hidden="true" data-layla-language="en">Our song</span><span class="md-music__label" aria-hidden="true" data-layla-language="ar" lang="ar" hidden>أغنيتنا</span>
+    <span class="music-toggle__label" hidden></span>
+  </button>
+  <audio id="weddingAudio" preload="none" loop><source src="./music/wedding.mp3" type="audio/mpeg" /></audio>
+
+  <main class="site-content" id="siteContent" inert tabindex="-1">
+    <section class="hero section" id="heroSection">
+      <div class="hero-backdrop" aria-hidden="true">
+        <video class="md-hero-film" id="mdHeroFilm" muted loop playsinline webkit-playsinline disablepictureinpicture disableremoteplayback preload="none" tabindex="-1" poster="./invitations/wedding-designs/mandoos/assets/inside.webp">
+          <source data-src="./invitations/wedding-designs/mandoos/assets/inside-loop-portrait.mp4" media="(max-width: 760px)" type="video/mp4" />
+          <source data-src="./invitations/wedding-designs/mandoos/assets/inside-loop.mp4" type="video/mp4" />
+        </video>
+      </div>
+      <div class="hero-composition">
+        <svg class="md-hero-mark" aria-hidden="true"><use href="#md-lozenge" /></svg>
+        <p class="md-kicker" data-layla-text="heroKicker">Together with their families</p>
+        <h1 class="hero-names"><span id="heroEnglishNames" data-layla-language="en"></span><span id="heroArabicNames" data-layla-language="ar" lang="ar" hidden></span></h1>
+        <p class="hero-subtitle" id="heroSubtitleEnglish" data-layla-language="en"></p><p class="hero-subtitle" id="heroSubtitleArabic" data-layla-language="ar" lang="ar" hidden></p>
+        <span class="md-talli md-talli--short" aria-hidden="true"></span>
+        <p class="hero-event-line" id="heroEventLine"></p>
+      </div>
+      <div class="hero-bottom">
+        <button class="luxury-button luxury-button--primary" type="button" data-scroll-details><span data-layla-text="viewDetails">Open the details</span><span class="md-arrow" aria-hidden="true">↓</span></button>
+      </div>
+    </section>
+
+    <section class="section details-section reveal" id="detailsSection">
+      <span class="md-henna-rule" aria-hidden="true"></span>
+      <div class="section-frame details-composition">
+        <figure class="md-panel-figure">
+          <div class="md-panel"><img src="./invitations/wedding-designs/mandoos/assets/henna-hands.webp" width="880" height="1100" alt="A bride's hennaed hands cupping a single white pearl, with emerald sleeves edged in talli" loading="lazy" decoding="async" /></div>
+          <figcaption><svg aria-hidden="true"><use href="#md-lozenge" /></svg><span data-layla-language="en">The henna is dry; the dana is chosen.</span><span data-layla-language="ar" lang="ar" hidden>جفّت الحنّاء، واختيرت الدانة.</span></figcaption>
+        </figure>
+        <div class="details-copy">
+          <div class="section-heading">
+            <p class="md-kicker" data-layla-language="en">When &amp; where</p><p class="md-kicker" data-layla-language="ar" lang="ar" hidden>الموعد والمكان</p>
+            <h2 data-layla-language="en">A night as rare<br><em>as a dana pearl.</em></h2><h2 data-layla-language="ar" lang="ar" hidden>ليلةٌ نادرة<br><em>كالدانة.</em></h2>
+            <p class="md-message" id="invitationMessageEnglish" data-layla-language="en"></p><p class="md-message" id="invitationMessageArabic" data-layla-language="ar" lang="ar" hidden></p>
+          </div>
+          <div class="md-strand">
+            <span class="md-strand__thread" aria-hidden="true"></span>
+            <div class="hero-countdown" id="countdownGrid" aria-label="Time until the wedding"></div>
+          </div>
+          <div id="detailsGrid"></div>
+          <div class="venue-actions" id="venueActions"><a class="luxury-button luxury-button--primary" id="openMapsLink" target="_blank" rel="noopener noreferrer" hidden><span data-layla-text="openInMaps">Open in Maps</span><span class="md-arrow" aria-hidden="true">↗</span></a><button class="luxury-button luxury-button--secondary" type="button" data-calendar-download data-layla-text="calendar">Add to Calendar</button></div>
+          <div id="venueMapPreviewMount"></div>
+        </div>
+      </div>
+    </section>
+
+    <section class="section schedule-section reveal" id="scheduleSection" hidden>
+      <span class="md-talli md-talli--edge" aria-hidden="true"></span>
+      <div class="section-frame evening-composition">
+        <div class="evening-title">
+          <p class="md-kicker" data-layla-language="en">The programme</p><p class="md-kicker" data-layla-language="ar" lang="ar" hidden>البرنامج</p>
+          <h2 data-layla-text="scheduleHeading">The evening, pearl by pearl.</h2>
+          <div class="md-panel md-panel--small"><img src="./invitations/wedding-designs/mandoos/assets/gahwa.webp" width="880" height="1100" alt="Arabic coffee poured from a brass dallah beside a bowl of dates" loading="lazy" decoding="async" /></div>
+        </div>
+        <div class="evening-programme"><ol class="schedule-timeline" id="scheduleMount"></ol><div id="scheduleActions"></div></div>
+      </div>
+    </section>
+
+    <section class="section" id="guestSpotlightSection" hidden><div class="section-frame"><h2 id="guestGreetingTitle"></h2><p id="guestGreetingArabic" lang="ar"></p><p id="guestGreetingEnglish"></p></div></section>
+
+    <section class="section seating-section reveal" id="seatingSection" hidden>
+      <div class="section-frame">
+        <div class="seating-heading">
+          <div><p class="md-kicker" data-layla-language="en">Seating</p><p class="md-kicker" data-layla-language="ar" lang="ar" hidden>الجلوس</p><h2 data-layla-language="en">Your place,<br><em>set with care.</em></h2><h2 data-layla-language="ar" lang="ar" hidden>مكانكم،<br><em>مُعدٌّ بعناية.</em></h2></div>
+          <p data-layla-language="en">Choose a name to find its place in the hall.</p><p data-layla-language="ar" lang="ar" hidden>اختاروا اسماً لمعرفة مكانه في القاعة.</p>
+        </div>
+        <div id="seatDetailsMount"></div>
+        <div class="seating-map-shell"><div class="seating-map" id="seatingMap"></div></div>
+      </div>
+    </section>
+
+    <section class="section rsvp-section reveal" id="rsvpSection" aria-labelledby="rsvpTitle">
+      <div class="md-smoke" aria-hidden="true">
+        <video class="md-smoke__film" id="mdSmokeFilm" muted loop playsinline webkit-playsinline disablepictureinpicture disableremoteplayback preload="none" tabindex="-1" poster="./invitations/wedding-designs/mandoos/assets/mabkhara.webp"><source data-src="./invitations/wedding-designs/mandoos/assets/mabkhara-loop.mp4" type="video/mp4" /></video>
+      </div>
+      <div class="section-frame rsvp-composition">
+        <div class="rsvp-heading">
+          <p class="md-kicker" data-layla-language="en">Kindly reply</p><p class="md-kicker" data-layla-language="ar" lang="ar" hidden>نرجو الرد</p>
+          <h2 id="rsvpTitle" data-layla-text="rsvpHeading">Will you honour us?</h2>
+          <p data-layla-language="en">Your reply is the last pearl on the string.</p><p data-layla-language="ar" lang="ar" hidden>ردّكم آخر لؤلؤة في العقد.</p>
+        </div>
+        <div class="rsvp-card">
+          <span class="md-corner md-corner--tl" aria-hidden="true"></span><span class="md-corner md-corner--tr" aria-hidden="true"></span><span class="md-corner md-corner--bl" aria-hidden="true"></span><span class="md-corner md-corner--br" aria-hidden="true"></span>
+          <span class="md-rsvp-crest" aria-hidden="true"></span>
+          <div id="rsvpMount"></div>
+        </div>
+      </div>
+    </section>
+
+    <section class="section pass-section reveal" id="qrPassSection" hidden>
+      <span class="md-talli md-talli--edge" aria-hidden="true"></span>
+      <div class="section-frame pass-composition">
+        <div class="section-heading"><p class="md-kicker" data-layla-language="en">At the door</p><p class="md-kicker" data-layla-language="ar" lang="ar" hidden>عند الوصول</p><h2 data-layla-text="passHeading">Your key to the evening.</h2><p data-layla-language="en">Show this tag at the entrance and walk straight in.</p><p data-layla-language="ar" lang="ar" hidden>أظهروا هذه البطاقة عند المدخل.</p></div>
+        <div class="md-tag">
+          <span class="md-tag__cord" aria-hidden="true"></span>
+          <div class="qr-pass" id="qrPassMount"></div>
+          <span class="md-tag__tassel" aria-hidden="true"></span>
+        </div>
+      </div>
+    </section>
+
+    <section class="section closing-section reveal">
+      <div class="section-frame closing-card">
+        <span class="md-medallion" aria-hidden="true"></span>
+        <p class="md-verse" lang="ar">﴿ وَمِنْ آيَاتِهِ أَنْ خَلَقَ لَكُم مِّنْ أَنفُسِكُمْ أَزْوَاجًا لِّتَسْكُنُوا إِلَيْهَا ﴾</p>
+        <p class="md-verse-translation" data-layla-language="en">“And among His signs is that He created for you spouses, that you may find tranquillity in them.” <span>Ar-Rum 30:21</span></p>
+        <span class="md-talli md-talli--short" aria-hidden="true"></span>
+        <p class="md-closing" id="closingEnglish" data-layla-language="en"></p><p class="md-closing" id="closingArabic" data-layla-language="ar" lang="ar" hidden></p>
+      </div>
+    </section>
+    <footer class="qd-footer"><svg class="md-footer-mark" aria-hidden="true"><use href="#md-lozenge" /></svg><p class="qd-footer__credit"><span data-layla-text="madeBy">Made by</span> <a href="https://qdsystems.ae/" target="_blank" rel="noopener noreferrer">QDsystems</a></p></footer>
+  </main>
+  <nav class="sticky-actions" id="stickyActions" aria-label="Quick event actions" hidden></nav>
+  <div class="toast-rail" id="toastRail" aria-live="polite" aria-atomic="true"></div>
+  <noscript><p class="no-script">Please enable JavaScript to open this personal invitation. يرجى تفعيل جافاسكريبت لفتح الدعوة.</p></noscript>
+  <script type="module" src="./invitations/wedding-designs/mandoos/invitation.js?v=20261113-1"></script>
+</body>
+</html>

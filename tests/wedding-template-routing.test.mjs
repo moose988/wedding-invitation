@@ -12,6 +12,8 @@ test("saved template choices route new event IDs, while live assignments always 
     assert.equal(getWeddingDesign(id, "layla-zaid").designId, "layla-zaid");
     assert.equal(getWeddingDesign(id, "pomegranate-courtyard").designId, "pomegranate-courtyard");
     assert.equal(getInvitationRoute(id, base, "pomegranate-courtyard").pathname, "/invitations/wedding-designs/pomegranate-courtyard/index.html");
+    assert.equal(getWeddingDesign(id, "mandoos").designId, "mandoos");
+    assert.equal(getInvitationRoute(id, base, "mandoos").pathname, "/invitations/wedding-designs/mandoos/index.html");
     for (const value of ["", "unknown", "../../evil", "__proto__", "toString"]) assert.equal(getWeddingDesign(id, value), null);
   }
   assert.equal(getWeddingDesign("luxury-wedding-demo", "moonlit-conservatory").designId, "layla-zaid");
@@ -32,17 +34,31 @@ test("both creation surfaces expose the new card and leave Floral Wedding select
     assert.match(html, /moonlit-conservatory\/assets\/thumbnail.webp/);
     assert.match(html, /value="pomegranate-courtyard" \/>/);
     assert.match(html, /pomegranate-courtyard\/assets\/thumbnail.webp/);
+    assert.match(html, /value="mandoos" \/>/);
+    assert.match(html, /mandoos\/assets\/thumbnail.webp/);
   }
 });
 
 test("Pomegranate Courtyard is an allowed published template and ships its own assets", async () => {
   const rules = await readFile(new URL("../firestore.rules", import.meta.url), "utf8");
-  assert.match(rules, /"pomegranate-courtyard"\]/);
+  assert.match(rules, /"pomegranate-courtyard", "mandoos"\]/);
   const html = await readFile(new URL("../invitations/wedding-designs/pomegranate-courtyard/index.html", import.meta.url), "utf8");
   for (const id of ["introScreen", "openInvitation", "openingVideo", "skipOpening", "musicToggle", "weddingAudio", "siteContent", "heroSection", "countdownGrid", "detailsGrid", "scheduleMount", "seatingMap", "rsvpMount", "qrPassMount", "stickyActions", "toastRail"]) {
     assert.match(html, new RegExp(`id="${id}"`), `missing #${id}`);
   }
   for (const asset of ["opening.webp", "opening.mp4", "courtyard-loop.mp4", "courtyard-loop-portrait.mp4", "chair.svg", "thumbnail.webp"]) {
     await readFile(new URL(`../invitations/wedding-designs/pomegranate-courtyard/assets/${asset}`, import.meta.url));
+  }
+});
+
+test("Mandoos is an allowed published template and ships its own assets", async () => {
+  const rules = await readFile(new URL("../firestore.rules", import.meta.url), "utf8");
+  assert.match(rules, /"mandoos"\]/);
+  const html = await readFile(new URL("../invitations/wedding-designs/mandoos/index.html", import.meta.url), "utf8");
+  for (const id of ["introScreen", "openInvitation", "openingVideo", "skipOpening", "musicToggle", "weddingAudio", "siteContent", "heroSection", "countdownGrid", "detailsGrid", "scheduleMount", "seatingMap", "rsvpMount", "qrPassMount", "stickyActions", "toastRail"]) {
+    assert.match(html, new RegExp(`id="${id}"`), `missing #${id}`);
+  }
+  for (const asset of ["opening.webp", "opening.mp4", "inside-loop.mp4", "inside-loop-portrait.mp4", "mabkhara-loop.mp4", "henna-medallion.webp", "henna-vine.webp", "chair.svg", "thumbnail.webp"]) {
+    await readFile(new URL(`../invitations/wedding-designs/mandoos/assets/${asset}`, import.meta.url));
   }
 });

@@ -85,7 +85,7 @@ test("Shiraa ships its shell and its own assets", async () => {
   for (const id of ["introScreen", "openInvitation", "openingVideo", "skipOpening", "musicToggle", "weddingAudio", "siteContent", "heroSection", "countdownGrid", "detailsGrid", "scheduleMount", "seatingMap", "rsvpMount", "qrPassMount", "stickyActions", "toastRail", "shVeil"]) {
     assert.match(html, new RegExp(`id="${id}"`), `missing #${id}`);
   }
-  for (const asset of ["opening.webp", "opening.mp4", "hero.webp", "hero-portrait.webp", "garland.webp", "chair.svg", "thumbnail.webp"]) {
+  for (const asset of ["opening.webp", "opening.mp4", "hero.webp", "hero-portrait.webp", "hero-loop-portrait.mp4", "garland.webp", "chair.svg", "thumbnail.webp"]) {
     await readFile(new URL(`../invitations/wedding-designs/shiraa/assets/${asset}`, import.meta.url));
   }
 });

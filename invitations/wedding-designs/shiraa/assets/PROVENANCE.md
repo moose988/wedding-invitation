@@ -21,6 +21,7 @@ outside the repository; the site ships optimised WebP and audio-free H.264.
 | thumbnail.webp | Event-picker card | Crop of hero-portrait |
 | sail.svg, chair.svg | Favicon and guest-chair drawing | Hand-authored vectors |
 
-Pending: hero-loop-portrait.mp4 / hero-loop.mp4 (living hero loops, Seedance
-2.5 locked camera, start = end = hero still). The hero shows its still until
-they are added to index.html.
+hero-loop-portrait.mp4: living phone hero loop, Seedance 2.5 locked camera,
+start = end = hero-portrait still, re-encoded H.264 720x1280.
+
+Pending: hero-loop.mp4 (wide loop), added to index.html when rendered.

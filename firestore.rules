@@ -733,7 +733,7 @@ service cloud.firestore {
         };
       return data.diff(expected).affectedKeys().hasOnly(["scheduleCount", "invitationTemplate", "musicMode", "musicVersion"])
         && canonicalSharedMusic(event, data)
-        && (!data.keys().hasAny(["invitationTemplate"]) || (data.invitationTemplate == event.get("invitationTemplate", "") && data.invitationTemplate in ["layla-zaid", "moonlit-conservatory", "pomegranate-courtyard", "mandoos"]))
+        && (!data.keys().hasAny(["invitationTemplate"]) || (data.invitationTemplate == event.get("invitationTemplate", "") && data.invitationTemplate in ["layla-zaid", "moonlit-conservatory", "pomegranate-courtyard", "mandoos", "yasmine"]))
         && (event.get("invitationTemplate", "") == "" || data.get("invitationTemplate", "") == event.invitationTemplate)
         && scheduleMatches;
     }

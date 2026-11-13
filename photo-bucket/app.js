@@ -295,15 +295,30 @@ function bindCommon() {
   });
   // Native <dialog> supplies modal focus containment, Escape and focus return.
   window.addEventListener('focus', run(async () => { bucket = owner ? await adapter.get(bucket.id) : await adapter.status(bucket.id); syncDetails(); await refreshGallery(); }));
-  window.addEventListener('pagehide', () => { queue?.stop(); revokeGallery(); for (const url of jobUrls.values()) URL.revokeObjectURL(url); editor?.bitmap?.close(); }, { once: true });
-  window.addEventListener('pageshow', event => { if (event.persisted) location.reload(); });
+  window.addEventListener('pagehide', event => {
+    // A cached guest page still owns any selected files and in-flight uploads.
+    if (!owner && event.persisted) return;
+    queue?.stop();
+    revokeGallery();
+    for (const url of jobUrls.values()) URL.revokeObjectURL(url);
+    editor?.bitmap?.close();
+  });
+  window.addEventListener('pageshow', event => { if (owner && event.persisted) location.reload(); });
 }
 function bindGuest() {
-  listen('#cameraButton', 'click', () => $('#cameraInput').click());
-  listen('#galleryButton', 'click', () => $('#galleryInput').click());
-  for (const input of ['#cameraInput', '#galleryInput']) {
-    listen(input, 'change', async event => {
-      const files = [...(event.target.files || [])]; event.target.value = ''; if (!files.length) return;
+  const noPhoto = () => message('No photo was received. Choose a photo or take one again.');
+  for (const [button, selector] of [['#cameraButton', '#cameraInput'], ['#galleryButton', '#galleryInput']]) {
+    const input = $(selector);
+    listen(button, 'click', () => {
+      // Clear the previous selection before reopening so the same file can be picked again.
+      input.value = '';
+      input.click();
+    });
+    input.addEventListener('cancel', noPhoto);
+    listen(selector, 'change', async () => {
+      const files = Array.from(input.files || []);
+      if (!files.length) return noPhoto();
+      message(files.length === 1 ? 'Preparing your photo…' : 'Preparing your photos…');
       let accepted = 0;
       const errors = [];
       const skipped = files.length - LIMITS.batch;

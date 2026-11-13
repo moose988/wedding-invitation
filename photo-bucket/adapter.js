@@ -35,7 +35,18 @@ async function transaction(names, mode, work) {
 }
 // randomUUID is missing on older Android/Huawei browsers; fall back to getRandomValues.
 const id = () => globalThis.crypto?.randomUUID ? crypto.randomUUID() : ([1e7] + -1e3 + -4e3 + -8e3 + -1e11).replace(/[018]/g, c => (c ^ crypto.getRandomValues(new Uint8Array(1))[0] & 15 >> c / 4).toString(16));
-const readBytes = file => file.arrayBuffer ? file.arrayBuffer() : new Promise((resolve, reject) => { const r = new FileReader(); r.onload = () => resolve(r.result); r.onerror = () => reject(r.error); r.readAsArrayBuffer(file); });
+function readBytes(file) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(reader.result);
+    reader.onerror = () => reject(reader.error);
+    reader.onabort = () => reject(new Error('The file read was interrupted.'));
+    const timer = setTimeout(() => reader.abort(), 30_000);
+    reader.onloadend = () => clearTimeout(timer);
+    try { reader.readAsArrayBuffer(file); }
+    catch (error) { clearTimeout(timer); reject(error); }
+  });
+}
 function identity(value) { if (typeof value !== 'string' || !value || value.length > 160) throw new Error('A valid local identity is required.'); return value; }
 function checkBucket(bucket, ownerId) { if (!bucket || bucket.ownerId !== ownerId) throw new Error('This bucket is not available to your account on this browser.'); return bucket; }
 function checkPhoto(photo, bucketId, contributorId) {

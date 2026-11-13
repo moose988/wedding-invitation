@@ -15,6 +15,7 @@ test("saved template choices route new event IDs, while live assignments always 
     assert.equal(getWeddingDesign(id, "mandoos").designId, "mandoos");
     assert.equal(getInvitationRoute(id, base, "mandoos").pathname, "/invitations/wedding-designs/mandoos/index.html");
     assert.equal(getInvitationRoute(id, base, "yasmine").pathname, "/invitations/wedding-designs/yasmine/index.html");
+    assert.equal(getInvitationRoute(id, base, "shiraa").pathname, "/invitations/wedding-designs/shiraa/index.html");
     for (const value of ["", "unknown", "../../evil", "__proto__", "toString"]) assert.equal(getWeddingDesign(id, value), null);
   }
   assert.equal(getWeddingDesign("luxury-wedding-demo", "moonlit-conservatory").designId, "layla-zaid");
@@ -38,6 +39,8 @@ test("both creation surfaces expose the new card and leave Floral Wedding select
     assert.match(html, /value="mandoos" \/>/);
     assert.match(html, /mandoos\/assets\/thumbnail.webp/);
     assert.match(html, /value="yasmine" \/>/);
+    assert.match(html, /value="shiraa" \/>/);
+    assert.match(html, /shiraa\/assets\/thumbnail.webp/);
   }
 });
 
@@ -74,5 +77,15 @@ test("Yasmine is an allowed published template and ships its own assets", async 
   }
   for (const asset of ["opening.webp", "opening.mp4", "terrace-loop.mp4", "terrace-loop-portrait.mp4", "olive-wreath.webp", "chair.svg", "thumbnail.webp"]) {
     await readFile(new URL(`../invitations/wedding-designs/yasmine/assets/${asset}`, import.meta.url));
+  }
+});
+
+test("Shiraa ships its shell and its own assets", async () => {
+  const html = await readFile(new URL("../invitations/wedding-designs/shiraa/index.html", import.meta.url), "utf8");
+  for (const id of ["introScreen", "openInvitation", "openingVideo", "skipOpening", "musicToggle", "weddingAudio", "siteContent", "heroSection", "countdownGrid", "detailsGrid", "scheduleMount", "seatingMap", "rsvpMount", "qrPassMount", "stickyActions", "toastRail", "shVeil"]) {
+    assert.match(html, new RegExp(`id="${id}"`), `missing #${id}`);
+  }
+  for (const asset of ["opening.webp", "opening.mp4", "hero.webp", "hero-portrait.webp", "garland.webp", "chair.svg", "thumbnail.webp"]) {
+    await readFile(new URL(`../invitations/wedding-designs/shiraa/assets/${asset}`, import.meta.url));
   }
 });

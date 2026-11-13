@@ -24,6 +24,7 @@ export const weddingTemplateRegistry = Object.freeze({
   "pomegranate-courtyard": Object.freeze({ designId: "pomegranate-courtyard", route: "./invitations/wedding-designs/pomegranate-courtyard/index.html", name: "Pomegranate Courtyard" }),
   "mandoos": Object.freeze({ designId: "mandoos", route: "./invitations/wedding-designs/mandoos/index.html", name: "Mandoos" }),
   "yasmine": Object.freeze({ designId: "yasmine", route: "./invitations/wedding-designs/yasmine/index.html", name: "Yasmine" }),
+  "shiraa": Object.freeze({ designId: "shiraa", route: "./invitations/wedding-designs/shiraa/index.html", name: "Shiraa" }),
 });
 
 export function getWeddingDesign(weddingId, invitationTemplate = "") {

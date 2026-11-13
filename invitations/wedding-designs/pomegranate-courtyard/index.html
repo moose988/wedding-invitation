@@ -1,0 +1,175 @@
+<!doctype html>
+<html lang="en" dir="ltr">
+<head>
+  <base href="../../../" />
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <meta name="theme-color" content="#2a0a12" />
+  <meta name="description" content="A personal invitation to a wedding evening in the courtyard." />
+  <title>Pomegranate Courtyard · Wedding Invitation</title>
+  <link rel="icon" type="image/svg+xml" href="./invitations/wedding-designs/pomegranate-courtyard/assets/seal.svg" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Bodoni+Moda:ital,opsz,wght@0,6..96,400;0,6..96,500;1,6..96,400;1,6..96,500&family=Manrope:wght@400;500;600&family=Reem+Kufi:wght@400;500&family=IBM+Plex+Sans+Arabic:wght@400;500&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="./invitations/wedding-designs/pomegranate-courtyard/styles.css?v=20261113-1" />
+</head>
+<body class="pomegranate-invitation" data-guest-experience="bilingual" data-invitation-template="pomegranate-courtyard">
+  <svg class="pc-sprite" aria-hidden="true" focusable="false" xmlns="http://www.w3.org/2000/svg">
+    <!-- An eight-pointed zellige star: the template's one repeated mark. -->
+    <symbol id="pc-star" viewBox="0 0 40 40"><path d="M20 2l5.3 7.2 8.8-1.3-1.3 8.8L40 20l-7.2 5.3 1.3 8.8-8.8-1.3L20 40l-5.3-7.2-8.8 1.3 1.3-8.8L0 20l7.2-5.3-1.3-8.8 8.8 1.3z" /></symbol>
+    <symbol id="pc-seed" viewBox="0 0 12 16"><path d="M6 1c3 2.6 4.6 6 4 9.2C9.4 13.4 7.8 15 6 15s-3.4-1.6-4-4.8C1.4 7 3 3.6 6 1z" /></symbol>
+    <symbol id="pc-arch" viewBox="0 0 100 130" preserveAspectRatio="none"><path d="M4 128V58C4 34 20 8 50 4c30 4 46 30 46 54v70" /></symbol>
+    <symbol id="pc-fruit" viewBox="0 0 48 48"><path d="M24 12c9 0 17 7 17 17s-8 15-17 15S7 39 7 29s8-17 17-17z" /><path d="M19 12l1-6 4 3 4-3 1 6" /><path d="M17 26c2 3 5 4 7 4" /></symbol>
+  </svg>
+
+  <a class="skip-link" href="#siteContent">Skip to invitation</a>
+  <div class="pc-language" id="laylaLanguageToggle" role="group" aria-label="Invitation language">
+    <button type="button" data-language="en" aria-pressed="true" lang="en">EN</button>
+    <button type="button" data-language="ar" aria-pressed="false" lang="ar">ع</button>
+  </div>
+  <aside class="sample-preview-banner" id="samplePreviewBanner" hidden><span data-layla-text="sampleInvitation">Sample invitation</span></aside>
+
+  <!-- Opening: a copper-foiled card. The guest scratches the foil away; the
+       picture underneath is the first frame of the opening film. -->
+  <section class="envelope-intro" id="introScreen" aria-label="Open your invitation">
+    <div class="envelope-intro__stage" id="envelopeStage">
+      <div class="pc-scene">
+        <img class="envelope-intro__poster" src="./invitations/wedding-designs/pomegranate-courtyard/assets/opening.webp" alt="A wine-red invitation card on blush plaster beside pomegranates and blossoms" width="720" height="1280" fetchpriority="high" />
+        <video class="envelope-intro__video" id="openingVideo" playsinline webkit-playsinline muted preload="none" poster="./invitations/wedding-designs/pomegranate-courtyard/assets/opening.webp" aria-label="The invitation opens into a candlelit courtyard">
+          <source src="./invitations/wedding-designs/pomegranate-courtyard/assets/opening.mp4" type="video/mp4" />
+        </video>
+        <div class="pc-card-copy" aria-hidden="true">
+          <svg class="pc-card-copy__star"><use href="#pc-star" /></svg>
+          <p class="pc-card-copy__kicker" data-layla-language="en">The wedding of</p><p class="pc-card-copy__kicker" data-layla-language="ar" lang="ar" hidden>حفل زفاف</p>
+          <p class="pc-card-copy__names" id="pcCardNames"></p>
+          <p class="pc-card-copy__line" data-layla-language="en">request the joy of your company</p><p class="pc-card-copy__line" data-layla-language="ar" lang="ar" hidden>يتشرفان بدعوتكم</p>
+        </div>
+      </div>
+      <canvas class="pc-foil" id="pcFoil" aria-hidden="true"></canvas>
+      <div class="pc-foil-copy" id="pcFoilCopy">
+        <p class="pc-kicker" data-layla-language="en">A private invitation</p><p class="pc-kicker" data-layla-language="ar" lang="ar" hidden>دعوة خاصة</p>
+        <h2 data-layla-language="en">Scratch<br><em>to reveal</em></h2><h2 data-layla-language="ar" lang="ar" hidden>امسحوا<br><em>لتظهر الدعوة</em></h2>
+        <span class="pc-swipe" aria-hidden="true"><span></span></span>
+      </div>
+      <button class="pc-open-link" id="openInvitation" type="button"><span id="openInvitationLabelPrimary" data-layla-text="openInvitation">Or tap to open</span><span id="introRetryLabel"></span></button>
+    </div>
+    <p class="envelope-intro__status" id="introStatus" role="status" aria-live="polite" hidden></p>
+    <button class="envelope-intro__skip" id="skipOpening" type="button" data-layla-text="skip">Skip</button>
+  </section>
+
+  <!-- Music: a copper roundel whose seeds dance while the song plays. -->
+  <button class="music-toggle pc-music" id="musicToggle" type="button" aria-label="Play event music" aria-pressed="false" data-state="paused" hidden>
+    <span class="pc-music__ring" aria-hidden="true"><svg viewBox="0 0 100 100"><defs><path id="pcMusicPath" d="M50 50m-38 0a38 38 0 1 1 76 0a38 38 0 1 1-76 0" /></defs><text><textPath href="#pcMusicPath" textLength="236" lengthAdjust="spacing">OUR SONG · أغنيتنا · OUR SONG ·</textPath></text></svg></span>
+    <span class="pc-music__core" aria-hidden="true"><i></i><i></i><i></i><i></i><i></i></span>
+    <span class="music-toggle__label" hidden></span>
+  </button>
+  <audio id="weddingAudio" preload="none" loop><source src="./music/wedding.mp3" type="audio/mpeg" /></audio>
+
+  <main class="site-content" id="siteContent" inert tabindex="-1">
+    <section class="hero section" id="heroSection">
+      <div class="hero-backdrop" aria-hidden="true">
+        <video class="pc-hero-film" id="pcHeroFilm" muted loop playsinline webkit-playsinline disablepictureinpicture disableremoteplayback preload="none" tabindex="-1" poster="./invitations/wedding-designs/pomegranate-courtyard/assets/courtyard.webp">
+          <source data-src="./invitations/wedding-designs/pomegranate-courtyard/assets/courtyard-loop-portrait.mp4" media="(max-width: 760px)" type="video/mp4" />
+          <source data-src="./invitations/wedding-designs/pomegranate-courtyard/assets/courtyard-loop.mp4" type="video/mp4" />
+        </video>
+      </div>
+      <div class="hero-composition">
+        <p class="pc-kicker" data-layla-text="heroKicker">Together with their families</p>
+        <h1 class="hero-names"><span id="heroEnglishNames" data-layla-language="en"></span><span id="heroArabicNames" data-layla-language="ar" lang="ar" hidden></span></h1>
+        <p class="hero-subtitle" id="heroSubtitleEnglish" data-layla-language="en"></p><p class="hero-subtitle" id="heroSubtitleArabic" data-layla-language="ar" lang="ar" hidden></p>
+      </div>
+      <div class="hero-bottom">
+        <div class="pc-stamp" aria-hidden="true">
+          <svg viewBox="0 0 120 120"><defs><path id="pcStampPath" d="M60 60m-47 0a47 47 0 1 1 94 0a47 47 0 1 1-94 0" /></defs><text><textPath href="#pcStampPath" textLength="292" lengthAdjust="spacing">SAVE THE DATE · احفظوا التاريخ ·</textPath></text></svg>
+          <svg class="pc-stamp__star"><use href="#pc-star" /></svg>
+        </div>
+        <p class="hero-event-line" id="heroEventLine"></p>
+        <button class="luxury-button luxury-button--primary" type="button" data-scroll-details><span data-layla-text="viewDetails">Step inside</span><span class="pc-arrow" aria-hidden="true">↓</span></button>
+      </div>
+    </section>
+
+    <section class="section details-section reveal" id="detailsSection">
+      <div class="section-frame details-composition">
+        <figure class="pc-arch-figure">
+          <svg class="pc-arch-figure__line" aria-hidden="true"><use href="#pc-arch" /></svg>
+          <img src="./invitations/wedding-designs/pomegranate-courtyard/assets/table.webp" width="880" height="1100" alt="A candlelit place setting with a pomegranate blossom tied to a wine-red napkin" loading="lazy" decoding="async" />
+          <figcaption><span class="pc-index">I</span><span data-layla-language="en">The table is set</span><span data-layla-language="ar" lang="ar" hidden>المائدة جاهزة</span></figcaption>
+        </figure>
+        <div class="details-copy">
+          <div class="section-heading">
+            <p class="pc-kicker" data-layla-language="en">When &amp; where</p><p class="pc-kicker" data-layla-language="ar" lang="ar" hidden>الموعد والمكان</p>
+            <h2 data-layla-language="en">An evening<br><em>in the courtyard.</em></h2><h2 data-layla-language="ar" lang="ar" hidden>أمسية<br><em>في الفناء.</em></h2>
+            <p class="pc-message" id="invitationMessageEnglish" data-layla-language="en"></p><p class="pc-message" id="invitationMessageArabic" data-layla-language="ar" lang="ar" hidden></p>
+          </div>
+          <div class="hero-countdown" id="countdownGrid" aria-label="Time until the wedding"></div>
+          <div id="detailsGrid"></div>
+          <div class="venue-actions" id="venueActions"><a class="luxury-button luxury-button--primary" id="openMapsLink" target="_blank" rel="noopener noreferrer" hidden><span data-layla-text="openInMaps">Open in Maps</span><span class="pc-arrow" aria-hidden="true">↗</span></a><button class="luxury-button luxury-button--secondary" type="button" data-calendar-download data-layla-text="calendar">Add to Calendar</button></div>
+          <div id="venueMapPreviewMount"></div>
+        </div>
+      </div>
+    </section>
+
+    <section class="section schedule-section reveal" id="scheduleSection" hidden>
+      <div class="section-frame evening-composition">
+        <div class="evening-title">
+          <p class="pc-kicker" data-layla-language="en">The programme</p><p class="pc-kicker" data-layla-language="ar" lang="ar" hidden>البرنامج</p>
+          <h2 data-layla-text="scheduleHeading">The evening, hour by hour.</h2>
+          <img class="pc-sprig" src="./invitations/wedding-designs/pomegranate-courtyard/assets/sprig.webp" width="880" height="1168" alt="" loading="lazy" decoding="async" />
+        </div>
+        <div class="evening-programme"><ol class="schedule-timeline" id="scheduleMount"></ol><div id="scheduleActions"></div></div>
+      </div>
+    </section>
+
+    <section class="section" id="guestSpotlightSection" hidden><div class="section-frame"><h2 id="guestGreetingTitle"></h2><p id="guestGreetingArabic" lang="ar"></p><p id="guestGreetingEnglish"></p></div></section>
+
+    <section class="section seating-section reveal" id="seatingSection" hidden>
+      <div class="section-frame">
+        <div class="seating-heading">
+          <div><p class="pc-kicker" data-layla-language="en">Seating</p><p class="pc-kicker" data-layla-language="ar" lang="ar" hidden>الجلوس</p><h2 data-layla-language="en">A seat,<br><em>kept for you.</em></h2><h2 data-layla-language="ar" lang="ar" hidden>مقعدٌ<br><em>محجوز لكم.</em></h2></div>
+          <p data-layla-language="en">Choose a name to find its place at the table.</p><p data-layla-language="ar" lang="ar" hidden>اختاروا اسماً لمعرفة مكانه على الطاولة.</p>
+        </div>
+        <div id="seatDetailsMount"></div>
+        <div class="seating-map-shell"><div class="seating-map" id="seatingMap"></div></div>
+      </div>
+    </section>
+
+    <section class="section rsvp-section reveal" id="rsvpSection" aria-labelledby="rsvpTitle">
+      <div class="section-frame rsvp-composition">
+        <div class="rsvp-heading">
+          <p class="pc-kicker" data-layla-language="en">Kindly reply</p><p class="pc-kicker" data-layla-language="ar" lang="ar" hidden>نرجو الرد</p>
+          <h2 id="rsvpTitle" data-layla-text="rsvpHeading">Will you join us?</h2>
+          <p data-layla-language="en">One word from you, and our table is complete.</p><p data-layla-language="ar" lang="ar" hidden>كلمة منكم، وتكتمل مائدتنا.</p>
+        </div>
+        <div class="rsvp-card">
+          <span class="pc-seal" aria-hidden="true"><svg><use href="#pc-star" /></svg></span>
+          <div id="rsvpMount"></div>
+        </div>
+      </div>
+    </section>
+
+    <section class="section pass-section reveal" id="qrPassSection" hidden>
+      <div class="section-frame pass-composition">
+        <div class="section-heading"><p class="pc-kicker" data-layla-language="en">At the door</p><p class="pc-kicker" data-layla-language="ar" lang="ar" hidden>عند الوصول</p><h2 data-layla-text="passHeading">Your key to the courtyard.</h2><p data-layla-language="en">Show this at the entrance and walk straight in.</p><p data-layla-language="ar" lang="ar" hidden>أظهروا هذا الرمز عند المدخل.</p></div>
+        <div class="qr-pass" id="qrPassMount"></div>
+      </div>
+    </section>
+
+    <section class="section closing-section reveal">
+      <div class="section-frame closing-card">
+        <div class="pc-wreath">
+          <img src="./invitations/wedding-designs/pomegranate-courtyard/assets/wreath.webp" width="800" height="800" alt="" loading="lazy" decoding="async" />
+          <div class="pc-wreath__copy">
+            <svg class="pc-wreath__star" aria-hidden="true"><use href="#pc-star" /></svg>
+            <p id="closingEnglish" data-layla-language="en"></p><p id="closingArabic" data-layla-language="ar" lang="ar" hidden></p>
+          </div>
+        </div>
+      </div>
+    </section>
+    <footer class="qd-footer"><svg class="pc-footer-star" aria-hidden="true"><use href="#pc-star" /></svg><p class="qd-footer__credit"><span data-layla-text="madeBy">Made by</span> <a href="https://qdsystems.ae/" target="_blank" rel="noopener noreferrer">QDsystems</a></p></footer>
+  </main>
+  <nav class="sticky-actions" id="stickyActions" aria-label="Quick event actions" hidden></nav>
+  <div class="toast-rail" id="toastRail" aria-live="polite" aria-atomic="true"></div>
+  <noscript><p class="no-script">Please enable JavaScript to open this personal invitation. يرجى تفعيل جافاسكريبت لفتح الدعوة.</p></noscript>
+  <script type="module" src="./invitations/wedding-designs/pomegranate-courtyard/invitation.js?v=20261113-1"></script>
+</body>
+</html>

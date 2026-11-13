@@ -10,6 +10,8 @@ test("saved template choices route new event IDs, while live assignments always 
     assert.equal(getWeddingDesign(id, "moonlit-conservatory").designId, "moonlit-conservatory");
     assert.equal(getInvitationRoute(id, base, "moonlit-conservatory").pathname, "/invitations/wedding-designs/moonlit-conservatory/index.html");
     assert.equal(getWeddingDesign(id, "layla-zaid").designId, "layla-zaid");
+    assert.equal(getWeddingDesign(id, "pomegranate-courtyard").designId, "pomegranate-courtyard");
+    assert.equal(getInvitationRoute(id, base, "pomegranate-courtyard").pathname, "/invitations/wedding-designs/pomegranate-courtyard/index.html");
     for (const value of ["", "unknown", "../../evil", "__proto__", "toString"]) assert.equal(getWeddingDesign(id, value), null);
   }
   assert.equal(getWeddingDesign("luxury-wedding-demo", "moonlit-conservatory").designId, "layla-zaid");
@@ -28,5 +30,19 @@ test("both creation surfaces expose the new card and leave Floral Wedding select
     assert.match(html, /value="layla-zaid" checked/);
     assert.match(html, /value="moonlit-conservatory" \/>/);
     assert.match(html, /moonlit-conservatory\/assets\/thumbnail.webp/);
+    assert.match(html, /value="pomegranate-courtyard" \/>/);
+    assert.match(html, /pomegranate-courtyard\/assets\/thumbnail.webp/);
+  }
+});
+
+test("Pomegranate Courtyard is an allowed published template and ships its own assets", async () => {
+  const rules = await readFile(new URL("../firestore.rules", import.meta.url), "utf8");
+  assert.match(rules, /"pomegranate-courtyard"\]/);
+  const html = await readFile(new URL("../invitations/wedding-designs/pomegranate-courtyard/index.html", import.meta.url), "utf8");
+  for (const id of ["introScreen", "openInvitation", "openingVideo", "skipOpening", "musicToggle", "weddingAudio", "siteContent", "heroSection", "countdownGrid", "detailsGrid", "scheduleMount", "seatingMap", "rsvpMount", "qrPassMount", "stickyActions", "toastRail"]) {
+    assert.match(html, new RegExp(`id="${id}"`), `missing #${id}`);
+  }
+  for (const asset of ["opening.webp", "opening.mp4", "courtyard-loop.mp4", "courtyard-loop-portrait.mp4", "chair.svg", "thumbnail.webp"]) {
+    await readFile(new URL(`../invitations/wedding-designs/pomegranate-courtyard/assets/${asset}`, import.meta.url));
   }
 });

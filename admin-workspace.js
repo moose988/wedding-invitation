@@ -1,4 +1,4 @@
-// Platform-admin sections of the All Events page: Photo Buckets, Demos and the
+// Platform-admin sections of the All Events page: Photo Buckets, Demos, Templates and the
 // per-event customer activity log. Loaded only for platform admins.
 import { collection, getDocs, limit, orderBy, query, startAfter, where } from "./firebase-config.js";
 import { createOwnerAdapter } from "./photo-bucket/adapters.js";
@@ -9,7 +9,7 @@ import { mountAdminHealth } from "./admin-health.js";
 import { DEFAULT_DEMO_HOURS, DEMO_DURATIONS, DEMO_NOTICE, DEMO_TYPES, adminPost, bucketOverdue, esc, formatCountdown, timeText } from "./admin-api.js";
 
 const $ = id => document.getElementById(id);
-const SECTIONS = ["events", "buckets", "demos"];
+const SECTIONS = ["events", "buckets", "demos", "templates"];
 let ctx = null;
 
 
@@ -22,6 +22,7 @@ export function mountAdminWorkspace(context) {
     $("workspace").dataset.section = section;
     $("adminBuckets").hidden = section !== "buckets";
     $("adminDemos").hidden = section !== "demos";
+    $("adminTemplates").hidden = section !== "templates";
     document.querySelectorAll("#workspaceTabs [data-section]").forEach(link => {
       const active = link.dataset.section === section;
       link.classList.toggle("is-active", active);
@@ -29,6 +30,12 @@ export function mountAdminWorkspace(context) {
     });
     if (section === "buckets" && !$("adminBuckets").dataset.ready) { $("adminBuckets").dataset.ready = "1"; buildBuckets(); }
     if (section === "demos" && !$("adminDemos").dataset.ready) { $("adminDemos").dataset.ready = "1"; buildDemos(); }
+    if (section === "templates" && !$("adminTemplates").dataset.ready) {
+      $("adminTemplates").dataset.ready = "1";
+      import("./admin-templates.js")
+        .then(module => module.buildTemplates($("adminTemplates"), { db: ctx.state.services.db, user: ctx.user }))
+        .catch(error => { console.error(error); $("adminTemplates").dataset.ready = ""; $("adminTemplates").innerHTML = `<p class="form-error" role="alert">The Templates tab could not open. Reload the page to try again.</p>`; });
+    }
   };
   window.addEventListener("hashchange", route);
   route();

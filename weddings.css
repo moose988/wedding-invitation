@@ -166,7 +166,8 @@
 
 /* ---- Platform admin sections: Photo Buckets, Demos, activity log ---- */
 #workspace[data-section="buckets"] > :not(header):not(nav.workspace-tabs):not(.admin-panel),
-#workspace[data-section="demos"] > :not(header):not(nav.workspace-tabs):not(.admin-panel) { display: none !important; }
+#workspace[data-section="demos"] > :not(header):not(nav.workspace-tabs):not(.admin-panel),
+#workspace[data-section="templates"] > :not(header):not(nav.workspace-tabs):not(.admin-panel) { display: none !important; }
 .workspace-tabs { flex-wrap: wrap; gap: 6px 24px; }
 :is(a, button, input, select, textarea, summary):focus-visible { outline: 3px solid rgba(31, 90, 77, .45); outline-offset: 2px; }
 .admin-panel[hidden] { display: none !important; }
@@ -255,3 +256,34 @@
 .form-grid .pb-create-switch { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; min-height: 44px; }
 .form-grid .music-create__option input, .form-grid .pb-create-switch input { width: auto; min-width: 20px; min-height: 20px; margin: 0; }
 .pb-create-switch small { flex-basis: 100%; color: var(--muted); font-weight: 500; }
+
+
+/* ---------- Templates tab (admin-templates.js) ---------- */
+#adminTemplates .tpl-label { display: block; margin: 10px 0 6px; font-size: 13px; font-weight: 700; }
+#adminTemplates .tpl-field { display: flex; flex-wrap: wrap; gap: 8px; align-items: stretch; }
+#adminTemplates .tpl-field input { flex: 1 1 240px; min-width: 0; min-height: 44px; padding: 10px 12px; border: 1px solid #d8d1c4; border-radius: 12px; background: #fff; font: inherit; }
+#adminTemplates .tpl-field input[readonly] { background: #f8f6f0; }
+#adminTemplates .tpl-field > :not(input) { flex: 0 0 auto; display: inline-grid; place-items: center; }
+@media (max-width: 640px) { #adminTemplates .tpl-field > :not(input) { flex: 1 1 auto; } }
+#adminTemplates .tpl-group { margin: 22px 0 10px; font-size: 13px; letter-spacing: .08em; text-transform: uppercase; opacity: .7; }
+#adminTemplates .tpl-list { display: grid; gap: 10px; margin: 0; padding: 0; list-style: none; }
+#adminTemplates .tpl-row { display: grid; grid-template-columns: 52px minmax(0, 1fr) auto auto; align-items: center; gap: 14px; padding: 10px 12px; border: 1px solid rgba(0,0,0,.08); border-radius: 14px; background: rgba(255,255,255,.6); transition: opacity .25s; }
+#adminTemplates .tpl-row img { width: 52px; height: 80px; object-fit: cover; border-radius: 9px; }
+#adminTemplates .tpl-row__text { display: grid; gap: 2px; min-width: 0; }
+#adminTemplates .tpl-row__text span { font-size: 13px; opacity: .72; }
+#adminTemplates .tpl-row.is-hidden img, #adminTemplates .tpl-row.is-hidden .tpl-row__text { opacity: .45; }
+#adminTemplates .tpl-switch { display: inline-flex; align-items: center; gap: 8px; cursor: pointer; }
+#adminTemplates .tpl-switch input { position: absolute; opacity: 0; width: 1px; height: 1px; }
+#adminTemplates .tpl-switch span[aria-hidden] { position: relative; width: 44px; height: 26px; border-radius: 999px; background: #c9c2b8; transition: background .25s; }
+#adminTemplates .tpl-switch span[aria-hidden]::after { content: ""; position: absolute; top: 3px; left: 3px; width: 20px; height: 20px; border-radius: 50%; background: #fff; box-shadow: 0 1px 3px rgba(0,0,0,.3); transition: transform .25s; }
+#adminTemplates .tpl-switch input:checked + span[aria-hidden] { background: #2f7d55; }
+#adminTemplates .tpl-switch input:checked + span[aria-hidden]::after { transform: translateX(18px); }
+#adminTemplates .tpl-switch input:focus-visible + span[aria-hidden] { outline: 2px solid #2f7d55; outline-offset: 2px; }
+#adminTemplates .tpl-switch input:disabled + span[aria-hidden] { opacity: .5; }
+#adminTemplates .tpl-switch em { min-width: 52px; font-style: normal; font-size: 13px; font-weight: 600; }
+@media (max-width: 640px) {
+  #adminTemplates .tpl-row { grid-template-columns: 44px minmax(0, 1fr) auto; }
+  #adminTemplates .tpl-row img { width: 44px; height: 68px; }
+  #adminTemplates .tpl-row > a { grid-column: 2; justify-self: start; }
+  #adminTemplates .tpl-switch { grid-column: 3; grid-row: 1; }
+}

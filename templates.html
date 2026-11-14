@@ -1,0 +1,57 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <meta name="theme-color" content="#16111a" />
+  <title>Invitation templates · QD Systems</title>
+  <meta name="description" content="Browse QD Systems digital invitations for weddings, gender reveals and birthdays, and open each one as your guests would." />
+  <meta property="og:title" content="Invitation templates · QD Systems" />
+  <meta property="og:description" content="Open each invitation on your phone, exactly as your guests will see it." />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,500;0,600;1,500&family=Outfit:wght@300;400;500;600&family=Reem+Kufi:wght@500;600&family=IBM+Plex+Sans+Arabic:wght@400;500&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="./skeleton.css?v=1" />
+  <link rel="stylesheet" href="./templates.css?v=1" />
+</head>
+<body>
+  <a class="tp-skip" href="#gallery" data-i18n="skip">Skip to the templates</a>
+  <header class="tp-top">
+    <span class="tp-brand">QD <em>Systems</em></span>
+    <button class="tp-lang" id="langToggle" type="button" aria-label="عرض الصفحة بالعربية"><span data-lang="en">EN</span><span data-lang="ar">ع</span></button>
+  </header>
+
+  <main>
+    <section class="tp-hero" aria-labelledby="pageTitle">
+      <p class="tp-kicker" data-i18n="kicker">Digital invitations</p>
+      <h1 id="pageTitle" data-i18n="title">Choose your invitation</h1>
+      <p class="tp-lede" data-i18n="lede">Tap any design to open it full screen, exactly as your guests will see it on their phones.</p>
+    </section>
+
+    <nav class="tp-filters" id="filters" aria-label="Event type"></nav>
+
+    <section id="gallery" class="tp-gallery" aria-live="polite" aria-busy="true">
+      <div class="tp-loading" data-i18n="loading">Loading the templates…</div>
+    </section>
+
+    <footer class="tp-foot">
+      <p data-i18n="foot">Every design includes RSVP, a countdown, the venue map and English and Arabic.</p>
+      <span>Made by <strong>QD Systems</strong></span>
+    </footer>
+  </main>
+
+  <div class="tp-viewer" id="viewer" role="dialog" aria-modal="true" aria-labelledby="viewerTitle" hidden>
+    <div class="tp-viewer__bar">
+      <button class="tp-viewer__close" id="viewerClose" type="button"><span aria-hidden="true">←</span> <span data-i18n="back">All templates</span></button>
+      <p class="tp-viewer__title" id="viewerTitle"></p>
+      <a class="tp-viewer__want" id="viewerWant" target="_blank" rel="noopener" hidden><span data-i18n="want">I want this one</span></a>
+    </div>
+    <div class="tp-viewer__stage">
+      <div class="tp-viewer__phone"><iframe id="viewerFrame" title="" allow="autoplay; fullscreen" referrerpolicy="same-origin"></iframe></div>
+    </div>
+  </div>
+
+  <script type="module" src="./action-feedback.js"></script>
+  <script type="module" src="./templates.js?v=1"></script>
+</body>
+</html>

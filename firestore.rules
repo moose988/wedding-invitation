@@ -2037,6 +2037,22 @@ service cloud.firestore {
       }
     }
 
+    // Which templates the public templates page (templates.html) hides from
+    // customers, and the WhatsApp number its "I want this one" button uses.
+    // Anyone may read it; only platform admins may change it.
+    match /siteSettings/templateShowcase {
+      allow get: if true;
+      allow list, delete: if false;
+      allow create, update: if isPlatformAdmin()
+        && request.resource.data.keys().hasOnly(["hidden", "whatsapp", "updatedAt", "updatedBy"])
+        && request.resource.data.hidden is list
+        && request.resource.data.hidden.size() <= 50
+        && request.resource.data.whatsapp is string
+        && request.resource.data.whatsapp.matches("^[0-9]{0,15}$")
+        && request.resource.data.updatedAt == request.time
+        && request.resource.data.updatedBy == request.auth.uid;
+    }
+
     match /platformAdmins/{userId} {
       allow get: if isSignedIn() && request.auth.uid == userId;
       allow list, write: if false;

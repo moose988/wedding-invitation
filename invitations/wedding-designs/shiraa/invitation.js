@@ -17,7 +17,6 @@ globalThis.invitationDesignConfig = {
   skipOpening: reducedMotion,
   scrollBehavior: () => reducedMotion() || document.body.classList.contains("keyboard-navigation") ? "instant" : "smooth",
   copy: {
-    heroKicker: { en: "Together with their families", ar: "بحضور الأهل والأحبّة" },
     openInvitation: { en: "Or tap to open", ar: "أو اضغطوا للفتح" },
     introCaption: { en: "Swipe up to lift the veil.", ar: "اسحبوا للأعلى لرفع الطرحة." },
     videoLabel: { en: "The couple turn to each other on the boardwalk as the sail lights up for the evening", ar: "العروسان على الممشى البحري والشراع يضيء للمساء" },
@@ -46,7 +45,7 @@ globalThis.invitationDesignConfig = {
     closingAr: "تعالوا كما أنتم، فالليلة بانتظاركم.",
     venueEn: "The Sail Ballroom", venueAr: "قاعة الشراع", locationEn: "Jumeirah, Dubai", locationAr: "جميرا، دبي",
     eventDateISO: "2027-03-19T20:00:00+04:00", timeEn: "8:00 PM", timeAr: "٨:٠٠ مساءً",
-    mapsUrl: "https://www.google.com/maps/search/?api=1&query=Jumeirah+Dubai", venueMapEmbedUrl: "https://www.google.com/maps?q=Jumeirah+Dubai&output=embed",
+    mapsUrl: "https://www.google.com/maps/search/?api=1&query=Jumeirah+Dubai", venueMapEmbedUrl: "", venueMapQuery: "Burj Al Arab Jumeirah, Dubai",
   },
 };
 
@@ -69,7 +68,7 @@ if (["127.0.0.1", "localhost"].includes(location.hostname) && new URLSearchParam
   document.getElementById("skipOpening").click();
 }
 
-/* ---------- Names: a small gold sail between them; a monogram on the veil ---------- */
+/* ---------- Names: a gold ampersand between them; a monogram on the veil ---------- */
 const splitNames = (text) => {
   const parts = text.trim().split(/\s+(&|و)\s+/);
   return parts.length === 3 && parts[0] && parts[2] ? parts : null;
@@ -79,10 +78,8 @@ const ornamentNames = (node) => {
   const parts = splitNames(node.textContent);
   if (!parts) return;
   const make = (className, value) => { const span = document.createElement("span"); span.className = className; if (value) span.textContent = value; return span; };
-  const joint = make("sh-joint");
-  joint.setAttribute("aria-hidden", "true");
-  const label = make("sh-sr", ` ${parts[1] === "&" ? "and" : "و"} `);
-  node.replaceChildren(make("sh-name", parts[0]), joint, label, make("sh-name", parts[2]));
+  const joint = make("sh-joint", parts[1]);
+  node.replaceChildren(make("sh-name", parts[0]), joint, make("sh-name", parts[2]));
 };
 const veilNames = document.getElementById("shVeilNames");
 const monogram = document.getElementById("shMonogram");
@@ -222,11 +219,11 @@ function livingFilm(video, section, portraitPoster) {
 }
 livingFilm(document.getElementById("shHeroFilm"), document.getElementById("heroSection"), `${root}hero-portrait.webp`);
 
-/* ---------- Collage: tiles drift at their own pace as the page scrolls ---------- */
+/* ---------- Moments: images drift at their own pace as the page scrolls ---------- */
 const tiles = [...document.querySelectorAll(".sh-tile[class*=sh-tile--]")];
 const speeds = { gown: -.06, heels: .05, roses: -.04, quote: .02, bisht: -.03, emerald: .08, oud: .04, cake: -.05, ghutra: .05 };
 let drift = 0;
-const collage = document.querySelector(".sh-collage");
+const collage = document.querySelector(".sh-moments");
 const driftFrame = () => {
   drift = 0;
   if (!collage || reduced.matches) return;

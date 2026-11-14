@@ -79,7 +79,7 @@
 .shiraa-invitation:has(#introScreen:not(.is-playing):not(.is-hidden)) .sh-language { background:#fffaf399; border-color:#bf955055; }
 .shiraa-invitation:has(#introScreen:not(.is-playing):not(.is-hidden)) .sh-language button:not([aria-pressed=true]) { color:var(--ink-soft); }
 .shiraa-invitation:has(#introScreen.is-playing) .sh-language { opacity:0; pointer-events:none; }
-.shiraa-invitation .sample-preview-banner { position:fixed; z-index:101; top:calc(max(16px,env(safe-area-inset-top)) + 10px); left:max(16px,env(safe-area-inset-left)); padding:6px 14px; border-radius:999px; background:var(--plum); color:var(--gold-2); font:500 10px/1.3 var(--body); letter-spacing:.16em; text-transform:uppercase; }
+.shiraa-invitation .sample-preview-banner { display:none !important; }
 .shiraa-invitation .sample-rsvp-note { display:none; }
 .shiraa-invitation .sticky-actions:has([data-scroll-details]) { display:none; }
 .shiraa-invitation .sticky-actions { position:fixed; z-index:50; bottom:max(22px,env(safe-area-inset-bottom)); inset-inline:0; width:fit-content; margin-inline:auto; transition:opacity 260ms var(--ease),transform 260ms var(--ease); }
@@ -89,16 +89,28 @@
 .shiraa-invitation .toast.is-leaving { opacity:0; transition:opacity 180ms; }
 
 /* ---------- Music: a pearl in a turning gold ring ---------- */
-.shiraa-invitation .music-toggle.sh-music { position:fixed; z-index:100; right:max(18px,env(safe-area-inset-right)); bottom:max(20px,env(safe-area-inset-bottom)); width:60px; height:60px; padding:0; display:grid; place-items:center; border:0; border-radius:50%; background:radial-gradient(circle at 50% 40%,var(--plum-3),var(--plum) 70%); box-shadow:0 14px 30px -12px #000; transition:transform 300ms var(--ease); }
-.shiraa-invitation .sh-music__ring { position:absolute; inset:3px; border-radius:50%; background:conic-gradient(from 0deg,#8c672c,#f6e2ad,#c49a52,#8c672c,#e9cf90,#8c672c); -webkit-mask:radial-gradient(circle,transparent 62%,#000 64%); mask:radial-gradient(circle,transparent 62%,#000 64%); }
-.shiraa-invitation .sh-music__ring::after { content:""; position:absolute; inset:0; border-radius:50%; background:repeating-conic-gradient(#fff8 0 2deg,transparent 2deg 30deg); }
-.shiraa-invitation .sh-music__pearl { width:20px; height:20px; border-radius:50%; background:radial-gradient(circle at 35% 30%,#fff 0%,#f4ece0 35%,#d7c8b4 75%,#b9a68e 100%); box-shadow:0 2px 6px #0007; transition:transform 400ms var(--ease); }
-.shiraa-invitation .sh-music:not([data-state=playing]) .sh-music__pearl { transform:scale(.8); }
-.shiraa-invitation .sh-music:not([data-state=playing]) .sh-music__ring { filter:saturate(.6) brightness(.85); }
+.shiraa-invitation .music-toggle.sh-music { position:fixed; z-index:100; right:max(16px,env(safe-area-inset-right)); bottom:max(18px,env(safe-area-inset-bottom)); width:72px; height:62px; padding:0; display:block; border:0; border-radius:12px; cursor:pointer; background:none; box-shadow:none; transition:transform 300ms var(--ease); -webkit-tap-highlight-color:transparent; }
 .shiraa-invitation .sh-music:hover { transform:translateY(-2px); }
-.shiraa-invitation .sh-music__bars { position:absolute; bottom:-12px; display:flex; gap:3px; opacity:0; transition:opacity 300ms; }
-.shiraa-invitation .sh-music__bars i { width:5px; height:5px; border-radius:50%; background:var(--gold-2); }
-.shiraa-invitation .sh-music[data-state=playing] .sh-music__bars { opacity:1; }
+.shiraa-invitation .sh-music:focus-visible { outline:2px solid var(--gold-2); outline-offset:4px; }
+/* A little turntable: plinth, spinning record, a tonearm that lifts off when paused. */
+.shiraa-invitation .sh-deck { position:absolute; inset:0; border-radius:12px; background:linear-gradient(145deg,#4d2a57 0%,#2a1530 55%,#1c0d21 100%); box-shadow:0 14px 26px -12px #000c,inset 0 0 0 1px #c49a5288,inset 0 1px 0 #ffffff22; }
+.shiraa-invitation .sh-deck__platter { position:absolute; left:6px; top:5px; width:52px; height:52px; border-radius:50%; background:#0b060c; box-shadow:0 0 0 1.5px #c49a52aa,0 3px 6px #000a; }
+.shiraa-invitation .sh-deck__disc { position:absolute; inset:2px; border-radius:50%; background:repeating-radial-gradient(circle,#141014 0 1.2px,#231b22 1.6px 2.4px),#111; box-shadow:inset 0 0 0 1px #000; }
+.shiraa-invitation .sh-deck__disc::after { content:""; position:absolute; inset:0; border-radius:50%; background:conic-gradient(from 30deg,transparent 0 40deg,#ffffff1f 55deg,transparent 75deg 210deg,#ffffff14 228deg,transparent 250deg); }
+.shiraa-invitation .sh-deck__label { position:absolute; inset:34%; border-radius:50%; background:conic-gradient(from 0deg,#8c672c,#f6e2ad,#c49a52,#8c672c,#e9cf90,#8c672c); }
+.shiraa-invitation .sh-deck__label::before { content:""; position:absolute; top:12%; left:44%; width:12%; height:30%; border-radius:2px; background:#2a1530aa; }
+.shiraa-invitation .sh-deck__label::after { content:""; position:absolute; inset:42%; border-radius:50%; background:#1c0d21; }
+.shiraa-invitation .sh-deck__arm { position:absolute; right:5px; top:5px; width:12px; height:12px; border-radius:50%; background:radial-gradient(circle at 35% 30%,#fff3cf,#c49a52 60%,#8c672c); box-shadow:0 1px 3px #000a; transform-origin:6px 6px; transform:rotate(-4deg); transition:transform 700ms var(--ease); }
+.shiraa-invitation .sh-deck__arm i { position:absolute; left:5px; top:6px; width:2px; height:38px; border-radius:2px; background:linear-gradient(#f6e2ad,#c49a52); transform-origin:1px 0; transform:rotate(8deg); }
+.shiraa-invitation .sh-deck__arm i::after { content:""; position:absolute; left:-3px; bottom:-6px; width:7px; height:9px; border-radius:2px; background:linear-gradient(#e9cf90,#8c672c); transform:rotate(-24deg); }
+.shiraa-invitation .sh-music[data-state=playing] .sh-deck__arm { transform:rotate(26deg); }
+.shiraa-invitation .sh-deck__knob { position:absolute; right:7px; bottom:7px; width:8px; height:8px; border-radius:50%; background:radial-gradient(circle at 35% 30%,#fff3cf,#c49a52 60%,#8c672c); }
+.shiraa-invitation .sh-deck__state { position:absolute; left:23px; top:22px; width:18px; height:18px; display:grid; place-items:center; border-radius:50%; background:#f8efe0; box-shadow:0 2px 6px #000a; opacity:1; transition:opacity 300ms, transform 300ms var(--ease); }
+.shiraa-invitation .sh-deck__state::before { content:""; width:0; height:0; margin-left:2px; border-style:solid; border-width:5px 0 5px 8px; border-color:transparent transparent transparent var(--plum); }
+.shiraa-invitation .sh-music[data-state=playing] .sh-deck__state { opacity:0; transform:scale(.6); }
+.shiraa-invitation .sh-music[data-state=playing] .sh-deck__state::before { width:7px; height:9px; margin:0; border:0; border-inline:2.5px solid var(--plum); }
+.shiraa-invitation .sh-music[data-state=playing]:hover .sh-deck__state,.shiraa-invitation .sh-music[data-state=playing]:focus-visible .sh-deck__state { opacity:1; transform:none; }
+.shiraa-invitation .sh-music .music-toggle__label { display:none; }
 
 /* ---------- Opening: lift the veil ---------- */
 .shiraa-invitation.intro-active { overflow:hidden; }
@@ -172,10 +184,7 @@
 .shiraa-invitation .hero-names > span { display:grid; justify-items:center; }
 .shiraa-invitation .sh-name { display:block; }
 .shiraa-invitation .sh-name:last-of-type { font:italic 500 1.08em/.95 var(--serif); }
-.shiraa-invitation .sh-joint { display:flex; align-items:center; gap:14px; margin:.12em 0 .08em; }
-.shiraa-invitation .sh-joint::before { content:""; order:2; width:.3em; height:.42em; background:var(--foil); clip-path:polygon(30% 0,36% 0,100% 100%,0 100%,30% 92%); }
-.shiraa-invitation .sh-joint::after { content:""; order:1; width:clamp(90px,16vw,200px); height:12px; background:var(--zari) center/22px 12px; -webkit-mask:linear-gradient(90deg,transparent,#000 30%,#000 70%,transparent); mask:linear-gradient(90deg,transparent,#000 30%,#000 70%,transparent); position:absolute; left:50%; transform:translateX(-50%); z-index:-1; }
-.shiraa-invitation .sh-joint { position:relative; justify-content:center; width:100%; }
+.shiraa-invitation .sh-joint { display:block; margin:.02em 0 .04em; font:italic 400 .62em/1 var(--serif); color:transparent; background:var(--foil) 0 0/200% 100%; -webkit-background-clip:text; background-clip:text; text-shadow:none; filter:drop-shadow(0 4px 14px #1c0d21aa); }
 .shiraa-invitation .hero-subtitle { max-width:34ch; font:italic 500 clamp(19px,1.9vw,24px)/1.4 var(--serif); color:#f6eee6; text-shadow:0 1px 14px #1c0d21,0 0 2px #1c0d21; }
 .shiraa-invitation .hero-bottom { display:grid; justify-items:center; gap:22px; padding:0 0 calc(44px + env(safe-area-inset-bottom)); }
 .shiraa-invitation .hero-event-line { display:flex; flex-wrap:wrap; justify-content:center; align-items:center; gap:8px 0; max-width:46ch; padding:0 24px; font:500 12px/1.6 var(--body); letter-spacing:.24em; text-transform:uppercase; color:var(--ivory); }
@@ -193,16 +202,14 @@
 .shiraa-invitation .details-copy { position:sticky; top:100px; display:grid; gap:46px; }
 .shiraa-invitation .sh-message { max-width:38ch; color:var(--ink-soft); font:italic 500 22px/1.5 var(--serif)!important; }
 .shiraa-invitation .sh-message:empty { display:none; }
-/* Countdown: four pearl-white medallions on a gold thread. */
-.shiraa-invitation .hero-countdown { position:relative; display:grid; grid-template-columns:repeat(4,minmax(0,1fr)); gap:14px; direction:ltr; }
-.shiraa-invitation .hero-countdown::before { content:""; position:absolute; left:6%; right:6%; top:50%; height:12px; margin-top:-6px; background:var(--zari) 0 0/22px 12px; opacity:.8; }
-.shiraa-invitation .countdown-card { position:relative; display:grid; justify-items:center; align-content:center; gap:4px; aspect-ratio:1; border-radius:50%; background:radial-gradient(circle at 35% 28%,#fff 0%,var(--satin) 40%,var(--pearl) 80%,var(--pearl-2) 100%); box-shadow:0 18px 30px -20px #6d5a66,inset 0 -6px 14px #bba98f44,0 0 0 1px #fff,0 0 0 2px var(--gold-soft); }
-.shiraa-invitation .countdown-card:nth-child(2) { background:radial-gradient(circle at 35% 28%,#4e2a58,var(--plum) 75%); color:var(--ivory); }
-.shiraa-invitation .countdown-card:nth-child(3) { background:radial-gradient(circle at 35% 28%,#f6dfd8,var(--blush) 60%,var(--blush-2)); }
-.shiraa-invitation .countdown-card:nth-child(4) { background:radial-gradient(circle at 35% 28%,#3e8c73,var(--emerald) 75%); color:var(--ivory); }
-.shiraa-invitation .countdown-card__value { font:400 clamp(28px,3.2vw,44px)/1 var(--display); font-variant-numeric:lining-nums tabular-nums; }
+/* Countdown: four plum arches, like lit windows on the sail, with gold numerals. */
+.shiraa-invitation .hero-countdown { position:relative; display:grid; grid-template-columns:repeat(4,minmax(0,1fr)); gap:12px; direction:ltr; }
+.shiraa-invitation .countdown-card { position:relative; display:grid; justify-items:center; align-content:end; gap:8px; aspect-ratio:3/4.2; padding:0 6px 16px; border-radius:999px 999px 16px 16px; color:var(--ivory); background:linear-gradient(180deg,var(--plum-3) 0%,var(--plum) 58%,var(--plum-4) 100%); box-shadow:0 22px 34px -22px #1c0d21,inset 0 0 0 1px #c49a5266; overflow:hidden; }
+.shiraa-invitation .countdown-card::before { content:""; position:absolute; inset:5px; border-radius:999px 999px 12px 12px; border:1px solid #c49a5255; pointer-events:none; }
+.shiraa-invitation .countdown-card::after { content:""; position:absolute; top:14%; left:50%; width:7px; height:7px; margin-left:-3.5px; background:var(--foil); clip-path:polygon(50% 0,62% 38%,100% 50%,62% 62%,50% 100%,38% 62%,0 50%,38% 38%); }
+.shiraa-invitation .countdown-card__value { font:400 clamp(30px,3.4vw,46px)/1 var(--display); font-variant-numeric:lining-nums tabular-nums; color:transparent; background:var(--foil) 0 0/200% 100%; -webkit-background-clip:text; background-clip:text; }
 .shiraa-invitation .countdown-card__value.is-ticking { animation:sh-tick 520ms var(--ease); }
-.shiraa-invitation .countdown-card__label { font:500 9px/1.2 var(--body); letter-spacing:.2em; text-transform:uppercase; opacity:.75; }
+.shiraa-invitation .countdown-card__label { padding-top:8px; border-top:1px solid #c49a5255; font:500 9px/1.2 var(--body); letter-spacing:.2em; text-transform:uppercase; color:var(--on-dark-soft); }
 .shiraa-invitation .sh-satin { position:relative; display:grid; gap:20px; }
 .shiraa-invitation .sh-satin__photo { position:relative; margin-inline-start:12%; border-radius:999px 999px 18px 18px; overflow:hidden; aspect-ratio:4/5; box-shadow:0 40px 70px -40px #2a1530; }
 .shiraa-invitation .sh-satin__photo::after { content:""; position:absolute; inset:10px; border-radius:inherit; border:1px solid #f6e2adaa; pointer-events:none; }
@@ -238,36 +245,38 @@
 .shiraa-invitation .venue-map-preview--fallback { min-height:0; background:none; }
 .shiraa-invitation .map-preview-button { min-height:48px; padding:12px 24px; border:1px solid var(--gold); border-radius:999px; background:transparent; color:var(--gold-3); font:500 11px/1 var(--body); letter-spacing:.2em; text-transform:uppercase; }
 
-/* ---------- The little things: a collage, every tile its own size and colour ---------- */
-.shiraa-invitation .atelier-heading { display:grid; justify-items:center; gap:22px; margin-bottom:64px; text-align:center; }
+/* ---------- The little things: one image at a time, each with its own note ---------- */
+.shiraa-invitation .atelier-heading { display:grid; justify-items:center; gap:22px; margin-bottom:clamp(56px,7vw,90px); text-align:center; }
 .shiraa-invitation .atelier-heading h2 { margin-inline:auto; }
-.shiraa-invitation .sh-collage { display:grid; grid-template-columns:repeat(12,minmax(0,1fr)); grid-auto-rows:clamp(70px,7.6vw,96px); gap:clamp(12px,1.6vw,22px); }
-.shiraa-invitation .sh-tile { --drift:0px; position:relative; overflow:hidden; border-radius:18px; translate:0 var(--drift); box-shadow:0 30px 50px -34px #2a1530; }
+.shiraa-invitation .sh-moments { display:grid; gap:clamp(64px,9vw,120px); max-width:920px; margin-inline:auto; }
+.shiraa-invitation .sh-moment { display:grid; grid-template-columns:minmax(0,1.25fr) minmax(0,1fr); align-items:center; gap:clamp(22px,4vw,60px); }
+.shiraa-invitation .sh-moment:nth-of-type(even) { grid-template-columns:minmax(0,1fr) minmax(0,1.25fr); }
+.shiraa-invitation .sh-moment:nth-of-type(even) .sh-tile { order:2; }
+.shiraa-invitation .sh-tile { --drift:0px; position:relative; overflow:hidden; aspect-ratio:4/5; border-radius:18px; translate:0 var(--drift); box-shadow:0 30px 50px -34px #2a1530; }
 .shiraa-invitation .sh-tile img { width:100%; height:100%; object-fit:cover; transition:transform 1.6s var(--ease); }
 .shiraa-invitation .sh-tile:hover img { transform:scale(1.05); }
-.shiraa-invitation .sh-tile figcaption { position:absolute; inset-inline-start:14px; bottom:14px; padding:6px 14px; border-radius:999px; font:500 10px/1.3 var(--body); letter-spacing:.24em; text-transform:uppercase; background:#fffaf3e0; color:var(--ink); backdrop-filter:blur(6px); -webkit-backdrop-filter:blur(6px); }
-.shiraa-invitation .sh-tile--gown { grid-column:1 / 6; grid-row:1 / 8; padding:12px; background:var(--plum); border-radius:999px 999px 22px 22px; }
+.shiraa-invitation .sh-tile--gown { padding:10px; background:var(--plum); border-radius:999px 999px 22px 22px; }
 .shiraa-invitation .sh-tile--gown img { border-radius:999px 999px 14px 14px; }
-.shiraa-invitation .sh-tile--gown figcaption { inset-inline-start:26px; bottom:26px; }
-.shiraa-invitation .sh-tile--heels { grid-column:6 / 9; grid-row:1 / 5; padding:10px; background:var(--blush); }
-.shiraa-invitation .sh-tile--heels img { border-radius:12px; }
-.shiraa-invitation .sh-tile--roses { grid-column:9 / 13; grid-row:1 / 5; border-radius:22px 22px 22px 120px; }
-.shiraa-invitation .sh-tile--roses figcaption { inset-inline:auto 14px; }
-.shiraa-invitation .sh-tile--quote { grid-column:6 / 13; grid-row:5 / 8; display:grid; align-content:center; justify-items:center; gap:8px; padding:22px; text-align:center; background:var(--plum) var(--damask); color:var(--ivory); }
-.shiraa-invitation .sh-tile--quote p { font:700 clamp(26px,2.8vw,40px)/1.5 var(--ar-display); color:transparent; background:var(--foil) 0 0/200% 100%; -webkit-background-clip:text; background-clip:text; animation:sh-foil 6s ease-in-out infinite alternate; }
-.shiraa-invitation .sh-tile--quote footer { font:italic 500 17px/1.4 var(--serif); color:var(--on-dark-soft); }
-.shiraa-invitation .sh-tile--bisht { grid-column:1 / 9; grid-row:8 / 11; background:#0f0a0d; }
-.shiraa-invitation .sh-tile--bisht::after { content:""; position:absolute; inset:auto 0 0; height:12px; background:var(--zari) 0 0/22px 12px; }
-.shiraa-invitation .sh-tile--bisht figcaption { background:#0f0a0dcc; color:var(--gold-2); bottom:24px; }
-.shiraa-invitation .sh-tile--emerald { grid-column:9 / 13; grid-row:8 / 12; align-self:center; justify-self:center; width:min(100%,330px); aspect-ratio:1; border-radius:50%; padding:8px; background:var(--emerald); box-shadow:0 0 0 1px var(--gold-soft),0 30px 50px -30px var(--emerald); }
+.shiraa-invitation .sh-tile--heels { padding:9px; background:var(--blush); }
+.shiraa-invitation .sh-tile--heels img { border-radius:11px; }
+.shiraa-invitation .sh-tile--emerald { aspect-ratio:1; border-radius:50%; padding:7px; background:var(--emerald); box-shadow:0 0 0 1px var(--gold-soft),0 30px 50px -30px #0b2a20; }
 .shiraa-invitation .sh-tile--emerald img { border-radius:50%; }
-.shiraa-invitation .sh-tile--emerald figcaption { inset-inline:0; margin-inline:auto; width:fit-content; bottom:14%; }
-.shiraa-invitation .sh-tile--oud { grid-column:1 / 5; grid-row:11 / 16; padding:10px; background:var(--gold-soft); border-radius:22px 22px 999px 999px; }
+.shiraa-invitation .sh-tile--bisht { background:#0f0a0d; border-radius:120px 18px 18px 18px; }
+.shiraa-invitation .sh-tile--bisht::after { content:""; position:absolute; inset:auto 0 0; height:12px; background:var(--zari) 0 0/22px 12px; }
+.shiraa-invitation .sh-tile--oud { padding:9px; background:var(--gold-soft); border-radius:22px 22px 999px 999px; }
 .shiraa-invitation .sh-tile--oud img { border-radius:14px 14px 999px 999px; }
-.shiraa-invitation .sh-tile--oud figcaption { inset-inline:0; margin-inline:auto; width:fit-content; bottom:16%; white-space:nowrap; }
-.shiraa-invitation .sh-tile--cake { grid-column:5 / 9; grid-row:11 / 16; padding:10px; background:var(--satin); box-shadow:0 0 0 1px var(--gold-soft),0 30px 50px -34px #2a1530; }
-.shiraa-invitation .sh-tile--cake img { border-radius:12px; }
-.shiraa-invitation .sh-tile--ghutra { grid-column:9 / 13; grid-row:12 / 16; border-radius:120px 22px 22px 22px; }
+.shiraa-invitation .sh-tile--cake { padding:9px; background:var(--satin); box-shadow:0 0 0 1px var(--gold-soft),0 30px 50px -34px #2a1530; }
+.shiraa-invitation .sh-tile--cake img { border-radius:11px; }
+.shiraa-invitation .sh-note { display:grid; gap:10px; align-content:center; }
+.shiraa-invitation .sh-moment:nth-of-type(even) .sh-note { text-align:end; justify-items:end; }
+.shiraa-invitation .sh-note__no { font:italic 400 15px/1 var(--serif); color:var(--gold-3); }
+.shiraa-invitation .sh-note__label { display:flex; align-items:center; gap:10px; font:500 11px/1.3 var(--body); letter-spacing:.26em; text-transform:uppercase; color:var(--plum-3); }
+.shiraa-invitation .sh-note__label::after { content:""; width:28px; height:1px; background:var(--gold); }
+.shiraa-invitation .sh-moment:nth-of-type(even) .sh-note__label { flex-direction:row-reverse; }
+.shiraa-invitation .sh-note__line { max-width:18ch; font:italic 500 clamp(19px,2.2vw,26px)/1.35 var(--serif); color:var(--ink); }
+.shiraa-invitation .sh-verse { display:grid; justify-items:center; gap:10px; padding:clamp(34px,5vw,56px) 24px; text-align:center; border-radius:24px; background:var(--plum) var(--damask); color:var(--ivory); box-shadow:inset 0 0 0 1px #c49a5255,0 30px 50px -34px #2a1530; }
+.shiraa-invitation .sh-verse p { font:700 clamp(26px,3.4vw,42px)/1.5 var(--ar-display); color:transparent; background:var(--foil) 0 0/200% 100%; -webkit-background-clip:text; background-clip:text; animation:sh-foil 6s ease-in-out infinite alternate; }
+.shiraa-invitation .sh-verse footer { font:italic 500 17px/1.4 var(--serif); color:var(--on-dark-soft); }
 
 /* ---------- Schedule: a gold thread through the evening ---------- */
 .shiraa-invitation .schedule-section { padding-top:150px; }
@@ -397,7 +406,10 @@
 .shiraa-invitation .sh-closing { max-width:24ch; margin-top:10px; font:400 clamp(24px,2.8vw,34px)/1.25 var(--display); color:var(--ink); text-wrap:balance; }
 .shiraa-invitation .sh-closing:empty { display:none; }
 .shiraa-invitation .qd-footer { position:relative; z-index:1; display:grid; justify-items:center; gap:10px; padding:20px 25px calc(40px + env(safe-area-inset-bottom)); color:var(--ink-soft); font:500 11px/1 var(--body); letter-spacing:.18em; text-transform:uppercase; }
-.shiraa-invitation .sh-footer-mark { width:14px; height:20px; background:var(--foil); clip-path:polygon(30% 0,36% 0,100% 100%,0 100%,30% 92%); }
+.shiraa-invitation .sh-rings { position:relative; width:40px; height:24px; }
+.shiraa-invitation .sh-rings i { position:absolute; top:2px; width:20px; height:20px; border-radius:50%; background:var(--foil); -webkit-mask:radial-gradient(circle,transparent 7px,#000 7.5px); mask:radial-gradient(circle,transparent 7px,#000 7.5px); }
+.shiraa-invitation .sh-rings i:first-child { left:5px; } .shiraa-invitation .sh-rings i:last-child { right:5px; }
+.shiraa-invitation .sh-rings i:last-child::after { content:""; position:absolute; top:-4px; left:50%; width:6px; height:6px; margin-left:-3px; background:#fff; clip-path:polygon(50% 0,100% 50%,50% 100%,0 50%); }
 .shiraa-invitation .qd-footer__credit { display:flex; align-items:center; gap:8px; }
 .shiraa-invitation .qd-footer a { display:inline-flex; align-items:center; min-height:44px; color:var(--gold-3); text-decoration:none; }
 
@@ -410,17 +422,19 @@
 
 /* ---------- Arabic ---------- */
 .shiraa-invitation [lang=ar],.shiraa-invitation.layla-arabic { font-family:var(--ar-body); letter-spacing:0; }
-.shiraa-invitation.layla-arabic :is(h1,h2,.detail-card__line,.schedule-item h3,.rsvp-summary h3,.sh-closing,.hero-subtitle,.rsvp-heading p,.seating-heading > p,.sh-message,.firebase-rsvp-greeting,.rsvp-answer,.schedule-item time,.qr-pass__copy,.rsvp-summary__message,.rsvp-deadline,.seat-plan-caption,.sh-veil__names),.shiraa-invitation h2[lang=ar] { font-family:var(--ar-display)!important; font-style:normal!important; letter-spacing:0; line-height:1.5; }
+.shiraa-invitation.layla-arabic :is(h1,h2,.detail-card__line,.schedule-item h3,.rsvp-summary h3,.sh-closing,.hero-subtitle,.rsvp-heading p,.seating-heading > p,.sh-message,.firebase-rsvp-greeting,.rsvp-answer,.schedule-item time,.qr-pass__copy,.rsvp-summary__message,.rsvp-deadline,.seat-plan-caption,.sh-veil__names,.sh-note__line),.shiraa-invitation h2[lang=ar] { font-family:var(--ar-display)!important; font-style:normal!important; letter-spacing:0; line-height:1.5; }
 .shiraa-invitation.layla-arabic h2,.shiraa-invitation h2[lang=ar] { line-height:1.35; font-weight:700; }
 .shiraa-invitation.layla-arabic h2 em,.shiraa-invitation h2[lang=ar] em { font-family:var(--ar-display); font-style:normal; }
 .shiraa-invitation.layla-arabic .hero-names { font-size:clamp(56px,min(9vw,10.5svh),128px); line-height:1.25; font-weight:700; }
 .shiraa-invitation.layla-arabic .sh-name:last-of-type { font-family:var(--ar-display); font-style:normal; }
-.shiraa-invitation.layla-arabic :is(.sh-kicker,.luxury-button,.hero-event-line,.countdown-card__label,.detail-tab,.rsvp-form__message,.rsvp-summary__eyebrow,.envelope-intro__skip,.sh-open-link,.map-preview-button,.sh-tile figcaption,.sh-veil__cue p) { font-family:var(--ar-body); letter-spacing:0; text-transform:none; }
+.shiraa-invitation.layla-arabic .sh-joint { font:700 .95em/1 var(--ar-display); margin:-.12em 0 -.2em; }
+.shiraa-invitation.layla-arabic .sh-note__label { font-size:14px; }
+.shiraa-invitation.layla-arabic .sh-note__line { font-size:19px; line-height:1.6; font-weight:500; }
+.shiraa-invitation.layla-arabic :is(.sh-kicker,.luxury-button,.hero-event-line,.countdown-card__label,.detail-tab,.rsvp-form__message,.rsvp-summary__eyebrow,.envelope-intro__skip,.sh-open-link,.map-preview-button,.sh-note__label,.sh-veil__cue p) { font-family:var(--ar-body); letter-spacing:0; text-transform:none; }
 .shiraa-invitation .sh-kicker[lang=ar] { font-family:var(--ar-body); letter-spacing:0; font-size:13.5px; }
 .shiraa-invitation.layla-arabic .hero-event-line { font-size:15px; }
 .shiraa-invitation.layla-arabic .countdown-card__label { font-size:11px; }
 .shiraa-invitation.layla-arabic .detail-tab { font-size:13px; }
-.shiraa-invitation.layla-arabic .sh-tile figcaption { font-size:13px; }
 .shiraa-invitation.layla-arabic .sh-arrow { transform:scaleX(-1); }
 
 /* ---------- Phones ---------- */
@@ -429,7 +443,7 @@
   .shiraa-invitation h2 { font-size:clamp(38px,11vw,52px); }
   .shiraa-invitation .sh-kicker { font-size:10px; letter-spacing:.24em; gap:10px; }
   /* Names stay in the sky above the couple; the line of copy drops to just above the date. */
-  .shiraa-invitation .hero-composition { align-self:stretch; grid-template-rows:auto auto 1fr; padding-top:calc(70px + env(safe-area-inset-top)); gap:6px; }
+  .shiraa-invitation .hero-composition { align-self:stretch; grid-template-rows:auto 1fr; padding-top:calc(96px + env(safe-area-inset-top)); gap:6px; }
   .shiraa-invitation .hero-names { font-size:clamp(46px,13.4vw,62px); line-height:.9; }
   .shiraa-invitation .sh-joint { margin:.02em 0; }
   .shiraa-invitation .hero-subtitle { align-self:end; margin-bottom:18px; font-size:18px; max-width:27ch; }
@@ -441,8 +455,18 @@
   .shiraa-invitation :is(.details-composition,.evening-composition,.rsvp-composition,.pass-composition) { grid-template-columns:1fr; gap:52px; }
   .shiraa-invitation .details-copy { position:relative; top:auto; gap:38px; }
   .shiraa-invitation .hero-countdown { gap:8px; }
-  .shiraa-invitation .countdown-card__value { font-size:clamp(22px,7vw,30px); }
-  .shiraa-invitation .countdown-card__label { font-size:7.5px; letter-spacing:.12em; }
+  .shiraa-invitation .countdown-card { padding-bottom:12px; gap:6px; }
+  .shiraa-invitation .countdown-card__value { font-size:clamp(24px,7.4vw,32px); }
+  .shiraa-invitation .countdown-card__label { font-size:7.5px; letter-spacing:.14em; padding-top:6px; }
+  .shiraa-invitation .sh-moment,.shiraa-invitation .sh-moment:nth-of-type(even) { grid-template-columns:minmax(0,1.3fr) minmax(0,1fr); gap:18px; }
+  .shiraa-invitation .sh-moment:nth-of-type(even) { grid-template-columns:minmax(0,1fr) minmax(0,1.3fr); }
+  .shiraa-invitation .sh-moments { gap:64px; }
+  .shiraa-invitation .sh-note { gap:8px; }
+  .shiraa-invitation .sh-note__label { font-size:9.5px; letter-spacing:.2em; gap:8px; }
+  .shiraa-invitation .sh-note__label::after { width:18px; }
+  .shiraa-invitation .sh-note__line { font-size:17px; }
+  .shiraa-invitation .sh-tile--gown { padding:7px; } .shiraa-invitation :is(.sh-tile--heels,.sh-tile--oud,.sh-tile--cake) { padding:6px; } .shiraa-invitation .sh-tile--emerald { padding:5px; } .shiraa-invitation .sh-tile--bisht { border-radius:80px 16px 16px 16px; }
+  .shiraa-invitation .sh-verse p { font-size:26px; } .shiraa-invitation .sh-verse footer { font-size:15px; }
   .shiraa-invitation .sh-satin__photo { margin-inline:14% 0; }
   .shiraa-invitation .sh-satin__card { margin-inline:-4px 6%; margin-top:-34%; padding:24px 18px 26px; }
   .shiraa-invitation .detail-tab { font-size:9.5px; letter-spacing:.12em; }
@@ -453,22 +477,6 @@
   .shiraa-invitation .venue-map-preview iframe { height:210px; }
   /* The collage becomes a two-column scrapbook on phones. */
   .shiraa-invitation .atelier-heading { margin-bottom:40px; }
-  .shiraa-invitation .sh-collage { grid-template-columns:repeat(6,minmax(0,1fr)); grid-auto-rows:62px; gap:12px; }
-  .shiraa-invitation .sh-tile--gown { grid-column:1 / 5; grid-row:1 / 8; padding:8px; }
-  .shiraa-invitation .sh-tile--heels { grid-column:5 / 7; grid-row:1 / 6; padding:6px; }
-  .shiraa-invitation .sh-tile--emerald { grid-column:4 / 7; grid-row:6 / 9; width:100%; z-index:1; padding:5px; }
-  .shiraa-invitation .sh-tile--bisht { grid-column:1 / 7; grid-row:9 / 12; }
-  .shiraa-invitation .sh-tile--roses { grid-column:1 / 4; grid-row:12 / 16; border-radius:18px 18px 18px 80px; }
-  .shiraa-invitation .sh-tile--oud { grid-column:4 / 7; grid-row:12 / 17; padding:6px; }
-  .shiraa-invitation .sh-tile--cake { grid-column:1 / 4; grid-row:16 / 21; padding:6px; }
-  .shiraa-invitation .sh-tile--quote { grid-column:4 / 7; grid-row:17 / 21; padding:14px; }
-  .shiraa-invitation .sh-tile--ghutra { grid-column:1 / 7; grid-row:21 / 24; border-radius:80px 18px 18px 18px; }
-  .shiraa-invitation .sh-tile--quote p { font-size:21px; }
-  .shiraa-invitation .sh-tile--quote footer { font-size:13px; }
-  .shiraa-invitation .sh-tile figcaption { inset-inline-start:10px; bottom:10px; padding:5px 10px; font-size:8.5px; letter-spacing:.16em; }
-  .shiraa-invitation .sh-tile--gown figcaption { inset-inline-start:18px; bottom:18px; }
-  .shiraa-invitation .sh-tile--heels figcaption { inset-inline-start:12px; bottom:12px; }
-  .shiraa-invitation .sh-tile--bisht figcaption { bottom:22px; }
   .shiraa-invitation .schedule-section { padding-top:110px; }
   .shiraa-invitation .evening-title { position:relative; top:auto; padding-inline-end:112px; }
   .shiraa-invitation .evening-title h2 { font-size:clamp(34px,9.6vw,44px); }
@@ -491,17 +499,18 @@
   .shiraa-invitation .pass-composition h2 { margin-inline:auto; }
   .shiraa-invitation .sh-blessing { font-size:clamp(28px,8vw,36px); }
   .shiraa-invitation .sh-closing { font-size:clamp(22px,6.4vw,28px); }
-  .shiraa-invitation .music-toggle.sh-music { width:54px; height:54px; }
+  .shiraa-invitation .music-toggle.sh-music { width:66px; height:57px; }
+  .shiraa-invitation .sh-deck__platter { width:47px; height:47px; }
+  .shiraa-invitation .sh-deck__state { left:20px; top:20px; }
+  .shiraa-invitation .sh-deck__arm i { height:34px; }
   .shiraa-invitation .sticky-actions { inset-inline:max(14px,env(safe-area-inset-left)) auto; margin-inline:0; }
   .shiraa-invitation .sticky-actions .luxury-button { padding-inline:22px; letter-spacing:.14em; }
 }
 
 /* ---------- Motion ---------- */
 @media (prefers-reduced-motion:no-preference) {
+  .shiraa-invitation .sh-music[data-state=playing] .sh-deck__disc { animation:sh-spin 2.4s linear infinite; }
   .shiraa-invitation .sh-glints i { animation:sh-rise-glint var(--d,14s) linear var(--w,0s) infinite; }
-  .shiraa-invitation .sh-music[data-state=playing] .sh-music__ring { animation:sh-spin 7s linear infinite; }
-  .shiraa-invitation .sh-music[data-state=playing] .sh-music__bars i { animation:sh-bead 1.2s ease-in-out infinite; }
-  .shiraa-invitation .sh-music[data-state=playing] .sh-music__bars i:nth-child(2) { animation-delay:.2s; } .shiraa-invitation .sh-music[data-state=playing] .sh-music__bars i:nth-child(3) { animation-delay:.4s; }
   .shiraa-invitation .envelope-intro:not(.is-opening):not(.is-playing) .sh-veil__copy > * { animation:sh-rise 1.4s var(--ease) both; }
   .shiraa-invitation .envelope-intro:not(.is-opening):not(.is-playing) .sh-veil__copy > :nth-child(2) { animation-delay:.2s; } .shiraa-invitation .envelope-intro:not(.is-opening):not(.is-playing) .sh-veil__copy > :nth-child(3),.shiraa-invitation .envelope-intro:not(.is-opening):not(.is-playing) .sh-veil__copy > :nth-child(4) { animation-delay:.4s; }
   .shiraa-invitation .envelope-intro:not(.is-opening):not(.is-playing) .sh-veil__cue { animation:sh-rise 1.2s var(--ease) .9s both; }
@@ -521,7 +530,6 @@
   .shiraa-invitation.sh-motion .sh-tile:not(.sh-arrival) { opacity:0; }
   .shiraa-invitation .sh-tile.sh-arrival { animation:sh-tile 1.3s var(--ease) both; }
   .shiraa-invitation .sh-tile.sh-arrival img { animation:sh-settle 2.4s var(--ease) both; }
-  .shiraa-invitation .sh-tile--heels.sh-arrival,.shiraa-invitation .sh-tile--roses.sh-arrival { animation-delay:.12s; } .shiraa-invitation .sh-tile--emerald.sh-arrival,.shiraa-invitation .sh-tile--oud.sh-arrival { animation-delay:.24s; } .shiraa-invitation .sh-tile--quote.sh-arrival { animation-delay:.32s; }
   .shiraa-invitation .sh-arrival .countdown-card { animation:sh-pearl 1s var(--ease) both; }
   .shiraa-invitation .sh-arrival .countdown-card:nth-child(2) { animation-delay:.1s; } .shiraa-invitation .sh-arrival .countdown-card:nth-child(3) { animation-delay:.2s; } .shiraa-invitation .sh-arrival .countdown-card:nth-child(4) { animation-delay:.3s; }
   .shiraa-invitation .sh-arrival .sh-satin__photo img { animation:sh-settle 2.6s var(--ease) both; }
@@ -562,3 +570,10 @@
 }
 .shiraa-invitation.keyboard-navigation * { scroll-behavior:auto!important; }
 }
+
+
+/* ---------- RSVP: the sea at dusk, softly out of focus ---------- */
+.shiraa-invitation .rsvp-section { background:var(--plum-4); isolation:isolate; }
+.shiraa-invitation .sh-dusk { position:absolute; inset:0; z-index:-1; overflow:hidden; }
+.shiraa-invitation .sh-dusk::before { content:""; position:absolute; inset:-40px; background:url("./assets/hero.webp") 70% 40%/cover no-repeat; filter:blur(7px) saturate(1.15); transform:scale(1.06); }
+.shiraa-invitation .sh-dusk::after { content:""; position:absolute; inset:0; background:linear-gradient(180deg,#1c0d21d9 0%,#2a153073 34%,#4d2a5752 60%,#1c0d21e6 100%),radial-gradient(70% 50% at 80% 30%,#e9cf9033,transparent 70%); }

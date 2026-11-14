@@ -65,9 +65,21 @@ async function allPages(fetchPage) {
   }
   return out;
 }
-async function put(target, blob) {
+// With onProgress the PUT goes through XMLHttpRequest, the only browser API that reports upload progress. It is the
+// same signed PUT with the same headers (already a CORS-preflighted request), so storage needs no new permissions.
+function xhrPut(url, headers, blob, onProgress) {
+  return new Promise((resolve, reject) => {
+    const xhr = new XMLHttpRequest(); xhr.open('PUT', url);
+    for (const [name, value] of Object.entries(headers || {})) xhr.setRequestHeader(name, value);
+    xhr.upload.onprogress = event => { if (event.lengthComputable && event.total) { try { onProgress(event.loaded / event.total); } catch { /* display only */ } } };
+    xhr.onload = () => resolve({ ok: xhr.status >= 200 && xhr.status < 300, status: xhr.status });
+    xhr.onerror = xhr.ontimeout = xhr.onabort = () => reject(new TypeError('Upload connection failed'));
+    xhr.send(blob);
+  });
+}
+async function put(target, blob, onProgress) {
   let response;
-  try { response = await fetch(storageUrl(target.url), { method: 'PUT', headers: target.headers, body: blob }); }
+  try { response = onProgress && typeof XMLHttpRequest !== 'undefined' ? await xhrPut(storageUrl(target.url), target.headers, blob, onProgress) : await fetch(storageUrl(target.url), { method: 'PUT', headers: target.headers, body: blob }); }
   catch { throw Object.assign(retryable(new Error('The upload could not reach the server. Check your internet connection; it will resume by itself.')), { network: true }); }
   if (!response.ok) throw response.status >= 500 || response.status === 429 ? retryable(new Error('Upload service is busy. Retrying…')) : new Error('The upload was rejected. Please choose the photo again.');
 }
@@ -161,10 +173,10 @@ export async function guestAdapterApi(publicDetails) {
     try { return await call(method, path, { ...options, token: session.token }); }
     catch (error) { if (error.status !== 401) throw error; await start(); return call(method, path, { ...options, token: session.token }); }
   };
-  async function upload(bucketId_, photoId, image, extra) {
+  async function upload(bucketId_, photoId, image, extra, onProgress) {
     const grant = await api('POST', `/b/${bucketId_}/uploads`, { body: { photoId, size: image.blob.size, thumbSize: image.thumbnail.size, ...extra } });
     if (grant.exists) return { photo: grant.exists };
-    await put(grant.image, image.blob); await put(grant.thumbnail, image.thumbnail);
+    await put(grant.image, image.blob, onProgress); await put(grant.thumbnail, image.thumbnail);
     return { grant };
   }
   async function finish(bucketId_, photoId, result, image, body) {
@@ -181,10 +193,10 @@ export async function guestAdapterApi(publicDetails) {
     allPhotos: (id, contributor) => allOf(api, id, contributor),
     thumbnail: (id, photo) => thumbnailFor(session.token, validId(id), photo),
     image: (id, photoId) => blobFor(session.token, id, photoId, 'image'),
-    async commit(id, jobId, image) {
+    async commit(id, jobId, image, onProgress) {
       validId(id); const job = (await queue.jobs(id)).find(j => j.id === jobId);
       const name = job?.name?.trim();
-      const photo = await finish(id, jobId, await upload(id, jobId, image, {}), image, name ? { name } : {});
+      const photo = await finish(id, jobId, await upload(id, jobId, image, {}, onProgress), image, name ? { name } : {});
       await queue.discardJob(id, jobId).catch(() => { /* best effort: the photo is saved; a leftover local copy is harmless */ });
       return photo;
     },

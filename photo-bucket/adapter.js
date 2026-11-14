@@ -112,7 +112,7 @@ export function guestAdapter(contributorId) {
       const create = keepSource => transaction(['buckets', 'jobs', 'sources'], 'readwrite', async s => {
         writable(await req(s.buckets.get(bucketId)));
         const queued = await req(s.jobs.getAll());
-        if (queued.reduce((sum, j) => sum + j.size, 0) + file.size > LIMITS.queuedBytes) throw new Error('The local queue is full. Finish or remove pending photos, then try again.');
+        if (queued.reduce((sum, j) => sum + j.size, 0) + file.size > LIMITS.queuedBytes) throw new Error('Too many large photos at once. Let these finish uploading, then choose the rest again.');
         const job = { id: id(), bucketId, contributorId, name: String(name).trim().slice(0, 60), size: file.size, filename: file.name, createdAt: Date.now(), attempts: 0, state: 'queued', error: '' };
         s.jobs.add(job);
         if (keepSource) s.sources.add({ id: job.id, blob: copy }); else memorySources.set(job.id, copy);

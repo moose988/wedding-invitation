@@ -69,14 +69,16 @@ async function boot() {
     }
     else {
       owner ? renderOwner() : renderGuest(); bindCommon(); bindViewer(); bindSort();
-      if (owner) { bindOwner(); await renderShare(); setInterval(autoRefresh, 5000); }
-      else { bindGuest(); queue = uploadQueue({ adapter, bucketId: bucket.id, changed: onJobChange, transport: defaultTransport() }); await loadQueue(); await queue.start(); await afterStatus(); }
+      if (owner) { bindOwner(); paintUsage(); await renderShare(); setInterval(autoRefresh, 5000); }
+      else { bindGuest(); queue = uploadQueue({ adapter, bucketId: bucket.id, changed: onJobChange, transport: defaultTransport() }); listenToOtherTabs(); await loadQueue(); await queue.start(); await afterStatus(); }
       await refreshGallery();
     }
     app.setAttribute('aria-busy', 'false');
   } catch (error) {
     app.setAttribute('aria-busy', 'false'); app.innerHTML = `${brand(owner)}<div class="pb-state"><strong>This collection could not open</strong><p>${h(friendlyError(error))}</p><button id="reloadButton" type="button">Try again</button></div>`;
     $('#reloadButton').addEventListener('click', () => location.reload());
+    // Paused-until-the-event (frozen) collections open by themselves once they resume: re-check every 30 s while visible.
+    if (!owner && error?.code === 'BUCKET_FROZEN') setInterval(() => { if (document.visibilityState === 'visible') location.reload(); }, 30000);
   }
 }
 function renderGuest() {
@@ -89,7 +91,7 @@ function renderGuest() {
 }
 function renderOwner() {
   app.innerHTML = `${brand(true)}<header class="pb-owner-heading"><div><h1 id="eventName" dir="auto">${h(bucket.name)}</h1><div id="eventMeta">${meta()}</div></div></header>${frozenNotice()}${notice()}<p id="message" class="pb-message" role="status" aria-live="polite"></p>
-  <div class="pb-owner-layout"><section aria-labelledby="galleryHeading"><div class="pb-section-head pb-gallery-head"><h2 id="galleryHeading">The photo collection</h2><span id="photoCount" class="pb-count"></span></div><div class="pb-gallery-toolbar"><button type="button" id="zipButton">Download all as ZIP</button><button type="button" id="pauseButton">${bucket.paused ? 'Resume uploads' : 'Pause uploads'}</button>${bucket.canFreeze ? `<button type="button" id="freezeButton" class="pb-danger">${bucket.frozen ? 'Resume everything' : 'Pause everything'}</button>` : ''}${sortControl()}</div><p id="zipStatus" class="pb-subtle" role="status"></p><div id="gallery" class="pb-grid">${skeleton.tiles(6)}</div><div id="galleryState" class="pb-state" role="status">Loading your photos…</div>
+  <div class="pb-owner-layout"><section aria-labelledby="galleryHeading"><div class="pb-section-head pb-gallery-head"><h2 id="galleryHeading">The photo collection</h2><span id="photoCount" class="pb-count"></span></div><div class="pb-gallery-toolbar"><button type="button" id="zipButton">Download all as ZIP</button><button type="button" id="pauseButton">${bucket.paused ? 'Resume uploads' : 'Pause uploads'}</button>${bucket.canFreeze ? `<button type="button" id="freezeButton" class="pb-danger">${bucket.frozen ? 'Resume everything' : 'Pause everything'}</button>` : ''}${sortControl()}</div><p id="usageLine" class="pb-usage" role="status" hidden></p><p id="zipStatus" class="pb-subtle" role="status"></p><div id="gallery" class="pb-grid">${skeleton.tiles(6)}</div><div id="galleryState" class="pb-state" role="status">Loading your photos…</div>
   </section>
   <aside><section class="pb-panel pb-sharing" aria-labelledby="shareHeading"><h2 id="shareHeading">Invite their perspective</h2><div id="qrSlot" class="pb-qr-slot" role="status">Preparing QR code…</div><button type="button" id="copyLink">Copy guest link</button><a id="guestLink" class="pb-button" target="_blank" rel="noopener">Open guest page</a><button type="button" id="downloadQr">Download QR image</button><a class="pb-button" href="./photo-bucket-poster.html?bucket=${encodeURIComponent(bucket.id)}">Preview & print A5 card</a></section>
   <details class="pb-panel pb-owner-details"><summary>Edit details</summary><form id="detailsForm"><label>Event title<input name="name" dir="auto" required maxlength="100" value="${h(bucket.name)}"></label><label>Date<input name="date" type="date" required value="${h(bucket.date)}"${bucket.canAdmin ? '' : ' readonly aria-describedby="dateLockNote"'}>${bucket.canAdmin ? '' : '<small id="dateLockNote" class="pb-subtle">Only a QD Events admin can change the date.</small>'}</label><label>Place<input name="location" dir="auto" required maxlength="160" value="${h(bucket.location)}"></label>${online && bucket.canAdmin ? `<label>Guest page &amp; card theme<select name="theme">${THEMES.map(([value, label]) => `<option value="${value}" ${value === themeOf(bucket) ? 'selected' : ''}>${label}</option>`).join('')}</select></label>` : ''}${online && bucket.canAdmin ? `<label class="pb-switch"><input name="showUploaderNames" type="checkbox" ${bucket.showUploaderNames === true ? 'checked' : ''}> Show who uploaded each photo</label><label class="pb-switch"><input name="guestShowsDetails" type="checkbox" ${bucket.guestShowsDetails !== false ? 'checked' : ''}> Show the date and place on the guest page</label><label class="pb-switch"><input name="cardShowsDetails" type="checkbox" ${bucket.cardShowsDetails === true ? 'checked' : ''}> Show the date and place on the printed card</label>` : ''}<button type="submit" class="pb-primary">Save</button></form></details></aside></div>${dialogs()}`;
@@ -101,9 +103,21 @@ const byTime = (a, b) => sortOrder === 'oldest' ? a.createdAt - b.createdAt : b.
 const timeLabel = ms => { try { return new Intl.DateTimeFormat(undefined, { day: 'numeric', month: 'short', hour: 'numeric', minute: '2-digit' }).format(ms); } catch { return ''; } };
 // quiet = background refresh: no redraw when nothing changed, and no error banner if the network blips.
 // Host page only: pick up new guest uploads every 5 seconds while the tab is visible and nothing is open.
+// Every sixth tick (30 s) it also re-reads the bucket for the storage line, so a filling bucket is noticed in time.
+let refreshTicks = 0;
 function autoRefresh() {
   if (disposed || document.visibilityState !== 'visible' || document.querySelector('dialog[open]')) return;
   void refreshGallery(true);
+  if (++refreshTicks % 6 === 0) void adapter.get(bucket.id).then(current => { if (disposed) return; bucket = current; syncDetails(); }).catch(() => { /* next tick */ });
+}
+// Storage used, for hosts. Online buckets only (the local demo has no limit). Warns from 90% full.
+const gbText = bytes => bytes >= 1e9 ? `${(bytes / 1024 ** 3).toFixed(1)} GB` : `${Math.max(1, Math.round(bytes / 1024 ** 2))} MB`;
+function paintUsage() {
+  const line = $('#usageLine'); if (!line) return;
+  if (!online || !Number.isFinite(bucket.usedBytes) || !(bucket.limitBytes > 0)) { line.hidden = true; return; }
+  const ratio = bucket.usedBytes / bucket.limitBytes;
+  line.hidden = false; line.classList.toggle('pb-usage--warn', ratio >= 0.9);
+  line.textContent = `Storage: ${gbText(bucket.usedBytes)} of ${bucket.limitGb ?? gbText(bucket.limitBytes)}${bucket.limitGb ? ' GB' : ''} used (${Math.min(100, Math.floor(ratio * 100))}%)` + (ratio >= 1 ? ' · The collection is full: new guest photos are refused. Contact QD Events to add space.' : ratio >= 0.9 ? ' · Almost full. Contact QD Events to add space before guests are turned away.' : '');
 }
 async function refreshGallery(quiet = false) {
   if (disposed) return;
@@ -216,7 +230,9 @@ function drawGallery() {
   revokeGallery(); const visible = visiblePhotos();
   // The server's total, not the loaded page size; filtered or offline views count what is shown.
   const count = !filter && Number.isInteger(totalPhotos) ? Math.max(totalPhotos, visible.length) : visible.length;
-  $('#photoCount').textContent = count > visible.length ? `Showing ${visible.length} of ${count.toLocaleString()} photos` : `${count} ${count === 1 ? 'photo' : 'photos'}`;
+  // Guests get no server total, so when more pages exist the count says so instead of showing the loaded page size.
+  const morePages = !filter && Boolean(nextCursor) && adapter.photosPage && !(Number.isInteger(totalPhotos) && totalPhotos > visible.length);
+  $('#photoCount').textContent = count > visible.length ? `Showing ${visible.length} of ${count.toLocaleString()} photos` : morePages ? `${count}+ photos` : `${count} ${count === 1 ? 'photo' : 'photos'}`;
   $('#galleryState').hidden = Boolean(visible.length);
   $('#galleryState').innerHTML = filter ? '<strong>No photos from this contributor</strong>Choose Everyone to see the collection.' : `<strong>${owner ? 'The best moments are still to come' : 'Your story starts here'}</strong>${owner ? (online ? 'Share the guest link to start collecting photos.' : 'Share the guest link or add demo samples below.') : 'Take a photo or choose a favourite from your gallery.'}`;
   $('#gallery').innerHTML = visible.map(photo => `<article class="pb-tile"><button class="pb-image-button" type="button" data-photo="${h(photo.id)}" data-action="view" aria-label="Open photo by ${h(photo.name || 'Anonymous guest')}"><img ${photo.thumbnail ? `src="${thumb(photo.thumbnail)}"` : `data-thumb="${h(photo.id)}" class="pb-thumb-pending"`} alt="Event memory shared by ${h(photo.name || 'Anonymous guest')}" loading="lazy" width="240" height="300"></button><div class="pb-tile-body"><p dir="auto">${h(owner ? (photo.name || '') : (online ? 'Saved online' : 'Saved on this device'))}${photo.source === 'fixture' ? ' · Demo sample' : ''}</p><small class="pb-tile-time">${h(timeLabel(photo.createdAt))}</small><div class="pb-tile-actions"><button type="button" data-photo="${h(photo.id)}" data-action="${owner ? 'download' : 'edit'}">${owner ? 'Download' : 'Edit photo'}</button><button type="button" class="pb-danger" data-photo="${h(photo.id)}" data-action="delete" aria-label="Delete photo by ${h(photo.name || 'Anonymous guest')}">Delete</button></div></div></article>`).join('');
@@ -321,13 +337,16 @@ function bindGuest() {
       showUploadNotice('');
       message(files.length === 1 ? 'Preparing your photo…' : 'Preparing your photos…');
       let accepted = 0;
-      const errors = [];
+      const errors = [], refused = new Map(); // reason -> file names, so many photos refused for one reason read as one line
       const skipped = files.length - LIMITS.batch;
       if (skipped > 0) errors.push(`Choose up to ${LIMITS.batch} photos at a time. Choose the remaining ${skipped} in a new batch.`);
       for (const file of files.slice(0, LIMITS.batch)) {
         try { const job = await adapter.enqueue(bucket.id, file, bucket.showUploaderNames ? currentName() : ''); queueStates.set(job.id, job); accepted++; renderJobs(); void queue.start(); }
-        catch (error) { errors.push(`${file.name}: ${friendlyError(error)}`); }
+        catch (error) { const reason = friendlyError(error); refused.set(reason, [...(refused.get(reason) || []), file.name]); }
       }
+      const named = names => names.length <= 4 ? names.join(', ') : `${names.slice(0, 3).join(', ')} and ${names.length - 3} more`;
+      for (const [reason, names] of refused) errors.push(`${reason} (${named(names)})`);
+      if (accepted) tellOtherTabs();
       // Problems stay in their own box until the guest dismisses it or picks again; upload progress
       // messages below never replace them, so a skipped or refused photo is not missed.
       showUploadNotice(errors.length ? `${accepted ? `${accepted} ${accepted === 1 ? 'photo is' : 'photos are'} uploading. ` : ''}${files.length - accepted === 1 ? '1 photo was' : `${files.length - accepted} photos were`} not added: ${errors.join(' ')}` : '');
@@ -338,7 +357,7 @@ function bindGuest() {
   listen('#queueList', 'click', async event => {
     const button = event.target.closest('[data-job]'); if (!button) return;
     if (button.dataset.retry) { const job = queueStates.get(button.dataset.job); queueStates.set(job.id, { ...job, state: 'queued', attempts: 0, error: '' }); renderJobs(); await queue.retry(job.id); }
-    else { await adapter.discardJob(bucket.id, button.dataset.job); queueStates.delete(button.dataset.job); renderJobs(); }
+    else { await adapter.discardJob(bucket.id, button.dataset.job).catch(error => { if (!/not available/.test(error.message)) throw error; }); queueStates.delete(button.dataset.job); renderJobs(); tellOtherTabs(); }
   });
   listen('#rotateButton', 'click', () => { editor.rotation = (editor.rotation + 90) % 360; drawEditor(); });
   listen('#replaceButton', 'click', () => $('#replaceInput').click());
@@ -394,6 +413,21 @@ function watchPause() {
   }, 20000);
 }
 function stopPauseWatch() { clearInterval(pauseTimer); pauseTimer = null; }
+// Tabs of the same guest share the queue on this phone. A tab that saves, adds or removes photos tells the others,
+// which re-read the queue (dropping photos already finished elsewhere), refresh the gallery and pick up new work.
+let tabChannel = null;
+function tellOtherTabs() { try { tabChannel?.postMessage('changed'); } catch { /* channel closed */ } }
+async function syncQueue() {
+  if (owner || !queue || disposed) return;
+  const live = new Set(['processing', 'retrying', 'waiting']), next = new Map();
+  for (const job of await adapter.jobs(bucket.id)) { const mine = queueStates.get(job.id); next.set(job.id, mine && live.has(mine.state) ? mine : job); }
+  queueStates = next; renderJobs(); void queue.start(); await refreshGallery(true);
+}
+function listenToOtherTabs() {
+  if (owner || typeof BroadcastChannel === 'undefined') return;
+  try { tabChannel = new BroadcastChannel(`photo-bucket-queue:${bucket.id}`); tabChannel.onmessage = () => { void syncQueue().catch(() => { /* background sync only: the next change, focus or reload syncs again */ }); }; } catch { tabChannel = null; }
+  document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') void syncQueue().catch(() => { /* background sync only: the queue still runs and the next change syncs again */ }); });
+}
 async function loadQueue() { for (const job of await adapter.jobs(bucket.id)) queueStates.set(job.id, job); renderJobs(); }
 function onJobChange(job) {
   if (disposed) return;
@@ -403,8 +437,11 @@ function onJobChange(job) {
     if (!bucket.paused) { bucket = { ...bucket, paused: true }; syncDetails(); }
     watchPause(); return;
   }
+  if (job.state === 'gone') { // finished or removed in another tab of this guest
+    queueStates.delete(job.id); renderJobs(); void refreshGallery(true); return;
+  }
   if (job.state === 'saved') {
-    queueStates.delete(job.id);
+    queueStates.delete(job.id); tellOtherTabs();
     message((online ? 'Saved online' : 'Saved on this device') + '. Thank you for sharing a little joy.');
     renderJobs();
     void refreshGallery();
@@ -506,12 +543,12 @@ function bindOwner() {
 }
 function syncDetails() {
   $('#eventName').textContent = bucket.name; $('#eventMeta').innerHTML = meta(); $('#pauseNotice').hidden = !bucket.paused;
-  if (owner) $('#pauseButton').textContent = bucket.paused ? 'Resume uploads' : 'Pause uploads';
+  if (owner) { $('#pauseButton').textContent = bucket.paused ? 'Resume uploads' : 'Pause uploads'; paintUsage(); }
   if (owner && $('#frozenNotice')) $('#frozenNotice').hidden = !bucket.frozen;
   if (owner && $('#freezeButton')) $('#freezeButton').textContent = bucket.frozen ? 'Resume everything' : 'Pause everything';
 }
 async function renderPoster() {
-  app.innerHTML = `<nav class="pb-poster-controls"><a class="pb-button" href="./photo-bucket-manage.html?bucket=${encodeURIComponent(bucket.id)}">Back to collection</a>${bucket.canAdmin ? `<label>Card design <select id="posterTemplate">${THEMES.map(([value, label], i) => `<option value="${value}">Template ${i + 1} · ${label}</option>`).join('')}</select></label><label class="pb-switch"><input type="checkbox" id="posterDetails" ${bucket.cardShowsDetails ? 'checked' : ''}> Date and place</label>` : ''}<button type="button" id="printPoster">Print</button><button type="button" class="pb-primary" id="downloadPoster">Download PDF</button></nav><article class="pb-poster" aria-label="A5 photo sharing table card"><img class="pb-floral pb-floral--tl" src="./photo-bucket/assets/botanical.svg" alt=""><img class="pb-floral pb-floral--br" src="./photo-bucket/assets/botanical.svg" alt=""><p class="pb-kicker">A collection of beautiful memories</p><h1>Share the moments</h1><h2>${h(bucket.name)}</h2><div class="pb-card-meta" id="cardMeta"${bucket.cardShowsDetails ? '' : ' hidden'}><span><span class="pb-card-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="5" width="18" height="16" rx="2"/><path d="M7 3v4M17 3v4M3 10h18M8 14h2M14 14h2"/></svg></span> ${h(dateLabel(bucket.date))}</span><span><span class="pb-card-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M20 10c0 5-8 11-8 11S4 15 4 10a8 8 0 1 1 16 0Z"/><circle cx="12" cy="10" r="2.5"/></svg></span> ${h(bucket.location)}</span></div><div id="posterQr"></div><div class="pb-card-instructions"><p class="pb-poster-scan">Scan to share your photos</p><p class="pb-card-note">Share with the hosts <span aria-hidden="true">·</span> No login needed</p></div></article><p class="pb-print-note" id="posterNote" role="status" aria-live="polite"></p><p class="pb-print-note">A5 portrait · Print at 100% with browser headers and footers off.</p>`;
+  app.innerHTML = `<nav class="pb-poster-controls"><a class="pb-button" href="./photo-bucket-manage.html?bucket=${encodeURIComponent(bucket.id)}">Back to collection</a>${bucket.canAdmin ? `<label>Card design <select id="posterTemplate">${THEMES.map(([value, label], i) => `<option value="${value}">Template ${i + 1} · ${label}</option>`).join('')}</select></label><label class="pb-switch"><input type="checkbox" id="posterDetails" ${bucket.cardShowsDetails ? 'checked' : ''}> Date and place</label>` : ''}<button type="button" id="printPoster">Print</button><button type="button" class="pb-primary" id="downloadPoster">Download PDF</button></nav><article class="pb-poster" aria-label="A5 photo sharing table card"><img class="pb-floral pb-floral--tl" src="./photo-bucket/assets/botanical.svg" alt=""><img class="pb-floral pb-floral--br" src="./photo-bucket/assets/botanical.svg" alt=""><p class="pb-kicker">A collection of beautiful memories</p><h1>Share the moments</h1><h2 dir="auto">${h(bucket.name)}</h2><div class="pb-card-meta" id="cardMeta"${bucket.cardShowsDetails ? '' : ' hidden'}><span><span class="pb-card-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="5" width="18" height="16" rx="2"/><path d="M7 3v4M17 3v4M3 10h18M8 14h2M14 14h2"/></svg></span> ${h(dateLabel(bucket.date))}</span><span><span class="pb-card-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M20 10c0 5-8 11-8 11S4 15 4 10a8 8 0 1 1 16 0Z"/><circle cx="12" cy="10" r="2.5"/></svg></span> <bdi>${h(bucket.location)}</bdi></span></div><div id="posterQr"></div><div class="pb-card-instructions"><p class="pb-poster-scan">Scan to share your photos</p><p class="pb-card-note">Share with the hosts <span aria-hidden="true">·</span> No login needed</p></div></article><p class="pb-print-note" id="posterNote" role="status" aria-live="polite"></p><p class="pb-print-note">A5 portrait · Print at 100% with browser headers and footers off.</p>`;
   // The card stands at the venue, so by default it shows the event name only; an admin can add the date and place.
   const setCompact = () => $('.pb-poster').classList.toggle('pb-poster--compact', bucket.name.length > 60 || (bucket.cardShowsDetails && bucket.location.length > 110));
   setCompact();

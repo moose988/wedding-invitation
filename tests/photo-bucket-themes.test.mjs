@@ -36,7 +36,8 @@ test('the A5 card hides the date and place unless an admin switches them on', as
   const app = await read('photo-bucket/app.js');
   const start = app.indexOf('async function renderPoster()');
   const poster = app.slice(start, app.indexOf('`;', start)); // the card's markup only
-  assert.match(poster, /<h2>\$\{h\(bucket\.name\)\}<\/h2><div class="pb-card-meta" id="cardMeta"\$\{bucket\.cardShowsDetails \? '' : ' hidden'\}>/);
+  // dir="auto" keeps Arabic names in their own reading direction on the card.
+  assert.match(poster, /<h2 dir="auto">\$\{h\(bucket\.name\)\}<\/h2><div class="pb-card-meta" id="cardMeta"\$\{bucket\.cardShowsDetails \? '' : ' hidden'\}>/);
   assert.match(poster, /\$\{bucket\.canAdmin \? `<label>Card design.*id="posterDetails".*` : ''\}/, 'only admins get the switch');
   assert.match(styles, /\.pb \.pb-card-meta\[hidden\] \{ display:none; \}/);
 });

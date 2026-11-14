@@ -7,7 +7,45 @@ function imageFallback(blob) {
     img.src = url;
   });
 }
+// Width and height from a JPEG's frame header (as stored, before EXIF rotation). Null for anything else.
+export function jpegDimensions(bytes) {
+  if (bytes.length < 4 || bytes[0] !== 0xff || bytes[1] !== 0xd8) return null;
+  for (let i = 2; i + 9 < bytes.length;) {
+    if (bytes[i] !== 0xff) { i++; continue; }
+    const marker = bytes[i + 1];
+    if (marker === 0xff) { i++; continue; }
+    if (marker === 0xd8 || marker === 0x01 || (marker >= 0xd0 && marker <= 0xd7)) { i += 2; continue; }
+    const length = (bytes[i + 2] << 8) | bytes[i + 3];
+    if (length < 2) return null;
+    if (marker >= 0xc0 && marker <= 0xcf && ![0xc4, 0xc8, 0xcc].includes(marker)) {
+      const height = (bytes[i + 5] << 8) | bytes[i + 6], width = (bytes[i + 7] << 8) | bytes[i + 8];
+      return width && height ? { width, height } : null;
+    }
+    i += 2 + length;
+  }
+  return null;
+}
+async function headerDimensions(blob) {
+  if (blob.type !== 'image/jpeg' || typeof blob.slice !== 'function') return null;
+  try { return jpegDimensions(new Uint8Array(await blob.slice(0, 512 * 1024).arrayBuffer())); } catch { return null; }
+}
+// High-resolution camera modes (48, 50, 108, 200 MP) give JPEGs over the full-size decode limit. They are decoded already
+// scaled so the long side is at most 4096 px, whichever way the browser applies EXIF rotation to the resize, and then
+// shrunk to 2560 px like every other photo. Photos under the limit keep the plain full-size decode below.
+async function decodeScaled(blob, { width, height }) {
+  if (width * height > LIMITS.maxPixels) throw new Error('This photo is extremely large. Switch your camera to its normal photo size, or choose another photo.');
+  const long = Math.max(width, height), short = Math.min(width, height);
+  const target = Math.max(1, Math.floor(4096 * short / long));
+  let bitmap;
+  try { bitmap = await createImageBitmap(blob, { imageOrientation: 'from-image', resizeWidth: target, resizeQuality: 'high' }); }
+  catch { bitmap = null; }
+  if (bitmap && bitmap.width * bitmap.height <= LIMITS.pixels) return bitmap;
+  bitmap?.close?.();
+  throw new Error('This photo is very large (over 40 megapixels) and this browser cannot shrink it. Switch your camera to its normal photo size, or choose another photo.');
+}
 export async function decode(blob) {
+  const size = await headerDimensions(blob);
+  if (size && size.width * size.height > LIMITS.pixels) return decodeScaled(blob, size);
   let bitmap;
   // Older Android/Huawei browsers lack createImageBitmap or its options; fall back to an <img> (which applies EXIF rotation itself).
   try { bitmap = await createImageBitmap(blob, { imageOrientation: 'from-image' }); }
@@ -15,7 +53,7 @@ export async function decode(blob) {
     try { bitmap = await imageFallback(blob); }
     catch { throw new Error('This photo could not be opened. Try exporting it as JPEG or choose another photo.'); }
   }
-  if (bitmap.width * bitmap.height > LIMITS.pixels) { bitmap.close(); throw new Error('Choose a photo under 40 megapixels.'); }
+  if (bitmap.width * bitmap.height > LIMITS.pixels) { bitmap.close(); throw new Error('This photo is very large (over 40 megapixels). Switch your camera to its normal photo size, or choose another photo.'); }
   return bitmap;
 }
 function canvas(width, height) { const c = document.createElement('canvas'); c.width = width; c.height = height; return c; }

@@ -17,11 +17,11 @@ globalThis.invitationDesignConfig = {
   skipOpening: reducedMotion,
   scrollBehavior: () => reducedMotion() || document.body.classList.contains("keyboard-navigation") ? "instant" : "smooth",
   copy: {
-    openInvitation: { en: "Or tap to open", ar: "أو اضغطوا للفتح" },
+    openInvitation: { en: "Open invitation", ar: "افتحوا الدعوة" },
     introCaption: { en: "Swipe up to lift the veil.", ar: "اسحبوا للأعلى لرفع الطرحة." },
     videoLabel: { en: "The couple turn to each other on the boardwalk as the sail lights up for the evening", ar: "العروسان على الممشى البحري والشراع يضيء للمساء" },
     detailsHeading: { en: "By the sea, as the sail lights up.", ar: "على شاطئ البحر، حين يضيء الشراع." },
-    scheduleHeading: { en: "From the zaffa to the last song.", ar: "من الزفّة إلى آخر أغنية." },
+    scheduleHeading: { en: "An evening to remember.", ar: "أمسية تبقى في الذاكرة." },
     seatingHeading: { en: "Your place in the ballroom.", ar: "مكانكم في القاعة." },
     sampleSeating: { en: "A sample seating plan for your celebration.", ar: "نموذج لخطة الجلوس في احتفالكم." },
     introRetry: { en: "Still loading. Tap to retry.", ar: "ما زال التحميل جارياً. اضغطوا لإعادة المحاولة." },
@@ -31,14 +31,14 @@ globalThis.invitationDesignConfig = {
     attendanceDeclined: { en: "We will miss you by the sea.", ar: "سنفتقدكم على البحر." },
     closing: { en: "Come as you are; the evening is waiting for you.", ar: "تعالوا كما أنتم، فالليلة بانتظاركم." },
     passHeading: { en: "Your pass for the night.", ar: "بطاقة دخولكم لهذه الليلة." },
-    viewDetails: { en: "Join us", ar: "شاركونا" },
+    viewDetails: { en: "Discover our day", ar: "اكتشفوا تفاصيل يومنا" },
     skip: { en: "Skip", ar: "تخطي" },
   },
   // Fictional preview only. Live contexts replace these fields in the shared runtime.
   demoWedding: {
     coupleName: "Noura & Khalid", brideName: "Noura", groomName: "Khalid", brideNameAr: "نورة", groomNameAr: "خالد",
-    subtitleEn: "With the blessing of our families, we invite you to celebrate our wedding by the sea.",
-    subtitleAr: "بمباركة أهلنا، يسعدنا أن ندعوكم لمشاركتنا فرحة زفافنا على شاطئ البحر.",
+    subtitleEn: "Where the sea meets the sky, our forever begins.",
+    subtitleAr: "حيث يلتقي البحر بالسماء، تبدأ حكايتنا للأبد.",
     invitationMessageEn: "The sea at sunset, the sail lit gold, and the people we love most in one room.",
     invitationMessageAr: "البحر عند الغروب، والشراع يضيء ذهباً، وأحبّ الناس إلينا في مكانٍ واحد.",
     closingEn: "Come as you are; the evening is waiting for you.",
@@ -165,6 +165,8 @@ function onUp() {
   stage.classList.remove("sh-moved");
 }
 if (veil && stage) {
+  // The shared invitation runtime opens on a cover click; Shiraa uses a lift gesture.
+  stage.addEventListener("click", event => { if (!event.target.closest("#openInvitation")) event.stopPropagation(); });
   stage.addEventListener("pointerdown", onDown);
   stage.addEventListener("pointermove", onMove);
   stage.addEventListener("pointerup", onUp);
@@ -172,7 +174,7 @@ if (veil && stage) {
   stage.addEventListener("contextmenu", event => event.preventDefault());
   stage.addEventListener("keydown", event => { if (event.key === "ArrowUp" || event.key === "PageUp") { event.preventDefault(); openButton.click(); } });
 }
-// "Or tap to open" and skip lift the veil too, so it is never left hanging.
+// The internal open control and skip lift the veil too.
 openButton?.addEventListener("click", () => { warmFilm(); liftAway(); }, true);
 document.getElementById("skipOpening")?.addEventListener("click", liftAway, true);
 

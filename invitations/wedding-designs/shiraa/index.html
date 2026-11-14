@@ -11,7 +11,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Bodoni+Moda:ital,opsz,wght@0,6..96,400;0,6..96,500;1,6..96,400&family=Cormorant+Garamond:ital,wght@0,500;1,400;1,500&family=Jost:wght@400;500;600&family=Aref+Ruqaa:wght@400;700&family=Tajawal:wght@400;500;700&display=swap" rel="stylesheet" />
-  <link rel="stylesheet" href="./invitations/wedding-designs/shiraa/styles.css?v=20261113-1" />
+  <link rel="stylesheet" href="./invitations/wedding-designs/shiraa/styles.css?v=20261114-15" />
 </head>
 <body class="shiraa-invitation" data-guest-experience="bilingual" data-invitation-template="shiraa">
   <a class="skip-link" href="#siteContent">Skip to invitation</a>
@@ -26,7 +26,7 @@
        on the boardwalk, the sail lighting up behind them. The still under the
        veil is the film's first frame. -->
   <section class="envelope-intro" id="introScreen" aria-label="Open your invitation">
-    <div class="envelope-intro__stage" id="envelopeStage">
+    <div class="envelope-intro__stage" id="envelopeStage" tabindex="0" aria-label="Swipe up or press the up arrow to lift the veil">
       <div class="sh-scene">
         <img class="envelope-intro__poster" src="./invitations/wedding-designs/shiraa/assets/opening.webp" alt="A bride and groom on a boardwalk by the sea, a sail-shaped hotel behind them at sunset" width="720" height="1280" fetchpriority="high" />
         <video class="envelope-intro__video" id="openingVideo" playsinline webkit-playsinline muted preload="none" poster="./invitations/wedding-designs/shiraa/assets/opening.webp" aria-label="The couple turn to each other on the boardwalk as the sail lights up for the evening">
@@ -38,9 +38,8 @@
         <span class="sh-veil__sheen"></span>
         <span class="sh-veil__hem"><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i></span>
         <div class="sh-veil__copy">
-          <span class="sh-monogram" id="shMonogram"></span>
-          <p class="sh-kicker" data-layla-language="en">You are invited</p><p class="sh-kicker" data-layla-language="ar" lang="ar" hidden>أنتم مدعوّون</p>
           <p class="sh-veil__names" id="shVeilNames"></p>
+          <p class="sh-kicker" data-layla-language="en">You are invited</p><p class="sh-kicker" data-layla-language="ar" lang="ar" hidden>أنتم مدعوّون</p>
           <div class="sh-veil__cue">
             <span class="sh-cue-arrow" aria-hidden="true"><i></i><i></i></span>
             <h2 data-layla-language="en">Lift the <em>veil</em></h2><h2 data-layla-language="ar" lang="ar" hidden>ارفعوا <em>الطرحة</em></h2>
@@ -48,7 +47,7 @@
           </div>
         </div>
       </div>
-      <button class="sh-open-link" id="openInvitation" type="button"><span id="openInvitationLabelPrimary" data-layla-text="openInvitation">Or tap to open</span><span id="introRetryLabel"></span></button>
+      <button class="sh-open-link" id="openInvitation" type="button"><span id="openInvitationLabelPrimary" data-layla-text="openInvitation">Open invitation</span><span id="introRetryLabel"></span></button>
     </div>
     <p class="envelope-intro__status" id="introStatus" role="status" aria-live="polite" hidden></p>
     <button class="envelope-intro__skip" id="skipOpening" type="button" data-layla-text="skip">Skip</button>
@@ -81,7 +80,7 @@
       </div>
       <div class="hero-bottom">
         <p class="hero-event-line" id="heroEventLine"></p>
-        <button class="luxury-button luxury-button--primary" type="button" data-scroll-details><span data-layla-text="viewDetails">Join us</span><span class="sh-arrow" aria-hidden="true">↓</span></button>
+        <button class="luxury-button luxury-button--primary" type="button" data-scroll-details><span data-layla-text="viewDetails">Discover our day</span><span class="sh-arrow" aria-hidden="true">↓</span></button>
       </div>
     </section>
 
@@ -100,7 +99,7 @@
           <figure class="sh-satin__photo"><img src="./invitations/wedding-designs/shiraa/assets/couple-detail.webp" width="880" height="1100" alt="The groom's hand in a black bisht with gold trim, holding the bride's hand with an emerald ring" loading="lazy" decoding="async" /></figure>
           <div class="sh-satin__card">
             <div id="detailsGrid"></div>
-            <div class="venue-actions" id="venueActions"><a class="luxury-button luxury-button--primary" id="openMapsLink" target="_blank" rel="noopener noreferrer" hidden><span data-layla-text="openInMaps">Open in Maps</span><span class="sh-arrow" aria-hidden="true">↗</span></a><button class="luxury-button luxury-button--secondary" type="button" data-calendar-download data-layla-text="calendar">Add to Calendar</button></div>
+            <div class="venue-actions" id="venueActions"><a class="luxury-button luxury-button--secondary sh-detail-action" id="openMapsLink" target="_blank" rel="noopener noreferrer" hidden><span data-layla-text="openInMaps">Open in Maps</span><span class="sh-arrow" aria-hidden="true">↗</span></a><button class="luxury-button luxury-button--secondary sh-detail-action" type="button" data-calendar-download data-layla-text="calendar">Add to Calendar</button></div>
           </div>
           <div id="venueMapPreviewMount"></div>
         </div>
@@ -109,6 +108,7 @@
 
     <!-- The collage: the things of the evening, each in its own frame and colour. -->
     <section class="section atelier-section reveal" id="atelierSection" aria-labelledby="atelierTitle">
+      <span class="sh-scroll sh-scroll--top" aria-hidden="true"></span>
       <div class="section-frame">
         <div class="atelier-heading">
           <p class="sh-kicker" data-layla-language="en">The little things</p><p class="sh-kicker" data-layla-language="ar" lang="ar" hidden>التفاصيل الصغيرة</p>
@@ -169,11 +169,10 @@
     </section>
 
     <section class="section schedule-section reveal" id="scheduleSection" hidden>
+      <span class="sh-scroll sh-scroll--top" aria-hidden="true"></span>
       <div class="section-frame evening-composition">
         <div class="evening-title">
-          <p class="sh-kicker" data-layla-language="en">The evening</p><p class="sh-kicker" data-layla-language="ar" lang="ar" hidden>البرنامج</p>
-          <h2 data-layla-text="scheduleHeading">From the zaffa to the last song.</h2>
-          <figure class="sh-arch"><img src="./invitations/wedding-designs/shiraa/assets/ballroom.webp" width="880" height="1100" alt="A ballroom aisle under crystal chandeliers, white flowers along a gold-patterned carpet" loading="lazy" decoding="async" /></figure>
+          <h2 data-layla-text="scheduleHeading">An evening to remember.</h2>
         </div>
         <div class="evening-programme"><ol class="schedule-timeline" id="scheduleMount"></ol><div id="scheduleActions"></div></div>
       </div>
@@ -182,6 +181,7 @@
     <section class="section" id="guestSpotlightSection" hidden><div class="section-frame"><h2 id="guestGreetingTitle"></h2><p id="guestGreetingArabic" lang="ar"></p><p id="guestGreetingEnglish"></p></div></section>
 
     <section class="section seating-section reveal" id="seatingSection" hidden>
+      <span class="sh-scroll sh-scroll--top" aria-hidden="true"></span>
       <div class="section-frame">
         <div class="seating-heading">
           <div><p class="sh-kicker" data-layla-language="en">Seating</p><p class="sh-kicker" data-layla-language="ar" lang="ar" hidden>الجلوس</p><h2 data-layla-language="en">Your place<br><em>in the ballroom.</em></h2><h2 data-layla-language="ar" lang="ar" hidden>مكانكم<br><em>في القاعة.</em></h2></div>
@@ -193,13 +193,14 @@
     </section>
 
     <section class="section rsvp-section reveal" id="rsvpSection" aria-labelledby="rsvpTitle">
+      <span class="sh-scroll sh-scroll--top" aria-hidden="true"></span>
       <div class="sh-dusk" aria-hidden="true"></div>
       <div class="section-frame rsvp-composition">
         <div class="rsvp-heading">
+          <figure class="sh-oval"><img src="./invitations/wedding-designs/shiraa/assets/roses.webp" width="880" height="880" alt="" loading="lazy" decoding="async" /></figure>
           <p class="sh-kicker" data-layla-language="en">Kindly reply</p><p class="sh-kicker" data-layla-language="ar" lang="ar" hidden>نرجو الرد</p>
           <h2 id="rsvpTitle" data-layla-text="rsvpHeading">Will you be with us?</h2>
           <p data-layla-language="en">Your reply sets a place for you by the sea.</p><p data-layla-language="ar" lang="ar" hidden>بردّكم نحجز لكم مكاناً على البحر.</p>
-          <figure class="sh-oval"><img src="./invitations/wedding-designs/shiraa/assets/roses.webp" width="880" height="880" alt="" loading="lazy" decoding="async" /></figure>
         </div>
         <div class="rsvp-card">
           <span class="sh-ribbon" aria-hidden="true"><i></i></span>
@@ -228,6 +229,6 @@
   <nav class="sticky-actions" id="stickyActions" aria-label="Quick event actions" hidden></nav>
   <div class="toast-rail" id="toastRail" aria-live="polite" aria-atomic="true"></div>
   <noscript><p class="no-script">Please enable JavaScript to open this personal invitation. يرجى تفعيل جافاسكريبت لفتح الدعوة.</p></noscript>
-  <script type="module" src="./invitations/wedding-designs/shiraa/invitation.js?v=20261113-1"></script>
+  <script type="module" src="./invitations/wedding-designs/shiraa/invitation.js?v=20261114-2"></script>
 </body>
 </html>

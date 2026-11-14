@@ -21,7 +21,7 @@
   --tulle:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='7' height='12'%3E%3Cpath d='M3.5 0L7 3v6l-3.5 3L0 9V3z' fill='none' stroke='%23ffffff' stroke-opacity='.55' stroke-width='.5'/%3E%3C/svg%3E");
   --ease:cubic-bezier(.2,.9,.2,1); --ease-soft:cubic-bezier(.45,0,.2,1);
   --display:'Bodoni Moda','Didot','Georgia',serif; --serif:'Cormorant Garamond','Georgia',serif; --body:'Jost','Segoe UI',Arial,sans-serif;
-  --ar-display:'Aref Ruqaa','Amiri',serif; --ar-body:'Tajawal','Segoe UI',sans-serif;
+  --ar-display:'Tajawal','Segoe UI',sans-serif; --ar-body:'Tajawal','Segoe UI',sans-serif;
   --md-bg:var(--ivory);
   margin:0; min-height:100vh; color:var(--ink); background:var(--ivory); font:400 16px/1.7 var(--body); -webkit-font-smoothing:antialiased;
 }
@@ -73,12 +73,12 @@
 .shiraa-invitation .skip-link { position:fixed; top:10px; left:12px; z-index:200; padding:12px; background:var(--ivory); color:var(--ink); transform:translateY(-160%); }
 .shiraa-invitation .skip-link:focus { transform:none; }
 .shiraa-invitation .sh-language { position:fixed; z-index:100; top:calc(var(--layla-notice-height,0px) + max(16px,env(safe-area-inset-top))); right:max(16px,env(safe-area-inset-right)); display:flex; direction:ltr; padding:3px; border-radius:999px; background:#2a1530b8; border:1px solid #e3c58455; backdrop-filter:blur(14px); -webkit-backdrop-filter:blur(14px); }
-.shiraa-invitation .sh-language button { min-width:44px; min-height:44px; border:0; border-radius:999px; color:var(--on-dark-soft); background:transparent; font:500 12px/1 var(--body); letter-spacing:.1em; }
+.shiraa-invitation .sh-language button { min-width:40px; min-height:40px; border:0; border-radius:999px; color:var(--on-dark-soft); background:transparent; font:500 11px/1 var(--body); letter-spacing:.1em; }
 .shiraa-invitation .sh-language button[lang=ar] { font:700 19px/1 var(--ar-display); letter-spacing:0; }
 .shiraa-invitation .sh-language button[aria-pressed=true] { background:var(--foil); color:var(--plum-4); }
 .shiraa-invitation:has(#introScreen:not(.is-playing):not(.is-hidden)) .sh-language { background:#fffaf399; border-color:#bf955055; }
 .shiraa-invitation:has(#introScreen:not(.is-playing):not(.is-hidden)) .sh-language button:not([aria-pressed=true]) { color:var(--ink-soft); }
-.shiraa-invitation:has(#introScreen.is-playing) .sh-language { opacity:0; pointer-events:none; }
+.shiraa-invitation:has(#introScreen.is-playing:not(.is-hidden)) .sh-language { opacity:0; pointer-events:none; }
 .shiraa-invitation .sample-preview-banner { display:none !important; }
 .shiraa-invitation .sample-rsvp-note { display:none; }
 .shiraa-invitation .sticky-actions:has([data-scroll-details]) { display:none; }
@@ -93,7 +93,7 @@
 .shiraa-invitation .sh-music:hover { transform:translateY(-2px); }
 .shiraa-invitation .sh-music:focus-visible { outline:2px solid var(--gold-2); outline-offset:4px; }
 /* A little turntable: plinth, spinning record, a tonearm that lifts off when paused. */
-.shiraa-invitation .sh-deck { position:absolute; inset:0; border-radius:12px; background:linear-gradient(145deg,#4d2a57 0%,#2a1530 55%,#1c0d21 100%); box-shadow:0 14px 26px -12px #000c,inset 0 0 0 1px #c49a5288,inset 0 1px 0 #ffffff22; }
+.shiraa-invitation .sh-deck { position:absolute; inset:0; transform:scale(.76); transform-origin:bottom right; border-radius:12px; background:linear-gradient(145deg,#4d2a57 0%,#2a1530 55%,#1c0d21 100%); box-shadow:0 14px 26px -12px #000c,inset 0 0 0 1px #c49a5288,inset 0 1px 0 #ffffff22; }
 .shiraa-invitation .sh-deck__platter { position:absolute; left:6px; top:5px; width:52px; height:52px; border-radius:50%; background:#0b060c; box-shadow:0 0 0 1.5px #c49a52aa,0 3px 6px #000a; }
 .shiraa-invitation .sh-deck__disc { position:absolute; inset:2px; border-radius:50%; background:repeating-radial-gradient(circle,#141014 0 1.2px,#231b22 1.6px 2.4px),#111; box-shadow:inset 0 0 0 1px #000; }
 .shiraa-invitation .sh-deck__disc::after { content:""; position:absolute; inset:0; border-radius:50%; background:conic-gradient(from 30deg,transparent 0 40deg,#ffffff1f 55deg,transparent 75deg 210deg,#ffffff14 228deg,transparent 250deg); }
@@ -147,8 +147,8 @@
 .shiraa-invitation .sh-monogram.is-arabic { font:700 40px/1 var(--ar-display); letter-spacing:.06em; }
 .shiraa-invitation .sh-monogram:empty { display:none; }
 .shiraa-invitation .sh-veil__copy .sh-kicker { font-size:10.5px; }
-.shiraa-invitation .sh-veil__names { font:400 clamp(36px,10.5vw,64px)/1.05 var(--display); color:var(--ink); text-wrap:balance; }
-.shiraa-invitation .sh-veil__cue { position:absolute; bottom:calc(76px + env(safe-area-inset-bottom)); left:0; right:0; display:grid; justify-items:center; gap:6px; }
+.shiraa-invitation .sh-veil__names { font:500 clamp(38px,10.5vw,64px)/1.08 var(--serif); color:var(--ink); text-wrap:balance; }
+.shiraa-invitation .sh-veil__cue { position:absolute; bottom:calc(20px + env(safe-area-inset-bottom)); left:0; right:0; display:grid; justify-items:center; gap:6px; }
 .shiraa-invitation .sh-veil__cue h2 { max-width:none; font-size:clamp(30px,8.6vw,44px); color:var(--ink); }
 .shiraa-invitation .sh-veil__cue h2 em { color:var(--gold-3); }
 .shiraa-invitation .sh-veil__cue p { font:500 10.5px/1.4 var(--body); letter-spacing:.3em; text-transform:uppercase; color:var(--ink-soft); }
@@ -159,8 +159,9 @@
 .shiraa-invitation .sh-veil.sh-nudge { animation:sh-nudge .9s var(--ease); }
 .shiraa-invitation .sh-lifted .sh-veil__copy { opacity:0; }
 .shiraa-invitation .sh-open-link { position:absolute; z-index:3; left:50%; bottom:max(20px,env(safe-area-inset-bottom)); transform:translateX(-50%); min-height:44px; padding:10px 20px; border:0; border-radius:999px; background:transparent; color:var(--ink-soft); font:500 10.5px/1.2 var(--body); letter-spacing:.22em; text-transform:uppercase; text-decoration:underline; text-decoration-color:var(--gold); text-underline-offset:5px; transition:opacity 400ms; }
+.shiraa-invitation .sh-open-link { visibility:hidden; }
 .shiraa-invitation :is(.sh-moved,.sh-lifted,.is-playing,.is-opening) .sh-open-link { opacity:0; pointer-events:none; }
-.shiraa-invitation .is-retryable .sh-open-link { opacity:1; pointer-events:auto; background:var(--plum); color:var(--ivory); text-decoration:none; }
+.shiraa-invitation .is-retryable .sh-open-link { visibility:visible; opacity:1; pointer-events:auto; background:var(--plum); color:var(--ivory); text-decoration:none; }
 .shiraa-invitation #introRetryLabel:empty { display:none; }
 .shiraa-invitation .is-retryable #openInvitationLabelPrimary { display:none; }
 .shiraa-invitation .envelope-intro__skip { position:absolute; z-index:3; right:max(16px,env(safe-area-inset-right)); bottom:max(22px,env(safe-area-inset-bottom)); min-height:44px; padding:10px 20px; border:1px solid #f8f2e888; border-radius:999px; background:#2a153066; color:var(--ivory); font:500 11px/1 var(--body); letter-spacing:.2em; text-transform:uppercase; backdrop-filter:blur(8px); -webkit-backdrop-filter:blur(8px); }
@@ -267,6 +268,11 @@
 .shiraa-invitation .sh-tile--oud img { border-radius:14px 14px 999px 999px; }
 .shiraa-invitation .sh-tile--cake { padding:9px; background:var(--satin); box-shadow:0 0 0 1px var(--gold-soft),0 30px 50px -34px #2a1530; }
 .shiraa-invitation .sh-tile--cake img { border-radius:11px; }
+.shiraa-invitation :is(.sh-tile--gown,.sh-tile--heels,.sh-tile--emerald) { background:#d9b7b1; }
+.shiraa-invitation :is(.sh-tile--bisht,.sh-tile--oud) { background:var(--plum); }
+.shiraa-invitation .sh-tile--bisht { padding:9px; }
+.shiraa-invitation .sh-tile--bisht img { border-radius:111px 9px 9px 9px; }
+.shiraa-invitation .sh-tile--bisht::after { display:none; }
 .shiraa-invitation .sh-note { display:grid; gap:10px; align-content:center; }
 .shiraa-invitation .sh-moment:nth-of-type(even) .sh-note { text-align:end; justify-items:end; }
 .shiraa-invitation .sh-note__no { font:italic 400 15px/1 var(--serif); color:var(--gold-3); }
@@ -426,6 +432,7 @@
 .shiraa-invitation.layla-arabic h2,.shiraa-invitation h2[lang=ar] { line-height:1.35; font-weight:700; }
 .shiraa-invitation.layla-arabic h2 em,.shiraa-invitation h2[lang=ar] em { font-family:var(--ar-display); font-style:normal; }
 .shiraa-invitation.layla-arabic .hero-names { font-size:clamp(56px,min(9vw,10.5svh),128px); line-height:1.25; font-weight:700; }
+.shiraa-invitation.layla-arabic .hero-subtitle { width:min(100%, 28rem); max-width:100%; line-height:1.7; overflow-wrap:break-word; }
 .shiraa-invitation.layla-arabic .sh-name:last-of-type { font-family:var(--ar-display); font-style:normal; }
 .shiraa-invitation.layla-arabic .sh-joint { font:700 .95em/1 var(--ar-display); margin:-.12em 0 -.2em; }
 .shiraa-invitation.layla-arabic .sh-note__label { font-size:14px; }
@@ -443,10 +450,10 @@
   .shiraa-invitation h2 { font-size:clamp(38px,11vw,52px); }
   .shiraa-invitation .sh-kicker { font-size:10px; letter-spacing:.24em; gap:10px; }
   /* Names stay in the sky above the couple; the line of copy drops to just above the date. */
-  .shiraa-invitation .hero-composition { align-self:stretch; grid-template-rows:auto 1fr; padding-top:calc(96px + env(safe-area-inset-top)); gap:6px; }
+  .shiraa-invitation .hero-composition { align-self:stretch; grid-template-rows:auto 1fr; padding-top:calc(48px + env(safe-area-inset-top)); gap:6px; }
   .shiraa-invitation .hero-names { font-size:clamp(46px,13.4vw,62px); line-height:.9; }
   .shiraa-invitation .sh-joint { margin:.02em 0; }
-  .shiraa-invitation .hero-subtitle { align-self:end; margin-bottom:18px; font-size:18px; max-width:27ch; }
+  .shiraa-invitation .hero-subtitle { align-self:end; margin-bottom:24px; font-size:18px; max-width:25ch; }
   .shiraa-invitation .hero-backdrop::after { background:radial-gradient(90% 26% at 50% 14%,#1c0d21b0 0%,#1c0d2140 70%,transparent 100%),linear-gradient(180deg,#1c0d21a0 0%,transparent 30%,transparent 50%,#2a153099 66%,#2a1530e6 84%,#2a1530 100%); }
   .shiraa-invitation .hero-event-line { font-size:11px; letter-spacing:.18em; row-gap:10px; }
   .shiraa-invitation .hero-event-line span:first-child { flex-basis:100%; justify-content:center; font:italic 500 26px/1.2 var(--serif); letter-spacing:0; text-transform:none; }
@@ -576,4 +583,78 @@
 .shiraa-invitation .rsvp-section { background:var(--plum-4); isolation:isolate; }
 .shiraa-invitation .sh-dusk { position:absolute; inset:0; z-index:-1; overflow:hidden; }
 .shiraa-invitation .sh-dusk::before { content:""; position:absolute; inset:-40px; background:url("./assets/hero.webp") 70% 40%/cover no-repeat; filter:blur(7px) saturate(1.15); transform:scale(1.06); }
+
+/* A single clock face and centered event details. */
+.shiraa-invitation .hero-countdown { gap:0; padding:22px 8px; border:1px solid var(--gold-soft); border-radius:18px; background:linear-gradient(135deg,#321b38,#1c0d21); box-shadow:0 18px 35px -25px #1c0d21; }
+.shiraa-invitation .countdown-card { aspect-ratio:auto; min-width:0; padding:4px 2px; align-content:center; gap:10px; border-radius:0; background:none; box-shadow:none; overflow:visible; }
+.shiraa-invitation .countdown-card + .countdown-card { border-inline-start:1px solid #e3c58444; }
+.shiraa-invitation .countdown-card::before,.shiraa-invitation .countdown-card::after { display:none; }
+.shiraa-invitation .countdown-card__label { border:0; padding:0; }
+.shiraa-invitation .sh-satin__photo { width:88%; margin-inline:auto; }
+.shiraa-invitation .sh-satin__card { margin-inline:0; }
+.shiraa-invitation .detail-card { grid-template-columns:1fr; justify-items:center; gap:12px; text-align:center; padding:20px 4px 0; }
+.shiraa-invitation .detail-card__icon { grid-row:auto; }
+.shiraa-invitation :is(.detail-card__title,.detail-card__english) { grid-column:1; }
+.shiraa-invitation .detail-card p { justify-items:center; text-align:center; }
+.shiraa-invitation .venue-actions { justify-content:center; }
+
+/* A quieter backdrop lets the evening unfold along the timeline. */
+.shiraa-invitation .schedule-section { background:radial-gradient(ellipse at 50% 0%,#47294d 0%,#2a1530 48%,#1c0d21 100%); }
+.shiraa-invitation .schedule-section::before,.shiraa-invitation .schedule-section::after { display:none; }
+.shiraa-invitation .evening-title { padding-inline-end:0; }
+.shiraa-invitation .evening-composition { grid-template-columns:minmax(0,1fr); gap:36px; max-width:760px; }
+.shiraa-invitation .evening-title { position:relative; top:auto; justify-items:center; text-align:center; }
+.shiraa-invitation .schedule-timeline::before { width:1px; inset-inline-start:var(--rail); background:linear-gradient(transparent,#d9b56d99 12%,#d9b56d99 88%,transparent); }
+.shiraa-invitation #scheduleActions { display:flex; justify-content:center; }
+.shiraa-invitation .schedule-item svg.schedule-item__icon,.shiraa-invitation .schedule-item__marker { transition:filter 700ms ease,box-shadow 700ms ease; }
+.shiraa-invitation .schedule-item.sh-schedule-arrival svg.schedule-item__icon,.shiraa-invitation .schedule-item.sh-schedule-arrival .schedule-item__marker { filter:brightness(1.16); box-shadow:0 0 0 4px var(--plum),0 0 0 5px #e3c584aa,0 0 24px 5px #e3c58455; }
+@media (prefers-reduced-motion:reduce) {
+  .shiraa-invitation .schedule-item svg.schedule-item__icon,.shiraa-invitation .schedule-item__marker { transition:none; }
+}
 .shiraa-invitation .sh-dusk::after { content:""; position:absolute; inset:0; background:linear-gradient(180deg,#1c0d21d9 0%,#2a153073 34%,#4d2a5752 60%,#1c0d21e6 100%),radial-gradient(70% 50% at 80% 30%,#e9cf9033,transparent 70%); }
+
+/* Match the ivory ground used throughout the invitation. */
+.shiraa-invitation :is(.schedule-section,.rsvp-section) { --md-bg:var(--ivory); background:var(--ivory); color:var(--ink); }
+.shiraa-invitation :is(.schedule-section,.rsvp-section)::before,.shiraa-invitation :is(.schedule-section,.rsvp-section)::after,.shiraa-invitation .rsvp-section .sh-dusk { display:none; }
+.shiraa-invitation :is(.schedule-section,.rsvp-section) h2,.shiraa-invitation .schedule-item h3 { color:var(--ink); }
+.shiraa-invitation :is(.schedule-section,.rsvp-section) h2 em,.shiraa-invitation :is(.schedule-section,.rsvp-section) .sh-kicker,.shiraa-invitation .schedule-item time { color:var(--gold-3); }
+.shiraa-invitation .schedule-item p,.shiraa-invitation .rsvp-heading > p:not(.sh-kicker) { color:var(--ink-soft); }
+.shiraa-invitation :is(.schedule-section,.rsvp-section) .luxury-button--secondary { color:var(--ink); box-shadow:inset 0 0 0 1px var(--line); }
+.shiraa-invitation .schedule-item svg.schedule-item__icon,.shiraa-invitation .schedule-item__marker { box-shadow:0 0 0 4px var(--ivory),0 0 0 5px var(--gold-soft); }
+.shiraa-invitation .schedule-item.sh-schedule-arrival svg.schedule-item__icon,.shiraa-invitation .schedule-item.sh-schedule-arrival .schedule-item__marker { box-shadow:0 0 0 4px var(--ivory),0 0 0 5px var(--gold-soft),0 0 24px 5px #bf955055; }
+.shiraa-invitation .rsvp-card { box-shadow:0 35px 70px -45px #2a153088,inset 0 0 0 1px #fff; }
+
+/* A quiet, top-down ballroom plan with recognizable furniture. */
+.shiraa-invitation .seat-plan-viewport { background:#eee7da; }
+.shiraa-invitation .seat-plan-viewport::after { border-color:#bc9a67; }
+.shiraa-invitation .seat-plan-floor { border:2px solid #d0b993; border-radius:12px; background:linear-gradient(135deg,#f6f1e8,#e8ddcc); box-shadow:inset 0 0 0 7px #ffffff70; }
+.shiraa-invitation .seat-plan-table__surface { background:radial-gradient(circle at 40% 35%,#fffdf9,#eee3d2 80%); box-shadow:0 0 0 3px #c4a674,0 5px 12px #6b514333; }
+.shiraa-invitation .seat-plan-chair { width:28px; height:25px; border:2px solid #ad895b; border-radius:7px 7px 5px 5px; background:#f7ede0; color:var(--ink); box-shadow:0 3px 5px #6b514344; }
+.shiraa-invitation .seat-plan-chair::before { content:""; position:absolute; left:-3px; right:-3px; top:-7px; height:8px; border:2px solid #ad895b; border-radius:7px 7px 3px 3px; background:#d8c0a0; }
+.shiraa-invitation .seat-plan-chair.is-empty { background:#f7ede0; color:#6d5a50; box-shadow:0 3px 5px #6b514344; }
+.shiraa-invitation .seat-plan-chair.is-yours { background:var(--emerald-2); color:white; box-shadow:0 0 0 2px #fff,0 0 0 4px var(--emerald-2); }
+.shiraa-invitation .seat-plan-object--stage { height:70px; border:3px solid #9b784f; border-radius:12px 12px 45px 45px; background:linear-gradient(#dfc39b,#b98f5c); box-shadow:0 7px 0 #876647,0 10px 12px #70564044; }
+.shiraa-invitation .seat-plan-object--entrance { height:58px; border:0; border-top:6px double #a78459; border-radius:0; color:var(--ink); background:linear-gradient(90deg,transparent 5%,#b89a73 5% 8%,transparent 8% 92%,#b89a73 92% 95%,transparent 95%); }
+.shiraa-invitation .seat-plan-object--dance-floor { color:var(--ink); background:repeating-conic-gradient(#e7d3ba 0 25%,#f5eadc 0 50%) 0 0/40px 40px; border:4px solid #b99b70; border-radius:5px; box-shadow:0 5px 12px #6b514333; }
+.shiraa-invitation #venueActions :is(#openMapsLink,[data-calendar-download]),.shiraa-invitation #scheduleActions [data-calendar-download] { flex:0 1 240px; width:min(240px,100%); min-width:0; min-height:48px; padding:12px 18px; justify-content:center; color:var(--ivory); background:var(--plum); box-shadow:inset 0 0 0 1px #e3c58488; }
+.shiraa-invitation #venueActions :is(#openMapsLink,[data-calendar-download]):hover,.shiraa-invitation #scheduleActions [data-calendar-download]:hover { background:var(--plum-3); }
+.shiraa-invitation :is(#venueActions,#scheduleActions) .sh-detail-action { box-sizing:border-box; flex:0 1 240px; width:min(240px,100%); height:48px; min-height:48px; padding:12px 18px; color:var(--ivory); background:var(--plum); box-shadow:inset 0 0 0 1px #e3c58488; }
+.shiraa-invitation #openMapsLink { box-sizing:border-box; justify-self:center; width:min(240px,100%); height:48px; min-height:48px; padding:12px 18px; color:var(--ivory); background:var(--plum); box-shadow:inset 0 0 0 1px #e3c58488; }
+.shiraa-invitation #openMapsLink:hover { background:var(--plum-3); }
+
+/* Only the selected guest's chair is emphasized on the plan. */
+.shiraa-invitation .seat-plan-table__label { display:grid; justify-items:center; gap:4px; }
+.shiraa-invitation .seat-plan-chair.is-yours { animation:none; background:#f7ede0; color:#6d5a50; box-shadow:0 3px 5px #6b514344; }
+.shiraa-invitation .seat-plan-chair.is-yours:not(.is-selected) .seat-plan-chair__marker { display:none; }
+.shiraa-invitation .seat-plan-chair.is-yours.is-selected { background:var(--plum-3); border-color:var(--plum-3); color:#fff; outline:2px solid #ad89b4; outline-offset:4px; box-shadow:0 0 0 5px #c6b2cc88; }
+.shiraa-invitation .seat-plan-chair.is-yours.is-selected::before { background:var(--plum-3); border-color:var(--plum-3); }
+.shiraa-invitation .seat-plan-chair.is-selected .seat-plan-chair__marker { color:var(--plum-3); }
+.shiraa-invitation .rsvp-heading { padding-inline-end:0; justify-items:center; text-align:center; }
+.shiraa-invitation .rsvp-heading .sh-oval { position:relative; inset:auto; width:clamp(110px,18vw,160px); padding:5px; box-shadow:0 20px 35px -25px #2a153088; }
+
+/* Muted, matte gold for the invitation's decorative details. */
+.shiraa-invitation .site-content { --foil:linear-gradient(#c5aa75,#c5aa75); --gold:#ae9060; --gold-2:#cbb582; --gold-3:#806a47; --gold-soft:#cdbb9c; }
+.shiraa-invitation .site-content :is(.sh-blessing,.sh-monogram) { animation:none; }
+.shiraa-invitation .site-content .luxury-button--primary { box-shadow:0 8px 20px -16px #806a47; }
+.shiraa-invitation .site-content .sh-ribbon i { background:#b89b68; box-shadow:none; }
+.shiraa-invitation .site-content .sh-ribbon i::before,.shiraa-invitation .site-content .sh-ribbon i::after { background:#a78c61; }

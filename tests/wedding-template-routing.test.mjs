@@ -47,7 +47,7 @@ test("both creation surfaces expose the new card and leave Floral Wedding select
 
 test("Pomegranate Courtyard is an allowed published template and ships its own assets", async () => {
   const rules = await readFile(new URL("../firestore.rules", import.meta.url), "utf8");
-  assert.match(rules, /"pomegranate-courtyard", "mandoos", "yasmine"\]/);
+  assert.match(rules, /"pomegranate-courtyard", "mandoos", "yasmine", "shiraa", "ember"\]/);
   const html = await readFile(new URL("../invitations/wedding-designs/pomegranate-courtyard/index.html", import.meta.url), "utf8");
   for (const id of ["introScreen", "openInvitation", "openingVideo", "skipOpening", "musicToggle", "weddingAudio", "siteContent", "heroSection", "countdownGrid", "detailsGrid", "scheduleMount", "seatingMap", "rsvpMount", "qrPassMount", "stickyActions", "toastRail"]) {
     assert.match(html, new RegExp(`id="${id}"`), `missing #${id}`);
@@ -59,7 +59,7 @@ test("Pomegranate Courtyard is an allowed published template and ships its own a
 
 test("Mandoos is an allowed published template and ships its own assets", async () => {
   const rules = await readFile(new URL("../firestore.rules", import.meta.url), "utf8");
-  assert.match(rules, /"mandoos", "yasmine"\]/);
+  assert.match(rules, /"mandoos", "yasmine", "shiraa", "ember"\]/);
   const html = await readFile(new URL("../invitations/wedding-designs/mandoos/index.html", import.meta.url), "utf8");
   for (const id of ["introScreen", "openInvitation", "openingVideo", "skipOpening", "musicToggle", "weddingAudio", "siteContent", "heroSection", "countdownGrid", "detailsGrid", "scheduleMount", "seatingMap", "rsvpMount", "qrPassMount", "stickyActions", "toastRail"]) {
     assert.match(html, new RegExp(`id="${id}"`), `missing #${id}`);
@@ -71,7 +71,7 @@ test("Mandoos is an allowed published template and ships its own assets", async 
 
 test("Yasmine is an allowed published template and ships its own assets", async () => {
   const rules = await readFile(new URL("../firestore.rules", import.meta.url), "utf8");
-  assert.match(rules, /"yasmine"\]/);
+  assert.match(rules, /"yasmine", "shiraa", "ember"\]/);
   const html = await readFile(new URL("../invitations/wedding-designs/yasmine/index.html", import.meta.url), "utf8");
   for (const id of ["introScreen", "openInvitation", "openingVideo", "skipOpening", "musicToggle", "weddingAudio", "siteContent", "heroSection", "countdownGrid", "detailsGrid", "scheduleMount", "seatingMap", "rsvpMount", "qrPassMount", "stickyActions", "toastRail"]) {
     assert.match(html, new RegExp(`id="${id}"`), `missing #${id}`);

@@ -18,7 +18,7 @@ test("event creation collects a category and disables hidden identity fields", a
   assert.match(js, /data\.eventTitle = f\.eventTitle\.value\.trim\(\)/);
   assert.match(js, /category === EVENT_CATEGORIES\.GENDER_REVEAL/);
   assert.match(js, /seatingEnabled: false, showInvitationQr: false/);
-  assert.match(js, /gender-reveal\.html\?wedding=/);
+  assert.match(js, /genderRevealInvitationUrl\(/);
 });
 
 test("celebration dashboard hides side controls and creates neutral guest values", async () => {

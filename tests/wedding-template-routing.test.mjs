@@ -16,6 +16,7 @@ test("saved template choices route new event IDs, while live assignments always 
     assert.equal(getInvitationRoute(id, base, "mandoos").pathname, "/invitations/wedding-designs/mandoos/index.html");
     assert.equal(getInvitationRoute(id, base, "yasmine").pathname, "/invitations/wedding-designs/yasmine/index.html");
     assert.equal(getInvitationRoute(id, base, "shiraa").pathname, "/invitations/wedding-designs/shiraa/index.html");
+    assert.equal(getInvitationRoute(id, base, "ember").pathname, "/invitations/wedding-designs/ember/index.html");
     for (const value of ["", "unknown", "../../evil", "__proto__", "toString"]) assert.equal(getWeddingDesign(id, value), null);
   }
   assert.equal(getWeddingDesign("luxury-wedding-demo", "moonlit-conservatory").designId, "layla-zaid");
@@ -87,5 +88,21 @@ test("Shiraa ships its shell and its own assets", async () => {
   }
   for (const asset of ["opening.webp", "opening.mp4", "hero.webp", "hero-portrait.webp", "hero-loop-portrait.mp4", "garland.webp", "chair.svg", "thumbnail.webp"]) {
     await readFile(new URL(`../invitations/wedding-designs/shiraa/assets/${asset}`, import.meta.url));
+  }
+});
+
+test("Ember is offered for celebrations and ships its shell and its own assets", async () => {
+  for (const page of ["all-events.html", "customer-events.html"]) {
+    const picker = await readFile(new URL(`../${page}`, import.meta.url), "utf8");
+    assert.match(picker, /data-template-category="celebration"[^>]*><input type="radio" name="invitationTemplate" value="ember"/);
+    assert.match(picker, /data-template-category="celebration"[^>]*><input type="radio" name="invitationTemplate" value=""/);
+  }
+  const html = await readFile(new URL("../invitations/wedding-designs/ember/index.html", import.meta.url), "utf8");
+  for (const id of ["introScreen", "openInvitation", "openingVideo", "skipOpening", "musicToggle", "weddingAudio", "siteContent", "heroSection", "countdownGrid", "detailsGrid", "scheduleMount", "seatingMap", "rsvpMount", "qrPassMount", "stickyActions", "toastRail", "emBox", "emMatch", "emAge"]) {
+    assert.match(html, new RegExp(`id="${id}"`), `missing #${id}`);
+  }
+  assert.match(html, /QD Systems/);
+  for (const asset of ["opening.webp", "opening.mp4", "hero.webp", "coupes.webp", "sparklers.webp", "gift.webp", "slice.webp", "chair.svg", "flame.svg", "thumbnail.webp"]) {
+    await readFile(new URL(`../invitations/wedding-designs/ember/assets/${asset}`, import.meta.url));
   }
 });

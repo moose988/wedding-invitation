@@ -1,0 +1,164 @@
+<!doctype html>
+<html lang="en" dir="ltr">
+<head>
+  <base href="../../../" />
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <meta name="theme-color" content="#160f1d" />
+  <meta name="description" content="A personal invitation to a birthday evening." />
+  <title>Ember · Birthday Invitation</title>
+  <link rel="icon" type="image/svg+xml" href="./invitations/wedding-designs/ember/assets/flame.svg" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&family=Outfit:wght@300;400;500;600&family=Reem+Kufi:wght@500;600&family=IBM+Plex+Sans+Arabic:wght@400;500;600&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="./invitations/wedding-designs/ember/styles.css?v=20261114-1" />
+</head>
+<body class="ember-invitation" data-guest-experience="bilingual" data-invitation-template="ember">
+  <a class="skip-link" href="#siteContent">Skip to invitation</a>
+  <div class="em-language" id="laylaLanguageToggle" role="group" aria-label="Invitation language">
+    <button type="button" data-language="en" aria-pressed="true" lang="en">EN</button>
+    <button type="button" data-language="ar" aria-pressed="false" lang="ar">ع</button>
+  </div>
+  <aside class="sample-preview-banner" id="samplePreviewBanner" hidden><span data-layla-text="sampleInvitation">Sample invitation</span></aside>
+
+  <!-- Opening: a cake with its candles still dark. A matchbox waits at the
+       bottom; the guest drags the match across the striker, it catches, and the
+       film lights the candles from the cover's own frame. -->
+  <section class="envelope-intro" id="introScreen" aria-label="Open your invitation">
+    <div class="envelope-intro__stage" id="envelopeStage">
+      <div class="em-scene">
+        <img class="envelope-intro__poster" src="./invitations/wedding-designs/ember/assets/opening.webp" alt="A birthday cake with tall unlit gold candles on a dark velvet table" width="720" height="1280" fetchpriority="high" />
+        <video class="envelope-intro__video" id="openingVideo" playsinline webkit-playsinline muted preload="none" poster="./invitations/wedding-designs/ember/assets/opening.webp" aria-label="The candles on the cake light one by one">
+          <source src="./invitations/wedding-designs/ember/assets/opening.mp4" type="video/mp4" />
+        </video>
+      </div>
+      <div class="em-cover-copy">
+        <p class="em-kicker" data-layla-language="en">You are invited</p><p class="em-kicker" data-layla-language="ar" lang="ar" hidden>أنتم مدعوّون</p>
+        <p class="em-cover-title" id="emCoverTitle"></p>
+      </div>
+      <div class="em-strike" id="emStrike">
+        <div class="em-box" id="emBox">
+          <span class="em-box__strip" aria-hidden="true"></span>
+          <span class="em-box__sleeve" aria-hidden="true"></span>
+          <span class="em-match" id="emMatch" aria-hidden="true"><i class="em-match__stick"></i><i class="em-match__head"></i><i class="em-match__flame"></i></span>
+          <span class="em-sparks" id="emSparks" aria-hidden="true"></span>
+        </div>
+        <div class="em-strike__cue">
+          <h2 data-layla-language="en">Strike the <em>match</em></h2><h2 data-layla-language="ar" lang="ar" hidden>أشعلوا <em>الشمعة</em></h2>
+          <p data-layla-language="en">Swipe it across the box</p><p data-layla-language="ar" lang="ar" hidden>اسحبوا عود الثقاب على العلبة</p>
+        </div>
+      </div>
+      <button class="em-open-link" id="openInvitation" type="button"><span id="openInvitationLabelPrimary" data-layla-text="openInvitation">Or tap to open</span><span id="introRetryLabel"></span></button>
+    </div>
+    <p class="envelope-intro__status" id="introStatus" role="status" aria-live="polite" hidden></p>
+    <button class="envelope-intro__skip" id="skipOpening" type="button" data-layla-text="skip">Skip</button>
+  </section>
+
+  <!-- Music: a little flame in a champagne ring. -->
+  <button class="music-toggle em-music" id="musicToggle" type="button" aria-label="Play event music" aria-pressed="false" data-state="paused" hidden>
+    <span class="em-music__ring" aria-hidden="true"></span>
+    <span class="em-music__flame" aria-hidden="true"></span>
+    <span class="music-toggle__label" hidden></span>
+  </button>
+  <audio id="weddingAudio" preload="none" loop><source src="./music/wedding.mp3" type="audio/mpeg" /></audio>
+
+  <main class="site-content" id="siteContent" inert tabindex="-1">
+    <section class="hero section" id="heroSection">
+      <div class="hero-backdrop" aria-hidden="true"></div>
+      <div class="em-embers" aria-hidden="true"><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i></div>
+      <div class="hero-composition">
+        <p class="em-kicker" data-layla-text="heroKicker">You're invited to celebrate</p>
+        <div class="em-age" id="emAge" hidden>
+          <span class="em-age__label" data-layla-language="en">Turning</span><span class="em-age__label" data-layla-language="ar" lang="ar" hidden>يتمّ عامه</span>
+          <span class="em-age__digits" id="emAgeDigits" aria-hidden="true"></span>
+          <span class="em-sr" id="emAgeText"></span>
+        </div>
+        <h1 class="hero-names"><span id="heroEnglishNames" data-layla-language="en"></span><span id="heroArabicNames" data-layla-language="ar" lang="ar" hidden></span></h1>
+        <p class="hero-subtitle" id="heroSubtitleEnglish" data-layla-language="en"></p><p class="hero-subtitle" id="heroSubtitleArabic" data-layla-language="ar" lang="ar" hidden></p>
+      </div>
+      <div class="hero-bottom">
+        <p class="hero-event-line" id="heroEventLine"></p>
+        <button class="luxury-button luxury-button--primary" type="button" data-scroll-details><span data-layla-text="viewDetails">Join us</span><span class="em-arrow" aria-hidden="true">↓</span></button>
+      </div>
+    </section>
+
+    <section class="section details-section reveal" id="detailsSection">
+      <div class="section-frame details-composition">
+        <div class="details-copy">
+          <div class="section-heading">
+            <p class="em-kicker" data-layla-language="en">When &amp; where</p><p class="em-kicker" data-layla-language="ar" lang="ar" hidden>الموعد والمكان</p>
+            <h2 data-layla-language="en">One more year,<br><em>one long evening.</em></h2><h2 data-layla-language="ar" lang="ar" hidden>عامٌ جديد،<br><em>وأمسية طويلة.</em></h2>
+            <p class="em-message" id="invitationMessageEnglish" data-layla-language="en"></p><p class="em-message" id="invitationMessageArabic" data-layla-language="ar" lang="ar" hidden></p>
+          </div>
+          <div class="hero-countdown" id="countdownGrid" aria-label="Time until the party"></div>
+        </div>
+        <div class="em-card-wrap">
+          <img class="em-sticker em-sticker--coupes" src="./invitations/wedding-designs/ember/assets/coupes.webp" width="640" height="640" alt="" loading="lazy" decoding="async" />
+          <div class="em-card">
+            <div id="detailsGrid"></div>
+            <div class="venue-actions" id="venueActions"><a class="luxury-button luxury-button--primary" id="openMapsLink" target="_blank" rel="noopener noreferrer" hidden><span data-layla-text="openInMaps">Open in Maps</span><span class="em-arrow" aria-hidden="true">↗</span></a><button class="luxury-button luxury-button--secondary" type="button" data-calendar-download data-layla-text="calendar">Add to Calendar</button></div>
+          </div>
+          <div id="venueMapPreviewMount"></div>
+        </div>
+      </div>
+    </section>
+
+    <section class="section schedule-section reveal" id="scheduleSection" hidden>
+      <div class="section-frame evening-composition">
+        <div class="evening-title">
+          <p class="em-kicker" data-layla-language="en">The evening</p><p class="em-kicker" data-layla-language="ar" lang="ar" hidden>البرنامج</p>
+          <h2 data-layla-text="scheduleHeading">From the first toast to the last song.</h2>
+          <img class="em-sticker em-sticker--sparklers" src="./invitations/wedding-designs/ember/assets/sparklers.webp" width="640" height="640" alt="" loading="lazy" decoding="async" />
+        </div>
+        <div class="evening-programme"><ol class="schedule-timeline" id="scheduleMount"></ol><div id="scheduleActions"></div></div>
+      </div>
+    </section>
+
+    <section class="section" id="guestSpotlightSection" hidden><div class="section-frame"><h2 id="guestGreetingTitle"></h2><p id="guestGreetingArabic" lang="ar"></p><p id="guestGreetingEnglish"></p></div></section>
+
+    <section class="section seating-section reveal" id="seatingSection" hidden>
+      <div class="section-frame">
+        <div class="seating-heading">
+          <div><p class="em-kicker" data-layla-language="en">Seating</p><p class="em-kicker" data-layla-language="ar" lang="ar" hidden>الجلوس</p><h2 data-layla-language="en">Your seat<br><em>at the table.</em></h2><h2 data-layla-language="ar" lang="ar" hidden>مكانكم<br><em>على الطاولة.</em></h2></div>
+          <p data-layla-language="en">Choose a name to find its seat.</p><p data-layla-language="ar" lang="ar" hidden>اختاروا اسماً لمعرفة مقعده.</p>
+        </div>
+        <div id="seatDetailsMount"></div>
+        <div class="seating-map-shell"><div class="seating-map" id="seatingMap"></div></div>
+      </div>
+    </section>
+
+    <section class="section rsvp-section reveal" id="rsvpSection" aria-labelledby="rsvpTitle">
+      <div class="section-frame rsvp-composition">
+        <div class="rsvp-heading">
+          <p class="em-kicker" data-layla-language="en">Kindly reply</p><p class="em-kicker" data-layla-language="ar" lang="ar" hidden>نرجو الرد</p>
+          <h2 id="rsvpTitle" data-layla-text="rsvpHeading">Will you raise a glass with us?</h2>
+          <p data-layla-language="en">Your reply saves you a seat and a slice.</p><p data-layla-language="ar" lang="ar" hidden>بردّكم نحجز لكم مقعداً وقطعة من الكعكة.</p>
+          <img class="em-sticker em-sticker--gift" src="./invitations/wedding-designs/ember/assets/gift.webp" width="640" height="640" alt="" loading="lazy" decoding="async" />
+        </div>
+        <div class="rsvp-card"><div id="rsvpMount"></div></div>
+      </div>
+    </section>
+
+    <section class="section pass-section reveal" id="qrPassSection" hidden>
+      <div class="section-frame pass-composition">
+        <div class="section-heading"><p class="em-kicker" data-layla-language="en">At the door</p><p class="em-kicker" data-layla-language="ar" lang="ar" hidden>عند الوصول</p><h2 data-layla-text="passHeading">Your pass for the night.</h2><p data-layla-language="en">Show this at the door.</p><p data-layla-language="ar" lang="ar" hidden>أظهروا هذه البطاقة عند الباب.</p></div>
+        <div class="em-pass"><div class="qr-pass" id="qrPassMount"></div></div>
+      </div>
+    </section>
+
+    <section class="section closing-section reveal">
+      <div class="section-frame closing-card">
+        <img class="em-sticker em-sticker--slice" src="./invitations/wedding-designs/ember/assets/slice.webp" width="640" height="640" alt="" loading="lazy" decoding="async" />
+        <p class="em-wish" lang="ar">كل عام وأنتم بخير</p>
+        <p class="em-wish-en" data-layla-language="en">Here's to another year.</p>
+        <p class="em-closing" id="closingEnglish" data-layla-language="en"></p><p class="em-closing" id="closingArabic" data-layla-language="ar" lang="ar" hidden></p>
+      </div>
+    </section>
+    <footer class="qd-footer"><span class="em-footer-mark" aria-hidden="true"></span><p class="qd-footer__credit"><span data-layla-text="madeBy">Made by</span> <a href="https://qdsystems.ae/" target="_blank" rel="noopener noreferrer">QD Systems</a></p></footer>
+  </main>
+  <nav class="sticky-actions" id="stickyActions" aria-label="Quick event actions" hidden></nav>
+  <div class="toast-rail" id="toastRail" aria-live="polite" aria-atomic="true"></div>
+  <noscript><p class="no-script">Please enable JavaScript to open this personal invitation. يرجى تفعيل جافاسكريبت لفتح الدعوة.</p></noscript>
+  <script type="module" src="./invitations/wedding-designs/ember/invitation.js?v=20261114-1"></script>
+</body>
+</html>

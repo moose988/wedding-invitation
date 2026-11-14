@@ -51,7 +51,7 @@ test("sample route reads current public event only and never resolves a guest to
   assert.match(script, /explicitSampleMode = invitationParams\.get\("sample"\) === "1" && invitationParams\.get\("wedding"\) === "luxury-wedding-demo"/);
   assert.match(sampleBoot, /normaliseWedding\(\{ \.\.\.demoWedding, id: weddingId \}\)/);
   assert.doesNotMatch(sampleBoot, /loadGuestInvitation|loadFirebaseInvitation|loadTables|httpsCallable/);
-  assert.match(script, /state\.sampleMode \|\| state\.mode !== "firebase" \|\| !state\.guest/);
+  assert.match(script, /\(!preview && \(state\.sampleMode \|\| state\.mode !== "firebase"\)\) \|\| !state\.guest/);
   assert.match(script, /state\.sampleMode \|\| state\.mode !== "firebase"/);
   assert.match(html, /id="samplePreviewBanner" hidden/);
   assert.match(router, /invitationQueryKeys = \["wedding", "guest", "recipient", "sample"\]/);

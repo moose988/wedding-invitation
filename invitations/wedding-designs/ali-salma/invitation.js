@@ -1,6 +1,6 @@
 import { getInvitationParams, invitationCheckinUrl, invitationSeatingEnabled, loadInvitationContext, saveInvitationRsvp, subscribeToInvitation } from "../../shared/invitation-data.js?v=20261027-layla-lazy-public-firebase";
 import { escapeHtml, formatEventDate, guestSeat, setDocumentTitle } from "../../shared/invitation-utils.js";
-import { buildSatelliteMapEmbedUrl } from "../../shared/map-embed.js";
+import { buildSatelliteMapEmbedUrl } from "../../shared/map-embed.js?v=20261112-keyless-1";
 import { getEventDisplayTitle, isCelebrationEvent } from "../../../event-utils.js";
 import { renderQrCode } from "../../../qr.js?v=20261017-qr-module-fix";
 

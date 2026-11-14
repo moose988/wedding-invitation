@@ -48,7 +48,7 @@ globalThis.invitationDesignConfig = {
   },
 };
 
-await import("../../../script.js?v=20261112-refine-1");
+await import("../../../script.js?v=20261113-pc-1");
 
 // The shared runtime replaces the document with an accessible error for an
 // incomplete link. Only enhance a successfully mounted invitation shell.

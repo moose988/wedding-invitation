@@ -41,7 +41,10 @@ function diskFiles({ dir, origin, signKey }) {
   const list = (name, key) => (index[name === 'backups' ? 'backups' : 'photos'][key] ||= []);
   const current = (name, key) => { const v = index[name === 'backups' ? 'backups' : 'photos'][key]?.at(-1); return v && !v.marker ? v : null; };
   const blob = async v => readFile(path.join(blobs, v.blob));
-  async function store(body) { const id = createHash('sha256').update(body).digest('hex'); await writeFile(path.join(blobs, id), body); return id; }
+  // Blobs are named by content, so two uploads of identical bytes share a file. Write to a unique temp file and rename,
+  // so a reader never sees a half-written blob while another upload of the same bytes is being stored.
+  let tmpSeq = 0;
+  async function store(body) { const id = createHash('sha256').update(body).digest('hex'), file = path.join(blobs, id); if (existsSync(file)) return id; const tmp = `${file}.${process.pid}.${++tmpSeq}.tmp`; await writeFile(tmp, body); await rename(tmp, file); return id; }
   const sign = (method, key, size, exp) => createHmac('sha256', signKey).update(`${method}\n${key}\n${size}\n${exp}`).digest('base64url');
   const signed = (method, key, size) => { const exp = Date.now() + (method === 'PUT' ? 600 : 300) * 1000; const q = new URLSearchParams({ k: key, m: method, s: String(size), e: String(exp), sig: sign(method, key, size, exp) }); return `${origin}${OBJECT_ROUTE}?${q}`; };
   const files = {

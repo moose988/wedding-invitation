@@ -24,6 +24,11 @@ export const jitteredWait = (attempt, error, { backoff = 1000, cap = 30000, rand
 export const NETWORK_WAIT_LIMIT = 120; // network waits per photo, each 5-20 s: roughly 30 minutes
 const networkWaits = new Map();
 export const ONLINE_ATTEMPTS = 10;
+// One wording for a host pause, whether the page or the server noticed it first. A paused photo is not a failure:
+// it waits on the device and uploads by itself once the host resumes (see resumePaused below).
+export const PAUSED_JOB_MESSAGE = 'Your host has paused new photos. This photo is kept on your phone and will upload by itself when uploads resume.';
+export const isPausedError = error => Boolean(error?.paused) || error?.code === 'UPLOADS_PAUSED';
+const pausedError = () => Object.assign(new Error(PAUSED_JOB_MESSAGE), { paused: true });
 // Resolves when the browser reports it is online again (the online event, or the tab becoming
 // visible while online), with a slow poll as a safety net. Never rejects.
 export function waitOnline({ poll = 5000 } = {}) {
@@ -53,7 +58,7 @@ export function uploadQueue({ adapter, bucketId, changed = () => {}, transport =
         changed({ ...job, progress: 0 });
         try {
           const status = await adapter.status(bucketId);
-          if (status.paused) throw new Error('Your host has paused new photos. Retry after uploads resume.');
+          if (status.paused) throw pausedError();
           const file = await adapter.jobFile(bucketId, job.id);
           const image = await transport.run(job, file, async (progress, thumbnail) => {
             if (thumbnail) job = await adapter.updateJob(bucketId, job.id, { thumbnail });
@@ -63,6 +68,11 @@ export function uploadQueue({ adapter, bucketId, changed = () => {}, transport =
           await adapter.commit(bucketId, job.id, image);
           changed({ ...job, state: 'saved', progress: 100 }); return;
         } catch (error) {
+          // Host pause: park the photo without using up its attempts. It is not shown as failed and needs no Retry tap.
+          if (isPausedError(error)) {
+            await adapter.updateJob(bucketId, job.id, { attempts: Math.max(0, job.attempts - 1), state: 'paused', error: PAUSED_JOB_MESSAGE });
+            changed({ ...job, state: 'paused', error: PAUSED_JOB_MESSAGE }); return;
+          }
           // A dropped connection is not a failed attempt: give the attempt back, pause until the phone is online
           // again (minutes if needed), then try the same photo again. The commit is idempotent (job id = photo id).
           // Venue Wi-Fi often stays "connected" with no internet, so a request that never reached the server
@@ -93,11 +103,19 @@ export function uploadQueue({ adapter, bucketId, changed = () => {}, transport =
     try {
       for (const job of await adapter.jobs(bucketId)) {
         if (running.size >= LIMITS.concurrency) break;
-        if (job.state === 'failed' || running.has(job.id)) continue;
+        if (job.state === 'failed' || job.state === 'paused' || running.has(job.id)) continue;
         running.add(job.id); void process(job);
       }
     } catch (error) { changed({ state: 'queue-error', error: friendlyError(error) }); }
     finally { pumping = false; }
   }
-  return { start: pump, stop: () => { stopped = true; }, get idle() { return !running.size && !pumping; }, async retry(jobId) { if (running.has(jobId)) return; await adapter.updateJob(bucketId, jobId, { attempts: 0, state: 'queued', error: '' }); await pump(); } };
+  // After the host resumes: every photo parked by the pause goes back in the queue with a fresh attempt budget.
+  async function resumePaused() {
+    if (stopped) return 0;
+    const parked = (await adapter.jobs(bucketId)).filter(job => job.state === 'paused' && !running.has(job.id));
+    for (const job of parked) { const next = await adapter.updateJob(bucketId, job.id, { attempts: 0, state: 'queued', error: '' }); changed({ ...next, state: 'queued' }); }
+    if (parked.length) await pump();
+    return parked.length;
+  }
+  return { start: pump, resumePaused, stop: () => { stopped = true; }, get idle() { return !running.size && !pumping; }, async retry(jobId) { if (running.has(jobId)) return; await adapter.updateJob(bucketId, jobId, { attempts: 0, state: 'queued', error: '' }); await pump(); } };
 }

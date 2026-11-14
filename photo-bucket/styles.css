@@ -107,7 +107,8 @@
 .pb-crop-controls { display:grid;grid-template-columns:1fr 1fr;gap:12px; }
 .pb-crop-controls label:first-child { grid-column:1/-1; }
 .pb-editor .pb-subtle { margin:10px 0 0; }
-.pb-editor .pb-crop-controls,.pb-editor .pb-dialog-body > .pb-subtle { display:none!important; }
+.pb-crop-controls input[type=range] { width:100%;min-height:32px; }
+.pb-crop-controls label { display:grid;gap:4px;font-size:12px; }
 .pb-poster-controls { display:flex;align-items:end;justify-content:center;gap:12px;flex-wrap:wrap;margin:0 auto 24px; }
 .pb-poster-controls label { width:min(280px,100%); }
 .pb-poster-controls .pb-button,.pb-poster-controls button,.pb-poster-controls select { min-height:48px;height:48px; }
@@ -266,3 +267,11 @@
 .pb .pb-poster--gender-reveal h2 { font-family:"Palatino Linotype",Palatino,serif; font-weight:400; }
 .pb .pb-poster--gender-reveal .pb-kicker, .pb .pb-poster--gender-reveal .pb-event-meta, .pb .pb-poster--gender-reveal .pb-subtle, .pb .pb-poster--gender-reveal .pb-poster-demo { color:#5c4450; letter-spacing:.14em; }
 .pb .pb-poster--gender-reveal .pb-card-instructions { color:#2f2128; text-shadow:0 0 5px #fffaf4, 0 0 9px #fffaf4; }
+
+/* Upload problems (skipped or refused photos) stay until the guest dismisses them. */
+.pb-upload .pb-notice--warning { margin:14px 0 0;background:#fbefd9;border-color:#e2bf7c;color:#5a3d0a;display:grid;gap:8px; }
+.pb-notice--warning[hidden] { display:none; }
+.pb-notice--warning p { margin:0; }
+.pb-notice--warning button { justify-self:start;min-height:44px; }
+.pb-zip-progress { display:block;margin-top:8px; }
+.pb-zip-progress:empty { display:none; }

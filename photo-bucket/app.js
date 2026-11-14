@@ -5,7 +5,7 @@ if (typeof HTMLDialogElement !== 'undefined' && !HTMLDialogElement.prototype.sho
 import { createOwnerAdapter, createGuestAdapter, defaultTransport, online } from './adapters.js';
 import { guestUrl, readGuestUrl, validId, dateLabel, isLoopback, THEMES, themeOf } from './links.js';
 import { LIMITS, validateFile, friendlyError } from './limits.js';
-import { uploadQueue, ONLINE_ATTEMPTS } from './transport.js';
+import { uploadQueue, ONLINE_ATTEMPTS, PAUSED_JOB_MESSAGE } from './transport.js';
 import { skeleton } from '../skeleton.js';
 import { confirmAction, copyWithFallback, runFromEvent } from '../action-feedback.js';
 import { escapeHtml as h } from '../invitations/shared/invitation-utils.js';
@@ -29,7 +29,7 @@ const brand = back => `<nav class="pb-brand" aria-label="Photo Bucket">${back ? 
 // Hosts always see the date and place; guests see them unless an admin switched them off.
 const meta = () => !owner && bucket.guestShowsDetails === false ? '' : `<p class="pb-event-meta"><span>${h(dateLabel(bucket.date))}</span><span dir="auto">${h(bucket.location)}</span></p>`;
 const frozenNotice = () => `<div id="frozenNotice" class="pb-notice pb-notice--frozen" role="status" ${bucket.frozen ? '' : 'hidden'}><strong>Everything is paused.</strong> Guests and the customer see a "paused until the event" message, and nothing is running. Your photos are safe. Press "Resume everything" when you are ready.</div>`;
-const notice = () => `<div id="pauseNotice" class="pb-notice" role="status" ${bucket.paused ? '' : 'hidden'}>New photos are paused. ${owner ? 'Resume whenever you are ready.' : 'Your host will welcome more photos soon. You can still edit your saved moments.'}</div>`;
+const notice = () => `<div id="pauseNotice" class="pb-notice" role="status" ${bucket.paused ? '' : 'hidden'}>New photos are paused. ${owner ? 'Resume whenever you are ready.' : 'Your host will welcome more photos soon. Photos you already chose stay on your phone and upload by themselves when uploads resume. You can still edit your saved moments.'}</div>`;
 function message(text, error = false) { const node = $('#message'); if (node) { node.textContent = text; node.classList.toggle('pb-error', error); } }
 function run(work) { return async event => { await runFromEvent(event, () => work(event), { onError: error => message(friendlyError(error), true) }); }; }
 function listen(selector, type, work) { $(selector)?.addEventListener(type, run(work)); }
@@ -70,7 +70,7 @@ async function boot() {
     else {
       owner ? renderOwner() : renderGuest(); bindCommon(); bindViewer(); bindSort();
       if (owner) { bindOwner(); await renderShare(); setInterval(autoRefresh, 5000); }
-      else { bindGuest(); queue = uploadQueue({ adapter, bucketId: bucket.id, changed: onJobChange, transport: defaultTransport() }); await loadQueue(); await queue.start(); }
+      else { bindGuest(); queue = uploadQueue({ adapter, bucketId: bucket.id, changed: onJobChange, transport: defaultTransport() }); await loadQueue(); await queue.start(); await afterStatus(); }
       await refreshGallery();
     }
     app.setAttribute('aria-busy', 'false');
@@ -83,7 +83,7 @@ function renderGuest() {
   document.body.dataset.theme = themeOf(bucket);
   app.innerHTML = `${brand(false)}<header class="pb-hero"><p class="pb-kicker">A day to remember, together</p><h1 class="pb-event-title" id="eventName" dir="auto">${h(bucket.name)}</h1><div id="eventMeta">${meta()}</div><div class="pb-rule"></div><p class="pb-welcome">The little moments.<br>The big feelings. Your point of view.</p></header>
   <section class="pb-upload" aria-labelledby="uploadHeading"><h2 id="uploadHeading">Share a little joy</h2><p class="pb-subtle">Your memories belong in the picture.</p>${bucket.showUploaderNames ? `<label class="pb-name-field">Your name (optional)<input id="uploaderName" dir="auto" maxlength="40" autocomplete="name" placeholder="So the hosts know who shared it" value="${h(savedName())}"></label>` : ''}<div class="pb-upload-actions"><button type="button" class="pb-primary" id="cameraButton">${icon('camera')}Take a photo</button><button type="button" id="galleryButton">${icon('gallery')}Choose from gallery</button></div><input id="cameraInput" type="file" accept="image/*" capture="environment" hidden><input id="galleryInput" type="file" accept="image/*" multiple hidden>
-  </section>
+  <div id="uploadNotice" class="pb-notice pb-notice--warning" role="alert" hidden><p id="uploadNoticeText" dir="auto"></p><button type="button" id="uploadNoticeClose">OK, got it</button></div></section>
   ${notice()}<p id="message" class="pb-message" role="status" aria-live="polite"></p><section id="queueSection" hidden aria-label="${online ? 'Upload progress' : 'Local demo processing'}"><div class="pb-section-head"><h2>Saving your moments</h2></div><p class="pb-subtle">${online ? 'Uploading' : 'Local demo processing'} · Keep this page open while saving.</p><div id="queueList" class="pb-queue"></div></section>
   <section aria-labelledby="galleryHeading"><div class="pb-section-head"><h2 id="galleryHeading">Your moments</h2><span id="photoCount" class="pb-count"></span></div><div class="pb-gallery-toolbar">${sortControl()}</div><div id="gallery" class="pb-grid">${skeleton.tiles(6)}</div><div id="galleryState" class="pb-state" role="status">Loading your photos…</div></section><footer class="pb-powered-by">Powered by <a href="https://events.qdsystems.ae">QDsystems</a></footer>${dialogs()}`;
 }
@@ -294,7 +294,7 @@ function bindCommon() {
     catch (error) { $('#deleteError').textContent = friendlyError(error); return false; } finally { cancelDelete.disabled = false; }
   });
   // Native <dialog> supplies modal focus containment, Escape and focus return.
-  window.addEventListener('focus', run(async () => { bucket = owner ? await adapter.get(bucket.id) : await adapter.status(bucket.id); syncDetails(); await refreshGallery(); }));
+  window.addEventListener('focus', run(async () => { bucket = owner ? await adapter.get(bucket.id) : { ...bucket, ...await adapter.status(bucket.id) }; syncDetails(); if (!owner) await afterStatus(); await refreshGallery(); }));
   window.addEventListener('pagehide', event => {
     // A cached guest page still owns any selected files and in-flight uploads.
     if (!owner && event.persisted) return;
@@ -318,6 +318,7 @@ function bindGuest() {
     listen(selector, 'change', async () => {
       const files = Array.from(input.files || []);
       if (!files.length) return noPhoto();
+      showUploadNotice('');
       message(files.length === 1 ? 'Preparing your photo…' : 'Preparing your photos…');
       let accepted = 0;
       const errors = [];
@@ -327,9 +328,13 @@ function bindGuest() {
         try { const job = await adapter.enqueue(bucket.id, file, bucket.showUploaderNames ? currentName() : ''); queueStates.set(job.id, job); accepted++; renderJobs(); void queue.start(); }
         catch (error) { errors.push(`${file.name}: ${friendlyError(error)}`); }
       }
-      message(errors.length ? `${accepted} queued. ${errors.join(' ')}` : `${accepted} ${accepted === 1 ? 'photo' : 'photos'} queued for ${online ? 'upload' : 'local demo processing'}.`, Boolean(errors.length));
+      // Problems stay in their own box until the guest dismisses it or picks again; upload progress
+      // messages below never replace them, so a skipped or refused photo is not missed.
+      showUploadNotice(errors.length ? `${accepted ? `${accepted} ${accepted === 1 ? 'photo is' : 'photos are'} uploading. ` : ''}${files.length - accepted === 1 ? '1 photo was' : `${files.length - accepted} photos were`} not added: ${errors.join(' ')}` : '');
+      message(accepted ? `${accepted} ${accepted === 1 ? 'photo' : 'photos'} queued for ${online ? 'upload' : 'local demo processing'}.` : '');
     });
   }
+  listen('#uploadNoticeClose', 'click', () => showUploadNotice(''));
   listen('#queueList', 'click', async event => {
     const button = event.target.closest('[data-job]'); if (!button) return;
     if (button.dataset.retry) { const job = queueStates.get(button.dataset.job); queueStates.set(job.id, { ...job, state: 'queued', attempts: 0, error: '' }); renderJobs(); await queue.retry(job.id); }
@@ -367,10 +372,37 @@ function drawEditor() {
   const rect = cropRect(c.width, c.height, editValues()); ctx.fillStyle = '#102a2580'; ctx.beginPath(); ctx.rect(0,0,c.width,c.height); ctx.rect(rect.x,rect.y,rect.width,rect.height); ctx.fill('evenodd'); ctx.strokeStyle = '#fffdf3'; ctx.lineWidth = 3; ctx.strokeRect(rect.x+1.5,rect.y+1.5,rect.width-3,rect.height-3);
   $('#cropX').disabled = $('#cropY').disabled = Number($('#cropSize').value) === 100;
 }
+function showUploadNotice(text) { const box = $('#uploadNotice'); if (!box) return; $('#uploadNoticeText').textContent = text; box.hidden = !text; }
+// Guest pause handling. The page learns about a pause when it opens, on focus, or when the server refuses an upload.
+// While paused it checks the public status every 20 s (only then, and only while visible), and on resume the parked
+// photos upload by themselves. No polling happens while uploads are open.
+let pauseTimer = null;
+async function afterStatus() {
+  if (owner || !queue) return;
+  if (bucket.paused) return watchPause();
+  stopPauseWatch();
+  const resumed = await queue.resumePaused();
+  if (resumed) message(`Uploads resumed. ${resumed === 1 ? 'Your waiting photo is' : `Your ${resumed} waiting photos are`} uploading now.`);
+}
+function watchPause() {
+  if (owner || pauseTimer || disposed) return;
+  pauseTimer = setInterval(async () => {
+    if (disposed) return stopPauseWatch();
+    if (document.visibilityState !== 'visible') return;
+    try { const status = await adapter.status(bucket.id); if (status.paused !== bucket.paused) { bucket = { ...bucket, ...status }; syncDetails(); } if (!status.paused) await afterStatus(); }
+    catch { /* a network blip: check again on the next tick */ }
+  }, 20000);
+}
+function stopPauseWatch() { clearInterval(pauseTimer); pauseTimer = null; }
 async function loadQueue() { for (const job of await adapter.jobs(bucket.id)) queueStates.set(job.id, job); renderJobs(); }
 function onJobChange(job) {
   if (disposed) return;
   if (job.state === 'queue-error') return message(job.error, true);
+  if (job.state === 'paused') {
+    queueStates.set(job.id, job); renderJobs();
+    if (!bucket.paused) { bucket = { ...bucket, paused: true }; syncDetails(); }
+    watchPause(); return;
+  }
   if (job.state === 'saved') {
     queueStates.delete(job.id);
     message((online ? 'Saved online' : 'Saved on this device') + '. Thank you for sharing a little joy.');
@@ -388,10 +420,10 @@ function renderJobs() {
     jobUrls.delete(id);
   }
   $('#queueList').innerHTML = jobs.map(job => {
-    const state = { queued:'Queued', processing:`${online ? 'Uploading' : 'Local demo processing'} · ${job.progress || 0}%`, retrying:`Retrying ${online ? 'upload' : 'local processing'} · attempt ${Math.min(job.attempts, online ? ONLINE_ATTEMPTS : 3)}/${online ? ONLINE_ATTEMPTS : 3}`, waiting:'Waiting for a connection. Your photo will upload by itself.', saved:online ? 'Saved online' : 'Saved on this device', failed:job.error || 'Processing did not finish. Tap Retry.' }[job.state] || 'Queued';
+    const state = { queued:'Queued', processing:`${online ? 'Uploading' : 'Local demo processing'} · ${job.progress || 0}%`, retrying:`Retrying ${online ? 'upload' : 'local processing'} · attempt ${Math.min(job.attempts, online ? ONLINE_ATTEMPTS : 3)}/${online ? ONLINE_ATTEMPTS : 3}`, waiting:'Waiting for a connection. Your photo will upload by itself.', paused:job.error || PAUSED_JOB_MESSAGE, saved:online ? 'Saved online' : 'Saved on this device', failed:job.error || 'Processing did not finish. Tap Retry.' }[job.state] || 'Queued';
     if (job.thumbnail && !jobUrls.has(job.id)) jobUrls.set(job.id, URL.createObjectURL(job.thumbnail));
     const preview = jobUrls.get(job.id);
-    return `<article class="pb-job"><div class="pb-job-icon">${preview ? `<img src="${preview}" alt="Your photo preview">` : icon('gallery')}</div><div><p dir="auto">${h(job.filename || 'Your photo')}</p><p ${job.state === 'failed' ? 'class="pb-error"' : ''}>${h(state)}</p>${!['saved','failed'].includes(job.state) ? `<progress max="100" value="${job.progress || 0}" aria-label="${online ? 'Upload progress' : 'Local demo processing progress'}"></progress>` : ''}${job.state === 'failed' ? `<button type="button" data-job="${h(job.id)}" data-retry="1">Retry</button><button type="button" data-job="${h(job.id)}">Remove</button>` : ''}</div></article>`;
+    return `<article class="pb-job"><div class="pb-job-icon">${preview ? `<img src="${preview}" alt="Your photo preview">` : icon('gallery')}</div><div><p dir="auto">${h(job.filename || 'Your photo')}</p><p ${job.state === 'failed' ? 'class="pb-error"' : ''}>${h(state)}</p>${!['saved','failed','paused'].includes(job.state) ? `<progress max="100" value="${job.progress || 0}" aria-label="${online ? 'Upload progress' : 'Local demo processing progress'}"></progress>` : ''}${job.state === 'failed' ? `<button type="button" data-job="${h(job.id)}" data-retry="1">Retry</button><button type="button" data-job="${h(job.id)}">Remove</button>` : ''}${job.state === 'paused' ? `<button type="button" data-job="${h(job.id)}">Remove</button>` : ''}</div></article>`;
   }).join('');
 }
 async function renderShare() {
@@ -443,14 +475,31 @@ function bindOwner() {
       status.textContent = 'Preparing…';
       const list = adapter.allPhotos ? (await adapter.allPhotos(bucket.id, filterAllowed() ? filter : '')).sort(byTime) : visiblePhotos();
       const parts = splitZipParts(list);
+      // Progress goes to its own line, so the part buttons below it stay in place while a part is prepared.
+      const progressLine = () => status.querySelector('#zipProgress') || status;
       const run = async index => {
-        const blob = await makeZip(parts[index], p => adapter.image(bucket.id, p.id), (done, total) => { status.textContent = `Preparing ${online ? '' : 'local '}ZIP${parts.length > 1 ? ` part ${index + 1} of ${parts.length}` : ''} · ${done} of ${total} photos`; });
-        download(blob, zipPartName(index, parts.length)); status.textContent = parts.length > 1 ? `Part ${index + 1} of ${parts.length} is ready in your downloads.` : 'Your ZIP is ready in your downloads.';
+        const blob = await makeZip(parts[index], p => adapter.image(bucket.id, p.id), (done, total) => { progressLine().textContent = `Preparing ${online ? '' : 'local '}ZIP${parts.length > 1 ? ` part ${index + 1} of ${parts.length}` : ''} · ${done} of ${total} photos`; });
+        download(blob, zipPartName(index, parts.length)); progressLine().textContent = parts.length > 1 ? `Part ${index + 1} of ${parts.length} is ready in your downloads.` : 'Your ZIP is ready in your downloads.';
       };
       if (parts.length <= 1) await run(0);
       else {
-        status.innerHTML = `<strong>${list.length} photos are too many for one file, so they come in ${parts.length} numbered parts.</strong> Download each part in turn.<span class="pb-zip-parts">${parts.map((part, i) => `<button type="button" data-zip-part="${i}">Download part ${i + 1} of ${parts.length} (${part.length} photos)</button>`).join('')}</span>`;
-        status.onclick = async event => { const b = event.target.closest('[data-zip-part]'); if (!b) return; b.disabled = true; const label = b.textContent; try { await run(Number(b.dataset.zipPart)); b.textContent = `Part ${Number(b.dataset.zipPart) + 1} done`; } catch (error) { b.disabled = false; b.textContent = label; status.insertAdjacentText('afterbegin', `${friendlyError(error)} `); } };
+        // One tap downloads every part in turn (one ZIP in memory at a time); the numbered buttons stay for a single part.
+        status.innerHTML = `<strong>${list.length} photos are too many for one file, so they come in ${parts.length} numbered parts.</strong> <span id="zipPartsNote">Download them all at once, or one part at a time. Your browser may ask once to allow several downloads; choose Allow.</span><span id="zipProgress" class="pb-zip-progress" aria-live="polite"></span><span class="pb-zip-parts"><button type="button" class="pb-primary" data-zip-all="1">Download all ${parts.length} parts</button>${parts.map((part, i) => `<button type="button" data-zip-part="${i}">Download part ${i + 1} of ${parts.length} (${part.length} photos)</button>`).join('')}</span>`;
+        const done = new Set(), partButton = i => status.querySelector(`[data-zip-part="${i}"]`), note = text => { const n = status.querySelector('#zipPartsNote'); if (n) n.textContent = text; };
+        const runPart = async i => { const b = partButton(i); b.disabled = true; const label = b.textContent; try { await run(i); done.add(i); b.textContent = `Part ${i + 1} done`; } catch (error) { b.disabled = false; b.textContent = label; throw error; } };
+        status.onclick = async event => {
+          const all = event.target.closest('[data-zip-all]'), one = event.target.closest('[data-zip-part]');
+          if (all) {
+            all.disabled = true;
+            try {
+              for (let i = 0; i < parts.length; i++) if (!done.has(i)) await runPart(i);
+              all.textContent = 'All parts downloaded'; note(`All ${parts.length} parts are in your downloads.`);
+            } catch (error) { all.disabled = false; all.textContent = 'Continue downloading the remaining parts'; note(`${friendlyError(error)} Parts already downloaded are kept.`); }
+            return;
+          }
+          if (!one) return;
+          try { await runPart(Number(one.dataset.zipPart)); } catch (error) { note(friendlyError(error)); }
+        };
       }
     } catch (error) { status.textContent = friendlyError(error); } finally { button.disabled = !visiblePhotos().length; }
   });

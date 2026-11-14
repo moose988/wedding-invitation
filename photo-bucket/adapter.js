@@ -53,7 +53,7 @@ function checkPhoto(photo, bucketId, contributorId) {
   if (!photo || photo.bucketId !== bucketId || (contributorId && photo.contributorId !== contributorId)) throw new Error('This photo is not available to you.');
   return photo;
 }
-function writable(bucket) { if (!bucket) throw new Error('Open the complete guest link first.'); if (bucket.paused) throw new Error('Your host has paused new photos. Try again after uploads resume.'); }
+function writable(bucket) { if (!bucket) throw new Error('Open the complete guest link first.'); if (bucket.paused) throw Object.assign(new Error('Your host has paused new photos. Try again after uploads resume.'), { paused: true }); }
 function validImage(image) {
   if (!(image?.blob instanceof Blob) || !image.blob.size || image.blob.size > LIMITS.fileBytes || !(image.thumbnail instanceof Blob)) throw new Error('The processed photo is invalid. Your previous photo is unchanged.');
 }

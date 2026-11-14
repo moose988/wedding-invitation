@@ -24,8 +24,8 @@ export async function buildTemplates(root, { db, user }) {
     <form class="admin-card tpl-whatsapp" id="tplWhatsappForm" novalidate>
       <h3>"I want this one" button</h3>
       <label for="tplWhatsapp" class="tpl-label">WhatsApp number, with country code</label>
-      <div class="tpl-field"><input id="tplWhatsapp" type="tel" inputmode="tel" autocomplete="off" placeholder="+971 50 123 4567" aria-describedby="tplWhatsappHelp" /><button class="primary-button" type="submit" id="tplWhatsappSave">Save</button></div>
-      <p class="admin-meta" id="tplWhatsappHelp">When a customer is viewing a template, the button opens WhatsApp to this number with the template's name already typed. Leave it empty to hide the button.</p>
+      <div class="tpl-field"><input id="tplWhatsapp" type="tel" inputmode="tel" autocomplete="off" placeholder="+971 50 461 1123 (default)" aria-describedby="tplWhatsappHelp" /><button class="primary-button" type="submit" id="tplWhatsappSave">Save</button></div>
+      <p class="admin-meta" id="tplWhatsappHelp">When a customer is viewing a template, the button opens WhatsApp to this number with the template's name already typed. Leave it empty to use the support number, +971 50 461 1123.</p>
       <p class="form-error" id="tplWhatsappError" role="alert"></p>
     </form>
     <section class="admin-card" aria-labelledby="tplListTitle">

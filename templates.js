@@ -83,17 +83,16 @@ let lastFocus = null;
 function syncViewer() {
   const id = decodeURIComponent(location.hash.slice(1));
   const item = state.ready ? visibleTemplates(state.settings).find(x => x.id === id) : null;
-  const viewer = $("viewer"), frame = $("viewerFrame");
+  const viewer = $("viewer");
   if (!item) {
     if (!viewer.hidden) {
-      viewer.hidden = true; frame.src = "about:blank"; document.body.classList.remove("tp-locked");
+      viewer.hidden = true; $("viewerFrame")?.remove(); document.body.classList.remove("tp-locked");
       lastFocus?.focus?.();
     }
     return;
   }
   const name = item.name[state.lang];
   $("viewerTitle").textContent = name;
-  frame.title = name;
   const want = whatsappLink(state.settings.whatsapp, item.name.en);
   $("viewerWant").hidden = !want;
   if (want) $("viewerWant").href = want;
@@ -101,10 +100,23 @@ function syncViewer() {
     lastFocus = document.activeElement;
     // Open the invitation in the visitor's language.
     setInvitationLanguage(item.id, state.lang);
-    frame.src = item.url;
+    mountFrame(item.url, name);
     viewer.hidden = false; document.body.classList.add("tp-locked");
     $("viewerClose").focus();
   }
+}
+// A brand-new iframe per opening, with its address set before it joins the page: changing an
+// existing iframe's address adds a step to the browser history, so "back" would blank the
+// invitation (a black screen) instead of returning to the list.
+function mountFrame(url, title) {
+  $("viewerFrame")?.remove();
+  const frame = document.createElement("iframe");
+  frame.id = "viewerFrame";
+  frame.title = title;
+  frame.allow = "autoplay; fullscreen";
+  frame.referrerPolicy = "same-origin";
+  frame.src = url;
+  document.querySelector(".tp-viewer__phone").append(frame);
 }
 // Each design remembers its own language; set it so the invitation opens in the visitor's language.
 function setInvitationLanguage(id, lang) {

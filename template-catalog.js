@@ -87,8 +87,11 @@ export function showcaseLink(base, category = "") {
   return url.href;
 }
 
+// The support number already used on the login pages; used until an admin saves another one.
+export const DEFAULT_WHATSAPP = "971504611123";
+
 export function whatsappLink(number, templateName) {
-  const digits = String(number || "").replace(/\D/g, "");
+  const digits = String(number || DEFAULT_WHATSAPP).replace(/\D/g, "");
   if (!digits) return "";
   const text = `Hello QD Systems, I'd like the "${templateName}" invitation template.`;
   return `https://wa.me/${digits}?text=${encodeURIComponent(text)}`;

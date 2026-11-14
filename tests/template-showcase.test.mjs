@@ -44,7 +44,7 @@ test("links: one general link, one per event type, and WhatsApp", () => {
   assert.equal(showcaseLink(base), "https://qd.example/templates.html");
   assert.equal(showcaseLink(base, "gender_reveal"), "https://qd.example/templates.html?event=gender_reveal");
   assert.equal(showcaseLink(base, "nope"), "https://qd.example/templates.html");
-  assert.equal(whatsappLink("", "Ember"), "");
+  assert.match(whatsappLink("", "Ember"), /^https:\/\/wa\.me\/971504611123\?text=/);
   const wa = new URL(whatsappLink("+971 50 123 4567", "Ember"));
   assert.equal(wa.origin + wa.pathname, "https://wa.me/971501234567");
   assert.match(wa.searchParams.get("text"), /"Ember"/);
@@ -72,8 +72,9 @@ test("the admin workspace has a Templates tab and other admin pages link to it",
 
 test("the customer page loads the catalog and has the viewer and language switch", () => {
   const html = read("templates.html");
-  for (const id of ["gallery", "filters", "viewer", "viewerFrame", "viewerClose", "viewerWant", "langToggle"]) assert.match(html, new RegExp(`id="${id}"`));
+  for (const id of ["gallery", "filters", "viewer", "viewerClose", "viewerWant", "langToggle"]) assert.match(html, new RegExp(`id="${id}"`));
   const js = read("templates.js");
   assert.match(js, /visibleTemplates\(/);
   assert.match(js, /initPublicFirebase\(/);
+  assert.match(js, /mountFrame/);
 });

@@ -18,7 +18,7 @@ globalThis.invitationDesignConfig = {
   scrollBehavior: () => reducedMotion() || document.body.classList.contains("keyboard-navigation") ? "instant" : "smooth",
   copy: {
     heroKicker: { en: "Together with their families", ar: "بفرحة الأهل" },
-    openInvitation: { en: "Or tap to open", ar: "أو اضغطوا للفتح" },
+    openInvitation: { en: "Open invitation", ar: "افتحوا الدعوة" },
     introCaption: { en: "Press and hold to stitch your invitation.", ar: "اضغطوا مطوّلاً لتطريز دعوتكم." },
     videoLabel: { en: "Jasmine lifts from the card and rises to a terrace under an olive tree", ar: "الياسمين يرتفع عن البطاقة إلى شرفة تحت شجرة زيتون" },
     detailsHeading: { en: "Under the olive tree, as the sun goes down.", ar: "تحت شجرة الزيتون، عند المغيب." },
@@ -59,6 +59,7 @@ const body = document.body;
 const intro = document.getElementById("introScreen");
 const stage = document.getElementById("envelopeStage");
 const openButton = document.getElementById("openInvitation");
+const stitchButton = document.getElementById("stitchButton");
 const reduced = matchMedia("(prefers-reduced-motion: reduce)");
 const compact = () => matchMedia("(max-width: 760px)").matches;
 const saveData = navigator.connection?.saveData === true;
@@ -110,7 +111,7 @@ const ornamentNames = (node) => {
   const make = (className, value) => { const span = document.createElement("span"); span.className = className; if (value) span.textContent = value; return span; };
   const joint = make("ys-joint");
   joint.setAttribute("aria-hidden", "true");
-  joint.innerHTML = '<svg><use href="#ys-star"/></svg>';
+  joint.textContent = parts[1];
   const label = make("ys-sr", ` ${parts[1] === "&" ? "and" : "و"} `);
   node.replaceChildren(make("ys-name", parts[0]), joint, label, make("ys-name", parts[2]));
 };
@@ -195,7 +196,7 @@ function tick(now) {
   requestAnimationFrame(tick);
 }
 function onDown(event) {
-  if (done || intro.classList.contains("is-opening") || event.target.closest("button")) return;
+  if (done || intro.classList.contains("is-opening") || event.target.closest("#openInvitation, #skipOpening")) return;
   holding = true;
   lastFrame = 0;
   warmFilm();
@@ -210,13 +211,17 @@ function onUp() {
   // Opening inside the release keeps the browser's user activation for the film and music.
   if (pendingOpen) { pendingOpen = false; clearTimeout(lingerTimer); openButton.click(); }
 }
-if (motif && stage) {
+if (motif && stage && stitchButton) {
   stage.addEventListener("pointerdown", onDown);
   stage.addEventListener("pointerup", onUp);
   stage.addEventListener("pointercancel", onUp);
   stage.addEventListener("contextmenu", event => event.preventDefault());
+  stage.addEventListener("click", event => { if (!event.target.closest("#openInvitation")) event.stopPropagation(); });
+  stitchButton.addEventListener("click", event => {
+    if (event.detail === 0 && !done) { progress = 1; draw(); done = true; stage.classList.add("ys-sewn"); openButton.click(); }
+  });
 }
-// "Or tap to open" finishes the embroidery too, so the star is never left half-sewn.
+// The internal open control completes the embroidery before playback.
 openButton?.addEventListener("click", () => {
   if (!done) { progress = 1; draw(); done = true; pendingOpen = false; stage.classList.add("ys-sewn"); }
   clearTimeout(lingerTimer);

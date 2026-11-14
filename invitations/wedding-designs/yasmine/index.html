@@ -11,7 +11,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Gloock&family=Instrument+Serif:ital@0;1&family=Outfit:wght@400;500;600&family=Mirza:wght@400;600&family=Noto+Kufi+Arabic:wght@400;600&display=swap" rel="stylesheet" />
-  <link rel="stylesheet" href="./invitations/wedding-designs/yasmine/styles.css?v=20261113-1" />
+  <link rel="stylesheet" href="./invitations/wedding-designs/yasmine/styles.css?v=20261114-11" />
 </head>
 <body class="yasmine-invitation" data-guest-experience="bilingual" data-invitation-template="yasmine">
   <!-- The cross-stitch star (#ys-star) is stitched into this sprite by invitation.js. -->
@@ -41,10 +41,10 @@
         </div>
           <div class="ys-cover-copy">
             <p class="ys-kicker" data-layla-language="en">A wedding, stitched by hand</p><p class="ys-kicker" data-layla-language="ar" lang="ar" hidden>عرسٌ مطرّزٌ باليد</p>
-            <h2 data-layla-language="en">Press &amp; hold <em>to stitch</em></h2><h2 data-layla-language="ar" lang="ar" hidden>اضغطوا مطوّلاً <em>للتطريز</em></h2>
+            <button class="ys-stitch-button" id="stitchButton" type="button"><span data-layla-language="en">Press &amp; hold <em>to stitch</em></span><span data-layla-language="ar" lang="ar" hidden>اضغطوا مطوّلاً <em>للتطريز</em></span></button>
           </div>
       </div>
-      <button class="ys-open-link" id="openInvitation" type="button"><span id="openInvitationLabelPrimary" data-layla-text="openInvitation">Or tap to open</span><span id="introRetryLabel"></span></button>
+      <button class="ys-open-link ys-retry-button" id="openInvitation" type="button"><span id="openInvitationLabelPrimary" data-layla-text="openInvitation">Open invitation</span><span id="introRetryLabel"></span></button>
     </div>
     <p class="envelope-intro__status" id="introStatus" role="status" aria-live="polite" hidden></p>
     <button class="envelope-intro__skip" id="skipOpening" type="button" data-layla-text="skip">Skip</button>
@@ -103,11 +103,11 @@
 
     <section class="section schedule-section reveal" id="scheduleSection" hidden>
       <span class="ys-band ys-band--edge" aria-hidden="true"></span>
+      <figure class="ys-snapshot ys-programme-photo"><img src="./invitations/wedding-designs/yasmine/assets/dabke.webp" width="880" height="1100" alt="Dancers' feet stamping the dabke on stone tiles, a red handkerchief in hand" loading="lazy" decoding="async" /></figure>
       <div class="section-frame evening-composition">
         <div class="evening-title">
           <p class="ys-kicker" data-layla-language="en">The programme</p><p class="ys-kicker" data-layla-language="ar" lang="ar" hidden>البرنامج</p>
           <h2 data-layla-text="scheduleHeading">From the zaffe to the last dabke.</h2>
-          <figure class="ys-snapshot"><img src="./invitations/wedding-designs/yasmine/assets/dabke.webp" width="880" height="1100" alt="Dancers' feet stamping the dabke on stone tiles, a red handkerchief in hand" loading="lazy" decoding="async" /></figure>
         </div>
         <div class="evening-programme"><ol class="schedule-timeline" id="scheduleMount"></ol><div id="scheduleActions"></div></div>
       </div>
@@ -127,12 +127,12 @@
     </section>
 
     <section class="section rsvp-section reveal" id="rsvpSection" aria-labelledby="rsvpTitle">
+      <figure class="ys-snapshot ys-reply-photo"><img src="./invitations/wedding-designs/yasmine/assets/almonds.webp" width="880" height="1168" alt="Sugared almonds in a mother-of-pearl box, tied with red thread, beside jasmine" loading="lazy" decoding="async" /></figure>
       <div class="section-frame rsvp-composition">
         <div class="rsvp-heading">
           <p class="ys-kicker" data-layla-language="en">Kindly reply</p><p class="ys-kicker" data-layla-language="ar" lang="ar" hidden>نرجو الرد</p>
           <h2 id="rsvpTitle" data-layla-text="rsvpHeading">Will you dance with us?</h2>
           <p data-layla-language="en">Tell us, and we will keep you a place in the dabke line.</p><p data-layla-language="ar" lang="ar" hidden>أخبرونا، ونحفظ لكم مكاناً في صفّ الدبكة.</p>
-          <figure class="ys-snapshot ys-snapshot--tilt"><img src="./invitations/wedding-designs/yasmine/assets/almonds.webp" width="880" height="1168" alt="Sugared almonds in a mother-of-pearl box, tied with red thread, beside jasmine" loading="lazy" decoding="async" /></figure>
         </div>
         <div class="rsvp-card">
           <span class="ys-band ys-band--card" aria-hidden="true"></span>
@@ -167,6 +167,6 @@
   <nav class="sticky-actions" id="stickyActions" aria-label="Quick event actions" hidden></nav>
   <div class="toast-rail" id="toastRail" aria-live="polite" aria-atomic="true"></div>
   <noscript><p class="no-script">Please enable JavaScript to open this personal invitation. يرجى تفعيل جافاسكريبت لفتح الدعوة.</p></noscript>
-  <script type="module" src="./invitations/wedding-designs/yasmine/invitation.js?v=20261113-1"></script>
+  <script type="module" src="./invitations/wedding-designs/yasmine/invitation.js?v=20261114-3"></script>
 </body>
 </html>

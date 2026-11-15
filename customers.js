@@ -2,7 +2,7 @@ import { CUSTOMER_ADMIN_REDIRECT } from "./customer-list.js";
 import * as api from "./firebase-config.js";
 import { isPlatformAdmin, assignCustomer } from "./account-access.js";
 import { getEventDisplayTitle } from "./event-utils.js";
-import { adminPost } from "./admin-api.js";
+import { adminPost, describeTargetResult } from "./admin-api.js";
 import { skeleton } from "./skeleton.js";
 import { runFromEvent } from "./action-feedback.js";
 import { mountAdminHealth } from "./admin-health.js";
@@ -13,7 +13,7 @@ import { bindPasswordVisibility, hidePasswords } from "./password-visibility.js?
 bindPasswordVisibility(document);
 
 const $ = id => document.getElementById(id);
-const state = { services: null, customers: [], events: [], selected: null, pending: new Map(), cursor: null, more: false, eventsLoaded: false, eventsError: "", eventsTruncated: false };
+const state = { services: null, customers: [], events: [], selected: null, pending: new Map(), cursor: null, more: false, eventsLoaded: false, eventsError: "", eventsTruncated: false, buckets: [], bucketsLoaded: false, bucketsError: "" };
 const escape = value => String(value ?? "").replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"})[c]);
 const errorText = error => error?.message || error?.code || "Please try again.";
 const formError = (form, text) => { form.querySelector(".form-error").textContent = text; };
@@ -52,6 +52,7 @@ async function load(more = false) {
   } catch (error) { $("status").textContent = `Could not load customers: ${errorText(error)}`; $("retryCustomers").hidden = false; $("customerList").innerHTML = ""; return; }
   $("retryCustomers").hidden = true;
   if (!state.eventsLoaded) void loadEventList();
+  if (!state.bucketsLoaded) void loadBucketList();
 }
 async function loadEventList() {
   try {
@@ -63,6 +64,16 @@ async function loadEventList() {
     state.eventsError = errorText(error);
     if ($("customerDialog").open) formError($("customerForm"), `The event list could not load (${state.eventsError}). Close and reopen this form to try again.`);
   }
+}
+// Photo buckets live on the separate photo service, not with the events in Firestore,
+// so the Add customer form loads them on their own and lists them in their own group.
+async function loadBucketList() {
+  try {
+    const rows = await (await createOwnerAdapter(state.user)).list();
+    state.buckets = rows.filter(b => b.status !== "deleting").map(b => ({ id: b.id, name: b.name || b.id, demo: b.demo === true })).sort((a, b) => a.name.localeCompare(b.name));
+    state.bucketsLoaded = true; state.bucketsError = "";
+  } catch (error) { state.bucketsError = errorText(error); }
+  if ($("customerDialog").open) populateCustomerEvents();
 }
 async function loadAssignments(customer) {
   const { db } = state.services;
@@ -109,10 +120,15 @@ function openAdd() {
   accountFields(); $("customerDialog").showModal();
   if (state.eventsError) formError(form, `The event list could not load (${state.eventsError}). Close and reopen this form to try again.`);
   else if (state.eventsTruncated) formError(form, `Only the first ${state.events.length} events are listed. Use the link panel above for others.`);
+  if (!state.bucketsLoaded) void loadBucketList();
 }
 function populateCustomerEvents() {
   const select = $("customerForm").elements.event, selected = select.value;
-  select.innerHTML = '<option value="">Select an event</option>' + state.events.map(row => `<option value="${escape(row.id)}">${escape(getEventDisplayTitle(row))}</option>`).join("");
+  const events = state.events.map(row => `<option value="event:${escape(row.id)}">${escape(getEventDisplayTitle(row))}</option>`).join("");
+  const buckets = state.buckets.map(row => `<option value="bucket:${escape(row.id)}">${escape(row.name)}${row.demo ? " (demo)" : ""}</option>`).join("");
+  const bucketGroup = buckets ? `<optgroup label="Photo buckets">${buckets}</optgroup>`
+    : `<optgroup label="Photo buckets"><option value="" disabled>${escape(state.bucketsError ? `Could not load photo buckets (${state.bucketsError}). Reopen this form to retry.` : state.bucketsLoaded ? "No photo buckets yet" : "Loading photo buckets…")}</option></optgroup>`;
+  select.innerHTML = '<option value="">Select an event or photo bucket</option>' + `<optgroup label="Events">${events}</optgroup>` + bucketGroup;
   select.value = selected;
 }
 $("addCustomer").onclick = () => openAdd(); $("customerForm").elements.account.onchange = accountFields;
@@ -139,9 +155,12 @@ document.addEventListener("customer-access-changed", async event => {
 $("loadMore").onclick = () => load(true);
 $("retryCustomers").onclick = () => load();
 $("customerForm").onsubmit = async event => {
-  event.preventDefault(); const form = event.currentTarget, wedding = state.events.find(row => row.id === form.elements.event.value);
+  event.preventDefault(); const form = event.currentTarget;
+  const [kind, targetId] = form.elements.event.value.split(/:(.*)/s);
+  const wedding = kind === "event" ? state.events.find(row => row.id === targetId) : null;
+  const bucket = kind === "bucket" ? state.buckets.find(row => row.id === targetId) : null;
   if (form.querySelector('[type="submit"]').disabled) return;
-  if (!wedding) { formError(form, "Choose an event."); return; }
+  if (!wedding && !bucket) { formError(form, "Choose an event or photo bucket."); return; }
   busy(form, true); formError(form, ""); let customer;
   try {
     if (form.elements.account.value === "new") {
@@ -151,6 +170,14 @@ $("customerForm").onsubmit = async event => {
     } else customer = state.customers.find(row => row.id === form.elements.account.value);
     if (!customer) throw new Error("Choose a customer account.");
     const userId = customer.userId || customer.id;
+    if (bucket) {
+      // Same server route as the link panel: makes the account an owner of the bucket and adds it to the customer list.
+      const response = await adminPost(state.services.auth, "/api/admin-customer-access", { action: "link", userId, targets: [{ kind: "bucket", id: bucket.id }] }, undefined, { what: "Linking the photo bucket" });
+      const result = response.results?.[0];
+      if (!result?.ok) throw new Error(result ? describeTargetResult(result) : "The photo bucket could not be linked.");
+      state.pending.delete(customer.email); form.elements.password.value = ""; $("customerDialog").close(); await load(); $("status").textContent = `Access saved for ${customer.email} (photo bucket ${bucket.name}).`;
+      return;
+    }
     const existing = await api.getDoc(api.doc(state.services.db, "weddings", wedding.id, "dashboardUsers", userId));
     if (existing.exists() && existing.data().role !== "customer") throw new Error("This account already has another role on that event.");
     await assignCustomer(api, state.services.db, wedding.id, wedding, { userId, email: customer.email });

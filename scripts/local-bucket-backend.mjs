@@ -30,18 +30,23 @@ function diskFiles({ dir, origin, signKey }) {
   const indexFile = path.join(dir, 'objects.json'), blobs = path.join(dir, 'blobs');
   const index = existsSync(indexFile) ? JSON.parse(readFileSync(indexFile, 'utf8')) : { photos: {}, backups: {} };
   const events = [];
-  let indexWrite = Promise.resolve();
+  let indexWrite = Promise.resolve(), pendingIndexWrite = null;
   function saveIndex() {
-    const snapshot = JSON.stringify(index);
-    // Uploads, commits and backups share one index and one atomic-write temp file.
-    // Keep the snapshots in order and let a later save proceed after a disk error.
-    indexWrite = indexWrite.catch(() => {}).then(() => atomicWrite(indexFile, snapshot));
+    // Uploads, commits and backups share one index and one atomic-write temp file. Saves are coalesced: at most one
+    // write runs and one waits, and the waiting one snapshots the index when it starts, so it includes every change made
+    // before it, and memory stays flat under load (one snapshot per change used to pile up). A later save proceeds after a disk error.
+    if (pendingIndexWrite) return pendingIndexWrite;
+    pendingIndexWrite = indexWrite.catch(() => {}).then(() => { pendingIndexWrite = null; return atomicWrite(indexFile, JSON.stringify(index)); });
+    indexWrite = pendingIndexWrite;
     return indexWrite;
   }
   const list = (name, key) => (index[name === 'backups' ? 'backups' : 'photos'][key] ||= []);
   const current = (name, key) => { const v = index[name === 'backups' ? 'backups' : 'photos'][key]?.at(-1); return v && !v.marker ? v : null; };
   const blob = async v => readFile(path.join(blobs, v.blob));
-  async function store(body) { const id = createHash('sha256').update(body).digest('hex'); await writeFile(path.join(blobs, id), body); return id; }
+  // Blobs are named by content, so two uploads of identical bytes share a file. Write to a unique temp file and rename,
+  // so a reader never sees a half-written blob while another upload of the same bytes is being stored.
+  let tmpSeq = 0;
+  async function store(body) { const id = createHash('sha256').update(body).digest('hex'), file = path.join(blobs, id); if (existsSync(file)) return id; const tmp = `${file}.${process.pid}.${++tmpSeq}.tmp`; await writeFile(tmp, body); await rename(tmp, file); return id; }
   const sign = (method, key, size, exp) => createHmac('sha256', signKey).update(`${method}\n${key}\n${size}\n${exp}`).digest('base64url');
   const signed = (method, key, size) => { const exp = Date.now() + (method === 'PUT' ? 600 : 300) * 1000; const q = new URLSearchParams({ k: key, m: method, s: String(size), e: String(exp), sig: sign(method, key, size, exp) }); return `${origin}${OBJECT_ROUTE}?${q}`; };
   const files = {
@@ -88,8 +93,9 @@ export async function createLocalBucketBackend({ dir, origin, verifyOwner, listA
   const backup = createBackupHandler({ store, files });
   const saveDb = () => atomicWrite(dbFile, dynamo.dump().map(encodeItem).join('\n'));
   // Backups run after the response, like the SQS pipeline; a failure is retried on the next request.
-  let work = Promise.resolve();
-  const drain = () => { work = work.then(async () => {
+  let work = Promise.resolve(), drainQueued = null;
+  // Coalesced like the index: requests arriving while a drain waits share it instead of queueing one table dump each.
+  const drain = () => { if (drainQueued) return drainQueued; drainQueued = work = work.then(async () => { drainQueued = null;
     const keys = files.events.splice(0);
     if (keys.length) {
       const { batchItemFailures } = await backup({ Records: keys.map(key => ({ messageId: key, body: JSON.stringify({ Records: [{ eventTime: new Date().toISOString(), s3: { object: { key } } }] }) })) });

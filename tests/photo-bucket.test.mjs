@@ -25,7 +25,8 @@ test('central limits reject unsupported, empty and oversized files', () => {
   assert.doesNotThrow(() => validateFile({ type:'image/jpeg', size:100 }));
   assert.throws(() => validateFile({ type:'image/heic', size:100 }), /HEIC/);
   assert.throws(() => validateFile({ type:'image/jpeg', size:0 }), /empty/);
-  assert.throws(() => validateFile({ type:'image/png', size:LIMITS.fileBytes+1 }), /20 MB/);
+  assert.throws(() => validateFile({ type:'image/png', size:LIMITS.inputBytes+1 }), /40 MB/);
+  assert.doesNotThrow(() => validateFile({ type:'image/jpeg', size:LIMITS.fileBytes+1 }), 'a high-resolution camera photo over 20 MB is shrunk on the phone, not refused');
 });
 test('crop coordinates use the rotated image dimensions and clamp within bounds', () => {
   assert.deepEqual(cropRect(600,1000,{ size:50,x:100,y:0 }), { x:300,y:0,width:300,height:500 });

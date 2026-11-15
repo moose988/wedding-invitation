@@ -76,7 +76,7 @@ export function uploadQueue({ adapter, bucketId, changed = () => {}, transport =
           changed(current ? { ...current } : { ...job, state: 'gone' });
         }).catch(() => elsewhere.delete(job.id)).then(() => { if (!stopped) void pump(); });
       }
-    } catch (error) { changed({ ...job, state: 'failed', error: friendlyError(error) }); }
+    } catch (error) { changed({ ...job, state: 'failed', error: friendlyError(error), final: Boolean(error?.unfixable) }); }
     // The wait allowance covers the whole automatic run of a photo; a manual Retry starts a fresh one.
     finally { networkWaits.delete(job.id); running.delete(job.id); if (!stopped) void pump(); }
   }
@@ -123,14 +123,15 @@ export function uploadQueue({ adapter, bucketId, changed = () => {}, transport =
           if (error.retryable && job.attempts < maxAttempts) { changed({ ...job, state: 'retrying', error: transport.online ? 'The service is busy. Trying again shortly…' : 'Retrying local processing…' }); await transport.wait(job.attempts, error); continue; }
           if (!await stillQueued(job.id).catch(() => job)) { changed({ ...job, state: 'gone' }); return; } // finished or removed elsewhere
           const reason = error.retryable ? (transport.online ? 'The upload did not go through after several tries. Tap Retry.' : 'Automatic retries finished. Tap Retry to try local processing again.') : friendlyError(error);
-          await adapter.updateJob(bucketId, job.id, { state: 'failed', error: reason }); changed({ ...job, state: 'failed', error: reason }); return;
+          const final = Boolean(error.unfixable);
+          await adapter.updateJob(bucketId, job.id, { state: 'failed', error: reason, final }); changed({ ...job, state: 'failed', error: reason, final }); return;
         }
       }
       if (!stopped) { await adapter.updateJob(bucketId, job.id, { state: 'failed', error: 'Automatic retries finished. Tap Retry to try again.' }); changed({ ...job, state: 'failed' }); }
     } catch (error) {
       // The photo left the queue under us (another tab without Web Locks finished it, or it was removed): not a failure.
       if (!await stillQueued(job.id).catch(() => job)) return changed({ ...job, state: 'gone' });
-      changed({ ...job, state: 'failed', error: friendlyError(error) });
+      changed({ ...job, state: 'failed', error: friendlyError(error), final: Boolean(error?.unfixable) });
     }
   }
   async function pump() {

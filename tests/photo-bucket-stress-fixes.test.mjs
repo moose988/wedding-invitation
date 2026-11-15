@@ -129,3 +129,31 @@ test('limits and texts from the second round', async () => {
   assert.match(app, /BroadcastChannel/, 'tabs of one guest keep each other up to date');
   assert.match(app, /\$\{count\}\+ photos/, 'guests with more than one page see "100+ photos"');
 });
+
+// Third round (combined branch): a photo that can never upload offers only Remove.
+test('a photo that cannot be opened or is too large fails as final, so Retry is not offered', async () => {
+  const unusable = new Error('This photo could not be opened. Try exporting it as JPEG or choose another photo.'); unusable.unfixable = true;
+  const adapter = fakeAdapter();
+  const queue = uploadQueue({ adapter, bucketId: 'b', transport: { ...transport, run: async () => { throw unusable; } } });
+  await queue.start();
+  for (let i = 0; i < 300 && adapter.job('j1')?.state !== 'failed'; i++) await tick();
+  assert.equal(adapter.job('j1').state, 'failed');
+  assert.equal(adapter.job('j1').final, true, 'stored as final so a reload keeps Retry hidden');
+  const busy = fakeAdapter({ commitError: () => Object.assign(new Error('busy'), { retryable: true }) });
+  await uploadQueue({ adapter: busy, bucketId: 'b', transport }).start();
+  for (let i = 0; i < 300 && busy.job('j1')?.state !== 'failed'; i++) await tick();
+  assert.equal(busy.job('j1').final, false, 'network failures keep their Retry button');
+  const images = await readFile(new URL('../photo-bucket/images.js', import.meta.url), 'utf8');
+  assert.equal((images.match(/throw unusable\(/g) || []).length, 4, 'corrupt and over-size photos are marked unfixable');
+  const app = await readFile(new URL('../photo-bucket/app.js', import.meta.url), 'utf8');
+  assert.match(app, /job\.final \? '' : `<button type="button" data-job="\$\{h\(job\.id\)\}" data-retry="1">Retry<\/button>`/);
+  const adapterSrc = await readFile(new URL('../photo-bucket/adapter.js', import.meta.url), 'utf8');
+  assert.equal((adapterSrc.match(/'final'/g) || []).length, 2, 'the local queue store keeps the flag');
+});
+
+test('the admin Templates tab cannot save until the stored settings have loaded', async () => {
+  const src = await readFile(new URL('../admin-templates.js', import.meta.url), 'utf8');
+  assert.match(src, /async function save\(next, what\) \{\n  if \(!view\.loaded\) return false;/);
+  assert.match(src, /input\.disabled = view\.saving \|\| !view\.loaded;/);
+  assert.match(src, /view\.loaded = true;/);
+});

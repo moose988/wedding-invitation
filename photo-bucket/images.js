@@ -1,4 +1,6 @@
 import { LIMITS, validateFile } from './limits.js';
+// The photo itself cannot be used, so trying again cannot help: the queue offers only Remove.
+const unusable = message => Object.assign(new Error(message), { unfixable: true });
 function imageFallback(blob) {
   return new Promise((resolve, reject) => {
     const url = URL.createObjectURL(blob), img = new Image();
@@ -33,7 +35,7 @@ async function headerDimensions(blob) {
 // scaled so the long side is at most 4096 px, whichever way the browser applies EXIF rotation to the resize, and then
 // shrunk to 2560 px like every other photo. Photos under the limit keep the plain full-size decode below.
 async function decodeScaled(blob, { width, height }) {
-  if (width * height > LIMITS.maxPixels) throw new Error('This photo is extremely large. Switch your camera to its normal photo size, or choose another photo.');
+  if (width * height > LIMITS.maxPixels) throw unusable('This photo is extremely large. Switch your camera to its normal photo size, or choose another photo.');
   const long = Math.max(width, height), short = Math.min(width, height);
   const target = Math.max(1, Math.floor(4096 * short / long));
   let bitmap;
@@ -41,7 +43,7 @@ async function decodeScaled(blob, { width, height }) {
   catch { bitmap = null; }
   if (bitmap && bitmap.width * bitmap.height <= LIMITS.pixels) return bitmap;
   bitmap?.close?.();
-  throw new Error('This photo is very large (over 40 megapixels) and this browser cannot shrink it. Switch your camera to its normal photo size, or choose another photo.');
+  throw unusable('This photo is very large (over 40 megapixels) and this browser cannot shrink it. Switch your camera to its normal photo size, or choose another photo.');
 }
 export async function decode(blob) {
   const size = await headerDimensions(blob);
@@ -51,9 +53,9 @@ export async function decode(blob) {
   try { bitmap = await createImageBitmap(blob, { imageOrientation: 'from-image' }); }
   catch {
     try { bitmap = await imageFallback(blob); }
-    catch { throw new Error('This photo could not be opened. Try exporting it as JPEG or choose another photo.'); }
+    catch { throw unusable('This photo could not be opened. Try exporting it as JPEG or choose another photo.'); }
   }
-  if (bitmap.width * bitmap.height > LIMITS.pixels) { bitmap.close(); throw new Error('This photo is very large (over 40 megapixels). Switch your camera to its normal photo size, or choose another photo.'); }
+  if (bitmap.width * bitmap.height > LIMITS.pixels) { bitmap.close(); throw unusable('This photo is very large (over 40 megapixels). Switch your camera to its normal photo size, or choose another photo.'); }
   return bitmap;
 }
 function canvas(width, height) { const c = document.createElement('canvas'); c.width = width; c.height = height; return c; }

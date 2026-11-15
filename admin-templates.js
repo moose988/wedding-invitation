@@ -10,7 +10,7 @@ import { esc } from "./admin-api.js";
 let view = null;
 
 export async function buildTemplates(root, { db, user }) {
-  view = { root, db, user, settings: { hidden: [], whatsapp: "" }, saving: false };
+  view = { root, db, user, settings: { hidden: [], whatsapp: "" }, saving: false, loaded: false };
   const base = location.href;
   root.innerHTML = `
     <div class="admin-panel__head"><div><h2 id="adminTemplatesTitle">Templates</h2>
@@ -61,11 +61,14 @@ async function load() {
   try {
     const snap = await getDoc(doc(db, ...SHOWCASE_SETTINGS_PATH));
     view.settings = normalizeShowcaseSettings(snap.exists() ? snap.data() : {});
+    view.loaded = true;
     root.querySelector("#tplError").textContent = "";
   } catch (error) {
-    root.querySelector("#tplError").textContent = `The settings could not load: ${error?.message || error?.code || "please try again."} Every template is shown to customers until this loads.`;
+    // Saving now would overwrite the stored choices with blanks, so changes stay locked until a reload works.
+    root.querySelector("#tplError").textContent = `The settings could not load: ${error?.message || error?.code || "please try again."} Reload this page to make changes.`;
   }
   root.querySelector("#tplWhatsapp").value = view.settings.whatsapp ? `+${view.settings.whatsapp}` : "";
+  root.querySelector("#tplWhatsapp").disabled = root.querySelector("#tplWhatsappSave").disabled = !view.loaded;
   paint();
 }
 
@@ -73,15 +76,16 @@ function paint() {
   const { root, settings } = view;
   root.querySelectorAll("[data-toggle]").forEach(input => {
     const shown = !settings.hidden.includes(input.dataset.toggle);
-    input.checked = shown; input.disabled = view.saving;
+    input.checked = shown; input.disabled = view.saving || !view.loaded;
     input.closest(".tpl-row").classList.toggle("is-hidden", !shown);
     input.parentElement.querySelector("em").textContent = shown ? "Shown" : "Hidden";
   });
   const shownCount = SHOWCASE_TEMPLATES.length - settings.hidden.length;
-  root.querySelector("#tplSummary").textContent = `${shownCount} of ${SHOWCASE_TEMPLATES.length} templates are on the customer page.`;
+  root.querySelector("#tplSummary").textContent = view.loaded ? `${shownCount} of ${SHOWCASE_TEMPLATES.length} templates are on the customer page.` : "Not loaded";
 }
 
 async function save(next, what) {
+  if (!view.loaded) return false;
   view.saving = true; paint();
   try {
     await setDoc(doc(view.db, ...SHOWCASE_SETTINGS_PATH), { hidden: next.hidden, whatsapp: next.whatsapp, updatedAt: serverTimestamp(), updatedBy: view.user.uid });

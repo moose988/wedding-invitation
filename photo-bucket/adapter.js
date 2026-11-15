@@ -125,8 +125,8 @@ export function guestAdapter(contributorId) {
     jobFile: (bucketId, jobId) => transaction(['jobs', 'sources'], 'readonly', async s => { mine(await req(s.jobs.get(jobId)), validId(bucketId)); const source = memorySources.get(jobId) || (await req(s.sources.get(jobId)))?.blob; if (!source) throw new Error('This photo is no longer on this device. Please choose it again.'); return source; }),
     async updateJob(bucketId, jobId, changes) {
       const apply = keys => transaction(['jobs'], 'readwrite', async s => { const job = mine(await req(s.jobs.get(jobId)), validId(bucketId)); for (const key of keys) if (key in changes) job[key] = changes[key]; s.jobs.put(job); return job; });
-      try { return await apply(['state', 'attempts', 'error', 'thumbnail']); }
-      catch (error) { if (!('thumbnail' in changes)) throw error; return apply(['state', 'attempts', 'error']); }
+      try { return await apply(['state', 'attempts', 'error', 'final', 'thumbnail']); }
+      catch (error) { if (!('thumbnail' in changes)) throw error; return apply(['state', 'attempts', 'error', 'final']); }
     },
     commit: (bucketId, jobId, image) => transaction(['buckets', 'photos', 'images', 'jobs', 'sources'], 'readwrite', async s => {
       validId(bucketId); validImage(image); writable(await req(s.buckets.get(bucketId)));

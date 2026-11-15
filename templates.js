@@ -1,7 +1,8 @@
-// Public templates page: customers browse the invitation designs and open each
-// one full screen. Templates an admin has hidden (siteSettings/templateShowcase)
+// Public templates page: customers browse the invitation designs and tap one to
+// open it on its own, full screen, exactly as a guest receives it (the browser's
+// back button returns here). Templates an admin has hidden (siteSettings/templateShowcase)
 // are left out. ?event=wedding|gender_reveal|celebration opens on one event type.
-import { SHOWCASE_CATEGORIES, SHOWCASE_SETTINGS_PATH, SHOWCASE_TEMPLATES, normalizeShowcaseSettings, visibleTemplates, whatsappLink } from "./template-catalog.js";
+import { SHOWCASE_CATEGORIES, SHOWCASE_SETTINGS_PATH, SHOWCASE_TEMPLATES, normalizeShowcaseSettings, visibleTemplates } from "./template-catalog.js";
 
 const $ = id => document.getElementById(id);
 const LANG_KEY = "qd-templates-lang";
@@ -9,14 +10,14 @@ const COPY = {
   en: {
     skip: "Skip to the templates", kicker: "Digital invitations", title: "Choose your invitation",
     lede: "Tap any design to open it full screen, exactly as your guests will see it on their phones.",
-    loading: "Loading the templates…", all: "All", view: "View invitation", back: "All templates", want: "I want this one",
+    loading: "Loading the templates…", all: "All", view: "View invitation",
     foot: "Every design includes RSVP, a countdown, the venue map and English and Arabic.",
     empty: "No templates to show here yet.", count: n => `${n} design${n === 1 ? "" : "s"}`, langLabel: "عرض الصفحة بالعربية"
   },
   ar: {
     skip: "انتقل إلى التصاميم", kicker: "دعوات رقمية", title: "اختر دعوتك",
     lede: "اضغط على أي تصميم لفتحه بملء الشاشة، تمامًا كما سيراه ضيوفك على هواتفهم.",
-    loading: "جارٍ تحميل التصاميم…", all: "الكل", view: "عرض الدعوة", back: "كل التصاميم", want: "أريد هذا التصميم",
+    loading: "جارٍ تحميل التصاميم…", all: "الكل", view: "عرض الدعوة",
     foot: "كل تصميم يشمل تأكيد الحضور والعدّ التنازلي وخريطة المكان، بالعربية والإنجليزية.",
     empty: "لا توجد تصاميم هنا بعد.", count: n => (n === 1 ? "تصميم واحد" : n === 2 ? "تصميمان" : `${n} تصاميم`), langLabel: "View the page in English"
   }
@@ -67,7 +68,7 @@ function renderGallery() {
       <div class="tp-group__head"><h2 id="group-${c.id}">${esc(c.name[state.lang])}</h2><span>${esc(t("count")(items.length))}</span></div>
       <ul class="tp-grid" role="list">
         ${items.map((x, i) => `<li class="tp-card" style="--i:${i}">
-          <a class="tp-card__link" href="#${x.id}" data-open="${x.id}">
+          <a class="tp-card__link" href="${esc(x.url)}" data-open="${x.id}">
             <span class="tp-card__media"><img src="${x.thumb}" alt="" loading="lazy" decoding="async" /><span class="tp-card__view">${esc(t("view"))}</span></span>
             <span class="tp-card__body"><strong>${esc(x.name[state.lang])}</strong><span>${esc(x.blurb[state.lang])}</span></span>
           </a>
@@ -76,47 +77,12 @@ function renderGallery() {
     </section>`).join("");
 }
 
-function render() { applyLang(); renderFilters(); if (state.ready) renderGallery(); syncViewer(); }
+function render() { applyLang(); renderFilters(); if (state.ready) renderGallery(); }
 
-/* ---------- Viewer: the sample invitation, full screen on phones, in a phone frame on wide screens ---------- */
-let lastFocus = null;
-function syncViewer() {
-  const id = decodeURIComponent(location.hash.slice(1));
-  const item = state.ready ? visibleTemplates(state.settings).find(x => x.id === id) : null;
-  const viewer = $("viewer");
-  if (!item) {
-    if (!viewer.hidden) {
-      viewer.hidden = true; $("viewerFrame")?.remove(); document.body.classList.remove("tp-locked");
-      lastFocus?.focus?.();
-    }
-    return;
-  }
-  const name = item.name[state.lang];
-  $("viewerTitle").textContent = name;
-  const want = whatsappLink(state.settings.whatsapp, item.name.en);
-  $("viewerWant").hidden = !want;
-  if (want) $("viewerWant").href = want;
-  if (viewer.hidden) {
-    lastFocus = document.activeElement;
-    // Open the invitation in the visitor's language.
-    setInvitationLanguage(item.id, state.lang);
-    mountFrame(item.url, name);
-    viewer.hidden = false; document.body.classList.add("tp-locked");
-    $("viewerClose").focus();
-  }
-}
-// A brand-new iframe per opening, with its address set before it joins the page: changing an
-// existing iframe's address adds a step to the browser history, so "back" would blank the
-// invitation (a black screen) instead of returning to the list.
-function mountFrame(url, title) {
-  $("viewerFrame")?.remove();
-  const frame = document.createElement("iframe");
-  frame.id = "viewerFrame";
-  frame.title = title;
-  frame.allow = "autoplay; fullscreen";
-  frame.referrerPolicy = "same-origin";
-  frame.src = url;
-  document.querySelector(".tp-viewer__phone").append(frame);
+/* ---------- Opening a design: the invitation alone, full screen ---------- */
+function openTemplate(item) {
+  setInvitationLanguage(item.id, state.lang);
+  location.assign(item.url);
 }
 // Each design remembers its own language; set it so the invitation opens in the visitor's language.
 function setInvitationLanguage(id, lang) {
@@ -125,17 +91,23 @@ function setInvitationLanguage(id, lang) {
     else localStorage.setItem(id === "layla-zaid" ? "layla-zaid-invitation-language" : `${id}-language`, lang);
   } catch { /* storage may be blocked; the invitation then opens in English */ }
 }
-function closeViewer() {
-  if (history.state?.tpViewer) history.back();
-  else { history.replaceState(null, "", location.pathname + location.search); syncViewer(); }
+// Older shared links pointed at templates.html#<design>: open that design, and keep this
+// list (without the #) as the page "back" returns to.
+function openLinkedTemplate() {
+  const id = decodeURIComponent(location.hash.slice(1));
+  const item = id && visibleTemplates(state.settings).find(x => x.id === id);
+  if (!item) return;
+  history.replaceState(null, "", location.pathname + location.search);
+  openTemplate(item);
 }
 
 $("gallery").addEventListener("click", event => {
   const link = event.target.closest("[data-open]");
-  if (!link) return;
+  if (!link || event.metaKey || event.ctrlKey || event.shiftKey || event.button) return;
+  const item = SHOWCASE_TEMPLATES.find(x => x.id === link.dataset.open);
+  if (!item) return;
   event.preventDefault();
-  history.pushState({ tpViewer: true }, "", `#${link.dataset.open}`);
-  syncViewer();
+  openTemplate(item);
 });
 $("filters").addEventListener("click", event => {
   const chip = event.target.closest("[data-filter]");
@@ -146,10 +118,7 @@ $("filters").addEventListener("click", event => {
   history.replaceState(history.state, "", url);
   renderFilters(); renderGallery();
 });
-$("viewerClose").addEventListener("click", closeViewer);
-document.addEventListener("keydown", event => { if (event.key === "Escape" && !$("viewer").hidden) closeViewer(); });
-window.addEventListener("popstate", syncViewer);
-window.addEventListener("hashchange", syncViewer);
+window.addEventListener("hashchange", () => { if (state.ready) openLinkedTemplate(); });
 $("langToggle").addEventListener("click", () => {
   state.lang = state.lang === "ar" ? "en" : "ar";
   try { localStorage.setItem(LANG_KEY, state.lang); } catch { /* ignore */ }
@@ -179,6 +148,7 @@ loadSettings().then(data => {
   state.settings = normalizeShowcaseSettings(data);
   state.ready = true;
   render();
+  openLinkedTemplate();
 });
 
 export { SHOWCASE_TEMPLATES };

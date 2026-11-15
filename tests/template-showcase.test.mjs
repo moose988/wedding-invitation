@@ -70,11 +70,13 @@ test("the admin workspace has a Templates tab and other admin pages link to it",
   assert.match(read("weddings.css"), /#workspace\[data-section="templates"\]/);
 });
 
-test("the customer page loads the catalog and has the viewer and language switch", () => {
+test("the customer page loads the catalog, has the language switch, and opens a design on its own full screen", () => {
   const html = read("templates.html");
-  for (const id of ["gallery", "filters", "viewer", "viewerClose", "viewerWant", "langToggle"]) assert.match(html, new RegExp(`id="${id}"`));
+  for (const id of ["gallery", "filters", "langToggle"]) assert.match(html, new RegExp(`id="${id}"`));
+  // No bar or frame around the invitation: a tap opens it exactly as a guest gets it.
+  assert.doesNotMatch(html, /id="viewer"|<iframe/);
   const js = read("templates.js");
   assert.match(js, /visibleTemplates\(/);
   assert.match(js, /initPublicFirebase\(/);
-  assert.match(js, /mountFrame/);
+  assert.match(js, /location\.assign\(item\.url\)/);
 });

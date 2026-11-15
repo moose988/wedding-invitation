@@ -342,7 +342,7 @@ if (film && "IntersectionObserver" in window) {
   const sync = () => {
     if (visible && canPlay()) {
       if (sources.length && !sources[0].src) { sources.forEach(item => { item.src = item.dataset.src; }); film.load(); }
-      film.play()?.catch(() => {});
+      film.play()?.catch(() => resumeOnTouch(sync));
     } else if (!film.paused) {
       film.pause();
     }
@@ -403,4 +403,22 @@ window.addEventListener("pagehide", () => {
   [filmObserver, observer, scheduleObserver, actionObserver].forEach(item => item?.disconnect());
   [scheduleChanges, opened, namesObserver, languageObserver].forEach(item => item.disconnect());
 }, { once: true });
+}
+
+// Phones in Low Power Mode or Data Saver refuse a film that starts without a tap,
+// and play() then fails quietly. Try again on the guest's next touch, so the film
+// still comes to life instead of staying a still picture.
+const touchRetries = new Set();
+const TOUCH_EVENTS = ["pointerdown", "touchend", "click", "keydown"];
+function resumeOnTouch(retry) {
+  if (touchRetries.has(retry)) return;
+  touchRetries.add(retry);
+  if (touchRetries.size > 1) return;
+  const again = () => {
+    TOUCH_EVENTS.forEach(type => removeEventListener(type, again, true));
+    const pending = [...touchRetries];
+    touchRetries.clear();
+    pending.forEach(fn => fn());
+  };
+  TOUCH_EVENTS.forEach(type => addEventListener(type, again, { capture: true, passive: true }));
 }

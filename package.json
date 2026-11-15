@@ -6,11 +6,12 @@
     "dev": "node scripts/dev-server.mjs",
     "dev:emulator": "node scripts/dev-server.mjs --emulator",
     "test": "node --test",
-    "test:security": "firebase emulators:exec --only firestore --project demo-wedding-security \"node --test tests/event-settings-firestore.test.mjs tests/firestore-security.test.mjs tests/customer-access-firestore.test.mjs tests/customer-seating-batch-firestore.test.mjs tests/regressions-firestore.test.mjs tests/admin-platform-firestore.test.mjs tests/customer-isolation-firestore.test.mjs tests/guest-consistency-firestore.test.mjs tests/invitation-template-firestore.test.mjs tests/template-showcase-firestore.test.mjs\"",
-    "test:gender-reveal": "firebase emulators:exec --only auth,firestore --project demo-wedding-security \"node --test tests/gender-reveal-security.test.mjs\"",
-    "test:provision": "firebase emulators:exec --only auth,firestore --project demo-wedding-security \"node --test tests/provision-admins.test.mjs\"",
+    "test:security": "npx --yes firebase-tools@15 emulators:exec --only firestore --project demo-wedding-security \"node --test --test-concurrency=1 tests/event-settings-firestore.test.mjs tests/firestore-security.test.mjs tests/customer-access-firestore.test.mjs tests/customer-seating-batch-firestore.test.mjs tests/regressions-firestore.test.mjs tests/admin-platform-firestore.test.mjs tests/customer-isolation-firestore.test.mjs tests/guest-consistency-firestore.test.mjs tests/invitation-template-firestore.test.mjs tests/template-showcase-firestore.test.mjs\"",
+    "test:emulator": "npx --yes firebase-tools@15 emulators:exec --only auth,firestore --project demo-wedding-security \"node --test --test-concurrency=1 && FIRESTORE_EMULATOR_HOST=127.0.0.1:8080 FIREBASE_AUTH_EMULATOR_HOST=127.0.0.1:9099 node scripts/seed-local-access.mjs && CUSTOMER_FUNCTIONS_EMULATOR_TEST=1 node --test --test-concurrency=1 tests/customer-management-emulator.test.mjs\"",
+    "test:gender-reveal": "npx --yes firebase-tools@15 emulators:exec --only auth,firestore --project demo-wedding-security \"node --test --test-concurrency=1 tests/gender-reveal-security.test.mjs\"",
+    "test:provision": "npx --yes firebase-tools@15 emulators:exec --only auth,firestore --project demo-wedding-security \"node --test --test-concurrency=1 tests/provision-admins.test.mjs\"",
     "seed:local": "node scripts/seed-local-access.mjs",
-    "test:admin-api": "firebase emulators:exec --only auth,firestore --project demo-wedding-security \"node --test tests/admin-api-emulator.test.mjs\""
+    "test:admin-api": "npx --yes firebase-tools@15 emulators:exec --only auth,firestore --project demo-wedding-security \"node --test --test-concurrency=1 tests/admin-api-emulator.test.mjs\""
   },
   "devDependencies": {
     "@firebase/rules-unit-testing": "5.0.1",

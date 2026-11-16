@@ -212,7 +212,11 @@ export function createHandler({ store, files, purgePhotoFiles, verifyOwner, secr
     if (query.uid !== undefined && (!a.isAdmin || !validUid(query.uid))) throw new HttpError(a.isAdmin ? 400 : 403, 'Only the main admin can list another account.', a.isAdmin ? 'INVALID_OWNER' : 'ADMIN_ONLY');
     const page = pageArgs(query);
     const { ids, nextCursor } = await store.listBuckets({ uid: query.uid ?? (a.isAdmin ? null : a.uid), limit: Math.min(page.limit, 50), cursor: page.cursor });
-    const metas = (await store.getMetas(ids)).filter(m => a.isAdmin || (m.status !== 'deleting' && !expired(m) && (m.owners || []).includes(a.uid)));
+    // META is strongly consistent even when the listing index still contains the id.
+    // A confirmed deletion must disappear for admins too, before the file sweep runs.
+    const metas = (await store.getMetas(ids)).filter(m => m.status !== 'deleting'
+      && (!query.uid || (m.owners || []).includes(query.uid))
+      && (a.isAdmin || (!expired(m) && (m.owners || []).includes(a.uid))));
     return reply(200, { items: await Promise.all(metas.map(m => view(a, m))), nextCursor });
   }
 

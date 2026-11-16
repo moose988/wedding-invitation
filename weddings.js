@@ -12,7 +12,7 @@ import { renderLocalBuckets } from "./photo-bucket/workspace.js";
 import { skeleton } from "./skeleton.js";
 import { confirmAction, copyWithFallback, runFromEvent, showToast } from "./action-feedback.js";
 import { CUSTOMER_ADMIN_REDIRECT, bucketItem, eventItem, itemCardHtml, noticesHtml, sortCustomerItems } from "./customer-list.js";
-import { esc } from "./admin-api.js";
+import { adminPost, esc } from "./admin-api.js";
 import { dateLabel } from "./photo-bucket/links.js";
 import { BUCKET_SIZES_GB, DEFAULT_BUCKET_GB, estimateLabel } from "./photo-bucket/sizes.js";
 
@@ -751,7 +751,7 @@ async function setArchived(wedding) {
 async function duplicate(wedding) {
  if (!state.isAdmin) return; const { id, stats, statsRequested, legacy, isOwner, seatingOnly, allowedSide, createdAt, updatedAt, completedAt, statusBeforeCompletion, isDemo, demoExpiresAt, demoAccountUid, musicMode, musicVersion, musicName, deleting, cleanupPending, canManageUsers, allowedViews, ...source } = wedding; const title = `${getEventDisplayTitle(wedding)} (Copy)`; const copy = { ...source, seatingEnabled:wedding.seatingEnabled !== false, eventTitle:title, status:"draft", ownerUserId:state.user.uid, createdAt:serverTimestamp(), updatedAt:serverTimestamp() }; if (eventUsesGuestSides(wedding)) copy.coupleName = title; if (isGenderRevealEvent(wedding)) { delete copy.coupleName; delete copy.brideName; delete copy.groomName; delete copy.brideNameAr; delete copy.groomNameAr; copy.seatingEnabled = false; copy.showInvitationQr = false; } flash("Duplicating the event…"); try { const ref = doc(collection(state.services.db,"weddings")); const batch = writeBatch(state.services.db); batch.set(ref, copy); batch.set(doc(state.services.db,"weddings",ref.id,"dashboardUsers",state.user.uid), { userId:state.user.uid, email:state.user.email || "", canViewDashboard:true, canEditGuests:true, canEditSeating:true, canCheckIn:true, canManageUsers:true, role:"owner", createdAt:serverTimestamp(), updatedAt:serverTimestamp() }); batch.set(doc(state.services.db,"users",state.user.uid,"weddingAccess",ref.id), { ...indexData(copy), weddingId:ref.id, ownerUserId:state.user.uid, createdAt:serverTimestamp(), updatedAt:serverTimestamp() }); await batch.commit(); flash("Event setup duplicated as a draft."); void refreshWorkspaceEvents(); } catch (e) {
  console.error(e); flash("The event was not duplicated. Check your connection and your access, then try again."); } }
-function openDelete(wedding) { state.deleteId=wedding.id; document.getElementById("deleteEventName").textContent=getEventDisplayTitle(wedding); el.deletePhrase.textContent=`DELETE ${wedding.id}`; el.deleteConfirmation.value=""; el.deleteError.textContent=""; el.deleteDialog.showModal(); }
+function openDelete(wedding) { state.deleteId=wedding.id; state.deleteIsDemo=wedding.isDemo === true; document.getElementById("deleteEventName").textContent=getEventDisplayTitle(wedding); el.deletePhrase.textContent="delete"; el.deleteConfirmation.value=""; el.deleteError.textContent=wedding.isDemo ? "The generated demo account is also removed unless it has access to another event or photo bucket." : ""; el.deleteDialog.showModal(); el.deleteConfirmation.focus(); }
 async function deleteEventCollection(weddingId, collectionId) {
   const source = collection(state.services.db, "weddings", weddingId, collectionId);
   while (true) {
@@ -768,7 +768,7 @@ async function deleteWedding(event) {
 
   event.preventDefault();
   const weddingId = state.deleteId;
-  const phrase = `DELETE ${weddingId}`;
+  const phrase = "delete";
   if (el.deleteConfirmation.value !== phrase) {
     el.deleteError.textContent = `Type “${phrase}” exactly to delete.`;
     return;
@@ -777,6 +777,16 @@ async function deleteWedding(event) {
   submit.disabled = true;
   el.deleteError.textContent = "Checking event ownership…";
   try {
+    if (state.deleteIsDemo) {
+      el.deleteError.textContent = "Deleting the demo and its account…";
+      const result = await adminPost(state.services.auth, "/api/admin-demos", { action: "delete", eventId: weddingId, confirmation: phrase }, undefined, { what: "Deleting the demo" });
+      state.weddings = state.weddings.filter(item => item.id !== weddingId);
+      el.deleteDialog.close(); render();
+      const accountMessage = result.account === "deleted" ? "Its generated demo account was also deleted." : result.account === "retained" ? "Its account was kept because it has other access or is no longer a demo-only account." : result.account === "pending" ? "Account cleanup is pending and will be retried automatically." : "No generated demo account was found in the cleanup records; other linked accounts were kept.";
+      flash(`Demo event deleted. ${accountMessage}`);
+      if (result.account === "pending") showToast(accountMessage, "error");
+      return;
+    }
     const eventRef = doc(state.services.db, "weddings", weddingId);
     const eventSnapshot = await getDoc(eventRef);
     if (!eventSnapshot.exists()) {

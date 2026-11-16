@@ -9,9 +9,9 @@ export default async function handler(req, res) {
     const token = bearerFrom(req);
     const { action, email, userId, targets } = readBody(req);
     const { auth, db } = adminServices();
-    if (action === 'lookup') return res.status(200).json(await lookupCustomer({ auth, db, token, email }));
-    if (action !== 'link' && action !== 'unlink') throw new AdminError(400, 'INVALID_ACTION', 'Choose lookup, link or unlink.');
     const bucketClient = process.env.PHOTO_BUCKET_API_URL ? createBucketClient({ baseUrl: process.env.PHOTO_BUCKET_API_URL, getToken: async () => token }) : null;
+    if (action === 'lookup') return res.status(200).json(await lookupCustomer({ auth, db, token, email, bucketClient }));
+    if (action !== 'link' && action !== 'unlink') throw new AdminError(400, 'INVALID_ACTION', 'Choose lookup, link or unlink.');
     return res.status(200).json(await manageCustomerAccess({ auth, db, token, action, userId, targets, bucketClient }));
   } catch (error) {
     return sendError(res, error, 'Customer access');

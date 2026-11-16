@@ -250,6 +250,57 @@ async function settleLedger({ auth, db, bucketClient, ledger, nowMs, result }) {
   result.accounts.deleted.push({ demoId, uid });
 }
 
+// Explicit admin deletion uses the same resumable cleanup as expiry, but starts now.
+// The server-owned ledger, never a supplied uid, identifies the generated account.
+export async function deleteDemoEvent({ auth, db, token, eventId, confirmation, bucketClient = null, now = Date.now }) {
+  await requireAdmin(auth, db, token);
+  if (confirmation !== 'delete') throw new AdminError(400, 'CONFIRM_REQUIRED', 'Type delete to confirm.');
+  if (typeof eventId !== 'string' || !eventId || eventId.length > 128 || eventId.includes('/') || eventId === '.' || eventId === '..') {
+    throw new AdminError(400, 'INVALID_EVENT', 'Choose a valid demo event.');
+  }
+  const ref = db.doc(`weddings/${eventId}`);
+  const ledgerRef = db.doc(`${LEDGER}/${eventId}`);
+  const nowMs = now();
+  await db.runTransaction(async transaction => {
+    const [event, ledger] = await Promise.all([transaction.get(ref), transaction.get(ledgerRef)]);
+    if (event.exists && event.data().isDemo !== true) throw new AdminError(409, 'NOT_DEMO', 'This is not a demo event.');
+    if (ledger.exists && (ledger.data().kind !== 'event' || ledger.data().targetId !== eventId || (event.exists && ledger.data().uid !== event.data().demoAccountUid))) {
+      throw new AdminError(409, 'DEMO_LEDGER_MISMATCH', 'The demo account record does not match this event.');
+    }
+    if (event.exists) transaction.update(ref, { deleting: true, demoExpiresAt: Timestamp.fromMillis(nowMs), updatedAt: FieldValue.serverTimestamp() });
+    // A crashed request is picked up by the very next scheduled cleanup.
+    if (ledger.exists) transaction.update(ledgerRef, { expiresAt: Timestamp.fromMillis(nowMs), state: 'deleting' });
+  });
+  const outcome = await deleteExpiredDemoEvent(db, ref, nowMs, bucketClient);
+  if (outcome === 'deferred') throw new AdminError(503, 'DEMO_FILES_PENDING', 'Demo deletion is pending because its stored files could not be removed. Retry deletion.');
+  const result = { deleted: [], retained: [], deferred: [], failed: [] };
+  const ledger = await ledgerRef.get();
+  if (ledger.exists) {
+    try { await settleLedger({ auth, db, bucketClient, ledger, nowMs, result: { accounts: result } }); }
+    catch (error) { result.deferred.push({ demoId: eventId, code: error.code || 'ACCOUNT_CLEANUP_PENDING' }); }
+  }
+  return { ok: true, eventId, account: result.deleted.length ? 'deleted' : result.retained.length ? 'retained' : result.deferred.length || result.failed.length ? 'pending' : 'not_tracked', accounts: result };
+}
+
+export async function deleteDemoBucket({ auth, db, token, bucketId, confirmation, bucketClient = null, now = Date.now }) {
+  await requireAdmin(auth, db, token);
+  if (confirmation !== 'delete') throw new AdminError(400, 'CONFIRM_REQUIRED', 'Type delete to confirm.');
+  if (typeof bucketId !== 'string' || !/^demo-[a-f0-9]{32}$/.test(bucketId)) throw new AdminError(400, 'INVALID_BUCKET', 'Choose a valid demo photo bucket.');
+  if (!bucketClient) throw new AdminError(503, 'BUCKET_API_UNCONFIGURED', 'The photo bucket service is not configured.');
+  const ledgers = await db.collection(LEDGER).where('targetId', '==', bucketId).get();
+  if (ledgers.docs.some(row => row.data().kind !== 'photo_bucket')) throw new AdminError(409, 'DEMO_LEDGER_MISMATCH', 'The demo account record does not match this photo bucket.');
+  // Only settle accounts once the bucket service has accepted deletion. Retrying a
+  // bucket already purged is safe; the ledger remains until account cleanup succeeds.
+  await bucketClient.deleteBucket(bucketId).catch(error => { if (error.status !== 404) throw error; });
+  const nowMs = now(), result = { deleted: [], retained: [], deferred: [], failed: [] };
+  for (const ledger of ledgers.docs) {
+    await ledger.ref.update({ expiresAt: Timestamp.fromMillis(nowMs), state: 'deleting' });
+    try { await settleLedger({ auth, db, bucketClient, ledger, nowMs, result: { accounts: result } }); }
+    catch (error) { result.deferred.push({ demoId: ledger.id, code: error.code || 'ACCOUNT_CLEANUP_PENDING' }); }
+  }
+  return { ok: true, bucketId, account: result.deferred.length || result.failed.length ? 'pending' : result.retained.length ? 'retained' : result.deleted.length ? 'deleted' : 'not_tracked', accounts: result };
+}
+
 // Pages by the last document seen rather than re-reading from the top, so a demo
 // that keeps failing cannot starve the ones after it.
 async function* expiredDocs(query) {

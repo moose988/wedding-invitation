@@ -181,6 +181,10 @@ test('admins link and unlink owners; a customer can hold several buckets', async
   assert.deepEqual((await h.call('DELETE', `/b/${one}/owners/${CUSTOMER}`, { token: 'admin-token' })).body.owners, []);
   assert.equal((await h.call('GET', `/b/${one}`, { token: 'customer-token' })).status, 403);
   assert.deepEqual((await pages(h.call, '/owner/list', { token: 'customer-token' })).map(b => b.id), [two]);
+  // DynamoDB's owner index can lag behind the successful unlink. META must win.
+  h.store.listBuckets = async () => ({ ids: [one, two], nextCursor: null });
+  assert.deepEqual((await pages(h.call, '/owner/list', { token: 'admin-token', query: { uid: CUSTOMER } })).map(b => b.id), [two]);
+  assert.equal((await pages(h.call, '/owner/list', { token: 'admin-token' })).length, 2, 'both buckets still exist for the admin');
 });
 
 // ---------- uploads ----------
@@ -1076,6 +1080,8 @@ test('only an admin deletes a bucket; it closes at once and the sweep purges it'
   assert.equal((await h.call('POST', `/b/${id}/guest`)).status, 404);
   assert.equal((await h.call('GET', `/b/${id}`, { token: 'customer-token' })).status, 404);
   assert.deepEqual((await pages(h.call, '/owner/list', { token: 'customer-token' })).map(b => b.id), [other.id]);
+  assert.deepEqual((await pages(h.call, '/owner/list', { token: 'admin-token' })).map(b => b.id), [other.id], 'refreshing the admin list hides deletion before the sweep');
+  assert.deepEqual((await pages(h.call, '/owner/list', { token: 'admin-token', query: { uid: CUSTOMER } })).map(b => b.id), [other.id], 'customer access lists hide deletion too');
   await assert.rejects(h.store.commitPhoto({ bucketId: id, shards: 32, stamp: 1, previous: null, photo: { id: 'p2', uploadId: late.body.uploadId, contributorId: 'c', bytes: 10, createdAt: 1, revision: 1, backupState: 'pending' } }), e => e.reason === 'closed', 'a commit already past the front door is refused');
   const swept = await createAdminSweep({ store: h.store, files: h.files })({});
   assert.equal(swept.purged, 1);

@@ -183,14 +183,19 @@ function dialogShell(id, html) {
 }
 
 function openBucketDelete(bucket) {
-  const phrase = `DELETE ${bucket.id}`;
-  const dialog = dialogShell("bucketDeleteDialog", `<form class="workspace-modal workspace-modal--small"><header><div><p class="workspace-kicker">Permanent action</p><h2>Delete photo bucket?</h2></div><button class="icon-close" type="button" data-dialog-close aria-label="Close">×</button></header><div class="workspace-modal__body"><p>This permanently removes <strong>${esc(bucket.name)}</strong> and every photo in it. It cannot be undone, and the data is gone within about five minutes.</p><p>Type <strong>${esc(phrase)}</strong> to continue.</p><label>Confirmation<input name="phrase" autocomplete="off" /></label><p class="form-error" role="alert"></p></div><footer><button class="secondary-button" type="button" data-dialog-close>Cancel</button><button class="danger-button" type="submit">Delete permanently</button></footer></form>`);
+  const phrase = "delete";
+  const dialog = dialogShell("bucketDeleteDialog", `<form class="workspace-modal workspace-modal--small"><header><div><p class="workspace-kicker">Permanent action</p><h2>Delete photo bucket?</h2></div><button class="icon-close" type="button" data-dialog-close aria-label="Close">×</button></header><div class="workspace-modal__body"><p>This permanently removes <strong>${esc(bucket.name)}</strong> and every photo in it. It disappears from all lists immediately while its stored files are deleted in the background.</p>${bucket.demo ? "<p>The generated demo account is also removed unless it has other access.</p>" : ""}<p>Type <strong>${esc(phrase)}</strong> to continue.</p><label>Confirmation<input name="phrase" autocomplete="off" /></label><p class="form-error" role="alert"></p></div><footer><button class="secondary-button" type="button" data-dialog-close>Cancel</button><button class="danger-button" type="submit">Delete permanently</button></footer></form>`);
   const form = dialog.querySelector("form"), error = form.querySelector(".form-error");
   form.addEventListener("submit", async submit => {
     submit.preventDefault();
     if (form.elements.phrase.value !== phrase) { error.textContent = `Type “${phrase}” exactly to delete.`; return; }
     const go = form.querySelector('[type="submit"]'); go.disabled = true; error.textContent = "";
-    try { await (await createOwnerAdapter(ctx.user)).deleteBucket(bucket.id); buckets.rows = buckets.rows.filter(b => b.id !== bucket.id); dialog.close(); renderBuckets(); ctx.flash("Photo bucket deleted. Its data is removed within about five minutes."); }
+    try {
+      const result = bucket.demo ? await adminPost(ctx.state.services.auth, "/api/admin-demos", { action: "delete", bucketId: bucket.id, confirmation: phrase }, undefined, { what: "Deleting the demo photo bucket" }) : await (await createOwnerAdapter(ctx.user)).deleteBucket(bucket.id);
+      buckets.rows = buckets.rows.filter(b => b.id !== bucket.id); dialog.close(); renderBuckets();
+      const accountMessage = result?.account === "deleted" ? " Its generated demo account was also deleted." : result?.account === "pending" ? " Demo account cleanup is pending and will be retried automatically." : result?.account === "retained" ? " Its account was kept because it has other access or is no longer a demo-only account." : "";
+      ctx.flash(`Photo bucket removed. Stored files are being deleted in the background.${accountMessage}`);
+    }
     catch (failure) { error.textContent = failure?.message || "The bucket could not be deleted."; go.disabled = false; }
   });
 }

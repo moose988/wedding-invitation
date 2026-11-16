@@ -268,7 +268,7 @@ export function installFeedback(doc = document) {
   });
   doc.addEventListener("click", event => {
     const button = event.target?.closest?.("button");
-    if (!button || button.classList.contains("is-busy")) return;
+    if (!button || button.closest("[data-feedback-managed]") || button.classList.contains("is-busy")) return;
     setTimeout(() => {
       if (!button.isConnected || !button.disabled || button.classList.contains("is-busy")) return;
       button.classList.add("is-busy", "is-auto-busy");
@@ -279,7 +279,7 @@ export function installFeedback(doc = document) {
 
   doc.addEventListener("submit", event => {
     const button = event.submitter;
-    if (!button || button.classList.contains("is-busy")) return;
+    if (!button || button.closest("[data-feedback-managed]") || button.classList.contains("is-busy")) return;
     button.classList.add("is-busy");
     setTimeout(() => { if (button.dataset.busy !== "1") button.classList.remove("is-busy"); }, 1500);
   }, true);

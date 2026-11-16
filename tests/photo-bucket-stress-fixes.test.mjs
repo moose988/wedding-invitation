@@ -153,7 +153,7 @@ test('a photo that cannot be opened or is too large fails as final, so Retry is 
 
 test('the admin Templates tab cannot save until the stored settings have loaded', async () => {
   const src = await readFile(new URL('../admin-templates.js', import.meta.url), 'utf8');
-  assert.match(src, /async function save\(next, what\) \{\n  if \(!view\.loaded\) return false;/);
+  assert.match(src, /async function save\(next, what\) \{\r?\n  if \(!view\.loaded\) return false;/);
   assert.match(src, /input\.disabled = view\.saving \|\| !view\.loaded;/);
   assert.match(src, /view\.loaded = true;/);
 });

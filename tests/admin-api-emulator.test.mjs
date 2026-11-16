@@ -8,7 +8,7 @@ import { connectAuthEmulator, getAuth, signInWithEmailAndPassword } from 'fireba
 import { connectFirestoreEmulator, doc, getDoc, getFirestore, serverTimestamp, updateDoc } from 'firebase/firestore';
 import { createBucketClient } from '../api/_lib/admin-common.js';
 import { lookupCustomer, manageCustomerAccess } from '../api/_lib/customer-access.js';
-import { cleanupExpiredDemos, createDemo, DEMO_EMAIL_DOMAIN, runCleanupRequest } from '../api/_lib/demo-accounts.js';
+import { cleanupExpiredDemos, createDemo, deleteDemoBucket, deleteDemoEvent, DEMO_EMAIL_DOMAIN, runCleanupRequest } from '../api/_lib/demo-accounts.js';
 import { DEMO_EXPIRY_HOURS } from '../api/_lib/demo-rules.js';
 
 const enabled = Boolean(process.env.FIRESTORE_EMULATOR_HOST && process.env.FIREBASE_AUTH_EMULATOR_HOST);
@@ -58,7 +58,7 @@ function fakeBucketApi() {
     const body = init.body ? JSON.parse(init.body) : {};
     if (init.method === 'POST' && parsed.pathname === '/owner/create') {
       state.createBodies.push(body);
-      const id = `demo-${unique('b').replace(/[^a-z0-9]/g, '')}`;
+      const id = `demo-${Date.now().toString(16).padStart(24, '0')}${(++counter).toString(16).padStart(8, '0')}`;
       const bucket = { id, demo: true, name: body.name, limitGb: 1, owners: body.owners, expiresAt: Date.now() + (state.ignoreExpiry ? 24 : body.expiresInHours ?? 24) * HOUR, status: 'active', expired: false };
       buckets.set(id, bucket);
       return reply(201, bucket);
@@ -552,6 +552,79 @@ test('lookup finds a customer by email, case-insensitively', options, async () =
   assert.equal(found.isAdmin, false);
   await assert.rejects(lookupCustomer({ auth, db, token: adminToken, email: 'nobody-here@example.test' }), { status: 404 });
   await assert.rejects(lookupCustomer({ auth, db, token: adminToken, email: 'not-an-email' }), { status: 400 });
+});
+
+test('lookup includes current event roles and bucket access without confusing service failure with no access', options, async () => {
+  const api = fakeBucketApi(), user = await newUser('access-snapshot');
+  const owned = await newRealEvent({ ownerUserId: user.uid }), linked = await newRealEvent();
+  await db.doc(`weddings/${linked}/dashboardUsers/${user.uid}`).set({ userId: user.uid, role: 'customer' });
+  const id = `b-${'a'.repeat(32)}`, deleting = `b-${'b'.repeat(32)}`;
+  api.buckets.set(id, { id, owners: [user.uid], status: 'active' });
+  api.buckets.set(deleting, { id: deleting, owners: [user.uid], status: 'deleting' });
+  const found = await lookupCustomer({ auth, db, token: adminToken, email: user.email, bucketClient: api.client });
+  assert.deepEqual(found.access.events.sort((a, b) => a.id.localeCompare(b.id)), [{ id: owned, role: 'owner' }, { id: linked, role: 'customer' }].sort((a, b) => a.id.localeCompare(b.id)));
+  assert.deepEqual(found.access.buckets, [{ id }]);
+  assert.equal(found.access.bucketError, null);
+  api.down = true;
+  const partial = await lookupCustomer({ auth, db, token: adminToken, email: user.email, bucketClient: api.client });
+  assert.ok(partial.access.bucketError);
+  assert.equal(partial.access.events.length, 2);
+});
+
+test('manual demo deletion removes the event, nested data and generated Auth account immediately, and can be repeated', options, async () => {
+  const api = fakeBucketApi();
+  const demo = await createDemo({ auth, db, token: adminToken, type: 'celebration', name: 'Delete before expiry' });
+  const uid = (await db.doc(`weddings/${demo.eventId}`).get()).data().demoAccountUid;
+  await db.doc(`weddings/${demo.eventId}/senderCapabilities/test/recipients/test`).set({ test: true });
+  const call = extra => deleteDemoEvent({ auth, db, token: adminToken, eventId: demo.eventId, confirmation: 'delete', bucketClient: api.client, ...extra });
+  await assert.rejects(call({ token: customerToken }), { code: 'ADMIN_ONLY' });
+  await assert.rejects(call({ confirmation: `DELETE ${demo.eventId}` }), { code: 'CONFIRM_REQUIRED' });
+  assert.equal(await exists(`weddings/${demo.eventId}`), true);
+  const removed = await call();
+  assert.equal(removed.account, 'deleted');
+  assert.equal(await authExists(uid), false);
+  for (const path of [`weddings/${demo.eventId}`, `weddings/${demo.eventId}/senderCapabilities/test/recipients/test`, `customerDirectory/${uid}`, `demoLedger/${demo.demoId}`, `users/${uid}/weddingAccess/${demo.eventId}`, `users/${adminUid}/weddingAccess/${demo.eventId}`]) assert.equal(await exists(path), false, path);
+  assert.equal((await call()).ok, true);
+  const real = await newRealEvent();
+  await assert.rejects(call({ eventId: real }), { code: 'NOT_DEMO' });
+  assert.equal(await exists(`weddings/${real}`), true);
+});
+
+test('manual deletion retains an account linked elsewhere and retries account cleanup after bucket outages', options, async () => {
+  const api = fakeBucketApi();
+  const demo = await createDemo({ auth, db, token: adminToken, type: 'celebration', name: 'Shared demo' });
+  const uid = (await db.doc(`weddings/${demo.eventId}`).get()).data().demoAccountUid;
+  const id = `b-${'c'.repeat(32)}`;
+  api.buckets.set(id, { id, owners: [uid], demo: false, status: 'active' });
+  const call = eventId => deleteDemoEvent({ auth, db, token: adminToken, eventId, confirmation: 'delete', bucketClient: api.client });
+  assert.equal((await call(demo.eventId)).account, 'retained');
+  assert.equal(await authExists(uid), true);
+  const retry = await createDemo({ auth, db, token: adminToken, type: 'celebration', name: 'Retry demo' });
+  const retryUid = (await db.doc(`weddings/${retry.eventId}`).get()).data().demoAccountUid;
+  api.down = true;
+  assert.equal((await call(retry.eventId)).account, 'pending');
+  assert.equal(await authExists(retryUid), true);
+  const ledger = await db.doc(`demoLedger/${retry.demoId}`).get();
+  assert.ok(ledger.data().expiresAt.toMillis() <= Date.now(), 'scheduled retry is eligible immediately');
+  api.down = false;
+  assert.equal((await call(retry.eventId)).account, 'deleted');
+  assert.equal(await authExists(retryUid), false);
+});
+
+test('manual demo bucket deletion also removes its generated account, but refuses real buckets and unconfirmed requests', options, async () => {
+  const api = fakeBucketApi();
+  const demo = await createDemo({ auth, db, token: adminToken, type: 'photo_bucket', name: 'Delete demo album', bucketClient: api.client });
+  const uid = (await db.doc(`demoLedger/${demo.demoId}`).get()).data().uid;
+  const call = extra => deleteDemoBucket({ auth, db, token: adminToken, bucketId: demo.bucketId, confirmation: 'delete', bucketClient: api.client, ...extra });
+  await assert.rejects(call({ token: customerToken }), { code: 'ADMIN_ONLY' });
+  await assert.rejects(call({ confirmation: 'wrong' }), { code: 'CONFIRM_REQUIRED' });
+  await assert.rejects(call({ bucketId: `b-${'1'.repeat(32)}` }), { code: 'INVALID_BUCKET' });
+  assert.equal((await call()).account, 'deleted');
+  assert.equal(await authExists(uid), false);
+  assert.equal(await exists(`customerDirectory/${uid}`), false);
+  assert.equal(await exists(`demoLedger/${demo.demoId}`), false);
+  assert.equal(api.buckets.has(demo.bucketId), false);
+  assert.equal((await call()).ok, true);
 });
 
 test('multi-event link and unlink report per event and never downgrade', options, async () => {

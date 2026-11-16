@@ -6,6 +6,9 @@
     }
   ],
   "functions": {
+    "api/admin-demos.js": {
+      "maxDuration": 60
+    },
     "api/demo-cleanup.js": {
       "maxDuration": 60
     }

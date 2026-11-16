@@ -9,14 +9,22 @@ const EMAIL = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 const validEventId = (id) => typeof id === 'string' && id.length >= 1 && id.length <= 128 && !id.includes('/') && id !== '.' && id !== '..' && !/^__.*__$/.test(id);
 const validBucketId = (id) => typeof id === 'string' && /^(?:b|demo)-[a-f0-9]{32}$/.test(id);
 
-export async function lookupCustomer({ auth, db, token, email }) {
+export async function lookupCustomer({ auth, db, token, email, bucketClient = null }) {
   await requireAdmin(auth, db, token);
   const normalized = typeof email === 'string' ? email.trim().toLowerCase() : '';
   if (!EMAIL.test(normalized) || normalized.length > 254) throw new AdminError(400, 'INVALID_EMAIL', 'Enter a valid email address.');
   const user = await auth.getUserByEmail(normalized).catch((error) => { if (error.code === 'auth/user-not-found') return null; throw error; });
   if (!user) throw new AdminError(404, 'CUSTOMER_NOT_FOUND', 'No account uses this email address.');
   const [admin, directory] = await Promise.all([db.doc(`platformAdmins/${user.uid}`).get(), db.doc(`customerDirectory/${user.uid}`).get()]);
-  return { uid: user.uid, email: user.email, disabled: user.disabled === true, isAdmin: admin.exists, inDirectory: directory.exists };
+  const [memberships, owned, buckets] = await Promise.all([
+    db.collectionGroup('dashboardUsers').where('userId', '==', user.uid).get(),
+    db.collection('weddings').where('ownerUserId', '==', user.uid).get(),
+    bucketClient ? bucketClient.listOwned(user.uid).then(items => ({ items }), error => ({ error: error.message })) : { error: 'Photo bucket access could not be checked. The service is not configured.' },
+  ]);
+  const access = new Map(memberships.docs.map(row => [row.ref.parent.parent.id, { id: row.ref.parent.parent.id, role: row.data().role || 'specialized' }]));
+  for (const row of owned.docs) access.set(row.id, { id: row.id, role: 'owner' });
+  return { uid: user.uid, email: user.email, disabled: user.disabled === true, isAdmin: admin.exists, inDirectory: directory.exists,
+    access: { events: [...access.values()], buckets: (buckets.items || []).filter(bucket => bucket.status !== 'deleting' && (!Array.isArray(bucket.owners) || bucket.owners.includes(user.uid))).map(bucket => ({ id: bucket.id })), bucketError: buckets.error || null } };
 }
 
 const fail = (target, code, error, retryable = false) => ({ ...target, ok: false, code, error, retryable });

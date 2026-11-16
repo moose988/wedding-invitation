@@ -122,7 +122,7 @@ export function ownerAdapterApi(user) {
       return api('POST', '/owner/create', { body });
     },
     // Admins may pass { uid } to list the buckets another account owns.
-    list: ({ uid } = {}) => allPages(cursor => api('GET', '/owner/list', { query: { limit: 50, ...(uid ? { uid } : {}), ...cursor } })),
+    list: async ({ uid } = {}) => (await allPages(cursor => api('GET', '/owner/list', { query: { limit: 50, ...(uid ? { uid } : {}), ...cursor } }))).filter(bucket => bucket.status !== 'deleting'),
     setSize: (bucketId, gb) => api('PUT', `/b/${validId(bucketId)}/size`, { body: { gb: Number(gb) } }),
     addOwner: (bucketId, uid) => api('POST', `/b/${validId(bucketId)}/owners`, { body: { uid } }),
     removeOwner: (bucketId, uid) => api('DELETE', `/b/${validId(bucketId)}/owners/${encodeURIComponent(uid)}`),

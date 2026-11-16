@@ -1,0 +1,18 @@
+{
+  "results": [
+    "Invalid email is explained",
+    "Owner role is visibly protected",
+    "One action links an event and a bucket; both backend records verified",
+    "Selections survive filtering and access survives reload",
+    "Desktop, tablet and phone have no horizontal overflow",
+    "Unlink confirmation cancels safely and removes both links without deleting the account",
+    "Partial failures retain only failed selections and retry completes",
+    "Late lookup cannot select the previous customer after an email edit",
+    "Typing delete removes the demo and its Auth account through the real UI",
+    "Normal event deletion also accepts delete",
+    "Photo bucket delete UI accepts delete and removes only generated demo accounts",
+    "Deleted bucket stays absent after navigation and fresh admin listing before the sweep",
+    "No uncaught browser errors"
+  ],
+  "errors": []
+}
